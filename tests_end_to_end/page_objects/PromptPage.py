@@ -12,7 +12,7 @@ class PromptPage:
         self.page.get_by_role("button", name="Edit prompt").click()
         self.page.get_by_role("textbox", name="Prompt").click()
         self.page.get_by_role("textbox", name="Prompt").fill(new_prompt)
-        self.page.get_by_role("button", name="Edit prompt").click()
+        self.page.get_by_role("button", name="Create new commit").click()
 
     def click_most_recent_commit(self):
         self.page.get_by_role("tab", name="Commits").click()
