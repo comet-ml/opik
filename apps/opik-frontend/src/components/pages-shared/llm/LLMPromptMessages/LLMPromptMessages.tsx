@@ -12,22 +12,22 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
 
-import { PlaygroundMessageType } from "@/types/playground";
-import { generateDefaultPlaygroundPromptMessage } from "@/lib/playground";
-import PlaygroundPromptMessage from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPromptMessages/PlaygroundPromptMessage";
+import { generateDefaultLLMPromptMessage } from "@/lib/llm";
+import LLMPromptMessage from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessage";
 import { Button } from "@/components/ui/button";
+import { LLMMessage } from "@/types/llm";
 
-interface PlaygroundPromptMessagesProps {
-  messages: PlaygroundMessageType[];
-  onChange: (messages: PlaygroundMessageType[]) => void;
+interface LLMPromptMessagesProps {
+  messages: LLMMessage[];
+  onChange: (messages: LLMMessage[]) => void;
   onAddMessage: () => void;
 }
 
-const PlaygroundPromptMessages = ({
+const LLMPromptMessages = ({
   messages,
   onChange,
   onAddMessage,
-}: PlaygroundPromptMessagesProps) => {
+}: LLMPromptMessagesProps) => {
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: {
@@ -37,8 +37,8 @@ const PlaygroundPromptMessages = ({
   );
 
   const handleDuplicateMessage = useCallback(
-    (message: Partial<PlaygroundMessageType> = {}, position: number) => {
-      const newMessage = generateDefaultPlaygroundPromptMessage(message);
+    (message: Partial<LLMMessage> = {}, position: number) => {
+      const newMessage = generateDefaultLLMPromptMessage(message);
       const newMessages = [...messages];
 
       newMessages.splice(position, 0, newMessage);
@@ -56,7 +56,7 @@ const PlaygroundPromptMessages = ({
   );
 
   const handleChangeMessage = useCallback(
-    (messageId: string, changes: Partial<PlaygroundMessageType>) => {
+    (messageId: string, changes: Partial<LLMMessage>) => {
       onChange(
         messages.map((m) => (m.id !== messageId ? m : { ...m, ...changes })),
       );
@@ -99,7 +99,7 @@ const PlaygroundPromptMessages = ({
         >
           <div className="flex flex-col gap-2 overflow-hidden">
             {messages.map((message, messageIdx) => (
-              <PlaygroundPromptMessage
+              <LLMPromptMessage
                 key={message.id}
                 hideRemoveButton={messages?.length === 1}
                 hideDragButton={messages?.length === 1}
@@ -130,4 +130,4 @@ const PlaygroundPromptMessages = ({
   );
 };
 
-export default PlaygroundPromptMessages;
+export default LLMPromptMessages;
