@@ -42,13 +42,14 @@ public interface AutomationRuleEvaluatorService {
 
     void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId, String name, int page, int size);
+    AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId,
+            String name, int page, int size);
 
-    List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, AutomationRuleEvaluatorType automationRuleEvaluatorType);
+    List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
+            AutomationRuleEvaluatorType automationRuleEvaluatorType);
 }
 
-@NonNull
-@Singleton
+@NonNull @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorService {
@@ -195,13 +196,14 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
             var criteria = AutomationRuleEvaluatorCriteria.builder().name(name).build();
             var automationRuleEvaluators = dao.find(workspaceId, projectId, criteria, offset, size)
-                            .stream()
-                            .map(evaluator -> switch (evaluator) {
-                                case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
-                                        AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
-                            })
-                            .toList();
-            log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(), projectId);
+                    .stream()
+                    .map(evaluator -> switch (evaluator) {
+                        case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                    })
+                    .toList();
+            log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(),
+                    projectId);
             return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(),
                     total,
                     automationRuleEvaluators);
@@ -210,18 +212,21 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, @NonNull AutomationRuleEvaluatorType type) {
-        log.debug("Finding AutomationRuleEvaluators with type '{}' in projectId '{}' and workspaceId '{}'", type, projectId, workspaceId);
+    public List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
+            @NonNull AutomationRuleEvaluatorType type) {
+        log.debug("Finding AutomationRuleEvaluators with type '{}' in projectId '{}' and workspaceId '{}'", type,
+                projectId, workspaceId);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var criteria = AutomationRuleEvaluatorCriteria.builder().type(AutomationRuleEvaluatorType.LLM_AS_JUDGE).build();
+            var criteria = AutomationRuleEvaluatorCriteria.builder().type(AutomationRuleEvaluatorType.LLM_AS_JUDGE)
+                    .build();
 
             return dao.find(workspaceId, projectId, criteria)
                     .stream()
                     .map(evaluator -> switch (evaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
-                                AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                            AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
                     })
                     .toList();
 

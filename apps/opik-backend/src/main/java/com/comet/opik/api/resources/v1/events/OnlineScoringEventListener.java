@@ -37,9 +37,9 @@ public class OnlineScoringEventListener {
 
     @Inject
     public OnlineScoringEventListener(EventBus eventBus,
-                                      AutomationRuleEvaluatorService ruleEvaluatorService,
-                                      ChatCompletionService aiProxyService,
-                                      FeedbackScoreService feedbackScoreService) {
+            AutomationRuleEvaluatorService ruleEvaluatorService,
+            ChatCompletionService aiProxyService,
+            FeedbackScoreService feedbackScoreService) {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.aiProxyService = aiProxyService;
         this.feedbackScoreService = feedbackScoreService;
@@ -61,8 +61,8 @@ public class OnlineScoringEventListener {
                 .collect(Collectors.groupingBy(Trace::projectId));
 
         Map<String, Integer> countMap = tracesByProject.entrySet().stream()
-                .collect(Collectors.toMap(entry -> "projectId "+entry.getKey(),
-                                          entry -> entry.getValue().size()));
+                .collect(Collectors.toMap(entry -> "projectId " + entry.getKey(),
+                        entry -> entry.getValue().size()));
 
         log.debug("[OnlineScoring] Received traces for workspace '{}': {}", tracesBatch.workspaceId(), countMap);
 
@@ -95,10 +95,10 @@ public class OnlineScoringEventListener {
     private void score(Trace trace, String workspaceId, AutomationRuleEvaluatorLlmAsJudge evaluator) {
         // TODO prepare base request
         var baseRequestBuilder = ChatCompletionRequest.builder()
-                                                    .model(evaluator.getCode().getModel().getName())
-                                                    .temperature(evaluator.getCode().getModel().getTemperature())
-                                                    .messages(renderMessages(trace, evaluator.getCode()))
-                                                    .build();
+                .model(evaluator.getCode().getModel().getName())
+                .temperature(evaluator.getCode().getModel().getTemperature())
+                .messages(renderMessages(trace, evaluator.getCode()))
+                .build();
 
         // TODO: call AI Proxy and parse response into 1+ FeedbackScore
 
@@ -119,18 +119,19 @@ public class OnlineScoringEventListener {
         // prepare the map of replacements to use in all messages, extracting the actual value from the Trace
         var parsedVariables = variableMapping(evaluatorCode.getVariables());
         var replacements = parsedVariables.stream().map(mapper -> {
-                var traceSection = switch (mapper.traceSection) {
-                    case INPUT -> trace.input();
-                    case OUTPUT -> trace.output();
-                    case METADATA -> trace.metadata();
-                };
+            var traceSection = switch (mapper.traceSection) {
+                case INPUT -> trace.input();
+                case OUTPUT -> trace.output();
+                case METADATA -> trace.metadata();
+            };
 
-                return mapper.toBuilder()
-                        .valueToReplace(getPath(traceSection, mapper.jsonPath()))
-                        .build();
-            })
-            .filter(mapper -> mapper.valueToReplace() != null)
-            .collect(Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
+            return mapper.toBuilder()
+                    .valueToReplace(getPath(traceSection, mapper.jsonPath()))
+                    .build();
+        })
+                .filter(mapper -> mapper.valueToReplace() != null)
+                .collect(
+                        Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
 
         // will convert all '{{key}}' into 'value'
         var templateRenderer = new StringSubstitutor(replacements, "{{", "}}");
@@ -171,16 +172,13 @@ public class OnlineScoringEventListener {
                     if (tracePath.startsWith("input.")) {
                         builder.traceSection(TraceSection.INPUT)
                                 .jsonPath(tracePath.substring("input.".length()));
-                    }
-                    else if (tracePath.startsWith("output.")) {
+                    } else if (tracePath.startsWith("output.")) {
                         builder.traceSection(TraceSection.OUTPUT)
                                 .jsonPath(tracePath.substring("output.".length()));
-                    }
-                    else if (tracePath.startsWith("metadata.")) {
+                    } else if (tracePath.startsWith("metadata.")) {
                         builder.traceSection(TraceSection.METADATA)
                                 .jsonPath(tracePath.substring("metadata.".length()));
-                    }
-                    else {
+                    } else {
                         log.info("Couldn't map trace path '{}' into a input/output/metadata path", tracePath);
                         return null;
                     }
@@ -191,9 +189,15 @@ public class OnlineScoringEventListener {
                 .collect(Collectors.toList());
     }
 
-    enum TraceSection { INPUT, OUTPUT, METADATA }
+    enum TraceSection {
+        INPUT,
+        OUTPUT,
+        METADATA
+    }
     @Builder(toBuilder = true)
-    record MessageVariableMapping(TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) { }
+    record MessageVariableMapping(TraceSection traceSection, String variableName, String jsonPath,
+            String valueToReplace) {
+    }
 
     String getPath(JsonNode rootNode, String path) {
         String[] parts = path.split("\\."); // Split by dot

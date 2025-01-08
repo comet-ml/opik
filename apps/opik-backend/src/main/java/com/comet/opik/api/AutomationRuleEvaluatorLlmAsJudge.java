@@ -23,10 +23,10 @@ import java.util.UUID;
 @SuperBuilder(toBuilder = true)
 @ToString(callSuper = true)
 public final class AutomationRuleEvaluatorLlmAsJudge
-        extends AutomationRuleEvaluator<AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode> {
+        extends
+            AutomationRuleEvaluator<AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode> {
 
-    @NotNull
-    @JsonView({View.Public.class, View.Write.class})
+    @NotNull @JsonView({View.Public.class, View.Write.class})
     @Schema(accessMode = Schema.AccessMode.READ_WRITE)
     LlmAsJudgeCode code;
 
@@ -36,24 +36,20 @@ public final class AutomationRuleEvaluatorLlmAsJudge
     public static class LlmAsJudgeCode {
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final LlmAsJudgeModelParameters model;
+        @NotNull private final LlmAsJudgeModelParameters model;
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final List<LlmAsJudgeMessage> messages;
+        @NotNull private final List<LlmAsJudgeMessage> messages;
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final Map<String, String> variables;
+        @NotNull private final Map<String, String> variables;
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final List<LlmAsJudgeOutputSchema> schema;
+        @NotNull private final List<LlmAsJudgeOutputSchema> schema;
 
         @ConstructorProperties({"model", "messages", "variables", "schema"})
         public LlmAsJudgeCode(@NotNull LlmAsJudgeModelParameters model, @NotNull List<LlmAsJudgeMessage> messages,
-                              @NotNull Map<String, String> variables, @NotNull List<LlmAsJudgeOutputSchema> schema) {
+                @NotNull Map<String, String> variables, @NotNull List<LlmAsJudgeOutputSchema> schema) {
             this.model = model;
             this.messages = messages;
             this.variables = variables;
@@ -67,12 +63,10 @@ public final class AutomationRuleEvaluatorLlmAsJudge
     public static class LlmAsJudgeMessage {
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final ChatMessageType role;
+        @NotNull private final ChatMessageType role;
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final String content;
+        @NotNull private final String content;
 
         @ConstructorProperties({"role", "content"})
         public LlmAsJudgeMessage(@NotNull ChatMessageType role, @NotNull String content) {
@@ -87,19 +81,17 @@ public final class AutomationRuleEvaluatorLlmAsJudge
     public static class LlmAsJudgeOutputSchema {
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final String name;
+        @NotNull private final String name;
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final LlmAsJudgeOutputSchemaType type;
+        @NotNull private final LlmAsJudgeOutputSchemaType type;
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final String description;
+        @NotNull private final String description;
 
         @ConstructorProperties({"name", "type", "description"})
-        public LlmAsJudgeOutputSchema(@NotNull String name, @NotNull LlmAsJudgeOutputSchemaType type, @NotNull String description) {
+        public LlmAsJudgeOutputSchema(@NotNull String name, @NotNull LlmAsJudgeOutputSchemaType type,
+                @NotNull String description) {
             this.name = name;
             this.description = description;
             this.type = type;
@@ -112,12 +104,10 @@ public final class AutomationRuleEvaluatorLlmAsJudge
     public static class LlmAsJudgeModelParameters {
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final String name;
+        @NotNull private final String name;
 
         @JsonView({View.Public.class, View.Write.class})
-        @NotNull
-        private final Double temperature;
+        @NotNull private final Double temperature;
 
         @ConstructorProperties({"name", "temperature"})
         public LlmAsJudgeModelParameters(@NotNull String name, @NotNull Double temperature) {
@@ -126,9 +116,11 @@ public final class AutomationRuleEvaluatorLlmAsJudge
         }
     }
 
-    @ConstructorProperties({"id", "projectId", "name", "samplingRate", "code", "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, Float samplingRate, @NotNull LlmAsJudgeCode code,
-                                             Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
+    @ConstructorProperties({"id", "projectId", "name", "samplingRate", "code", "createdAt", "createdBy",
+            "lastUpdatedAt", "lastUpdatedBy"})
+    public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, Float samplingRate,
+            @NotNull LlmAsJudgeCode code,
+            Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
         super(id, projectId, name, samplingRate, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
         this.code = code;
     }

@@ -34,7 +34,8 @@ public class AutomationRuleEvaluatorResourceClient {
         }
     }
 
-    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName, String apiKey, int expectedStatus) {
+    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName, String apiKey,
+            int expectedStatus) {
         var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, evaluator.getProjectId()))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -47,7 +48,8 @@ public class AutomationRuleEvaluatorResourceClient {
         return actualResponse;
     }
 
-    public void updateEvaluator(UUID evaluatorId, UUID projectId, String workspaceName, AutomationRuleEvaluatorUpdate updatedEvaluator, String apiKey, boolean isAuthorized) {
+    public void updateEvaluator(UUID evaluatorId, UUID projectId, String workspaceName,
+            AutomationRuleEvaluatorUpdate updatedEvaluator, String apiKey, boolean isAuthorized) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
                 .path(evaluatorId.toString())
                 .request()

@@ -19,8 +19,6 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
@@ -46,14 +44,11 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.in;
-import static org.assertj.core.api.Assertions.within;
 
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -96,7 +91,6 @@ public class OnlineScoringEventListenerTest {
     private AutomationRuleEvaluatorResourceClient evaluatorResourceClient;
     private ProjectResourceClient projectResourceClient;
 
-
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
 
@@ -131,10 +125,14 @@ public class OnlineScoringEventListenerTest {
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BasicWorking {
-        @Mock AutomationRuleEvaluatorService ruleEvaluatorService;
-        @Mock ChatCompletionService aiProxyService;
-        @Mock FeedbackScoreService feedbackScoreService;
-        @Mock EventBus eventBus;
+        @Mock
+        AutomationRuleEvaluatorService ruleEvaluatorService;
+        @Mock
+        ChatCompletionService aiProxyService;
+        @Mock
+        FeedbackScoreService feedbackScoreService;
+        @Mock
+        EventBus eventBus;
         OnlineScoringEventListener onlineScoringEventListener;
 
         AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode evaluatorCode;
@@ -169,31 +167,32 @@ public class OnlineScoringEventListenerTest {
                     { "name": "Technical Accuracy",  "type": "BOOLEAN",   "description": "Technical accuracy of the summary" }
                   ]
                 }
-                """.formatted(messageToTest).trim();
+                """
+                .formatted(messageToTest).trim();
         String summaryStr = "What was the approach to experimenting with different data mixtures?";
         String outputStr = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
         String input = """
-                    {
-                        "questions": {
-                            "question1": "%s",
-                            "question2": "Whatever, we wont use it anyway"
-                         },
-                        "pdf_url": "https://arxiv.org/pdf/2406.04744",
-                        "title": "CRAG -- Comprehensive RAG Benchmark"
-                    }
-                    """.formatted(summaryStr).trim();
+                {
+                    "questions": {
+                        "question1": "%s",
+                        "question2": "Whatever, we wont use it anyway"
+                     },
+                    "pdf_url": "https://arxiv.org/pdf/2406.04744",
+                    "title": "CRAG -- Comprehensive RAG Benchmark"
+                }
+                """.formatted(summaryStr).trim();
         String output = """
-                    {
-                        "output": "%s"
-                    }
-                    """.formatted(outputStr).trim();
+                {
+                    "output": "%s"
+                }
+                """.formatted(outputStr).trim();
 
         @BeforeEach
         void setUp() throws JsonProcessingException {
             MockitoAnnotations.initMocks(this);
             Mockito.doNothing().when(eventBus).register(Mockito.any());
             onlineScoringEventListener = new OnlineScoringEventListener(eventBus, ruleEvaluatorService,
-                                                                        aiProxyService, feedbackScoreService);
+                    aiProxyService, feedbackScoreService);
 
             var mapper = new ObjectMapper();
             evaluatorCode = mapper.readValue(testEvaluator, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class);
@@ -267,12 +266,8 @@ public class OnlineScoringEventListenerTest {
 
             Trace returnTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
 
-
             // TODO: run the actual test checking for if we have a FeedbackScore by the end. Prob mocking AI Proxy.
         }
     }
 
-
 }
-
-

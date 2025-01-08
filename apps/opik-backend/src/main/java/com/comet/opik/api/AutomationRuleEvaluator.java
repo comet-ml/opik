@@ -29,7 +29,8 @@ import java.util.UUID;
 })
 @AllArgsConstructor
 public abstract sealed class AutomationRuleEvaluator<T>
-        implements AutomationRule<T>
+        implements
+            AutomationRule<T>
         permits AutomationRuleEvaluatorLlmAsJudge {
 
     @JsonView({View.Public.class})

@@ -58,19 +58,22 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
-                                               @Bind("projectId") UUID projectId,
-                                               @Bind("action") AutomationRule.AutomationRuleAction action,
-                                               @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
-                                               @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-                                               @Define("name") @Bind("name") String name,
-                                               @Define("offset") @Bind("offset") Integer offset,
-                                               @Define("limit") @Bind("limit") Integer limit);
+            @Bind("projectId") UUID projectId,
+            @Bind("action") AutomationRule.AutomationRuleAction action,
+            @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
+            @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+            @Define("name") @Bind("name") String name,
+            @Define("offset") @Bind("offset") Integer offset,
+            @Define("limit") @Bind("limit") Integer limit);
 
-    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId, AutomationRuleEvaluatorCriteria criteria, Integer offset, Integer limit) {
-        return find(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.name(), offset, limit);
+    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
+            AutomationRuleEvaluatorCriteria criteria, Integer offset, Integer limit) {
+        return find(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.name(), offset,
+                limit);
     }
 
-    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId, AutomationRuleEvaluatorCriteria criteria) {
+    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
+            AutomationRuleEvaluatorCriteria criteria) {
         return find(workspaceId, projectId, criteria, 0, Integer.MAX_VALUE);
     }
 
@@ -86,7 +89,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteEvaluatorsByIds(@Bind("workspaceId") String workspaceId,
-                               @Bind("projectId") UUID projectId,
-                               @Define("ids") @BindList("ids") Set<UUID> ids);
+            @Bind("projectId") UUID projectId,
+            @Define("ids") @BindList("ids") Set<UUID> ids);
 
 }

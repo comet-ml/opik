@@ -104,16 +104,16 @@ class TraceServiceImpl implements TraceService {
                 .validateVersionAsync(id, TRACE_KEY)
                 .then(Mono.defer(() -> getOrCreateProject(projectName)))
                 .flatMap(project -> lockService.executeWithLock(
-                                                new LockService.Lock(id, TRACE_KEY),
-                                                Mono.defer(() -> insertTrace(trace, project, id)))
-                                            .doOnSuccess(__ -> {
-                                                // forwards the trace with its actual projectId
-                                                var savedTrace = trace.toBuilder().projectId(project.id()).build();
-                                                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                                                String userName = ctx.get(RequestContext.USER_NAME);
+                        new LockService.Lock(id, TRACE_KEY),
+                        Mono.defer(() -> insertTrace(trace, project, id)))
+                        .doOnSuccess(__ -> {
+                            // forwards the trace with its actual projectId
+                            var savedTrace = trace.toBuilder().projectId(project.id()).build();
+                            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                            String userName = ctx.get(RequestContext.USER_NAME);
 
-                                                eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                                            })));
+                            eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                        })));
     }
 
     @WithSpan

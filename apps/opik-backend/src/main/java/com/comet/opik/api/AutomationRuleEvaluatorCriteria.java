@@ -9,10 +9,11 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record AutomationRuleEvaluatorCriteria(
-    AutomationRuleEvaluatorType type,
-    String name,
-    Set<UUID> ids
-    ) {
+        AutomationRuleEvaluatorType type,
+        String name,
+        Set<UUID> ids) {
 
-    public AutomationRule.AutomationRuleAction action() { return AutomationRule.AutomationRuleAction.EVALUATOR; }
+    public AutomationRule.AutomationRuleAction action() {
+        return AutomationRule.AutomationRuleAction.EVALUATOR;
+    }
 }

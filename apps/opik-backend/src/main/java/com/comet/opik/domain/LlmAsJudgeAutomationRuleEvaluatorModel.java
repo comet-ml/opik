@@ -11,17 +11,18 @@ import java.util.Map;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
-public record LlmAsJudgeAutomationRuleEvaluatorModel (
-    UUID id,
-    UUID projectId,
-    String name,
-    Float samplingRate,
-    @Json LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode code,
-    Instant createdAt,
-    String createdBy,
-    Instant lastUpdatedAt,
-    String lastUpdatedBy
-) implements AutomationRuleEvaluatorModel<LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode> {
+public record LlmAsJudgeAutomationRuleEvaluatorModel(
+        UUID id,
+        UUID projectId,
+        String name,
+        Float samplingRate,
+        @Json LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode code,
+        Instant createdAt,
+        String createdBy,
+        Instant lastUpdatedAt,
+        String lastUpdatedBy)
+        implements
+            AutomationRuleEvaluatorModel<LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode> {
 
     @Override
     public AutomationRuleEvaluatorType type() {
@@ -29,11 +30,14 @@ public record LlmAsJudgeAutomationRuleEvaluatorModel (
     }
 
     record LlmAsJudgeCode(LlmAsJudgeCodeParameters model,
-                          List<LlmAsJudgeCodeMessage> messages,
-                          Map<String, String> variables,
-                          List<LlmAsJudgeCodeSchema> schema) {}
-    record LlmAsJudgeCodeParameters(String name, Double temperature) {}
-    record LlmAsJudgeCodeMessage(String role, String content) {}
-    record LlmAsJudgeCodeSchema(String name, LlmAsJudgeOutputSchemaType type, String description) {}
+            List<LlmAsJudgeCodeMessage> messages,
+            Map<String, String> variables,
+            List<LlmAsJudgeCodeSchema> schema) {
+    }
+    record LlmAsJudgeCodeParameters(String name, Double temperature) {
+    }
+    record LlmAsJudgeCodeMessage(String role, String content) {
+    }
+    record LlmAsJudgeCodeSchema(String name, LlmAsJudgeOutputSchemaType type, String description) {
+    }
 }
-
