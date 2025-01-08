@@ -45,18 +45,18 @@ public final class AutomationRuleEvaluatorLlmAsJudge
 
         @JsonView({View.Public.class, View.Write.class})
         @NotNull
-        private final Map<String, String> variableMapping;
+        private final Map<String, String> variables;
 
         @JsonView({View.Public.class, View.Write.class})
         @NotNull
         private final List<LlmAsJudgeOutputSchema> schema;
 
-        @ConstructorProperties({"model", "messages", "variableMapping", "schema"})
+        @ConstructorProperties({"model", "messages", "variables", "schema"})
         public LlmAsJudgeCode(@NotNull LlmAsJudgeModelParameters model, @NotNull List<LlmAsJudgeMessage> messages,
-                              @NotNull Map<String, String> variableMapping, @NotNull List<LlmAsJudgeOutputSchema> schema) {
+                              @NotNull Map<String, String> variables, @NotNull List<LlmAsJudgeOutputSchema> schema) {
             this.model = model;
             this.messages = messages;
-            this.variableMapping = variableMapping;
+            this.variables = variables;
             this.schema = schema;
         }
     }

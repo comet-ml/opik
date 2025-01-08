@@ -97,7 +97,7 @@ public class OnlineScoringEventListener {
         var baseRequestBuilder = ChatCompletionRequest.builder()
                                                     .model(evaluator.getCode().getModel().getName())
                                                     .temperature(evaluator.getCode().getModel().getTemperature())
-                                                    .messages(renderMessages(trace, evaluator))
+                                                    .messages(renderMessages(trace, evaluator.getCode()))
                                                     .build();
 
         // TODO: call AI Proxy and parse response into 1+ FeedbackScore
@@ -112,12 +112,12 @@ public class OnlineScoringEventListener {
      * Then we go through every variable template to replace them for the value from the trace.
      *
      * @param trace the trace with value to use to replace template variables
-     * @param evaluator the evaluator
+     * @param evaluatorCode the evaluator
      * @return
      */
-    private List<Message> renderMessages(Trace trace, AutomationRuleEvaluatorLlmAsJudge evaluator) {
+    List<Message> renderMessages(Trace trace, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode evaluatorCode) {
         // prepare the map of replacements to use in all messages, extracting the actual value from the Trace
-        var parsedVariables = variableMapping(evaluator.getCode().getVariableMapping());
+        var parsedVariables = variableMapping(evaluatorCode.getVariables());
         var replacements = parsedVariables.stream().map(mapper -> {
                 var traceSection = switch (mapper.traceSection) {
                     case INPUT -> trace.input();
@@ -136,7 +136,7 @@ public class OnlineScoringEventListener {
         var templateRenderer = new StringSubstitutor(replacements, "{{", "}}");
 
         // render the message templates from evaluator rule
-        return evaluator.getCode().getMessages().stream()
+        return evaluatorCode.getMessages().stream()
                 .map(templateMessage -> {
                     var renderedMessage = templateRenderer.replace(templateMessage.getContent());
 
@@ -160,6 +160,7 @@ public class OnlineScoringEventListener {
      * @return a parsed list of mappings, easier to use for the template rendering
      */
     List<MessageVariableMapping> variableMapping(Map<String, String> evaluatorVariables) {
+        log.debug("Parsing: {}", evaluatorVariables);
         return evaluatorVariables.entrySet().stream()
                 .map(mapper -> {
                     var templateVariable = mapper.getKey();
