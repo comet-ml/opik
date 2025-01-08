@@ -34,7 +34,7 @@ class RedissonLockService implements LockService {
             semaphore.release(locked)
                     .subscribe(
                             __ -> log.debug("Lock '{}' released successfully", locked),
-                            __ -> log.warn("Lock '{}' already released", locked));
+                            __ -> log.warn("Lock already released or doesn't exist"));
         }
 
     }
