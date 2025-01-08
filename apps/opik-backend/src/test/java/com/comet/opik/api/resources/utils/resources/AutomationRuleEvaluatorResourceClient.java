@@ -2,9 +2,8 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
-import com.comet.opik.api.Trace;
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -13,12 +12,10 @@ import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
@@ -65,7 +62,7 @@ public class AutomationRuleEvaluatorResourceClient {
             } else {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                 assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                        .isEqualTo(UNAUTHORIZED_RESPONSE);
+                        .isEqualTo(TestHttpClientUtils.UNAUTHORIZED_RESPONSE);
             }
         }
     }
