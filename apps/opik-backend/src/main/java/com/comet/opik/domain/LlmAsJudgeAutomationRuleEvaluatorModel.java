@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.LlmAsJudgeOutputSchemaType;
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
 import org.jdbi.v3.json.Json;
 
@@ -31,7 +30,7 @@ public record LlmAsJudgeAutomationRuleEvaluatorModel (
 
     record LlmAsJudgeCode(LlmAsJudgeCodeParameters model,
                           List<LlmAsJudgeCodeMessage> messages,
-                          Map<String, String> variableMapping,
+                          Map<String, String> variables,
                           List<LlmAsJudgeCodeSchema> schema) {}
     record LlmAsJudgeCodeParameters(String name, Double temperature) {}
     record LlmAsJudgeCodeMessage(String role, String content) {}
