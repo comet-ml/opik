@@ -9,6 +9,9 @@
 target/
 **/dependency-reduced-pom.xml
 
+# BE related
+/apps/opik-backend/redoc/openapi.yaml
+
 # FE related
 /apps/opik-frontend/dist
 /apps/opik-frontend/build
