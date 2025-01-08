@@ -72,7 +72,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
             AutomationRuleEvaluatorCriteria criteria) {
-        return find(workspaceId, projectId, criteria, 0, Integer.MAX_VALUE);
+        return find(workspaceId, projectId, criteria, null, null);
     }
 
     @SqlUpdate("""
