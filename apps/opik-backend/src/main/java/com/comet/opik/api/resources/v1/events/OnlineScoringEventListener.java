@@ -14,23 +14,18 @@ import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.Message;
 import dev.ai4j.openai4j.chat.SystemMessage;
 import dev.ai4j.openai4j.chat.UserMessage;
-import dev.langchain4j.data.message.ChatMessageType;
 import jakarta.inject.Inject;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringSubstitutor;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
-import java.util.Spliterator;
-import java.util.Spliterators;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 @EagerSingleton
 @Slf4j
@@ -98,24 +93,16 @@ public class OnlineScoringEventListener {
      * @param evaluator the automation rule to score the trace
      */
     private void score(Trace trace, String workspaceId, AutomationRuleEvaluatorLlmAsJudge evaluator) {
-//        var baseRequestBuilder = ChatCompletionRequest.builder()
-//                                                    .model(evaluator.model())
-//                                                    .temperature(evaluator.temperature())
-//                                                    .messages(renderMessages(trace, evaluator))
-//                                                    .build();
-//
-//        // we do a request for each schema in the evaluator provided
-//        evaluator.scorers().stream()
-//            .map(responseFormat -> {
-//
-//            // TODO: prepare request for AI Proxy
-//                return null;
-//            })
-//            .filter(Objects::nonNull)
-//            .forEach(response -> {
-//
-//            // TODO: convert AI Proxy response into a FeedbackScore and save it
-//            });
+        // TODO prepare base request
+        var baseRequestBuilder = ChatCompletionRequest.builder()
+                                                    .model(evaluator.getCode().getModel().getName())
+                                                    .temperature(evaluator.getCode().getModel().getTemperature())
+                                                    .messages(renderMessages(trace, evaluator))
+                                                    .build();
+
+        // TODO: call AI Proxy and parse response into 1+ FeedbackScore
+
+        // TODO: store FeedbackScores
     }
 
     /**
@@ -124,13 +111,14 @@ public class OnlineScoringEventListener {
      * As the rule my consist in multiple messages, we check each one of them for variables to fill.
      * Then we go through every variable template to replace them for the value from the trace.
      *
-     * @param trace
+     * @param trace the trace with value to use to replace template variables
+     * @param evaluator the evaluator
      * @return
      */
     private List<Message> renderMessages(Trace trace, AutomationRuleEvaluatorLlmAsJudge evaluator) {
-        // prepare the map of replacements, extracting the actual value from the Trace
-        var replacements = variableMapping(evaluator).stream()
-            .map(mapper -> {
+        // prepare the map of replacements to use in all messages, extracting the actual value from the Trace
+        var parsedVariables = variableMapping(evaluator.getCode().getVariableMapping());
+        var replacements = parsedVariables.stream().map(mapper -> {
                 var traceSection = switch (mapper.traceSection) {
                     case INPUT -> trace.input();
                     case OUTPUT -> trace.output();
@@ -147,72 +135,59 @@ public class OnlineScoringEventListener {
         // will convert all '{{key}}' into 'value'
         var templateRenderer = new StringSubstitutor(replacements, "{{", "}}");
 
-        return Collections.emptyList();
+        // render the message templates from evaluator rule
+        return evaluator.getCode().getMessages().stream()
+                .map(templateMessage -> {
+                    var renderedMessage = templateRenderer.replace(templateMessage.getContent());
 
-//        // render the message templates from evaluator rule
-//        return StreamSupport
-//                .stream(((Iterable<JsonNode>) evaluator::messages).spliterator(), false)
-//                .map(templateMessage -> {
-//                    var messageRole = templateMessage.get("role").asText();
-//                    var messageRoleType = ChatMessageType.valueOf(messageRole.toUpperCase());
-//
-//                    var templateContent = templateMessage.get("content").asText();
-//                    var renderedMessage = templateRenderer.replace(templateContent);
-//
-//                    return switch (messageRoleType) {
-//                        case USER -> UserMessage.from(renderedMessage);
-//                        case SYSTEM -> SystemMessage.from(renderedMessage);
-//                        default -> {
-//                            log.info("No mapping for message role type {} (mapped from {})", messageRoleType, messageRole);
-//                            yield null;
-//                        }
-//                    };
-//                })
-//                .filter(Objects::nonNull)
-//                .collect(Collectors.toList());
+                    return switch (templateMessage.getRole()) {
+                        case USER -> UserMessage.from(renderedMessage);
+                        case SYSTEM -> SystemMessage.from(renderedMessage);
+                        default -> {
+                            log.info("No mapping for message role type {}", templateMessage.getRole());
+                            yield null;
+                        }
+                    };
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     /**
      * Parse evaluator\'s variable mapper into an usable list of
      *
-     * @param evaluator
-     * @return
+     * @param evaluatorVariables a map with variables and a path into a trace input/output/metadata to replace
+     * @return a parsed list of mappings, easier to use for the template rendering
      */
-    List<MessageVariableMapping> variableMapping(AutomationRuleEvaluatorLlmAsJudge evaluator) {
-        return Collections.emptyList();
+    List<MessageVariableMapping> variableMapping(Map<String, String> evaluatorVariables) {
+        return evaluatorVariables.entrySet().stream()
+                .map(mapper -> {
+                    var templateVariable = mapper.getKey();
+                    var tracePath = mapper.getValue();
 
-//        Spliterator<Map.Entry<String, JsonNode>> spliterator = Spliterators.spliteratorUnknownSize(
-//                evaluator.templateVariables(), Spliterator.ORDERED);
-//
-//        return StreamSupport
-//                .stream(spliterator, false)
-//                .map(mapper -> {
-//                    var templateVariable = mapper.getKey();
-//                    var tracePath = mapper.getValue().asText();
-//
-//                    var builder = MessageVariableMapping.builder().variableName(templateVariable);
-//
-//                    if (tracePath.startsWith("input.")) {
-//                        builder.traceSection(TraceSection.INPUT)
-//                                .jsonPath(tracePath.substring("input.".length()));
-//                    }
-//                    else if (tracePath.startsWith("output.")) {
-//                        builder.traceSection(TraceSection.OUTPUT)
-//                                .jsonPath(tracePath.substring("output.".length()));
-//                    }
-//                    else if (tracePath.startsWith("metadata.")) {
-//                        builder.traceSection(TraceSection.METADATA)
-//                                .jsonPath(tracePath.substring("metadata.".length()));
-//                    }
-//                    else {
-//                        log.info("Couldn't map trace path '{}' into a input/output/metadata path", tracePath);
-//                        return null;
-//                    }
-//
-//                    return builder.build();
-//                })
-//                .filter(Objects::nonNull)
-//                .collect(Collectors.toList());
+                    var builder = MessageVariableMapping.builder().variableName(templateVariable);
+
+                    if (tracePath.startsWith("input.")) {
+                        builder.traceSection(TraceSection.INPUT)
+                                .jsonPath(tracePath.substring("input.".length()));
+                    }
+                    else if (tracePath.startsWith("output.")) {
+                        builder.traceSection(TraceSection.OUTPUT)
+                                .jsonPath(tracePath.substring("output.".length()));
+                    }
+                    else if (tracePath.startsWith("metadata.")) {
+                        builder.traceSection(TraceSection.METADATA)
+                                .jsonPath(tracePath.substring("metadata.".length()));
+                    }
+                    else {
+                        log.info("Couldn't map trace path '{}' into a input/output/metadata path", tracePath);
+                        return null;
+                    }
+
+                    return builder.build();
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     enum TraceSection { INPUT, OUTPUT, METADATA }

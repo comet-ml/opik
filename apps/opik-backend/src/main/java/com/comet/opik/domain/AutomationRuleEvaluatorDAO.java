@@ -53,7 +53,6 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             <if(name)> AND rule.name like concat('%', :name, '%') <endif>
             <if(limit)> LIMIT :limit <endif>
             <if(offset)> OFFSET :offset <endif>
-            
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings

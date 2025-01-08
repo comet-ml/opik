@@ -2,6 +2,7 @@ package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
+import dev.langchain4j.data.message.ChatMessageType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -67,14 +68,14 @@ public final class AutomationRuleEvaluatorLlmAsJudge
 
         @JsonView({View.Public.class, View.Write.class})
         @NotNull
-        private final String role;
+        private final ChatMessageType role;
 
         @JsonView({View.Public.class, View.Write.class})
         @NotNull
         private final String content;
 
         @ConstructorProperties({"role", "content"})
-        public LlmAsJudgeMessage(@NotNull String role, @NotNull String content) {
+        public LlmAsJudgeMessage(@NotNull ChatMessageType role, @NotNull String content) {
             this.role = role;
             this.content = content;
         }
@@ -116,10 +117,10 @@ public final class AutomationRuleEvaluatorLlmAsJudge
 
         @JsonView({View.Public.class, View.Write.class})
         @NotNull
-        private final Float temperature;
+        private final Double temperature;
 
         @ConstructorProperties({"name", "temperature"})
-        public LlmAsJudgeModelParameters(@NotNull String name, @NotNull Float temperature) {
+        public LlmAsJudgeModelParameters(@NotNull String name, @NotNull Double temperature) {
             this.name = name;
             this.temperature = temperature;
         }
