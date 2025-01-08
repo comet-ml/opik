@@ -41,7 +41,7 @@ from opik.integrations.dspy.callback import OpikCallback
 project_name = "DSPY"
 
 lm = dspy.LM(
-    model="openai/gpt-4o-mini",
+    model="openai/gpt-4o",
 )
 dspy.configure(lm=lm)
 
