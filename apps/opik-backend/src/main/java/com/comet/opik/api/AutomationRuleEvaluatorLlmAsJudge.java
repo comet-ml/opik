@@ -51,8 +51,9 @@ public final class AutomationRuleEvaluatorLlmAsJudge
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record LlmAsJudgeMessage(@JsonView( {
-            View.Public.class, View.Write.class}) @NotNull ChatMessageType role,
+    public record LlmAsJudgeMessage(
+            @JsonView( {
+                    View.Public.class, View.Write.class}) @NotNull ChatMessageType role,
             @JsonView({View.Public.class, View.Write.class}) @NotNull String content){
 
         @ConstructorProperties({"role", "content"})
@@ -64,8 +65,9 @@ public final class AutomationRuleEvaluatorLlmAsJudge
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record LlmAsJudgeOutputSchema(@JsonView( {
-            View.Public.class, View.Write.class}) @NotNull String name,
+    public record LlmAsJudgeOutputSchema(
+            @JsonView( {
+                    View.Public.class, View.Write.class}) @NotNull String name,
             @JsonView({View.Public.class, View.Write.class}) @NotNull LlmAsJudgeOutputSchemaType type,
             @JsonView({View.Public.class, View.Write.class}) @NotNull String description){
 
@@ -80,8 +82,9 @@ public final class AutomationRuleEvaluatorLlmAsJudge
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record LlmAsJudgeModelParameters(@JsonView( {
-            View.Public.class, View.Write.class}) @NotNull String name,
+    public record LlmAsJudgeModelParameters(
+            @JsonView( {
+                    View.Public.class, View.Write.class}) @NotNull String name,
             @JsonView({View.Public.class, View.Write.class}) @NotNull Double temperature){
 
         @ConstructorProperties({"name", "temperature"})

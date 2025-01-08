@@ -203,32 +203,30 @@ public class OnlineScoringEventListenerTest {
         @Test
         @DisplayName("parse variable mapping into a usable one")
         void when__parseRuleVariables() {
-            log.info(evaluatorCode.toString());
             var variableMappings = onlineScoringEventListener.variableMapping(evaluatorCode.variables());
 
             assertThat(variableMappings).hasSize(4);
 
             var varSummary = variableMappings.get(0);
             assertThat(varSummary.traceSection()).isEqualTo(OnlineScoringEventListener.TraceSection.INPUT);
-            assertThat(varSummary.jsonPath()).isEqualTo("questions.question1");
+            assertThat(varSummary.jsonPath()).isEqualTo("$.questions.question1");
 
             var varInstruction = variableMappings.get(1);
             assertThat(varInstruction.traceSection()).isEqualTo(OnlineScoringEventListener.TraceSection.OUTPUT);
-            assertThat(varInstruction.jsonPath()).isEqualTo("output");
+            assertThat(varInstruction.jsonPath()).isEqualTo("$.output");
 
             var varNonUsed = variableMappings.get(2);
             assertThat(varNonUsed.traceSection()).isEqualTo(OnlineScoringEventListener.TraceSection.INPUT);
-            assertThat(varNonUsed.jsonPath()).isEqualTo("questions.question2");
+            assertThat(varNonUsed.jsonPath()).isEqualTo("$.questions.question2");
 
             var varToFail = variableMappings.get(3);
             assertThat(varToFail.traceSection()).isEqualTo(OnlineScoringEventListener.TraceSection.METADATA);
-            assertThat(varToFail.jsonPath()).isEqualTo("nonexistent.path");
+            assertThat(varToFail.jsonPath()).isEqualTo("$.nonexistent.path");
         }
 
         @Test
         @DisplayName("render message templates with a trace")
-        void when__parseRuleVariable2s() {
-            log.info(evaluatorCode.toString());
+        void when__renderTemplate() {
             var renderedMessages = onlineScoringEventListener.renderMessages(trace, evaluatorCode);
 
             assertThat(renderedMessages).hasSize(2);

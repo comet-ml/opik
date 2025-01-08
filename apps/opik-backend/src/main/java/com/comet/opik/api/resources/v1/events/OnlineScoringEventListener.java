@@ -8,8 +8,10 @@ import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
+import com.jayway.jsonpath.JsonPath;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.Message;
 import dev.ai4j.openai4j.chat.SystemMessage;
@@ -61,7 +63,7 @@ public class OnlineScoringEventListener {
                 .collect(Collectors.groupingBy(Trace::projectId));
 
         Map<String, Integer> countMap = tracesByProject.entrySet().stream()
-                .collect(Collectors.toMap(entry -> "projectId " + entry.getKey(),
+                .collect(Collectors.toMap(entry -> "projectId: " + entry.getKey(),
                         entry -> entry.getValue().size()));
 
         log.debug("[OnlineScoring] Received traces for workspace '{}': {}", tracesBatch.workspaceId(), countMap);
@@ -105,6 +107,20 @@ public class OnlineScoringEventListener {
         // TODO: store FeedbackScores
     }
 
+    final ObjectMapper objectMapper = new ObjectMapper();
+
+    String extractFromJson(JsonNode json, String path) {
+        try {
+            // JsonPath didnt work with JsonNode, even explicitly using JacksonJsonProvider, so we convert to a Map
+            var forcedObject = objectMapper.convertValue(json, Map.class);
+            return JsonPath.parse(forcedObject).read(path);
+        }
+        catch (Exception e) {
+            log.debug("Couldn't find path '{}' inside json {}: {}", path, json, e.getMessage());
+            return null;
+        }
+    }
+
     /**
      * Render the rule evaluator message template using the values from an actual trace.
      *
@@ -113,7 +129,7 @@ public class OnlineScoringEventListener {
      *
      * @param trace the trace with value to use to replace template variables
      * @param evaluatorCode the evaluator
-     * @return
+     * @return a list of AI messages, with templates rendered
      */
     List<Message> renderMessages(Trace trace, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode evaluatorCode) {
         // prepare the map of replacements to use in all messages, extracting the actual value from the Trace
@@ -126,7 +142,7 @@ public class OnlineScoringEventListener {
             };
 
             return mapper.toBuilder()
-                    .valueToReplace(getPath(traceSection, mapper.jsonPath()))
+                    .valueToReplace(extractFromJson(traceSection, mapper.jsonPath()))
                     .build();
         })
                 .filter(mapper -> mapper.valueToReplace() != null)
@@ -151,7 +167,7 @@ public class OnlineScoringEventListener {
                     };
                 })
                 .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -161,7 +177,6 @@ public class OnlineScoringEventListener {
      * @return a parsed list of mappings, easier to use for the template rendering
      */
     List<MessageVariableMapping> variableMapping(Map<String, String> evaluatorVariables) {
-        log.debug("Parsing: {}", evaluatorVariables);
         return evaluatorVariables.entrySet().stream()
                 .map(mapper -> {
                     var templateVariable = mapper.getKey();
@@ -171,13 +186,13 @@ public class OnlineScoringEventListener {
 
                     if (tracePath.startsWith("input.")) {
                         builder.traceSection(TraceSection.INPUT)
-                                .jsonPath(tracePath.substring("input.".length()));
+                                .jsonPath("$" + tracePath.substring("input".length()));
                     } else if (tracePath.startsWith("output.")) {
                         builder.traceSection(TraceSection.OUTPUT)
-                                .jsonPath(tracePath.substring("output.".length()));
+                                .jsonPath("$" + tracePath.substring("output".length()));
                     } else if (tracePath.startsWith("metadata.")) {
                         builder.traceSection(TraceSection.METADATA)
-                                .jsonPath(tracePath.substring("metadata.".length()));
+                                .jsonPath("$" + tracePath.substring("metadata".length()));
                     } else {
                         log.info("Couldn't map trace path '{}' into a input/output/metadata path", tracePath);
                         return null;
@@ -186,7 +201,7 @@ public class OnlineScoringEventListener {
                     return builder.build();
                 })
                 .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     enum TraceSection {
@@ -197,20 +212,5 @@ public class OnlineScoringEventListener {
     @Builder(toBuilder = true)
     record MessageVariableMapping(TraceSection traceSection, String variableName, String jsonPath,
             String valueToReplace) {
-    }
-
-    String getPath(JsonNode rootNode, String path) {
-        String[] parts = path.split("\\."); // Split by dot
-        JsonNode currentNode = rootNode;
-
-        for (String part : parts) {
-            if (currentNode == null || currentNode.isMissingNode()) {
-                log.info("Couldn't find json path '{}' in Trace section {}", path, rootNode);
-                return null;
-            }
-            currentNode = currentNode.path(part);
-        }
-
-        return currentNode.textValue();
     }
 }
