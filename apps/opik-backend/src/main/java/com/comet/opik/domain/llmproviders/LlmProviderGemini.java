@@ -1,6 +1,5 @@
 package com.comet.opik.domain.llmproviders;
 
-import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -11,30 +10,26 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
-import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+@RequiredArgsConstructor
 public class LlmProviderGemini implements LlmProviderService {
-    private final LlmProviderClientConfig llmProviderClientConfig;
-    private final String apiKey;
+    private final @NonNull LlmProviderClientGenerator llmProviderClientGenerator;
+    private final @NonNull String apiKey;
 
     private static final String ERR_UNEXPECTED_ROLE = "unexpected role '%s'";
 
-    public LlmProviderGemini(LlmProviderClientConfig llmProviderClientConfig, String apiKey) {
-        this.llmProviderClientConfig = llmProviderClientConfig;
-        this.apiKey = apiKey;
-    }
-
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var response = createClient(request).generate(request.messages().stream().map(this::toChatMessage).toList());
+        var response = llmProviderClientGenerator.newGeminiClient(apiKey, request)
+                .generate(request.messages().stream().map(this::toChatMessage).toList());
 
         return ChatCompletionResponse.builder()
                 .model(request.model())
@@ -53,8 +48,9 @@ public class LlmProviderGemini implements LlmProviderService {
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        createStreamingClient(request).generate(request.messages().stream().map(this::toChatMessage).toList(),
-                new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
+        llmProviderClientGenerator.newGeminiStreamingClient(apiKey, request)
+                .generate(request.messages().stream().map(this::toChatMessage).toList(),
+                        new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
     }
 
     @Override
@@ -89,31 +85,5 @@ public class LlmProviderGemini implements LlmProviderService {
         }
 
         throw new BadRequestException("only text content is supported");
-    }
-
-    private GoogleAiGeminiChatModel createClient(ChatCompletionRequest request) {
-        return GoogleAiGeminiChatModel.builder()
-                .apiKey(apiKey)
-                .modelName(request.model())
-                .maxOutputTokens(request.maxCompletionTokens())
-                .maxRetries(1)
-                .stopSequences(request.stop())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
-                .build();
-    }
-
-    private GoogleAiGeminiStreamingChatModel createStreamingClient(ChatCompletionRequest request) {
-        return GoogleAiGeminiStreamingChatModel.builder()
-                .apiKey(apiKey)
-                .modelName(request.model())
-                .maxOutputTokens(request.maxCompletionTokens())
-                .maxRetries(1)
-                .stopSequences(request.stop())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
-                .build();
     }
 }

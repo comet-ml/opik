@@ -1,6 +1,5 @@
 package com.comet.opik.domain.llmproviders;
 
-import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -23,9 +22,9 @@ import dev.langchain4j.model.anthropic.internal.client.AnthropicHttpException;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,15 +33,10 @@ import java.util.function.Consumer;
 import static com.comet.opik.domain.ChatCompletionService.ERROR_EMPTY_MESSAGES;
 import static com.comet.opik.domain.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
 
+@RequiredArgsConstructor
 @Slf4j
 class LlmProviderAnthropic implements LlmProviderService {
-    private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
     private final @NonNull AnthropicClient anthropicClient;
-
-    public LlmProviderAnthropic(@NonNull LlmProviderClientConfig llmProviderClientConfig, @NonNull String apiKey) {
-        this.llmProviderClientConfig = llmProviderClientConfig;
-        this.anthropicClient = newClient(apiKey);
-    }
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
@@ -156,34 +150,6 @@ class LlmProviderAnthropic implements LlmProviderService {
                         .content(content.text)
                         .build())
                 .finishReason(response.stopReason)
-                .build();
-    }
-
-    private AnthropicClient newClient(String apiKey) {
-        var anthropicClientBuilder = AnthropicClient.builder();
-        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
-                .map(LlmProviderClientConfig.AnthropicClientConfig::url)
-                .ifPresent(url -> {
-                    if (StringUtils.isNotEmpty(url)) {
-                        anthropicClientBuilder.baseUrl(url);
-                    }
-                });
-        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
-                .map(LlmProviderClientConfig.AnthropicClientConfig::version)
-                .ifPresent(version -> {
-                    if (StringUtils.isNotBlank(version)) {
-                        anthropicClientBuilder.version(version);
-                    }
-                });
-        Optional.ofNullable(llmProviderClientConfig.getLogRequests())
-                .ifPresent(anthropicClientBuilder::logRequests);
-        Optional.ofNullable(llmProviderClientConfig.getLogResponses())
-                .ifPresent(anthropicClientBuilder::logResponses);
-        // anthropic client builder only receives one timeout variant
-        Optional.ofNullable(llmProviderClientConfig.getCallTimeout())
-                .ifPresent(callTimeout -> anthropicClientBuilder.timeout(callTimeout.toJavaDuration()));
-        return anthropicClientBuilder
-                .apiKey(apiKey)
                 .build();
     }
 }

@@ -68,7 +68,8 @@ class LlmProviderFactoryTest {
                 .build());
 
         // SUT
-        var llmProviderFactory = new LlmProviderFactory(llmProviderClientConfig, llmProviderApiKeyService);
+        var llmProviderFactory = new LlmProviderFactory(llmProviderApiKeyService,
+                new LlmProviderClientGenerator(llmProviderClientConfig));
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
 
