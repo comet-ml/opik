@@ -116,7 +116,13 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             try {
                 int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.name(),
                         evaluatorUpdate.samplingRate(), userName);
-                int resultEval = dao.updateEvaluator(id, evaluatorUpdate, userName);
+
+                var modelUpdate = LlmAsJudgeAutomationRuleEvaluatorModel.builder()
+                        .code(AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.code()))
+                        .lastUpdatedBy(userName)
+                        .build();
+
+                int resultEval = dao.updateEvaluator(id, modelUpdate);
 
                 if (resultEval == 0 || resultBase == 0) {
                     throw newNotFoundException();

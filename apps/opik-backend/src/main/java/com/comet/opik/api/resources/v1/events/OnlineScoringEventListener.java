@@ -7,24 +7,15 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
-import com.jayway.jsonpath.JsonPath;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.ai4j.openai4j.chat.Message;
-import dev.ai4j.openai4j.chat.SystemMessage;
-import dev.ai4j.openai4j.chat.UserMessage;
 import jakarta.inject.Inject;
-import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.text.StringSubstitutor;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -99,7 +90,7 @@ public class OnlineScoringEventListener {
         var baseRequestBuilder = ChatCompletionRequest.builder()
                 .model(evaluator.getCode().model().name())
                 .temperature(evaluator.getCode().model().temperature())
-                .messages(renderMessages(trace, evaluator.getCode()))
+                .messages(LlmAsJudgeMessageRender.renderMessages(trace, evaluator.getCode()))
                 .build();
 
         // TODO: call AI Proxy and parse response into 1+ FeedbackScore
@@ -107,110 +98,4 @@ public class OnlineScoringEventListener {
         // TODO: store FeedbackScores
     }
 
-    final ObjectMapper objectMapper = new ObjectMapper();
-
-    String extractFromJson(JsonNode json, String path) {
-        try {
-            // JsonPath didnt work with JsonNode, even explicitly using JacksonJsonProvider, so we convert to a Map
-            var forcedObject = objectMapper.convertValue(json, Map.class);
-            return JsonPath.parse(forcedObject).read(path);
-        }
-        catch (Exception e) {
-            log.debug("Couldn't find path '{}' inside json {}: {}", path, json, e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Render the rule evaluator message template using the values from an actual trace.
-     *
-     * As the rule my consist in multiple messages, we check each one of them for variables to fill.
-     * Then we go through every variable template to replace them for the value from the trace.
-     *
-     * @param trace the trace with value to use to replace template variables
-     * @param evaluatorCode the evaluator
-     * @return a list of AI messages, with templates rendered
-     */
-    List<Message> renderMessages(Trace trace, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode evaluatorCode) {
-        // prepare the map of replacements to use in all messages, extracting the actual value from the Trace
-        var parsedVariables = variableMapping(evaluatorCode.variables());
-        var replacements = parsedVariables.stream().map(mapper -> {
-            var traceSection = switch (mapper.traceSection) {
-                case INPUT -> trace.input();
-                case OUTPUT -> trace.output();
-                case METADATA -> trace.metadata();
-            };
-
-            return mapper.toBuilder()
-                    .valueToReplace(extractFromJson(traceSection, mapper.jsonPath()))
-                    .build();
-        })
-                .filter(mapper -> mapper.valueToReplace() != null)
-                .collect(
-                        Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
-
-        // will convert all '{{key}}' into 'value'
-        var templateRenderer = new StringSubstitutor(replacements, "{{", "}}");
-
-        // render the message templates from evaluator rule
-        return evaluatorCode.messages().stream()
-                .map(templateMessage -> {
-                    var renderedMessage = templateRenderer.replace(templateMessage.content());
-
-                    return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
-                        case SYSTEM -> SystemMessage.from(renderedMessage);
-                        default -> {
-                            log.info("No mapping for message role type {}", templateMessage.role());
-                            yield null;
-                        }
-                    };
-                })
-                .filter(Objects::nonNull)
-                .toList();
-    }
-
-    /**
-     * Parse evaluator\'s variable mapper into an usable list of
-     *
-     * @param evaluatorVariables a map with variables and a path into a trace input/output/metadata to replace
-     * @return a parsed list of mappings, easier to use for the template rendering
-     */
-    List<MessageVariableMapping> variableMapping(Map<String, String> evaluatorVariables) {
-        return evaluatorVariables.entrySet().stream()
-                .map(mapper -> {
-                    var templateVariable = mapper.getKey();
-                    var tracePath = mapper.getValue();
-
-                    var builder = MessageVariableMapping.builder().variableName(templateVariable);
-
-                    if (tracePath.startsWith("input.")) {
-                        builder.traceSection(TraceSection.INPUT)
-                                .jsonPath("$" + tracePath.substring("input".length()));
-                    } else if (tracePath.startsWith("output.")) {
-                        builder.traceSection(TraceSection.OUTPUT)
-                                .jsonPath("$" + tracePath.substring("output".length()));
-                    } else if (tracePath.startsWith("metadata.")) {
-                        builder.traceSection(TraceSection.METADATA)
-                                .jsonPath("$" + tracePath.substring("metadata".length()));
-                    } else {
-                        log.info("Couldn't map trace path '{}' into a input/output/metadata path", tracePath);
-                        return null;
-                    }
-
-                    return builder.build();
-                })
-                .filter(Objects::nonNull)
-                .toList();
-    }
-
-    enum TraceSection {
-        INPUT,
-        OUTPUT,
-        METADATA
-    }
-    @Builder(toBuilder = true)
-    record MessageVariableMapping(TraceSection traceSection, String variableName, String jsonPath,
-            String valueToReplace) {
-    }
 }

@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AutomationRule;
 import com.comet.opik.api.AutomationRuleEvaluatorCriteria;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
@@ -35,11 +34,10 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @SqlUpdate("""
             UPDATE automation_rule_evaluators
             SET code = :rule.code,
-                last_updated_by = :userName
+                last_updated_by = :rule.lastUpdatedBy
             WHERE id = :id
             """)
-    int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorUpdate ruleUpdate,
-            @Bind("userName") String userName);
+    <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
     @SqlQuery("""
             SELECT rule.id, rule.project_id, rule.action, rule.name, rule.sampling_rate, evaluator.type, evaluator.code,
