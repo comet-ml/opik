@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 
 @UtilityClass
 @Slf4j
-public class LlmAsJudgeMessageRender {
+class LlmAsJudgeMessageRender {
 
     /**
      * Render the rule evaluator message template using the values from an actual trace.
