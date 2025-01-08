@@ -187,3 +187,36 @@ def evaluate_experiment(
     )
 
     return evaluation_result_
+
+def evaluate_prompt(
+    dataset: dataset.Dataset,
+    prompt: List[Dict[str, Any]],
+    model: str,
+    model_kwargs: Dict[str, Any],
+    scoring_metrics: List[base_metric.BaseMetric],
+    scoring_threads: int = 16,
+    verbose: int = 1
+) -> evaluation_result.EvaluationResult:
+    """
+    Performs prompt evaluation on a given dataset.
+
+    Args:
+        dataset: An Opik dataset instance
+
+        prompt: A list of prompt messages to evaluate.
+
+        model: The name of the model to use for evaluation.
+
+        model_kwargs: A dictionary of keyword arguments to pass to the model, these are typically `temperature`, `max_tokens`, etc .
+
+        scoring_metrics: List of metrics to calculate during evaluation.
+            Each metric has `score(...)` method, arguments for this method
+            are taken from the `task` output, check the signature
+            of the `score` method in metrics that you need to find out which keys
+            are mandatory in `task`-returned dictionary.
+
+        scoring_threads: amount of thread workers to run scoring metrics.
+
+        verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
+    """
+    pass
