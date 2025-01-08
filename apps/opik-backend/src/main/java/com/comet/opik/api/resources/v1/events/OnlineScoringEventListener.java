@@ -95,8 +95,8 @@ public class OnlineScoringEventListener {
     private void score(Trace trace, String workspaceId, AutomationRuleEvaluatorLlmAsJudge evaluator) {
         // TODO prepare base request
         var baseRequestBuilder = ChatCompletionRequest.builder()
-                .model(evaluator.getCode().getModel().getName())
-                .temperature(evaluator.getCode().getModel().getTemperature())
+                .model(evaluator.getCode().model().name())
+                .temperature(evaluator.getCode().model().temperature())
                 .messages(renderMessages(trace, evaluator.getCode()))
                 .build();
 
@@ -117,7 +117,7 @@ public class OnlineScoringEventListener {
      */
     List<Message> renderMessages(Trace trace, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode evaluatorCode) {
         // prepare the map of replacements to use in all messages, extracting the actual value from the Trace
-        var parsedVariables = variableMapping(evaluatorCode.getVariables());
+        var parsedVariables = variableMapping(evaluatorCode.variables());
         var replacements = parsedVariables.stream().map(mapper -> {
             var traceSection = switch (mapper.traceSection) {
                 case INPUT -> trace.input();
@@ -137,15 +137,15 @@ public class OnlineScoringEventListener {
         var templateRenderer = new StringSubstitutor(replacements, "{{", "}}");
 
         // render the message templates from evaluator rule
-        return evaluatorCode.getMessages().stream()
+        return evaluatorCode.messages().stream()
                 .map(templateMessage -> {
-                    var renderedMessage = templateRenderer.replace(templateMessage.getContent());
+                    var renderedMessage = templateRenderer.replace(templateMessage.content());
 
-                    return switch (templateMessage.getRole()) {
+                    return switch (templateMessage.role()) {
                         case USER -> UserMessage.from(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
-                            log.info("No mapping for message role type {}", templateMessage.getRole());
+                            log.info("No mapping for message role type {}", templateMessage.role());
                             yield null;
                         }
                     };

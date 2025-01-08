@@ -204,7 +204,7 @@ public class OnlineScoringEventListenerTest {
         @DisplayName("parse variable mapping into a usable one")
         void when__parseRuleVariables() {
             log.info(evaluatorCode.toString());
-            var variableMappings = onlineScoringEventListener.variableMapping(evaluatorCode.getVariables());
+            var variableMappings = onlineScoringEventListener.variableMapping(evaluatorCode.variables());
 
             assertThat(variableMappings).hasSize(4);
 

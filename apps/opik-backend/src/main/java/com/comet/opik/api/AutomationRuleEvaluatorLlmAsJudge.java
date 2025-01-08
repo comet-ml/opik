@@ -30,22 +30,14 @@ public final class AutomationRuleEvaluatorLlmAsJudge
     @Schema(accessMode = Schema.AccessMode.READ_WRITE)
     LlmAsJudgeCode code;
 
-    @Data
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class LlmAsJudgeCode {
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final LlmAsJudgeModelParameters model;
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final List<LlmAsJudgeMessage> messages;
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final Map<String, String> variables;
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final List<LlmAsJudgeOutputSchema> schema;
+    public record LlmAsJudgeCode(
+            @JsonView( {
+                    View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeMessage> messages,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull Map<String, String> variables,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema){
 
         @ConstructorProperties({"model", "messages", "variables", "schema"})
         public LlmAsJudgeCode(@NotNull LlmAsJudgeModelParameters model, @NotNull List<LlmAsJudgeMessage> messages,
@@ -57,16 +49,11 @@ public final class AutomationRuleEvaluatorLlmAsJudge
         }
     }
 
-    @Data
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class LlmAsJudgeMessage {
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final ChatMessageType role;
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final String content;
+    public record LlmAsJudgeMessage(@JsonView( {
+            View.Public.class, View.Write.class}) @NotNull ChatMessageType role,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull String content){
 
         @ConstructorProperties({"role", "content"})
         public LlmAsJudgeMessage(@NotNull ChatMessageType role, @NotNull String content) {
@@ -75,19 +62,12 @@ public final class AutomationRuleEvaluatorLlmAsJudge
         }
     }
 
-    @Data
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class LlmAsJudgeOutputSchema {
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final String name;
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final LlmAsJudgeOutputSchemaType type;
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final String description;
+    public record LlmAsJudgeOutputSchema(@JsonView( {
+            View.Public.class, View.Write.class}) @NotNull String name,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull LlmAsJudgeOutputSchemaType type,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull String description){
 
         @ConstructorProperties({"name", "type", "description"})
         public LlmAsJudgeOutputSchema(@NotNull String name, @NotNull LlmAsJudgeOutputSchemaType type,
@@ -98,16 +78,11 @@ public final class AutomationRuleEvaluatorLlmAsJudge
         }
     }
 
-    @Data
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class LlmAsJudgeModelParameters {
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final String name;
-
-        @JsonView({View.Public.class, View.Write.class})
-        @NotNull private final Double temperature;
+    public record LlmAsJudgeModelParameters(@JsonView( {
+            View.Public.class, View.Write.class}) @NotNull String name,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull Double temperature){
 
         @ConstructorProperties({"name", "temperature"})
         public LlmAsJudgeModelParameters(@NotNull String name, @NotNull Double temperature) {
