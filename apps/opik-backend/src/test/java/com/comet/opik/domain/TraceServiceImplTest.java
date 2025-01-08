@@ -120,6 +120,7 @@ class TraceServiceImplTest {
                     .thenReturn(Mono.just(traceId));
 
             var actualResult = traceService.create(Trace.builder()
+                    .projectId(projectId)
                     .projectName(projectName)
                     .startTime(Instant.now())
                     .build())
