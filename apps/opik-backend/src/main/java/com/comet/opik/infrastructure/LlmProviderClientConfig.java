@@ -15,6 +15,9 @@ public class LlmProviderClientConfig {
     public record OpenAiClientConfig(String url) {
     }
 
+    public record AnthropicClientConfig(String url, String version) {
+    }
+
     @Min(1)
     private Integer maxAttempts;
 
@@ -37,6 +40,13 @@ public class LlmProviderClientConfig {
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     private Duration writeTimeout;
 
+    private Boolean logRequests;
+
+    private Boolean logResponses;
+
     @Valid
     private LlmProviderClientConfig.OpenAiClientConfig openAiClient;
+
+    @Valid
+    private LlmProviderClientConfig.AnthropicClientConfig anthropicClient;
 }

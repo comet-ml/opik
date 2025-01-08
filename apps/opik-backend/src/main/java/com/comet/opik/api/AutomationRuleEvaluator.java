@@ -37,8 +37,7 @@ public abstract sealed class AutomationRuleEvaluator<T>
     UUID id;
 
     @JsonView({View.Public.class, View.Write.class})
-    @NotNull
-    UUID projectId;
+    @NotNull UUID projectId;
 
     @JsonView({View.Public.class, View.Write.class})
     @Schema(accessMode = Schema.AccessMode.READ_WRITE)
@@ -77,17 +76,21 @@ public abstract sealed class AutomationRuleEvaluator<T>
     }
 
     public static class View {
-        public static class Write {}
-        public static class Public {}
+        public static class Write {
+        }
+        public static class Public {
+        }
     }
 
     @Builder(toBuilder = true)
     public record AutomationRuleEvaluatorPage(
-            @JsonView({View.Public.class}) int page,
+            @JsonView( {
+                    View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
             @JsonView({View.Public.class}) List<AutomationRuleEvaluatorLlmAsJudge> content)
-            implements Page<AutomationRuleEvaluatorLlmAsJudge>{
+            implements
+                Page<AutomationRuleEvaluatorLlmAsJudge>{
 
         public static AutomationRuleEvaluator.AutomationRuleEvaluatorPage empty(int page) {
             return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(page, 0, 0, List.of());

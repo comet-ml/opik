@@ -2,7 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.ExperimentItemStreamRequest;
+import com.comet.opik.api.ExperimentItemSearchCriteria;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
@@ -120,13 +120,13 @@ public class ExperimentItemService {
         return new NotFoundException(message);
     }
 
-    public Flux<ExperimentItem> getExperimentItems(@NonNull ExperimentItemStreamRequest request) {
-        log.info("Getting experiment items by '{}'", request);
-        return experimentService.findByName(request.experimentName())
+    public Flux<ExperimentItem> getExperimentItems(@NonNull ExperimentItemSearchCriteria criteria) {
+        log.info("Getting experiment items by '{}'", criteria);
+        return experimentService.findByName(criteria.experimentName())
                 .subscribeOn(Schedulers.boundedElastic())
                 .collect(Collectors.mapping(Experiment::id, Collectors.toUnmodifiableSet()))
                 .flatMapMany(experimentIds -> experimentItemDAO.getItems(
-                        experimentIds, request.limit(), request.lastRetrievedId()));
+                        experimentIds, criteria));
     }
 
     public Mono<Void> delete(@NonNull Set<UUID> ids) {

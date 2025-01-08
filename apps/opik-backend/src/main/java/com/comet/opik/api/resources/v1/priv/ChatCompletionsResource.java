@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.ChunkedOutputHandlers;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -26,6 +27,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.server.ChunkedOutput;
 
 @Path("/v1/private/chat/completions")
 @Produces(MediaType.APPLICATION_JSON)
@@ -57,7 +59,10 @@ public class ChatCompletionsResource {
             log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'",
                     workspaceId, request.model());
             type = MediaType.SERVER_SENT_EVENTS;
-            entity = chatCompletionService.createAndStreamResponse(request, workspaceId);
+            var chunkedOutput = new ChunkedOutput<String>(String.class, "\r\n");
+            chatCompletionService.createAndStreamResponse(request, workspaceId,
+                    new ChunkedOutputHandlers(chunkedOutput));
+            entity = chunkedOutput;
         } else {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
             type = MediaType.APPLICATION_JSON;

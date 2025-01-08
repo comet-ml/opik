@@ -88,10 +88,10 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -857,21 +857,25 @@ class ProjectsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            List<Project> projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
+            List<Project> projects = createProjectsWithLastTrace(apiKey, workspaceName);
 
-            projects = projects.stream().map(project -> {
-                UUID projectId = createProject(project, apiKey, workspaceName);
-                List<UUID> traceIds = IntStream.range(0, 5)
-                        .mapToObj(i -> createCreateTrace(project.name(), apiKey, workspaceName))
-                        .toList();
+            requestAndAssertLastTraceSorting(workspaceName, apiKey, projects, request, expected, 1, projects.size());
+        }
 
-                Trace trace = getTrace(traceIds.getLast(), apiKey, workspaceName);
-                return project.toBuilder()
-                        .id(projectId)
-                        .lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
-            }).toList();
+        @Test
+        @DisplayName("when fetching all project with last trace sorting and out of range pagination, then return empty list")
+        void getProjects__whenSortingProjectsByLastTraceWithPagination__thenReturnEmptyList() {
+            final int OUT_OF_RANGE_PAGE = 3;
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
 
-            requestAndAssertLastTraceSorting(workspaceName, apiKey, projects, request, expected);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Project> projects = createProjectsWithLastTrace(apiKey, workspaceName);
+
+            requestAndAssertLastTraceSorting(workspaceName, apiKey, List.of(), Direction.DESC, Direction.DESC,
+                    OUT_OF_RANGE_PAGE, projects.size());
         }
 
         @ParameterizedTest
@@ -906,9 +910,10 @@ class ProjectsResourceTest {
                         return project.toBuilder().id(projectId).build();
                     }).toList();
 
+            List<Project> allProjects = Stream.concat(withTraceProjects.stream(), noTraceProjects.stream()).toList();
+
             requestAndAssertLastTraceSorting(
-                    workspaceName, apiKey, Stream.concat(withTraceProjects.stream(), noTraceProjects.stream()).toList(),
-                    request, expected);
+                    workspaceName, apiKey, allProjects, request, expected, 1, allProjects.size());
         }
 
         public static Stream<Arguments> sortDirectionProvider() {
@@ -916,6 +921,22 @@ class ProjectsResourceTest {
                     Arguments.of(Named.of("non specified", null), Direction.ASC),
                     Arguments.of(Named.of("ascending", Direction.ASC), Direction.ASC),
                     Arguments.of(Named.of("descending", Direction.DESC), Direction.DESC));
+        }
+
+        private List<Project> createProjectsWithLastTrace(String apiKey, String workspaceName) {
+            List<Project> projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
+
+            return projects.stream().map(project -> {
+                UUID projectId = createProject(project, apiKey, workspaceName);
+                List<UUID> traceIds = IntStream.range(0, 5)
+                        .mapToObj(i -> createCreateTrace(project.name(), apiKey, workspaceName))
+                        .toList();
+
+                Trace trace = getTrace(traceIds.getLast(), apiKey, workspaceName);
+                return project.toBuilder()
+                        .id(projectId)
+                        .lastUpdatedTraceAt(trace.lastUpdatedAt()).build();
+            }).toList();
         }
 
         @ParameterizedTest
@@ -1594,14 +1615,15 @@ class ProjectsResourceTest {
     }
 
     private void requestAndAssertLastTraceSorting(String workspaceName, String apiKey, List<Project> allProjects,
-            Direction request, Direction expected) {
+            Direction request, Direction expected, int page, int size) {
         var sorting = List.of(SortingField.builder()
                 .field(SortableFields.LAST_UPDATED_TRACE_AT)
                 .direction(request)
                 .build());
 
         var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .queryParam("size", allProjects.size())
+                .queryParam("size", size)
+                .queryParam("page", page)
                 .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
                         StandardCharsets.UTF_8))
                 .request()
@@ -1614,7 +1636,7 @@ class ProjectsResourceTest {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
         assertThat(actualEntity.size()).isEqualTo(allProjects.size());
         assertThat(actualEntity.total()).isEqualTo(allProjects.size());
-        assertThat(actualEntity.page()).isEqualTo(1);
+        assertThat(actualEntity.page()).isEqualTo(page);
 
         if (expected == Direction.DESC) {
             allProjects = allProjects.reversed();
@@ -2087,7 +2109,8 @@ class ProjectsResourceTest {
             // Create unexpected feedback scores
             String unexpectedProjectName = UUID.randomUUID().toString();
 
-            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey, workspaceName);
+            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey,
+                    workspaceName);
             Project unexpectedProject = projectResourceClient.getProject(unexpectedProjectId, apiKey, workspaceName);
 
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject,

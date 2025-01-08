@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-
 @Builder(toBuilder = true)
 public record LlmAsJudgeAutomationRuleEvaluatorModel (
     UUID id,

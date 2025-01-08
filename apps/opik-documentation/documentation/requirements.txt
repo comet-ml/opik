@@ -1,1 +1,4 @@
 jupyter
+markdown-analysis
+pytest-asyncio
+pytest-custom_exit_code

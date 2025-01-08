@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemSearchCriteria;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
@@ -220,7 +221,13 @@ public class ExperimentsResource {
         var userName = requestContext.get().getUserName();
         var workspaceName = requestContext.get().getWorkspaceName();
         log.info("Streaming experiment items by '{}', workspaceId '{}'", request, workspaceId);
-        var items = experimentItemService.getExperimentItems(request)
+        var criteria = ExperimentItemSearchCriteria.builder()
+                .experimentName(request.experimentName())
+                .limit(request.limit())
+                .lastRetrievedId(request.lastRetrievedId())
+                .truncate(request.truncate())
+                .build();
+        var items = experimentItemService.getExperimentItems(criteria)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_NAME, workspaceName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));

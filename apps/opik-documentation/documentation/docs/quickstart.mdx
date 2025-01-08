@@ -76,7 +76,7 @@ All OpenAI calls made using the `openai_client` will now be logged to Opik.
 </TabItem>
 <TabItem value="LiteLLM" title="LiteLLM">
 
-```python
+```python pytest_codeblocks_skip="true"
 from litellm.integrations.opik.opik import OpikLogger
 import litellm
 
@@ -93,7 +93,7 @@ All LiteLLM calls made using the `litellm` client will now be logged to Opik.
 
 If you are using an LLM provider that Opik does not have an integration for, you can still log the LLM calls by using the `@track` decorator:
 
-```python
+```python pytest_codeblocks_skip="true"
 from opik import track
 import anthropic
 
@@ -130,7 +130,8 @@ function is decorated with `@track`, the input and output of the function will b
 nested chains:
 
 ```python
-from opik.integrations.openai import track_openai, track
+from opik import track
+from opik.integrations.openai import track_openai
 from openai import OpenAI
 
 # Wrap your OpenAI client
@@ -164,7 +165,7 @@ def generate_response(input_text, context):
         f"AI:"
     )
 
-    response = client.chat.completions.create(
+    response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": full_prompt}]
     )
@@ -181,8 +182,7 @@ While this code sample assumes that you are using OpenAI, the same principle app
 If you are using LangChain to build your chains, you can use the `OpikTracer` to log your chains. The `OpikTracer` is a LangChain callback that will
 log every step of the chain to Opik:
 
-```python
-from langchain.chains import LLMChain
+```python pytest_codeblocks_skip="true"
 from langchain_openai import OpenAI
 from langchain.prompts import PromptTemplate
 from opik.integrations.langchain import OpikTracer
@@ -198,10 +198,11 @@ prompt_template = PromptTemplate(
     template="Translate the following text to French: {input}"
 )
 
-llm_chain = LLMChain(llm=llm, prompt=prompt_template)
+# Use pipe operator to create LLM chain
+llm_chain = prompt_template | llm
 
 # Generate the translations
-llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
+llm_chain.invoke({"input": "Hello, how are you?"}, callbacks=[opik_tracer])
 ```
 
 </TabItem>
@@ -210,7 +211,7 @@ llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
 
 If you are using LLamaIndex you can set `opik` as a global callback to log all LLM calls:
 
-```python
+```python pytest_codeblocks_skip="true"
 from llama_index.core import global_handler, set_global_handler
 
 set_global_handler("opik")

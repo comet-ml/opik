@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.DummyLockService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
@@ -34,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class RemoveAuthServiceTest {
+class RemoveAuthServiceTest {
     private Client client;
 
     private static final WireMockUtils.WireMockRuntime wireMock;

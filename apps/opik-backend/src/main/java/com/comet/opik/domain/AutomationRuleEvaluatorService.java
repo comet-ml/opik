@@ -31,20 +31,23 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(AutomationRuleEvaluatorServiceImpl.class)
 public interface AutomationRuleEvaluatorService {
 
-    <E, T extends AutomationRuleEvaluator<E>> T save(T automationRuleEvaluator, @NonNull String workspaceId, @NonNull String userName);
+    <E, T extends AutomationRuleEvaluator<E>> T save(T automationRuleEvaluator, @NonNull String workspaceId,
+            @NonNull String userName);
 
     void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
-                AutomationRuleEvaluatorUpdate automationRuleEvaluator);
+            AutomationRuleEvaluatorUpdate automationRuleEvaluator);
 
-    <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId);
+    <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId,
+            @NonNull String workspaceId);
 
     void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
     AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId, String name, int page, int size);
 
     List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId, AutomationRuleEvaluatorType automationRuleEvaluatorType);
-}@NonNull
+}
 
+@NonNull
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
@@ -58,8 +61,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     public <E, T extends AutomationRuleEvaluator<E>> T save(T inputRuleEvaluator,
-                                                            @NonNull String workspaceId,
-                                                            @NonNull String userName) {
+            @NonNull String workspaceId,
+            @NonNull String userName) {
 
         UUID id = idGenerator.generateId();
         IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
@@ -70,10 +73,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             AutomationRuleEvaluatorModel<?> evaluator = switch (inputRuleEvaluator) {
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
                     var definition = llmAsJudge.toBuilder()
-                        .id(id)
-                        .createdBy(userName)
-                        .lastUpdatedBy(userName)
-                        .build();
+                            .id(id)
+                            .createdBy(userName)
+                            .lastUpdatedBy(userName)
+                            .build();
 
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
@@ -100,17 +103,18 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         });
     }
 
-
     @Override
     public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
-                       @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
+            @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
 
-        log.debug("Updating AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId, workspaceId);
+        log.debug("Updating AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId,
+                workspaceId);
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             try {
-                int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.name(), evaluatorUpdate.samplingRate(), userName);
+                int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.name(),
+                        evaluatorUpdate.samplingRate(), userName);
                 int resultEval = dao.updateEvaluator(id, evaluatorUpdate, userName);
 
                 if (resultEval == 0 || resultBase == 0) {
@@ -130,8 +134,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId) {
-        log.debug("Finding AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId, workspaceId);
+    public <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId,
+            @NonNull String workspaceId) {
+        log.debug("Finding AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId,
+                workspaceId);
 
         return (T) template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
@@ -141,7 +147,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     .stream()
                     .findFirst()
                     .map(ruleEvaluator -> switch (ruleEvaluator) {
-                        case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge -> AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                        case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
                     })
                     .orElseThrow(this::newNotFoundException);
         });
@@ -154,7 +161,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             return;
         }
 
-        log.debug("Deleting AutomationRuleEvaluators with ids {} in projectId '{}' and workspaceId '{}'", ids, projectId, workspaceId);
+        log.debug("Deleting AutomationRuleEvaluators with ids {} in projectId '{}' and workspaceId '{}'", ids,
+                projectId, workspaceId);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
@@ -173,11 +181,12 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     public AutomationRuleEvaluator.AutomationRuleEvaluatorPage find(@NonNull UUID projectId,
-                                                                    @NonNull String workspaceId,
-                                                                    String name,
-                                                                    int pageNum, int size) {
+            @NonNull String workspaceId,
+            String name,
+            int pageNum, int size) {
 
-        log.debug("Finding AutomationRuleEvaluators with name pattern '{}' in projectId '{}' and workspaceId '{}'", name, projectId, workspaceId);
+        log.debug("Finding AutomationRuleEvaluators with name pattern '{}' in projectId '{}' and workspaceId '{}'",
+                name, projectId, workspaceId);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
@@ -193,8 +202,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                             })
                             .toList();
             log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(), projectId);
-
-            return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(), total,
+            return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(),
+                    total,
                     automationRuleEvaluators);
 
         });
