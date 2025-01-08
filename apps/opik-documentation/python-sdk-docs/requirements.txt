@@ -10,3 +10,5 @@ langchain_core
 botocore
 anthropic
 haystack-ai
+dspy-ai
+cloudpickle
