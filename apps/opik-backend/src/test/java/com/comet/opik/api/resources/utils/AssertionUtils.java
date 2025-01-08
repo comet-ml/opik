@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.utils;
 
-import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.FeedbackScoreNames;
 import lombok.experimental.UtilityClass;
 
 import java.util.List;
@@ -20,7 +20,8 @@ public class AssertionUtils {
                 .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
     }
 
-    public static ExperimentItem assertFeedbackScoresIgnoredFieldsAndSetThemToNull(ExperimentItem actualExperimentItem, String user) {
+    public static ExperimentItem assertFeedbackScoresIgnoredFieldsAndSetThemToNull(ExperimentItem actualExperimentItem,
+            String user) {
         if (actualExperimentItem.feedbackScores() == null) {
             return actualExperimentItem;
         }
@@ -38,8 +39,8 @@ public class AssertionUtils {
                                 .lastUpdatedBy(null)
                                 .createdAt(null)
                                 .lastUpdatedAt(null)
-                                .build()
-                ).toList())
+                                .build())
+                        .toList())
                 .build();
     }
 }
