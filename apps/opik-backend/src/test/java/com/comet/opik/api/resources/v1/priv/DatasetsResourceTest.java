@@ -2770,18 +2770,16 @@ class DatasetsResourceTest {
             return Stream.of(
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                                    .input(null)
                                     .data(null)
                                     .build()))
                             .build(),
-                            "items[0].input must provide either input or data field"),
+                            "items[0].data must provide data field"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                                    .input(null)
                                     .data(Map.of())
                                     .build()))
                             .build(),
-                            "items[0].input must provide either input or data field"),
+                            "items[0].data must provide data field"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
                                     .source(null)
@@ -2974,27 +2972,9 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when data is null, the accept the request")
-        void create__whenDataIsNull__thenAcceptTheRequest() {
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(null)
-                    .build();
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
-
-            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
-        }
-
-        @Test
         @DisplayName("when input is null but data is present, the accept the request")
         void create__whenInputIsNullButDataIsPresent__thenAcceptTheRequest() {
             var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .input(null)
                     .build();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
@@ -3160,7 +3140,6 @@ class DatasetsResourceTest {
             var items = IntStream.range(0, 1000)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
                             .experimentItems(null)
-                            .metadata(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
                             .build())
@@ -3232,8 +3211,6 @@ class DatasetsResourceTest {
         Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                 .orElse(Map.of());
 
-        expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
-
         assertThat(actualEntity.id()).isEqualTo(expectedDatasetItem.id());
         assertThat(actualEntity).usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
@@ -3241,37 +3218,6 @@ class DatasetsResourceTest {
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
-    }
-
-    private DatasetItem mergeInputMap(DatasetItem expectedDatasetItem, Map<String, JsonNode> data) {
-
-        Map<String, JsonNode> newMap = new HashMap<>();
-
-        if (expectedDatasetItem.expectedOutput() != null) {
-            newMap.put("expected_output", expectedDatasetItem.expectedOutput());
-        }
-
-        if (expectedDatasetItem.input() != null) {
-            newMap.put("input", expectedDatasetItem.input());
-        }
-
-        if (expectedDatasetItem.metadata() != null) {
-            newMap.put("metadata", expectedDatasetItem.metadata());
-        }
-
-        Map<String, JsonNode> mergedMap = Stream
-                .concat(data.entrySet().stream(), newMap.entrySet().stream())
-                .collect(toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        (v1, v2) -> v2 // In case of conflict, use the value from map2
-                ));
-
-        expectedDatasetItem = expectedDatasetItem.toBuilder()
-                .data(new HashMap<>(mergedMap))
-                .build();
-
-        return expectedDatasetItem;
     }
 
     @Nested
@@ -3474,7 +3420,7 @@ class DatasetsResourceTest {
 
             var updatedItems = items
                     .stream()
-                    .map(item -> item.toBuilder().input(factory.manufacturePojo(JsonNode.class)).build())
+                    .map(item -> item.toBuilder().data(Map.of(factory.manufacturePojo(String.class), factory.manufacturePojo(JsonNode.class))).build())
                     .toList();
 
             var updatedBatch = batch.toBuilder()
@@ -3645,8 +3591,6 @@ class DatasetsResourceTest {
 
             Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                     .orElse(Map.of());
-
-            expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
 
             assertThat(actualDatasetItem.data()).isEqualTo(expectedDatasetItem.data());
         }
@@ -4136,12 +4080,6 @@ class DatasetsResourceTest {
                             FieldType.FEEDBACK_SCORES_NUMBER, Operator.EQUAL, "sql_cost", "10")),
                     arguments(new ExperimentsComparisonFilter("feedback_scores",
                             FieldType.FEEDBACK_SCORES_NUMBER, Operator.NOT_EQUAL, "sql_cost", "10")),
-                    arguments(new ExperimentsComparisonFilter("output",
-                            FieldType.STRING, Operator.CONTAINS, null, "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter("expected_output",
-                            FieldType.DICTIONARY, Operator.CONTAINS, "output", "sql_cost")),
-                    arguments(new ExperimentsComparisonFilter("metadata",
-                            FieldType.DICTIONARY, Operator.EQUAL, "sql_cost", "10")),
                     arguments(new ExperimentsComparisonFilter("meta_field",
                             FieldType.DICTIONARY, Operator.CONTAINS, "version[*]", "10")),
                     arguments(new ExperimentsComparisonFilter("releases",
@@ -4196,8 +4134,6 @@ class DatasetsResourceTest {
                 var item = items.get(i);
                 var trace = Trace.builder()
                         .id(GENERATOR.generate())
-                        .input(item.input())
-                        .output(item.expectedOutput())
                         .projectName(projectName)
                         .startTime(Instant.now())
                         .name("trace-" + i)
@@ -4213,12 +4149,6 @@ class DatasetsResourceTest {
                 if (i == 0) {
                     DatasetItem item = factory.manufacturePojo(DatasetItem.class)
                             .toBuilder()
-                            .input(JsonUtils
-                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("input", "sql_cost"))))
-                            .expectedOutput(JsonUtils
-                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("output", "sql_cost"))))
-                            .metadata(JsonUtils
-                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
                             .source(DatasetItemSource.SDK)
                             .data(Map.of(
                                     "sql_tag", JsonUtils.readTree("sql_test"),
@@ -4747,18 +4677,12 @@ class DatasetsResourceTest {
                     .flatMap(connection -> Mono.from(connection.createStatement("""
                             INSERT INTO %s.%s (
                             id,
-                            input,
-                            expected_output,
-                            metadata,
                             source,
                             dataset_id,
                             workspace_id
-                            ) VALUES (:id, :input, :expected_output, :metadata, :source, :dataset_id, :workspace_id)
+                            ) VALUES (:id, :source, :dataset_id, :workspace_id)
                             """.formatted(DATABASE_NAME, "dataset_items"))
                             .bind("id", datasetItem.id())
-                            .bind("input", datasetItem.input().toString())
-                            .bind("expected_output", datasetItem.expectedOutput().toString())
-                            .bind("metadata", datasetItem.metadata().toString())
                             .bind("source", DatasetItemSource.SDK.getValue())
                             .bind("dataset_id", datasetId)
                             .bind("workspace_id", WORKSPACE_ID)
@@ -4766,22 +4690,6 @@ class DatasetsResourceTest {
                     .block();
 
             this.datasetItem = datasetItem;
-        }
-
-        @Test
-        void findById__whenDatasetItemNotMigrated__thenReturnDatasetItemWithData() {
-
-            var item = datasetItem.toBuilder()
-                    .spanId(null)
-                    .traceId(null)
-                    .experimentItems(null)
-                    .source(DatasetItemSource.SDK)
-                    .data(Map.of("input", datasetItem.input(),
-                            "expected_output", datasetItem.expectedOutput(),
-                            "metadata", datasetItem.metadata()))
-                    .build();
-
-            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
         }
     }
 
@@ -4797,12 +4705,6 @@ class DatasetsResourceTest {
                         .filterFieldPrefix("data")
                         .build())
                 .collect(Collectors.toCollection(HashSet::new));
-
-        columns.add(Column.builder().name("input").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data").build());
-        columns.add(Column.builder().name("expected_output").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data")
-                .build());
-        columns.add(
-                Column.builder().name("metadata").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data").build());
 
         Map<String, Set<ColumnType>> results = columns.stream()
                 .collect(groupingBy(Column::name, mapping(Column::types, flatMapping(Set::stream, toSet()))));

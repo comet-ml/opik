@@ -9,12 +9,12 @@ public class DatasetItemInputValidator implements ConstraintValidator<DatasetIte
 
     @Override
     public boolean isValid(DatasetItem datasetItem, ConstraintValidatorContext context) {
-        boolean result = datasetItem.input() != null || MapUtils.isNotEmpty(datasetItem.data());
+        boolean result = MapUtils.isNotEmpty(datasetItem.data());
 
         if (!result) {
             context.disableDefaultConstraintViolation();
-            context.buildConstraintViolationWithTemplate("must provide either input or data field")
-                    .addPropertyNode("input")
+            context.buildConstraintViolationWithTemplate("must provide data field")
+                    .addPropertyNode("data")
                     .addConstraintViolation();
         }
 

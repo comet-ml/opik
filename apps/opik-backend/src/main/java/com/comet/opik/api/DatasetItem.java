@@ -25,12 +25,6 @@ import java.util.UUID;
 public record DatasetItem(
         @JsonView( {
                 DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
-        @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode input,
-        @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode expectedOutput,
-        @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) @Schema(deprecated = true, description = "to be deprecated soon, please use data field") JsonNode metadata,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
