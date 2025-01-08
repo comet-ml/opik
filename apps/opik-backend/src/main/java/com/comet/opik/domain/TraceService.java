@@ -106,10 +106,14 @@ class TraceServiceImpl implements TraceService {
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, TRACE_KEY),
                         Mono.defer(() -> insertTrace(trace, project, id)))
-                        .doOnSuccess(__ -> eventBus.post(new TracesCreated(
-                                Set.of(project.id()),
-                                ctx.get(RequestContext.WORKSPACE_ID),
-                                ctx.get(RequestContext.USER_NAME))))));
+                        .doOnSuccess(__ -> {
+                            // forwards the trace with its actual projectId
+                            var savedTrace = trace.toBuilder().projectId(project.id()).build();
+                            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                            String userName = ctx.get(RequestContext.USER_NAME);
+
+                            eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                        })));
     }
 
     @WithSpan
@@ -131,12 +135,12 @@ class TraceServiceImpl implements TraceService {
                     .map(projects -> bindTraceToProjectAndId(batch, projects))
                     .subscribeOn(Schedulers.boundedElastic());
 
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
             return resolveProjects
                     .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection))
-                            .doOnSuccess(__ -> eventBus.post(new TracesCreated(
-                                    traces.stream().map(Trace::projectId).collect(Collectors.toUnmodifiableSet()),
-                                    ctx.get(RequestContext.WORKSPACE_ID),
-                                    ctx.get(RequestContext.USER_NAME)))));
+                            .doOnSuccess(__ -> eventBus.post(new TracesCreated(traces, workspaceId, userName))));
         });
     }
 
