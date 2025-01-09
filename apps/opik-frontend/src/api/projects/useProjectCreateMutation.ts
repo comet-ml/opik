@@ -16,14 +16,14 @@ const useProjectCreateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ project }: UseProjectCreateMutationParams) => {
-      const { data, headers } = await api.post(PROJECTS_REST_ENDPOINT, {
+      const { headers } = await api.post(PROJECTS_REST_ENDPOINT, {
         ...project,
       });
 
       // TODO workaround to return just created resource while implementation on BE is not done
       const id = extractIdFromLocation(headers?.location);
 
-      return { ...data, id };
+      return { id };
     },
     onError: (error: AxiosError) => {
       const message = get(
