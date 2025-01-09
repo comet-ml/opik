@@ -4,7 +4,7 @@ import api, { PROJECTS_REST_ENDPOINT } from "@/api/api";
 import { Project } from "@/types/projects";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
-import { last } from "lodash";
+import { extractIdFromLocation } from "@/lib/utils";
 
 type UseProjectCreateMutationParams = {
   project: Partial<Project>;
@@ -16,11 +16,14 @@ const useProjectCreateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ project }: UseProjectCreateMutationParams) => {
-      const res = await api.post(PROJECTS_REST_ENDPOINT, {
+      const { data, headers } = await api.post(PROJECTS_REST_ENDPOINT, {
         ...project,
       });
 
-      return { ...res.data, id: last(res.headers?.location?.split("/")) };
+      // TODO workaround to return just created resource while implementation on BE is not done
+      const id = extractIdFromLocation(headers?.location);
+
+      return { ...data, id };
     },
     onError: (error: AxiosError) => {
       const message = get(
