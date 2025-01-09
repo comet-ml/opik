@@ -84,7 +84,7 @@ public class TracesResource {
             @QueryParam("project_name") String projectName,
             @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") boolean truncate) {
+            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);

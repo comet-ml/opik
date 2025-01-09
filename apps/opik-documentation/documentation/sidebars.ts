@@ -42,7 +42,6 @@ const sidebars: SidebarsConfig = {
         "tracing/log_distributed_traces",
         "tracing/annotate_traces",
         "tracing/cost_tracking",
-        "tracing/production_monitoring",
         "tracing/sdk_configuration",
         "tracing/export_data",
         {
@@ -58,6 +57,7 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/anthropic",
             "tracing/integrations/bedrock",
             "tracing/integrations/dify",
+            "tracing/integrations/dspy",
             "tracing/integrations/gemini",
             "tracing/integrations/groq",
             "tracing/integrations/haystack",
@@ -116,7 +116,7 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Production",
       collapsed: true,
-      items: ["production/gateway"],
+      items: ["production/gateway", "production/production_monitoring"],
     },
     {
       type: "category",
@@ -130,6 +130,7 @@ const sidebars: SidebarsConfig = {
         "cookbook/aisuite",
         "cookbook/anthropic",
         "cookbook/bedrock",
+        "cookbook/dspy",
         "cookbook/gemini",
         "cookbook/groq",
         "cookbook/haystack",

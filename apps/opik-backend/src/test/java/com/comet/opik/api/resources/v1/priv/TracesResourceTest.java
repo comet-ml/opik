@@ -100,11 +100,11 @@ import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackSc
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectTraceStatItems;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -3569,7 +3569,8 @@ class TracesResourceTest {
         return traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
-    private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status, String errorMessage) {
+    private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status,
+            String errorMessage) {
         try (var response = traceResourceClient.createTrace(trace, apiKey, workspaceName, status)) {
             assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
         }
@@ -3680,7 +3681,8 @@ class TracesResourceTest {
                     .usage(null)
                     .feedbackScores(null)
                     .build();
-            createAndAssertErrorMessage(trace2, apiKey, workspaceName, HttpStatus.SC_CONFLICT, PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
+            createAndAssertErrorMessage(trace2, apiKey, workspaceName, HttpStatus.SC_CONFLICT,
+                    PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }
 
         @Test
