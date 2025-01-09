@@ -15,8 +15,8 @@ services:
   backend:
     ports:
       - "8080:8080" # Exposing backend HTTP port to host
-      - "3003:3003" # Exposing additional backend port to host
+      - "3003:3003" # Exposing backend OpenAPI specification port to host
 
   frontend:
     ports:
-      - "5173:5173" # Exposing frontend dev server port to host
+      - "5173:5173" # Exposing frontend server port to host
