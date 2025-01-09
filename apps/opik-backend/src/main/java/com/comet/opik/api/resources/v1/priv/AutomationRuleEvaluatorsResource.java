@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AutomationRuleEvaluator;
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Page;
@@ -66,8 +67,7 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
                 workspaceId, page);
-        Page<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(projectId,
-                workspaceId, name, page, size);
+        Page<AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(projectId, workspaceId, name, page, size);
         log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
                 definitionPage.size(), projectId, workspaceId, page, definitionPage.total());
 
