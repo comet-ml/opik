@@ -3,6 +3,7 @@ import {
   PLAYGROUND_MESSAGE_ROLE,
   PlaygroundMessageType,
   PlaygroundPromptConfigsType,
+  PlaygroundPromptType,
 } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
 import {
@@ -14,6 +15,12 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import { DatasetItem } from "@/types/datasets";
+import mustache from "mustache";
+import isUndefined from "lodash/isUndefined";
+import { getDefaultProviderKey } from "@/lib/provider";
+import { PROVIDERS } from "@/constants/providers";
+import { getPromptMustacheTags } from "@/lib/prompt";
 
 export const generateDefaultPlaygroundPromptMessage = (
   message: Partial<PlaygroundMessageType> = {},
@@ -63,11 +70,28 @@ export const getDefaultConfigByProvider = (
   return {};
 };
 
-export const transformMessageIntoProviderMessage = (
-  message: PlaygroundMessageType,
-): ProviderMessageType => {
+interface GenerateDefaultPromptParams {
+  initPrompt?: Partial<PlaygroundPromptType>;
+  setupProviders?: PROVIDER_TYPE[];
+}
+
+export const generateDefaultPrompt = ({
+  initPrompt = {},
+  setupProviders = [],
+}: GenerateDefaultPromptParams): PlaygroundPromptType => {
+  const defaultProviderKey = getDefaultProviderKey(setupProviders);
+  const defaultModel = defaultProviderKey
+    ? PROVIDERS[defaultProviderKey].defaultModel
+    : "";
+
   return {
-    role: message.role,
-    content: message.content,
+    name: "Prompt",
+    messages: [generateDefaultPlaygroundPromptMessage()],
+    model: defaultModel,
+    configs: defaultProviderKey
+      ? getDefaultConfigByProvider(defaultProviderKey)
+      : {},
+    ...initPrompt,
+    id: generateRandomString(),
   };
 };

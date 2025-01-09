@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import {
   CELL_HORIZONTAL_ALIGNMENT_MAP,
