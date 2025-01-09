@@ -747,8 +747,6 @@ class SpanDAO {
             int i = 0;
             for (Span span : spans) {
 
-                BigDecimal estimatedCost = calculateCost(span);
-
                 statement.bind("id" + i, span.id())
                         .bind("project_id" + i, span.projectId())
                         .bind("trace_id" + i, span.traceId())
@@ -761,14 +759,22 @@ class SpanDAO {
                         .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
                         .bind("model" + i, span.model() != null ? span.model() : "")
                         .bind("provider" + i, span.provider() != null ? span.provider() : "")
-                        .bind("total_estimated_cost" + i, estimatedCost.toString())
-                        .bind("total_estimated_cost_version" + i,
-                                estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "")
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
                                 span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "")
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);
+
+                if (span.totalEstimatedCost() != null) {
+                    // Cost is set manually by the user
+                    statement.bind("total_estimated_cost" + i, span.totalEstimatedCost().toString());
+                    statement.bind("total_estimated_cost_version" + i, "");
+                } else {
+                    BigDecimal estimatedCost = calculateCost(span);
+                    statement.bind("total_estimated_cost" + i, estimatedCost.toString());
+                    statement.bind("total_estimated_cost_version" + i,
+                            estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
+                }
 
                 if (span.endTime() != null) {
                     statement.bind("end_time" + i, span.endTime().toString());
@@ -849,12 +855,15 @@ class SpanDAO {
             statement.bind("provider", "");
         }
 
-        BigDecimal estimatedCost = calculateCost(span);
-        statement.bind("total_estimated_cost", estimatedCost.toString());
-        if (estimatedCost.compareTo(BigDecimal.ZERO) > 0) {
-            statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
-        } else {
+        if (span.totalEstimatedCost() != null) {
+            // Cost is set manually by the user
+            statement.bind("total_estimated_cost", span.totalEstimatedCost().toString());
             statement.bind("total_estimated_cost_version", "");
+        } else {
+            BigDecimal estimatedCost = calculateCost(span);
+            statement.bind("total_estimated_cost", estimatedCost.toString());
+            statement.bind("total_estimated_cost_version",
+                    estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
 
         if (span.tags() != null) {
@@ -912,7 +921,7 @@ class SpanDAO {
     public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT);
+                    ST template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false);
 
                     var statement = connection.createStatement(template.render());
 
@@ -926,7 +935,7 @@ class SpanDAO {
                         statement.bind("parent_span_id", "");
                     }
 
-                    bindUpdateParams(spanUpdate, statement);
+                    bindUpdateParams(spanUpdate, statement, false);
 
                     Segment segment = startSegment("spans", "Clickhouse", "partial_insert");
 
@@ -946,11 +955,11 @@ class SpanDAO {
                     .build();
         }
 
-        var template = newUpdateTemplate(spanUpdate, UPDATE);
+        var template = newUpdateTemplate(spanUpdate, UPDATE, isManualCost(existingSpan));
         var statement = connection.createStatement(template.render());
         statement.bind("id", id);
 
-        bindUpdateParams(spanUpdate, statement);
+        bindUpdateParams(spanUpdate, statement, isManualCost(existingSpan));
 
         Segment segment = startSegment("spans", "Clickhouse", "update");
 
@@ -958,7 +967,7 @@ class SpanDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private void bindUpdateParams(SpanUpdate spanUpdate, Statement statement) {
+    private void bindUpdateParams(SpanUpdate spanUpdate, Statement statement, boolean isManualCostExist) {
         Optional.ofNullable(spanUpdate.input())
                 .ifPresent(input -> statement.bind("input", input.toString()));
         Optional.ofNullable(spanUpdate.output())
@@ -988,14 +997,22 @@ class SpanDAO {
         Optional.ofNullable(spanUpdate.errorInfo())
                 .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
 
-        if (StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage())) {
-            statement.bind("total_estimated_cost",
-                    ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()).toString());
-            statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
+        if (Objects.nonNull(spanUpdate.totalEstimatedCost())) {
+            // Update with new manually set cost
+            statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
+            statement.bind("total_estimated_cost_version", "");
+        } else {
+            // Calculate estimated cost only in case Span doesn't have manually set cost
+            if (!isManualCostExist && StringUtils.isNotBlank(spanUpdate.model())
+                    && Objects.nonNull(spanUpdate.usage())) {
+                statement.bind("total_estimated_cost",
+                        ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()).toString());
+                statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
+            }
         }
     }
 
-    private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql) {
+    private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
         var template = new ST(sql);
         Optional.ofNullable(spanUpdate.input())
                 .ifPresent(input -> template.add("input", input.toString()));
@@ -1015,7 +1032,9 @@ class SpanDAO {
                 .ifPresent(usage -> template.add("usage", usage.toString()));
         Optional.ofNullable(spanUpdate.errorInfo())
                 .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
-        if (StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage())) {
+        // If we have manual cost in update OR if we can calculate it and user didn't set manual cost before
+        if ((!isManualCostExist && StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage()))
+                || Objects.nonNull(spanUpdate.totalEstimatedCost())) {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
         }
@@ -1097,6 +1116,9 @@ class SpanDAO {
                             row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                                     ? null
                                     : row.get("total_estimated_cost", BigDecimal.class))
+                    .totalEstimatedCostVersion(row.getMetadata().contains("total_estimated_cost_version")
+                            ? row.get("total_estimated_cost_version", String.class)
+                            : null)
                     .tags(Optional.of(Arrays.stream(row.get("tags", String[].class)).collect(Collectors.toSet()))
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
@@ -1281,4 +1303,7 @@ class SpanDAO {
                 .singleOrEmpty();
     }
 
+    private boolean isManualCost(Span span) {
+        return span.totalEstimatedCost() != null && StringUtils.isBlank(span.totalEstimatedCostVersion());
+    }
 }
