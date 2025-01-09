@@ -87,10 +87,25 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}
-        span_type: SpanType = "general"
-
         metadata["created_from"] = "crewai"
         tags = ["crewai"]
+
+        input_dict, name, span_type = self._parse_inputs(args, kwargs, metadata, name)
+
+        result = arguments_helpers.StartSpanParameters(
+            name=name,
+            input=input_dict,
+            type=span_type,
+            tags=tags,
+            metadata=metadata,
+            project_name=track_options.project_name,
+        )
+
+        return result
+
+    def _parse_inputs(self, args: Tuple, kwargs: Dict, metadata: Dict, name: str) -> Tuple[Dict, str, SpanType]:
+        span_type: SpanType = "general"
+        input_dict = {}
 
         # Crew
         if name == "kickoff":
@@ -120,25 +135,13 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
             span_type = "llm"
             name = "llm call"
 
-        result = arguments_helpers.StartSpanParameters(
-            name=name,
-            input=input_dict,
-            type=span_type,
-            tags=tags,
-            metadata=metadata,
-            project_name=track_options.project_name,
-        )
-
-        return result
+        return input_dict, name, span_type
 
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
         capture_output: bool,
     ) -> arguments_helpers.EndSpanParameters:
-        usage = None
-        model = None
-        provider = None
         object_type = None
         metadata = {}
 
@@ -146,6 +149,23 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         if current_span and current_span.metadata:
             metadata = current_span.metadata
             object_type = metadata.pop("object_type")
+
+        model, output_dict, provider, usage = self._parse_outputs(object_type, output)
+
+        result = arguments_helpers.EndSpanParameters(
+            output=output_dict,
+            usage=usage,
+            metadata=metadata,
+            model=model,
+            provider=provider,
+        )
+
+        return result
+
+    def _parse_outputs(self, object_type, output):
+        model = None
+        provider = None
+        usage = None
 
         if object_type == "crew":
             output_dict = output.model_dump()
@@ -159,17 +179,11 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         elif object_type == "completion":
             output_dict = output.model_dump()
             usage = output_dict.pop("usage", None)
+            model = output_dict.pop("model", None)
+            provider = "openai" if output_dict.get('object') == 'chat.completion' else None
             output = {}
 
-        result = arguments_helpers.EndSpanParameters(
-            output=output,
-            usage=usage,
-            metadata=metadata,
-            model=model,
-            provider=provider,
-        )
-
-        return result
+        return model, output, provider, usage
 
     def _generators_handler(
         self,
