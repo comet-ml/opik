@@ -4,6 +4,7 @@ import api, { PROJECTS_REST_ENDPOINT } from "@/api/api";
 import { Project } from "@/types/projects";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
+import { last } from "lodash";
 
 type UseProjectCreateMutationParams = {
   project: Partial<Project>;
@@ -15,10 +16,11 @@ const useProjectCreateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ project }: UseProjectCreateMutationParams) => {
-      const { data } = await api.post(PROJECTS_REST_ENDPOINT, {
+      const res = await api.post(PROJECTS_REST_ENDPOINT, {
         ...project,
       });
-      return data;
+
+      return { ...res.data, id: last(res.headers?.location?.split("/")) };
     },
     onError: (error: AxiosError) => {
       const message = get(
