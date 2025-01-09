@@ -91,6 +91,8 @@ jobs:
                     pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "prompts" ]; then
                     pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                elif [ "$SUITE" == "feedbacks" ]; then
+                    pytest -s tests/Feedbacks/test_feedbacks_crud.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "sanity" ]; then
                     pytest -s tests/application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "all_features" ]; then
