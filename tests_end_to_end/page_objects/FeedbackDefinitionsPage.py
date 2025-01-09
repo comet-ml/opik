@@ -34,19 +34,21 @@ class FeedbackDefinitionsPage:
 
         else:
             if len(categories.keys()) == 1:
-                raise ValueError("At least 2 categories are required for Categorical feedback definition")
+                raise ValueError(
+                    "At least 2 categories are required for Categorical feedback definition"
+                )
             for i, key in enumerate(categories.keys()):
-                self.page.get_by_placeholder("Name").nth(i+2).click()
-                self.page.get_by_placeholder("Name").nth(i+2).fill(key)
+                self.page.get_by_placeholder("Name").nth(i + 2).click()
+                self.page.get_by_placeholder("Name").nth(i + 2).fill(key)
                 self.page.get_by_placeholder("0.0").nth(i).click()
                 self.page.get_by_placeholder("0.0").nth(i).fill(str(categories[key]))
                 self.page.get_by_role("button", name="Add category").click()
-            
+
     def fill_numerical_values(self, min, max):
         min_box = self.page.get_by_placeholder("Min")
         max_box = self.page.get_by_placeholder("Max")
 
-        both_values_provided = (min is not None and max is not None)
+        both_values_provided = min is not None and max is not None
 
         min_box.click()
         val = min if both_values_provided else 0
@@ -56,7 +58,14 @@ class FeedbackDefinitionsPage:
         val = max if both_values_provided else 1
         max_box.fill(str(val))
 
-    def create_new_feedback(self, feedback_name: str, feedback_type: Literal["categorical", "numerical"], categories: dict=None, min: int=None, max: int=None):
+    def create_new_feedback(
+        self,
+        feedback_name: str,
+        feedback_type: Literal["categorical", "numerical"],
+        categories: dict = None,
+        min: int = None,
+        max: int = None,
+    ):
         self.page.get_by_role("button", name="Create new feedback definition").click()
         self.page.get_by_placeholder("Feedback definition name").fill(feedback_name)
         self.page.get_by_role("combobox").click()
@@ -87,10 +96,19 @@ class FeedbackDefinitionsPage:
         self.page.get_by_role("button", name="Delete feedback definition").click()
         self.search_bar.fill("")
 
-    def edit_feedback_by_name(self, feedback_name: str, new_name: str=None, feedback_type: Literal["categorical", "numerical"]=None, categories: dict=None, min: int=None, max: int=None):
+    def edit_feedback_by_name(
+        self,
+        feedback_name: str,
+        new_name: str = None,
+        feedback_type: Literal["categorical", "numerical"] = None,
+        categories: dict = None,
+        min: int = None,
+        max: int = None,
+    ):
         self.search_feedback_by_name(feedback_name=feedback_name)
         self.page.get_by_role("row", name=feedback_name).first.get_by_role(
-            "button", name="Actions menu").click()
+            "button", name="Actions menu"
+        ).click()
         self.page.get_by_role("menuitem", name="Edit").click()
 
         if new_name:
@@ -101,16 +119,20 @@ class FeedbackDefinitionsPage:
             self.fill_categorical_values(categories=categories)
         else:
             self.fill_numerical_values(min=min, max=max)
-        
+
         self.page.get_by_role("button", name="Update feedback definition").click()
         self.search_bar.fill("")
 
     def get_type_of_feedback_by_name(self, feedback_name: str):
         self.search_feedback_by_name(feedback_name=feedback_name)
         self.page.wait_for_timeout(500)
-        return self.page.get_by_role("row").nth(1).get_by_role("cell").nth(2).inner_text()
-    
+        return (
+            self.page.get_by_role("row").nth(1).get_by_role("cell").nth(2).inner_text()
+        )
+
     def get_values_of_feedback_by_name(self, feedback_name: str):
         self.search_feedback_by_name(feedback_name=feedback_name)
         self.page.wait_for_timeout(500)
-        return self.page.get_by_role("row").nth(1).get_by_role("cell").nth(3).inner_text()
+        return (
+            self.page.get_by_role("row").nth(1).get_by_role("cell").nth(3).inner_text()
+        )
