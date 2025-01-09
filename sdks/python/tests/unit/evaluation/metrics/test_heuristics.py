@@ -1,5 +1,9 @@
 import pytest
-from opik.evaluation.metrics.heuristics import equals, levenshtein_ratio, regex_match
+from opik.evaluation.metrics.heuristics import (
+    equals,
+    levenshtein_ratio,
+    regex_match
+)
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.heuristics.bleu import BLEU
 
@@ -15,7 +19,6 @@ def test_evaluation__equals():
         name=metric.name, value=0.0, reason=None, metadata=None
     )
 
-
 def test_evaluation__regex_match():
     # everything that ends with 'metric'
     metric_param = ".+metric$"
@@ -27,7 +30,6 @@ def test_evaluation__regex_match():
     assert metric.score("some param") == ScoreResult(
         name=metric.name, value=0.0, reason=None, metadata=None
     )
-
 
 def test_evaluation__levenshtein_ratio():
     metric_param = "apple"
@@ -43,39 +45,31 @@ def test_evaluation__levenshtein_ratio():
         name=metric.name, value=0.0, reason=None, metadata=None
     )
 
-
 @pytest.mark.parametrize(
-    "candidate,reference,expected",
+    "candidate,reference,expected_min,expected_max",
     [
-        # Perfect match => BLEU=1.0
-        ("The quick brown fox jumps", "The quick brown fox jumps", 1.0),
-        # Partial overlap (shorter candidate).
-        # Standard BLEU with a reference length of 9 vs. candidate length 4
-        # yields ~0.2865 if there's near-perfect n-gram match on those 4 tokens.
-        # We'll approximate that to 0.29, within ±0.05 for leniency.
-        ("The quick brown fox", "The quick brown fox jumps over the lazy dog", 0.29),
-        # Full mismatch => BLEU ~ 0.0
-        ("apple", "orange", 0.0),
-        # Single token partial => e.g. "hello" vs. "hello world"
-        # Typically ~0.3679 with standard brevity penalty => ~0.37
-        ("hello", "hello world", 0.37),
+        ("The quick brown fox jumps over the lazy dog",
+         "The quick brown fox jumps over the lazy dog", 0.99, 1.01),
+
+        ("The quick brown fox", "The quick green fox jumps over something", 0.05, 0.2),
+
+        ("apple", "orange", -0.01, 0.01),
+
+        ("hello", "hello world", 0.05, 0.5),
+
+        ("", "non-empty reference", -0.01, 0.01),
+        ("non-empty candidate", "", -0.01, 0.01),
     ],
 )
-def test_bleu_score_sentence_level(candidate, reference, expected):
-    """
-    Tests BLEU in more standard scenarios, using approximate checks.
-    We rely on approximate comparison since BLEU can differ slightly
-    depending on smoothing details. By default, BLEU uses method1 smoothing.
-    """
-    metric = BLEU()  # default n_grams=4, smoothing_method="method1"
+def test_bleu_score_sentence_level(candidate, reference, expected_min, expected_max):
+
+    metric = BLEU()
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
-    # For approximate matching, we allow a small tolerance
-    # e.g. ±0.05 around our target
-    assert result.value == pytest.approx(
-        expected, abs=0.05
-    ), f"Got {result.value:.4f}, expected ~{expected} ± 0.05"
-
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected BLEU in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
 
 @pytest.mark.parametrize(
     "candidate,reference",
@@ -99,7 +93,6 @@ def test_bleu_score_empty_cases(candidate, reference):
     elif not reference.strip():
         assert "Reference is empty" in res.reason
 
-
 @pytest.mark.parametrize(
     "candidate,reference,method",
     [
@@ -107,12 +100,14 @@ def test_bleu_score_empty_cases(candidate, reference):
         ("cat", "dog", "method0"),
         ("cat", "dog", "method1"),
         ("cat", "dog", "method2"),
+
         # Partial overlap => might see differences among smoothing methods
         ("The cat", "cat The", "method0"),
         ("The cat", "cat The", "method1"),
         ("The cat", "cat The", "method2"),
     ],
 )
+
 def test_bleu_score_different_smoothing(candidate, reference, method):
     """
     Check that different smoothing yields different non-negative values.
@@ -126,27 +121,50 @@ def test_bleu_score_different_smoothing(candidate, reference, method):
 
 
 @pytest.mark.parametrize(
-    "candidates,references",
+    "candidates,references,expected_min,expected_max",
     [
-        # Perfect match => corpus-level BLEU=1
         (
-            ["Hello world", "The quick brown fox"],
-            [["Hello world"], ["The quick brown fox"]],
+            ["The quick brown fox jumps over the lazy dog"],
+            [["The quick brown fox jumps over the lazy dog"]],
+            0.99,
+            1.01,
         ),
-        # Partial overlap => expect 0 < BLEU < 1
         (
-            ["Hello planet", "The quick brown cat"],
-            [["Hello world"], ["The quick brown fox"]],
+            ["The quick brown fox", "Hello world"],
+            [
+                ["The quick green fox jumps over something"],
+                ["Hello there big world"],
+            ],
+            0.0,
+            1.0,
+        ),
+        (
+            [
+                "The quick brown fox jumps over the lazy dog",
+                "I love apples and oranges"
+            ],
+            [
+                ["The quick brown fox jumps over the lazy dog"],
+                ["I love apples and oranges so much!"]
+            ],
+            0.8,
+            1.01,
+        ),
+        (
+            ["", "Some text here"],
+            [["non-empty reference"], [""]],
+            -0.01,
+            0.01,
         ),
     ],
 )
-def test_bleu_score_corpus(candidates, references):
+
+def test_bleu_score_corpus(candidates, references, expected_min, expected_max):
     metric = BLEU()
     res = metric.score_corpus(outputs=candidates, references_list=references)
     assert isinstance(res, ScoreResult)
-    if candidates[0] == references[0][0] and candidates[1] == references[1][0]:
-        # perfect match => 1.0
-        assert res.value == pytest.approx(1.0, abs=1e-6)
-    else:
-        # partial => between 0 and 1
-        assert 0 < res.value < 1.0
+
+    assert expected_min <= res.value <= expected_max, (
+        f"For corpus outputs={candidates} vs references={references}, "
+        f"expected BLEU in [{expected_min}, {expected_max}], got {res.value:.4f}"
+    )
