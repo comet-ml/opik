@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -36,7 +35,7 @@ public abstract sealed class AutomationRuleEvaluator<T>
     UUID id;
 
     @JsonView({View.Public.class, View.Write.class})
-    @NotNull UUID projectId;
+    UUID projectId;
 
     @JsonView({View.Public.class, View.Write.class})
     @Schema(accessMode = Schema.AccessMode.READ_WRITE)
