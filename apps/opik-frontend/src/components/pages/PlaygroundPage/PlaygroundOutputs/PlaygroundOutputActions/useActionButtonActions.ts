@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import asyncLib from "async";
 import mustache from "mustache";
 import isUndefined from "lodash/isUndefined";
+import isObject from "lodash/isObject";
 
 import { DatasetItem } from "@/types/datasets";
 import {
@@ -29,10 +30,6 @@ interface FlattenStackItem {
   prefix: string;
 }
 
-const isObject = (item: unknown): item is Object => {
-  return typeof item === "object" && item !== null;
-};
-
 function flattenObject(obj: object): Record<string, unknown> {
   const stack: FlattenStackItem[] = [{ obj, prefix: "" }];
   const result: Record<string, unknown> = {};
@@ -50,7 +47,7 @@ function flattenObject(obj: object): Record<string, unknown> {
             return;
           }
 
-          if (isObject(item)) {
+          if (item !== null && isObject(item)) {
             // nested
             stack.push({ obj: item, prefix: `${fullKey}[${index}]` });
             return;
@@ -62,7 +59,7 @@ function flattenObject(obj: object): Record<string, unknown> {
         continue;
       }
 
-      if (isObject(value)) {
+      if (value !== null && isObject(value)) {
         stack.push({ obj: value, prefix: fullKey });
         continue;
       }
@@ -78,25 +75,21 @@ export const transformMessageIntoProviderMessage = (
   message: PlaygroundMessageType,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {
-  try {
-    const messageTags = getPromptMustacheTags(message.content);
-    const flattenedDatasetItem = flattenObject(datasetItem);
+  const messageTags = getPromptMustacheTags(message.content);
+  const flattenedDatasetItem = flattenObject(datasetItem);
 
-    const notDefinedVariables = messageTags.filter((tag) =>
-      isUndefined(flattenedDatasetItem[tag]),
-    );
+  const notDefinedVariables = messageTags.filter((tag) =>
+    isUndefined(flattenedDatasetItem[tag]),
+  );
 
-    if (notDefinedVariables.length > 0) {
-      throw new Error(`${notDefinedVariables.join(", ")} not defined`);
-    }
-
-    return {
-      role: message.role,
-      content: mustache.render(message.content, datasetItem),
-    };
-  } catch (e) {
-    throw e;
+  if (notDefinedVariables.length > 0) {
+    throw new Error(`${notDefinedVariables.join(", ")} not defined`);
   }
+
+  return {
+    role: message.role,
+    content: mustache.render(message.content, datasetItem),
+  };
 };
 
 interface DatasetItemPromptCombination {
@@ -247,7 +240,15 @@ const useActionButtonActions = ({
         abortControllersOngoingRef.current.clear();
       },
     );
-  }, [resetOutputMap, promptIds, datasetItems, promptMap, createTraceSpan]);
+  }, [
+    resetOutputMap,
+    promptIds,
+    datasetItems,
+    promptMap,
+    createTraceSpan,
+    runStreaming,
+    updateOutput,
+  ]);
 
   return {
     isRunning,

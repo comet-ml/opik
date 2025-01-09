@@ -1,9 +1,8 @@
-import React, { useCallback } from "react";
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import usePlaygroundStore, {
-  PlaygroundStore,
+import {
   useOutputLoadingByPromptDatasetItemId,
   useOutputValueByPromptDatasetItemId,
 } from "@/store/PlaygroundStore";
@@ -51,7 +50,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
     >
       <div className="size-full">
         <div className="h-[var(--cell-top-height)]" />
-        <div className="overflow-y-auto h-[calc(100%-var(--cell-top-height))]">
+        <div className="h-[calc(100%-var(--cell-top-height))] overflow-y-auto">
           {renderContent()}
         </div>
       </div>

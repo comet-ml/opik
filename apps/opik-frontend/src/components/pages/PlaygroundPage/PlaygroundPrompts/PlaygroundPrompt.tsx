@@ -152,7 +152,14 @@ const PlaygroundPrompt = ({
 
       updateOutput(promptId, "", { value: "" });
     }
-  }, [providerKeys, isPendingProviderKeys, updateOutput, updatePrompt]);
+  }, [
+    providerKeys,
+    isPendingProviderKeys,
+    updateOutput,
+    updatePrompt,
+    promptId,
+    model,
+  ]);
 
   return (
     <div className="w-full min-w-[var(--min-prompt-width)]">

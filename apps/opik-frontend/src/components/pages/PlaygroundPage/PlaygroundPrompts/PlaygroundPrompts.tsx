@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect } from "react";
 import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { PROVIDER_TYPE } from "@/types/providers";
@@ -33,10 +33,10 @@ const PlaygroundPrompts = ({
     addPrompt(newPrompt);
   };
 
-  const resetPlayground = () => {
+  const resetPlayground = useCallback(() => {
     const newPrompt = generateDefaultPrompt({ setupProviders: providerKeys });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
-  };
+  }, [setPromptMap, providerKeys]);
 
   useEffect(() => {
     // hasn't been initialized yet or the last prompt is removed

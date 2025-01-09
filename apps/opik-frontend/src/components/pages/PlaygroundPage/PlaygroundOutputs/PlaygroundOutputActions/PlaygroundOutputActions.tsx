@@ -50,11 +50,7 @@ const PlaygroundOutputActions = ({
   const promptCount = usePromptCount();
   const resetOutputMap = useResetOutputMap();
 
-  const {
-    data: datasetsData,
-    isLoading: isLoadingDatasets,
-    isPending: isPendingDatasets,
-  } = useDatasetsList({
+  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
     workspaceName,
     page: 1,
     size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : 1000,
@@ -217,7 +213,7 @@ const PlaygroundOutputActions = ({
         <Button
           variant="outline"
           size="icon-sm"
-          className="border-l-0 rounded-l-none"
+          className="rounded-l-none border-l-0 "
           onClick={() => handleChangeDatasetId(null)}
         >
           <X className="size-4 text-light-slate" />

@@ -103,7 +103,7 @@ export const LoadableSelectBox = ({
               }
             : {}
         }
-        className="p-1 relative pt-12"
+        className="relative p-1 pt-12"
         hideWhenDetached
       >
         <div className="absolute inset-x-1 top-0 h-12">

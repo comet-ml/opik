@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 
 import dayjs from "dayjs";
 import { UsageType } from "@/types/shared";
@@ -14,7 +14,6 @@ import {
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { useLocation } from "@tanstack/react-router";
 
 const getNowUtcTimeISOString = (): string => {
   return dayjs().utc().toISOString();

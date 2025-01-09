@@ -16,14 +16,14 @@ export const mustachePlugin = ViewPlugin.fromClass(
     }
 
     createDecorations(view: EditorView): DecorationSet {
-      let widgets = [];
-      for (let { from, to } of view.visibleRanges) {
-        let text = view.state.doc.sliceString(from, to);
-        let regex = /{{(.*?)}}/g;
+      const widgets = [];
+      for (const { from, to } of view.visibleRanges) {
+        const text = view.state.doc.sliceString(from, to);
+        const regex = /{{(.*?)}}/g;
         let match;
         while ((match = regex.exec(text)) !== null) {
-          let start = from + match.index;
-          let end = start + match[0].length;
+          const start = from + match.index;
+          const end = start + match[0].length;
           widgets.push(
             Decoration.mark({ class: "text-[#19A979]" }).range(start, end),
           );

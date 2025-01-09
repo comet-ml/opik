@@ -1,5 +1,4 @@
 import {
-  ProviderMessageType,
   PLAYGROUND_MESSAGE_ROLE,
   PlaygroundMessageType,
   PlaygroundPromptConfigsType,
@@ -15,12 +14,8 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
-import { DatasetItem } from "@/types/datasets";
-import mustache from "mustache";
-import isUndefined from "lodash/isUndefined";
 import { getDefaultProviderKey } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
-import { getPromptMustacheTags } from "@/lib/prompt";
 
 export const generateDefaultPlaygroundPromptMessage = (
   message: Partial<PlaygroundMessageType> = {},

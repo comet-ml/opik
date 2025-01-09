@@ -3,8 +3,6 @@ import { CellContext } from "@tanstack/react-table";
 import isObject from "lodash/isObject";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
-import { cn, safelyParseJSON } from "@/lib/utils";
 import JsonView from "react18-json-view";
 
 interface CustomMeta {
