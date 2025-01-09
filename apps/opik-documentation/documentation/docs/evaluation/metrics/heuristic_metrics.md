@@ -16,6 +16,7 @@ You can use the following heuristic metrics:
 | RegexMatch  | Checks if the output matches a specified regular expression pattern                               |
 | IsJson      | Checks if the output is a valid JSON object                                                       |
 | Levenshtein | Calculates the Levenshtein distance between the output and an expected string                     |
+| BLEU        | Calculates the BLEU score for output text against one or more reference texts                     |
 
 ## Score an LLM response
 
@@ -96,4 +97,47 @@ metric = LevenshteinRatio()
 
 score = metric.score(output="Hello world !", reference="hello")
 print(score)
+```
+
+### BLEU
+
+The `BLEU` metric can be used to check if the output of an LLM is a valid translation of a reference text. `score()` computes the sentence-level BLEU score for a single candidate against one or more reference translations. It can be used in the following way:
+
+```python
+from opik.evaluation.metrics import BLEU
+
+metric = BLEU()
+
+score = metric.score(output="Hello world!", reference="Hello world")
+print(score)
+```
+
+You can also configure the `BLEU` metric when instantiating it:
+
+```python
+from opik.evaluation.metrics import BLEU
+
+metric = BLEU(n_grams=4, smoothing_method="method1", epsilon=0.1, alpha=5.0, k=5.0)
+
+score = metric.score(output="Hello world !", reference="Hello world")
+print(score)
+```
+
+`score_corpus()` computes the corpus-level BLEU score for multiple candidate sentences and their corresponding references. It can be used in the following way:
+
+```python
+from opik.evaluation.metrics import BLEU
+
+bleu_metric = BLEU()
+
+outputs = ["This is a test.", "Another test sentence."]
+
+references_list = [
+    ["This is a test.", "This is also a test."],
+    ["Another test sentence.", "Yet another test sentence."],
+]
+
+result = bleu_metric.score_corpus(outputs, references_list)
+
+print(f"Corpus BLEU score: {result.value:.4f}, Reason: {result.reason}")
 ```
