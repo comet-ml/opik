@@ -18,14 +18,14 @@ def track_crewai(
 
     decorator_factory = crewai_decorator.CrewAITrackDecorator()
 
-    kickoff_decorator = decorator_factory.track(
+    crewai_wrapper = decorator_factory.track(
         project_name=project_name,
     )
 
-    crewai.Crew.kickoff = kickoff_decorator(crewai.Crew.kickoff)
-    crewai.Crew.kickoff_for_each = kickoff_decorator(crewai.Crew.kickoff_for_each)
-    crewai.Agent.execute_task = kickoff_decorator(crewai.Agent.execute_task)
-    crewai.Task.execute_sync = kickoff_decorator(crewai.Task.execute_sync)
-    litellm.completion = kickoff_decorator(litellm.completion)
+    crewai.Crew.kickoff = crewai_wrapper(crewai.Crew.kickoff)
+    crewai.Crew.kickoff_for_each = crewai_wrapper(crewai.Crew.kickoff_for_each)
+    crewai.Agent.execute_task = crewai_wrapper(crewai.Agent.execute_task)
+    crewai.Task.execute_sync = crewai_wrapper(crewai.Task.execute_sync)
+    litellm.completion = crewai_wrapper(litellm.completion)
 
     return None
