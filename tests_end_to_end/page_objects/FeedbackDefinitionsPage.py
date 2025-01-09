@@ -1,5 +1,5 @@
 from playwright.sync_api import Page, expect
-from typing import Literal
+from typing import Literal, Optional
 
 
 class FeedbackDefinitionsPage:
@@ -62,11 +62,13 @@ class FeedbackDefinitionsPage:
         self,
         feedback_name: str,
         feedback_type: Literal["categorical", "numerical"],
-        categories: dict = None,
-        min: int = None,
-        max: int = None,
+        categories: Optional[dict] = None,
+        min: Optional[int] = None,
+        max: Optional[int] = None,
     ):
-        self.page.get_by_role("button", name="Create new feedback definition").first.click()
+        self.page.get_by_role(
+            "button", name="Create new feedback definition"
+        ).first.click()
         self.page.get_by_placeholder("Feedback definition name").fill(feedback_name)
         self.page.get_by_role("combobox").click()
         self.page.get_by_label(feedback_type.capitalize()).click()
@@ -99,11 +101,11 @@ class FeedbackDefinitionsPage:
     def edit_feedback_by_name(
         self,
         feedback_name: str,
-        new_name: str = None,
-        feedback_type: Literal["categorical", "numerical"] = None,
-        categories: dict = None,
-        min: int = None,
-        max: int = None,
+        new_name: str = "",
+        feedback_type: Optional[Literal["categorical", "numerical"]] = None,
+        categories: Optional[dict] = None,
+        min: Optional[int] = None,
+        max: Optional[int] = None,
     ):
         self.search_feedback_by_name(feedback_name=feedback_name)
         self.page.get_by_role("row", name=feedback_name).first.get_by_role(

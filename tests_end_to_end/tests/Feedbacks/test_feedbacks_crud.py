@@ -79,6 +79,7 @@ class TestFeedbacksCrud:
             num_new_name
         )
         match = re.search(r"Min: (\d+), Max: (\d+)", numerical_ui_values)
+        assert match is not None, "Improper formatting of min-max values"
         min_value = match.group(1)
         max_value = match.group(2)
         assert int(min_value) == new_min
