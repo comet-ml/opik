@@ -102,14 +102,20 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _parse_inputs(self, args: Tuple, kwargs: Dict, metadata: Dict, name: str) -> Tuple[Dict, str, SpanType]:
+    def _parse_inputs(
+        self,
+        args: Tuple,
+        kwargs: Dict,
+        metadata: Dict,
+        name: str,
+    ) -> Tuple[Dict, str, SpanType]:
         span_type: SpanType = "general"
-        input_dict = {}
+        input_dict: Dict[str, Any] = {}
 
         # Crew
         if name == "kickoff":
             metadata["object_type"] = "crew"
-            input_dict = kwargs.get("inputs")
+            input_dict = kwargs.get("inputs", {})
 
         # Agent
         elif name == "execute_task":
@@ -149,7 +155,7 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata = current_span.metadata
             object_type = metadata.pop("object_type")
 
-        model, output_dict, provider, usage = self._parse_outputs(object_type, output)
+        model, provider, output_dict, usage = self._parse_outputs(object_type, output)
 
         result = arguments_helpers.EndSpanParameters(
             output=output_dict,
@@ -161,28 +167,38 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _parse_outputs(self, object_type, output):
+    def _parse_outputs(
+        self,
+        object_type: Optional[str],
+        output: Any,
+    ) -> Tuple[
+        Optional[str],
+        Optional[str],
+        Dict[str, Any],
+        Optional[Dict[str, Any]],
+    ]:
         model = None
         provider = None
         usage = None
+        output_dict = {}
 
         if object_type == "crew":
             output_dict = output.model_dump()
             _ = output_dict.pop("token_usage")
-            output = output_dict
         elif object_type == "agent":
-            output = {"output": output}
+            output_dict = {"output": output}
         elif object_type == "task":
             output_dict = output.model_dump(include=TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT)
-            output = output_dict
         elif object_type == "completion":
             output_dict = output.model_dump()
             usage = output_dict.pop("usage", None)
             model = output_dict.pop("model", None)
-            provider = "openai" if output_dict.get('object') == 'chat.completion' else None
-            output = {}
+            provider = (
+                "openai" if output_dict.get("object") == "chat.completion" else None
+            )
+            output_dict = {}
 
-        return model, output, provider, usage
+        return model, provider, output_dict, usage
 
     def _generators_handler(
         self,

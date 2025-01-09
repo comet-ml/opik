@@ -1,5 +1,3 @@
-import litellm
-
 from opik.api_objects.opik_client import get_client_cached
 from opik.integrations.crewai import track_crewai
 from .crew import LatestAiDevelopmentCrew
@@ -11,8 +9,6 @@ from ...testlib import (
     TraceModel,
     assert_equal,
 )
-
-litellm.set_verbose = True
 
 
 def test_crewai__happyflow(
@@ -33,7 +29,7 @@ def test_crewai__happyflow(
     EXPECTED_TRACE_TREE = TraceModel(
         end_time=ANY_BUT_NONE,
         id=ANY_STRING(),
-        input={'topic': 'AI Agents'},
+        input={"topic": "AI Agents"},
         metadata={"created_from": "crewai"},
         name="kickoff",
         output=ANY_DICT,
@@ -58,7 +54,7 @@ def test_crewai__happyflow(
                         id=ANY_STRING(),
                         input=ANY_DICT,
                         metadata={"created_from": "crewai"},
-                        name='Task: research_task',
+                        name="Task: research_task",
                         output=ANY_DICT,
                         project_name=project_name,
                         start_time=ANY_BUT_NONE,
@@ -69,7 +65,7 @@ def test_crewai__happyflow(
                                 id=ANY_STRING(),
                                 input=ANY_DICT,
                                 metadata={"created_from": "crewai"},
-                                name='AI Agents Senior Data Researcher',
+                                name="AI Agents Senior Data Researcher",
                                 output=ANY_DICT,
                                 project_name=project_name,
                                 start_time=ANY_BUT_NONE,
@@ -85,7 +81,7 @@ def test_crewai__happyflow(
                                             "usage": ANY_DICT,
                                         },
                                         model=ANY_STRING(startswith="gpt-4o-mini"),
-                                        name='llm call',
+                                        name="llm call",
                                         output=ANY_DICT,
                                         project_name=project_name,
                                         provider="openai",
@@ -99,7 +95,7 @@ def test_crewai__happyflow(
                                         },
                                         spans=[],
                                     )
-                                ]
+                                ],
                             )
                         ],
                     ),
@@ -108,7 +104,7 @@ def test_crewai__happyflow(
                         id=ANY_STRING(),
                         input=ANY_DICT,
                         metadata={"created_from": "crewai"},
-                        name='Task: reporting_task',
+                        name="Task: reporting_task",
                         output=ANY_DICT,
                         project_name=project_name,
                         start_time=ANY_BUT_NONE,
@@ -119,7 +115,7 @@ def test_crewai__happyflow(
                                 id=ANY_STRING(),
                                 input=ANY_DICT,
                                 metadata={"created_from": "crewai"},
-                                name='AI Agents Reporting Analyst',
+                                name="AI Agents Reporting Analyst",
                                 output=ANY_DICT,
                                 project_name=project_name,
                                 start_time=ANY_BUT_NONE,
@@ -135,7 +131,7 @@ def test_crewai__happyflow(
                                             "usage": ANY_DICT,
                                         },
                                         model=ANY_STRING(startswith="gpt-4o-mini"),
-                                        name='llm call',
+                                        name="llm call",
                                         output=ANY_DICT,
                                         project_name=project_name,
                                         provider="openai",
@@ -149,7 +145,7 @@ def test_crewai__happyflow(
                                         },
                                         spans=[],
                                     )
-                                ]
+                                ],
                             )
                         ],
                     ),
