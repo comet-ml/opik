@@ -1,10 +1,19 @@
 import logging
-from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Optional, Tuple, Union
-
-from crewai.tasks import TaskOutput
+from typing import (
+    Any,
+    AsyncGenerator,
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from opik import opik_context
 from opik.decorator import arguments_helpers, base_track_decorator
+from opik.types import SpanType
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,48 +42,39 @@ TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS = [
     # 'agent',
     # 'async_execution',
     # 'callback',
-    'config',
-    'context',
+    "config",
+    "context",
     # 'converter_cls',
     # 'delegations',
-    'description',
-    'expected_output',
+    "description",
+    "expected_output",
     # 'human_input',
     # 'i18n',
     # 'id',
-    'name',
+    "name",
     # 'output',
     # 'output_file',
     # 'output_json',
     # 'output_pydantic',
     # 'processed_by_agents',
-    'prompt_context',
-    'tools',
+    "prompt_context",
+    "tools",
     # 'tools_errors',
     # 'used_tools',
 ]
 
 
-
-from litellm.integrations.custom_logger import CustomLogger
-
-
-class OpikTokenCalcHandler(CustomLogger):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._event_kwargs = None
-        self._response_obj = None
-        self.model = None
-        self.provider = None
-        self.usage = None
-
-
-    def log_success_event(self, kwargs, response_obj, start_time, end_time):
-        self._event_kwargs = kwargs
-        self._response_obj = response_obj
-        self.model = response_obj.model
-        self.provider = "openai" if response_obj.object == 'chat.completion' else None
-        self.usage = response_obj.model_dump().get("usage")
+TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT = [
+    # 'agent',
+    # 'description',
+    # 'expected_output',
+    # 'json_dict',
+    "name",
+    # 'output_format',
+    # 'pydantic',
+    "raw",
+    "summary",
+]
 
 
 class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -82,66 +82,48 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Optional[Tuple],
-        kwargs: Optional[Dict[str, Any]],
+        args: Tuple,
+        kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}
+        span_type: SpanType = "general"
 
-        metadata.update({
-                "created_from": "crewai",
-                "args": args,
-                "kwargs": kwargs,
-            })
-
+        metadata["created_from"] = "crewai"
         tags = ["crewai"]
 
-        ######################
-        # PARSE INPUT
-        ######################
         # Crew
         if name == "kickoff":
-            input = kwargs.get("inputs")
-            metadata.update({
-                "object_type": "crew",
-            })
+            metadata["object_type"] = "crew"
+            input_dict = kwargs.get("inputs")
 
         # Agent
         elif name == "execute_task":
-            assert kwargs['task'].agent == args[0]
+            metadata["object_type"] = "agent"
             agent = args[0]
-            token_usage_callback = OpikTokenCalcHandler()
-            agent.agent_executor.callbacks = [token_usage_callback] + agent.agent_executor.callbacks
-
-            input = {}
-            input["context"] = kwargs.get("context")
+            input_dict = {"context": kwargs.get("context")}
             agent_dict = agent.model_dump(include=AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS)
-            input["agent"] = agent_dict
-
+            input_dict["agent"] = agent_dict
             name = agent.role.strip()
-            metadata.update({
-                "object_type": "agent",
-            })
 
         # Task
         elif name == "execute_sync":
-            input = {}
+            metadata["object_type"] = "task"
+            input_dict = {}
             task_dict = args[0].model_dump(include=TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS)
-            input["task"] = task_dict
-
+            input_dict["task"] = task_dict
             name = f"Task: {args[0].name}"
-            metadata.update({
-                "object_type": "task",
-            })
 
-        else:
-            raise NotImplementedError
+        elif name == "completion":
+            metadata["object_type"] = "completion"
+            input_dict = {"messages": kwargs.get("messages")}
+            span_type = "llm"
+            name = "llm call"
 
         result = arguments_helpers.StartSpanParameters(
             name=name,
-            input=input,
-            type=track_options.type,
+            input=input_dict,
+            type=span_type,
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
@@ -154,34 +136,30 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         output: Any,
         capture_output: bool,
     ) -> arguments_helpers.EndSpanParameters:
-
         usage = None
         model = None
         provider = None
+        object_type = None
+        metadata = {}
 
         current_span = opik_context.get_current_span_data()
+        if current_span and current_span.metadata:
+            metadata = current_span.metadata
+            object_type = metadata.pop("object_type")
 
-        if isinstance(output, TaskOutput):
-            output = {"output": output.raw}
-        elif isinstance(output, str):
+        if object_type == "crew":
+            output_dict = output.model_dump()
+            _ = output_dict.pop("token_usage")
+            output = output_dict
+        elif object_type == "agent":
             output = {"output": output}
-        else:
-            # output = output.model_dump()
-            # usage = output.pop("token_usage", None)
+        elif object_type == "task":
+            output_dict = output.model_dump(include=TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT)
+            output = output_dict
+        elif object_type == "completion":
+            output_dict = output.model_dump()
+            usage = output_dict.pop("usage", None)
             output = {}
-
-        if current_span.metadata.get("object_type") == "agent":
-            opik_callback_handler = current_span.metadata['args'][0].agent_executor.callbacks[0]
-            if opik_callback_handler:
-                model = opik_callback_handler.model
-                provider = opik_callback_handler.provider
-                usage = opik_callback_handler.usage
-
-        metadata = current_span.metadata
-
-        metadata.pop('args')
-        metadata.pop('kwargs')
-        metadata.pop('token_usage_callback', None)
 
         result = arguments_helpers.EndSpanParameters(
             output=output,

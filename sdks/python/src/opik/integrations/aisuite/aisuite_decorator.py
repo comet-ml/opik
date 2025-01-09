@@ -1,5 +1,15 @@
 import logging
-from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import aisuite.framework as aisuite_chat_completion
 from openai.types.chat import chat_completion as openai_chat_completion

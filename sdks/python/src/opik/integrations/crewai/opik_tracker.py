@@ -1,14 +1,21 @@
-import functools
 from typing import Optional
 
 import crewai
+import litellm
 
 from . import crewai_decorator
+
+__IS_TRACKING_ENABLED = False
 
 
 def track_crewai(
     project_name: Optional[str] = None,
 ) -> None:
+    global __IS_TRACKING_ENABLED
+    if __IS_TRACKING_ENABLED:
+        return
+    __IS_TRACKING_ENABLED = True
+
     decorator_factory = crewai_decorator.CrewAITrackDecorator()
 
     kickoff_decorator = decorator_factory.track(
@@ -17,35 +24,8 @@ def track_crewai(
 
     crewai.Crew.kickoff = kickoff_decorator(crewai.Crew.kickoff)
     crewai.Crew.kickoff_for_each = kickoff_decorator(crewai.Crew.kickoff_for_each)
-    crewai.Crew.kickoff_async = kickoff_decorator(crewai.Crew.kickoff_async)
-    crewai.Crew.kickoff_for_each_async = kickoff_decorator(crewai.Crew.kickoff_for_each_async)
-
     crewai.Agent.execute_task = kickoff_decorator(crewai.Agent.execute_task)
-    crewai.Agent.create_agent_executor = create_agent_executor_wrapper(crewai.Agent.create_agent_executor)
-
     crewai.Task.execute_sync = kickoff_decorator(crewai.Task.execute_sync)
-    crewai.Task.execute_async = kickoff_decorator(crewai.Task.execute_async)
+    litellm.completion = kickoff_decorator(litellm.completion)
 
     return None
-
-
-def create_agent_executor_wrapper(method):
-    @functools.wraps(method)
-    def wrapped_method(*args, **kwargs):
-        opik_obj = None
-
-        if args[0].agent_executor and len(args[0].agent_executor.callbacks) > 1:
-            for callback in args[0].agent_executor.callbacks:
-                if isinstance(callback, crewai_decorator.OpikTokenCalcHandler):
-                    opik_obj = callback
-                    break
-
-        result = method(*args, **kwargs)
-
-        if opik_obj is not None:
-            args[0].agent_executor.callbacks = [opik_obj] + args[0].agent_executor.callbacks
-
-        return result
-
-    return wrapped_method
-
