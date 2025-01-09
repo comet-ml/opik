@@ -63,7 +63,6 @@ TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS = [
     # 'used_tools',
 ]
 
-
 TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT = [
     # 'agent',
     # 'description',
