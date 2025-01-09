@@ -109,7 +109,7 @@ const PlaygroundOutputActions = ({
     }
 
     const areAllPromptsValid = Object.values(promptMap).every((p) => !!p.model);
-    const isDatasetEmpty = datasetId && datasetItems.length === 0;
+    const isDatasetEmpty = !!datasetId && datasetItems.length === 0;
     const isDatasetRemoved = !datasets.find((d) => d.id === datasetId);
 
     const isDisabled =
@@ -117,7 +117,7 @@ const PlaygroundOutputActions = ({
       loadingDatasetItems ||
       isLoadingDatasets ||
       isDatasetRemoved ||
-      !!isDatasetEmpty;
+      isDatasetEmpty;
 
     const style: React.CSSProperties = isDisabled
       ? { pointerEvents: "auto" }
