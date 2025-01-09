@@ -66,7 +66,7 @@ class FeedbackDefinitionsPage:
         min: int = None,
         max: int = None,
     ):
-        self.page.get_by_role("button", name="Create new feedback definition").click()
+        self.page.get_by_role("button", name="Create new feedback definition").first.click()
         self.page.get_by_placeholder("Feedback definition name").fill(feedback_name)
         self.page.get_by_role("combobox").click()
         self.page.get_by_label(feedback_type.capitalize()).click()
