@@ -24,7 +24,7 @@
         <stringtemplate.version>3.47.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
-        <clickhouse-java.version>0.7.0</clickhouse-java.version>
+        <clickhouse-java.version>0.7.2</clickhouse-java.version>
         <org.mapstruct.version>1.6.2</org.mapstruct.version>
         <testcontainers.version>1.20.2</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
@@ -199,6 +199,16 @@
             <version>5.2.3</version>
         </dependency>
         <dependency>
+            <groupId>org.mvel</groupId>
+            <artifactId>mvel2</artifactId>
+            <version>2.5.2.Final</version>
+        </dependency>
+        <dependency>
+            <groupId>com.thoughtworks.paranamer</groupId>
+            <artifactId>paranamer</artifactId>
+            <version>2.8</version>
+        </dependency>
+        <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
             <version>${org.mapstruct.version}</version>
@@ -286,7 +296,7 @@
         <dependency>
             <groupId>com.clickhouse</groupId>
             <artifactId>clickhouse-jdbc</artifactId>
-            <version>0.7.0</version>
+            <version>${clickhouse-java.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>

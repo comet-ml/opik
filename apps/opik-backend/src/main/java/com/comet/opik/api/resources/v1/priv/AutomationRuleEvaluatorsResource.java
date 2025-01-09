@@ -86,7 +86,7 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Looking for automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
-        AutomationRuleEvaluator evaluator = service.findById(evaluatorId, projectId, workspaceId);
+        AutomationRuleEvaluator<?> evaluator = service.findById(evaluatorId, projectId, workspaceId);
         log.info("Found automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
 
         return Response.ok().entity(evaluator).build();
