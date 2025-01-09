@@ -35,6 +35,7 @@ public abstract sealed class AutomationRuleEvaluator<T>
     UUID id;
 
     @JsonView({View.Public.class})
+    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     UUID projectId;
 
     @JsonView({View.Public.class, View.Write.class})
