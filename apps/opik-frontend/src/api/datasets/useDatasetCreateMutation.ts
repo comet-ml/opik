@@ -1,11 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
-import last from "lodash/last";
-
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Dataset } from "@/types/datasets";
 import { useToast } from "@/components/ui/use-toast";
+import { extractIdFromLocation } from "@/lib/utils";
 
 type UseDatasetCreateMutationParams = {
   dataset: Partial<Dataset>;
@@ -31,7 +30,7 @@ const useDatasetCreateMutation = () => {
         ? data
         : {
             ...dataset,
-            id: last(headers?.location?.split("/")),
+            id: extractIdFromLocation(headers?.location),
           };
     },
     onMutate: async (params: UseDatasetCreateMutationParams) => {

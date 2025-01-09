@@ -7,6 +7,7 @@ import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
 import snakeCase from "lodash/snakeCase";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
+import { last } from "lodash";
 
 const BASE_DOCUMENTATION_URL = "https://www.comet.com/docs/opik";
 
@@ -81,3 +82,6 @@ export const calculateWorkspaceName = (
   workspaceName: string,
   defaultName = "Personal",
 ) => (workspaceName === DEFAULT_WORKSPACE_NAME ? defaultName : workspaceName);
+
+export const extractIdFromLocation = (location: string) =>
+  last(location?.split("/"));
