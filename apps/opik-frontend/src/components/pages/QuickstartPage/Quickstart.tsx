@@ -32,7 +32,7 @@ const Quickstart: React.FunctionComponent<QuickstartProps> = ({
         </div>
         <div className="pt-5">
           <h1 className="comet-title-xl text-center">Quickstart guide</h1>
-          <div className="comet-body-s mt-4 h-[92px] w-[468px] m-auto self-center text-center text-muted-slate">
+          <div className="comet-body-s m-auto mt-4 h-[92px] w-[468px] self-center text-center text-muted-slate">
             Select the framework and follow the instructions to integrate Opik
             with your own code or use our ready-to-run examples on the right.
           </div>
