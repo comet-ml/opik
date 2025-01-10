@@ -196,8 +196,9 @@ const PlaygroundOutputActions = ({
           options={datasetOptions}
           value={datasetId || ""}
           placeholder={
-            <div className="flex items-center text-foreground">
-              <Database className="mr-2 size-4" /> Dataset
+            <div className="flex w-full items-center text-foreground">
+              <Database className="mr-2 size-4" />
+              <span className="truncate">Dataset</span>
             </div>
           }
           onChange={handleChangeDatasetId}
@@ -214,9 +215,9 @@ const PlaygroundOutputActions = ({
           })}
           renderTitle={(option) => {
             return (
-              <div className="flex items-center text-foreground">
+              <div className="flex w-full items-center text-foreground">
                 <Database className="mr-2 size-4" />
-                {option.label}
+                <span className="max-w-[90%] truncate">{option.label}</span>
               </div>
             );
           }}
