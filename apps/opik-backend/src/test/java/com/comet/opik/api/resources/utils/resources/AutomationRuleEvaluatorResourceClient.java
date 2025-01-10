@@ -26,17 +26,19 @@ public class AutomationRuleEvaluatorResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName, String apiKey) {
-        try (var actualResponse = createEvaluator(evaluator, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
+    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, UUID projectId, String workspaceName,
+            String apiKey) {
+        try (var actualResponse = createEvaluator(evaluator, projectId, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
             return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
     }
 
-    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName, String apiKey,
+    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, UUID projectId, String workspaceName,
+            String apiKey,
             int expectedStatus) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, evaluator.getProjectId()))
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
