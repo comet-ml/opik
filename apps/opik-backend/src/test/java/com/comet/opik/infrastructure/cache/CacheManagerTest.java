@@ -274,4 +274,37 @@ class CacheManagerTest {
         Assertions.assertThatThrownBy(() -> service.get2WithException(id, workspaceId).block())
                 .isInstanceOf(IndexOutOfBoundsException.class);
     }
+
+    // Test collection
+
+    @Test
+    void testCacheable__whenCacheableCollection__shouldCallRealMethodAgain(CachedService service) {
+
+        String id = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        // first call, should call real method
+        var dto = service.getCollection(id, workspaceId);
+
+        // second call, should return cached value
+        var dto2 = service.getCollection(id, workspaceId);
+
+        Assertions.assertThat(dto).isEqualTo(dto2);
+    }
+
+    @Test
+    void testCacheable__whenCacheableCollection__shouldCallRealMethodAgain2(CachedService service) {
+
+        String id = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        // first call, should call real method
+        var dto = service.getCollection2(id, workspaceId).block();
+
+        // second call, should return cached value
+        var dto2 = service.getCollection2(id, workspaceId).block();
+
+        Assertions.assertThat(dto).isEqualTo(dto2);
+    }
+
 }

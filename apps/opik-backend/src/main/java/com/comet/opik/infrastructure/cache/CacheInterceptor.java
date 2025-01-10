@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure.cache;
 
 import com.comet.opik.infrastructure.CacheConfiguration;
+import com.comet.opik.utils.TypeReferenceUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.thoughtworks.paranamer.BytecodeReadingParanamer;
 import jakarta.inject.Provider;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +14,7 @@ import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -122,10 +125,28 @@ public class CacheInterceptor implements MethodInterceptor {
             String name, Cacheable cacheable) {
 
         if (isReactive) {
+
+            if (cacheable.collectionType() != Collection.class) {
+                TypeReference<Object> typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
+                        cacheable.returnType());
+
+                return cacheManager.get().get(key, typeReference)
+                        .switchIfEmpty(processCacheMiss(invocation, key, name));
+            }
+
             return cacheManager.get().get(key, cacheable.returnType())
                     .map(Object.class::cast)
                     .switchIfEmpty(processCacheMiss(invocation, key, name));
         } else {
+
+            if (cacheable.collectionType() != Collection.class) {
+                TypeReference<Object> typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
+                        cacheable.returnType());
+
+                return cacheManager.get().get(key, typeReference)
+                        .switchIfEmpty(processSyncCacheMiss(invocation, key, name));
+            }
+
             return cacheManager.get().get(key, invocation.getMethod().getReturnType())
                     .map(Object.class::cast)
                     .switchIfEmpty(processSyncCacheMiss(invocation, key, name));
@@ -139,8 +160,7 @@ public class CacheInterceptor implements MethodInterceptor {
             } catch (Throwable e) {
                 return Mono.error(e);
             }
-        })
-                .flatMap(value -> cachePut(value, key, name));
+        }).flatMap(value -> cachePut(value, key, name));
     }
 
     private Mono<Object> processCacheMiss(MethodInvocation invocation, String key, String name) {
