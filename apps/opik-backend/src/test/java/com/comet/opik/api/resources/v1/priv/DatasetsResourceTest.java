@@ -84,7 +84,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -99,6 +98,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -2772,13 +2772,13 @@ class DatasetsResourceTest {
                                     .data(null)
                                     .build()))
                             .build(),
-                            "items[0].data must provide data field"),
+                            "items[0].data must not be empty"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
                                     .data(Map.of())
                                     .build()))
                             .build(),
-                            "items[0].data must provide data field"),
+                            "items[0].data must not be empty"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
                                     .source(null)
@@ -2969,23 +2969,6 @@ class DatasetsResourceTest {
                         "span workspace and dataset item workspace does not match");
             }
         }
-
-        @Test
-        @DisplayName("when input is null but data is present, the accept the request")
-        void create__whenInputIsNullButDataIsPresent__thenAcceptTheRequest() {
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .build();
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
-
-            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
-        }
-
     }
 
     private UUID createTrace(Trace trace, String apiKey, String workspaceName) {
@@ -3338,7 +3321,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3378,7 +3361,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3436,7 +3419,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
@@ -3492,7 +3475,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3535,7 +3518,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3730,7 +3713,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             var page = 1;
             var pageSize = 5;
@@ -3963,7 +3946,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::data).toList());
+            Set<Column> columns = getColumns(items.stream().map(DatasetItem::data).toList());
 
             List<Filter> filters = List.of(ExperimentsComparisonFilter.builder()
                     .type(FieldType.STRING)
@@ -4046,7 +4029,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(datasetItems.stream().map(DatasetItem::data).toList());
+            Set<Column> columns = getColumns(datasetItems.stream().map(DatasetItem::data).toList());
 
             List<Filter> filters = List.of(filter);
 
@@ -4083,6 +4066,12 @@ class DatasetsResourceTest {
                             FieldType.FEEDBACK_SCORES_NUMBER, Operator.EQUAL, "sql_cost", "10")),
                     arguments(new ExperimentsComparisonFilter("feedback_scores",
                             FieldType.FEEDBACK_SCORES_NUMBER, Operator.NOT_EQUAL, "sql_cost", "10")),
+                    arguments(new ExperimentsComparisonFilter("output",
+                            FieldType.STRING, Operator.CONTAINS, null, "sql_cost")),
+                    arguments(new ExperimentsComparisonFilter("expected_output",
+                            FieldType.DICTIONARY, Operator.CONTAINS, "output", "sql_cost")),
+                    arguments(new ExperimentsComparisonFilter("metadata",
+                            FieldType.DICTIONARY, Operator.EQUAL, "sql_cost", "10")),
                     arguments(new ExperimentsComparisonFilter("meta_field",
                             FieldType.DICTIONARY, Operator.CONTAINS, "version[*]", "10")),
                     arguments(new ExperimentsComparisonFilter("releases",
@@ -4137,6 +4126,8 @@ class DatasetsResourceTest {
                 var item = items.get(i);
                 var trace = Trace.builder()
                         .id(GENERATOR.generate())
+                        .input(item.data().get("input"))
+                        .output(item.data().get("expected_output"))
                         .projectName(projectName)
                         .startTime(Instant.now())
                         .name("trace-" + i)
@@ -4153,23 +4144,37 @@ class DatasetsResourceTest {
                     DatasetItem item = factory.manufacturePojo(DatasetItem.class)
                             .toBuilder()
                             .source(DatasetItemSource.SDK)
-                            .data(Map.of(
-                                    "sql_tag", JsonUtils.readTree("sql_test"),
-                                    "sql_rate", JsonUtils.readTree(100),
-                                    "meta_field", JsonUtils.readTree(Map.of("version", new String[]{"10", "11", "12"})),
-                                    "releases", JsonUtils.readTree(
+                            .data(new HashMap<>() {
+                                {
+                                    put("sql_tag", JsonUtils.readTree("sql_test"));
+                                    put("sql_rate", JsonUtils.readTree(100));
+                                    put("input", JsonUtils
+                                            .getJsonNodeFromString(
+                                                    JsonUtils.writeValueAsString(Map.of("input", "sql_cost"))));
+                                    put("expected_output", JsonUtils
+                                            .getJsonNodeFromString(
+                                                    JsonUtils.writeValueAsString(Map.of("output", "sql_cost"))));
+                                    put("metadata", JsonUtils
+                                            .getJsonNodeFromString(
+                                                    JsonUtils.writeValueAsString(Map.of("sql_cost", 10))));
+                                    put("meta_field",
+                                            JsonUtils.readTree(Map.of("version", new String[]{"10", "11", "12"})));
+                                    put("releases", JsonUtils.readTree(
                                             List.of(
                                                     Map.of("fixes", new String[]{"10", "11", "12"}, "version", "1.0"),
                                                     Map.of("fixes", new String[]{"10", "11", "12"}, "version", "1.1"),
-                                                    Map.of("fixes", new String[]{"10", "45", "30"}, "version", "1.2"))),
-                                    "json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338")),
-                                    RandomStringUtils.randomAlphanumeric(5),
-                                    BigIntegerNode.valueOf(new BigInteger("18446744073709551615")),
-                                    RandomStringUtils.randomAlphanumeric(5), DoubleNode.valueOf(132432432.79995),
-                                    RandomStringUtils.randomAlphanumeric(5),
-                                    DoubleNode.valueOf(1.1844674407370955444555),
-                                    RandomStringUtils.randomAlphanumeric(5), IntNode.valueOf(100000000),
-                                    RandomStringUtils.randomAlphanumeric(5), BooleanNode.valueOf(true)))
+                                                    Map.of("fixes", new String[]{"10", "45", "30"}, "version",
+                                                            "1.2"))));
+                                    put("json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338")));
+                                    put(RandomStringUtils.randomAlphanumeric(5),
+                                            BigIntegerNode.valueOf(new BigInteger("18446744073709551615")));
+                                    put(RandomStringUtils.randomAlphanumeric(5), DoubleNode.valueOf(132432432.79995));
+                                    put(RandomStringUtils.randomAlphanumeric(5),
+                                            DoubleNode.valueOf(1.1844674407370955444555));
+                                    put(RandomStringUtils.randomAlphanumeric(5), IntNode.valueOf(100000000));
+                                    put(RandomStringUtils.randomAlphanumeric(5), BooleanNode.valueOf(true));
+                                }
+                            })
                             .traceId(null)
                             .spanId(null)
                             .build();
@@ -4660,43 +4665,7 @@ class DatasetsResourceTest {
                 .collect(toSet());
     }
 
-    @Nested
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    //TODO: Remove this test class after migration to the new dataset item format
-    class TestNoMigratedDatasetItemRetrieval {
-
-        private DatasetItem datasetItem;
-
-        @BeforeEach
-        void setUp() {
-
-            var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class));
-            var clickhouseConnectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
-                    CLICKHOUSE, DATABASE_NAME).build();
-
-            var datasetItem = factory.manufacturePojo(DatasetItem.class);
-
-            Mono.from(clickhouseConnectionFactory.create())
-                    .flatMap(connection -> Mono.from(connection.createStatement("""
-                            INSERT INTO %s.%s (
-                            id,
-                            source,
-                            dataset_id,
-                            workspace_id
-                            ) VALUES (:id, :source, :dataset_id, :workspace_id)
-                            """.formatted(DATABASE_NAME, "dataset_items"))
-                            .bind("id", datasetItem.id())
-                            .bind("source", DatasetItemSource.SDK.getValue())
-                            .bind("dataset_id", datasetId)
-                            .bind("workspace_id", WORKSPACE_ID)
-                            .execute()))
-                    .block();
-
-            this.datasetItem = datasetItem;
-        }
-    }
-
-    private Set<Column> addDeprecatedFields(List<Map<String, JsonNode>> data) {
+    private Set<Column> getColumns(List<Map<String, JsonNode>> data) {
 
         HashSet<Column> columns = data
                 .stream()

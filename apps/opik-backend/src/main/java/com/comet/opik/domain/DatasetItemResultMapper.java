@@ -137,26 +137,6 @@ class DatasetItemResultMapper {
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    private static JsonNode getJsonNode(Row row, Map<String, JsonNode> data, String key) {
-        JsonNode json = null;
-
-        if (data.containsKey(key)) {
-            json = data.get(key);
-        }
-
-        if (json == null) {
-            json = Optional.ofNullable(row.get(key, String.class))
-                    .filter(s -> !s.isBlank())
-                    .map(JsonUtils::getJsonNodeFromString).orElse(null);
-        }
-
-        return json;
-    }
-
-    static String getOrDefault(JsonNode jsonNode) {
-        return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
-    }
-
     static Map<String, String> getOrDefault(Map<String, JsonNode> data) {
         return Optional.ofNullable(data)
                 .filter(not(Map::isEmpty))

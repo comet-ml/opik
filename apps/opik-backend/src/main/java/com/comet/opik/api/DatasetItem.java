@@ -1,6 +1,5 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.validate.DatasetItemInputValidation;
 import com.comet.opik.api.validate.SourceValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -8,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -21,7 +21,6 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @SourceValidation
-@DatasetItemInputValidation
 public record DatasetItem(
         @JsonView( {
                 DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
@@ -29,7 +28,7 @@ public record DatasetItem(
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
         @JsonView({DatasetItem.View.Public.class,
-                DatasetItem.View.Write.class}) @Schema(implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> data,
+                DatasetItem.View.Write.class}) @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotEmpty Map<String, JsonNode> data,
         @JsonView({
                 DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<ExperimentItem> experimentItems,
         @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
