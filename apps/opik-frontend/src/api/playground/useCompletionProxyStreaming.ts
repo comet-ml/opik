@@ -3,8 +3,6 @@ import { useCallback } from "react";
 import dayjs from "dayjs";
 import { UsageType } from "@/types/shared";
 import {
-  PlaygroundPromptConfigsType,
-  ProviderMessageType,
   ChatCompletionMessageChoiceType,
   ChatCompletionResponse,
   ChatCompletionProviderErrorMessageType,
@@ -13,7 +11,8 @@ import {
 } from "@/types/playground";
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { ProviderMessageType } from "@/types/llm";
 
 const getNowUtcTimeISOString = (): string => {
   return dayjs().utc().toISOString();
@@ -23,7 +22,7 @@ interface GetCompletionProxyStreamParams {
   model: PROVIDER_MODEL_TYPE | "";
   messages: ProviderMessageType[];
   signal: AbortSignal;
-  configs: PlaygroundPromptConfigsType;
+  configs: LLMPromptConfigsType;
   workspaceName: string;
 }
 
@@ -70,7 +69,7 @@ const getCompletionProxyStream = async ({
 export interface RunStreamingArgs {
   model: PROVIDER_MODEL_TYPE | "";
   messages: ProviderMessageType[];
-  configs: PlaygroundPromptConfigsType;
+  configs: LLMPromptConfigsType;
   onAddChunk: (accumulatedValue: string) => void;
   signal: AbortSignal;
 }

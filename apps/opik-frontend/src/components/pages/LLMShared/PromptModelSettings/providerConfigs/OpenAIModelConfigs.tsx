@@ -1,13 +1,13 @@
 import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import PromptModelSettingsTooltipContent from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { PlaygroundOpenAIConfigsType } from "@/types/providers";
-import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/playground";
+import PromptModelSettingsTooltipContent from "@/components/pages/LLMShared/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import { LLMOpenAIConfigsType } from "@/types/providers";
+import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 
 interface OpenAIModelSettingsProps {
-  configs: PlaygroundOpenAIConfigsType;
-  onChange: (configs: Partial<PlaygroundOpenAIConfigsType>) => void;
+  configs: LLMOpenAIConfigsType;
+  onChange: (configs: Partial<LLMOpenAIConfigsType>) => void;
 }
 
 const OpenAIModelConfigs = ({

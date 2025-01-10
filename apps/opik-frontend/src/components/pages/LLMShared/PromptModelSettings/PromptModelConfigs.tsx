@@ -1,8 +1,11 @@
 import React from "react";
 import { Settings2 } from "lucide-react";
 
-import { PlaygroundPromptConfigsType } from "@/types/playground";
-import { PlaygroundOpenAIConfigsType, PROVIDER_TYPE } from "@/types/providers";
+import {
+  LLMOpenAIConfigsType,
+  LLMPromptConfigsType,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 
 import {
   DropdownMenu,
@@ -11,12 +14,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-import OpenAIModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
+import OpenAIModelConfigs from "@/components/pages/LLMShared/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
-  configs: PlaygroundPromptConfigsType;
-  onChange: (configs: Partial<PlaygroundPromptConfigsType>) => void;
+  configs: LLMPromptConfigsType;
+  onChange: (configs: Partial<LLMPromptConfigsType>) => void;
 }
 
 const PromptModelConfigs = ({
@@ -28,7 +31,7 @@ const PromptModelConfigs = ({
     if (provider === PROVIDER_TYPE.OPEN_AI) {
       return (
         <OpenAIModelConfigs
-          configs={configs as PlaygroundOpenAIConfigsType}
+          configs={configs as LLMOpenAIConfigsType}
           onChange={onChange}
         />
       );

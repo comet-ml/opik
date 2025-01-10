@@ -3,8 +3,9 @@ import isEqual from "fast-deep-equal";
 
 import { Check, Pencil, Trash } from "lucide-react";
 
+import { LLMJudgeSchema } from "@/types/automations";
+import { LLM_SCHEMA_TYPE } from "@/types/llm";
 import { Card, CardContent } from "@/components/ui/card";
-import { EVALUATORS_SCHEMA_TYPE, LLMJudgeSchema } from "@/types/automations";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { DropdownOption } from "@/types/shared";
@@ -18,17 +19,17 @@ interface LLMJudgeScoreProps {
   onChangeScore: (changes: Partial<LLMJudgeSchema>) => void;
 }
 
-const SCORE_TYPE_OPTIONS: DropdownOption<EVALUATORS_SCHEMA_TYPE>[] = [
+const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = [
   {
-    value: EVALUATORS_SCHEMA_TYPE.DOUBLE,
+    value: LLM_SCHEMA_TYPE.DOUBLE,
     label: "Number",
   },
   {
-    value: EVALUATORS_SCHEMA_TYPE.INTEGER,
+    value: LLM_SCHEMA_TYPE.INTEGER,
     label: "Integer",
   },
   {
-    value: EVALUATORS_SCHEMA_TYPE.BOOLEAN,
+    value: LLM_SCHEMA_TYPE.BOOLEAN,
     label: "Boolean",
   },
 ];
@@ -42,8 +43,8 @@ const LLMJudgeScore = ({
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(score.name || "");
   const [description, setDescription] = useState(score.description || "");
-  const [type, setType] = useState<EVALUATORS_SCHEMA_TYPE>(
-    score.type || EVALUATORS_SCHEMA_TYPE.INTEGER,
+  const [type, setType] = useState<LLM_SCHEMA_TYPE>(
+    score.type || LLM_SCHEMA_TYPE.INTEGER,
   );
 
   const handleDoneEditing = () => {
@@ -93,7 +94,7 @@ const LLMJudgeScore = ({
         <div className="flex basis-1/3 gap-2">
           <SelectBox
             value={type}
-            onChange={(value) => setType(value as EVALUATORS_SCHEMA_TYPE)}
+            onChange={(value) => setType(value as LLM_SCHEMA_TYPE)}
             disabled={!isEditing}
             options={SCORE_TYPE_OPTIONS}
             className="h-8"

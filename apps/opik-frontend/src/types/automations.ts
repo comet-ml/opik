@@ -1,17 +1,8 @@
+import { LLM_SCHEMA_TYPE, ProviderMessageType } from "@/types/llm";
+
 export enum EVALUATORS_RULE_TYPE {
   llm_judge = "llm_as_judge", // TODO lala
   python_code = "python_code",
-}
-
-export enum EVALUATORS_MESSAGE_ROLE {
-  SYSTEM = "SYSTEM",
-  USER = "USER",
-}
-
-export enum EVALUATORS_SCHEMA_TYPE {
-  INTEGER = "INTEGER",
-  DOUBLE = "DOUBLE",
-  BOOLEAN = "BOOLEAN",
 }
 
 export interface LLMJudgeModel {
@@ -19,20 +10,15 @@ export interface LLMJudgeModel {
   temperature: number;
 }
 
-export interface LLMJudgeMessage {
-  role: EVALUATORS_MESSAGE_ROLE;
-  content: string;
-}
-
 export interface LLMJudgeSchema {
   name: string;
-  type: EVALUATORS_SCHEMA_TYPE;
+  type: LLM_SCHEMA_TYPE;
   description: string;
 }
 
 export interface LLMJudgeObject {
   model: LLMJudgeModel;
-  messages: LLMJudgeMessage[];
+  messages: ProviderMessageType[];
   variables: Record<string, string>;
   schema: LLMJudgeSchema[];
 }

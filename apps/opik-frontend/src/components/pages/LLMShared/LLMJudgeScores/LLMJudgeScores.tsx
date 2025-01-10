@@ -1,9 +1,10 @@
 import React, { useCallback } from "react";
 import { Plus } from "lucide-react";
 
+import { LLMJudgeSchema } from "@/types/automations";
+import { LLM_SCHEMA_TYPE } from "@/types/llm";
 import { Button } from "@/components/ui/button";
 import LLMJudgeScore from "@/components/pages/LLMShared/LLMJudgeScores/LLMJudgeScore";
-import { EVALUATORS_SCHEMA_TYPE, LLMJudgeSchema } from "@/types/automations";
 
 interface LLMJudgeScoresProps {
   scores: LLMJudgeSchema[];
@@ -18,7 +19,7 @@ const LLMJudgeScores = ({ scores, onChange }: LLMJudgeScoresProps) => {
       {
         name: "Score name",
         description: "Score description",
-        type: EVALUATORS_SCHEMA_TYPE.INTEGER,
+        type: LLM_SCHEMA_TYPE.INTEGER,
       },
     ]);
   }, [onChange, scores]);

@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
 
+import get from "lodash/get";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,14 +17,15 @@ import { EVALUATORS_RULE_TYPE, EvaluatorsRule } from "@/types/automations";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-
-// TODO lala move and refactor
-import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSelect/PromptModelSelect";
-import PromptModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSettings/PromptModelConfigs";
-import { getModelProvider } from "@/lib/playground";
-import get from "lodash/get";
-import useAppStore from "@/store/AppStore";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import PromptModelSelect from "@/components/pages/LLMShared/PromptModelSelect/PromptModelSelect";
+import PromptModelConfigs from "@/components/pages/LLMShared/PromptModelSettings/PromptModelConfigs";
 import LLMJudgeScores from "@/components/pages/LLMShared/LLMJudgeScores/LLMJudgeScores";
+import LLMPromptMessages from "@/components/pages/LLMShared/LLMPromptMessages/LLMPromptMessages";
+import { getModelProvider } from "@/lib/llm";
+import useAppStore from "@/store/AppStore";
+import { LLM_PROMPT_TEMPLATES } from "@/constants/llm";
+import { LLM_JUDGE } from "@/types/llm";
 
 const DEFAULT_SAMPLING_RATE = 0.3;
 
@@ -38,7 +40,7 @@ const DEBUG_EXAMPLE = {
     },
     messages: [
       {
-        role: "USER",
+        role: "user",
         content:
           "Summary: {{summary}}\nInstruction: {{instruction}}\n\nEvaluate the summary based on the following criteria:\n1. Relevance (1-5): How well does the summary address the given instruction?\n2. Conciseness (1-5): How concise is the summary while retaining key information?\n3. Technical Accuracy (1-5): How accurately does the summary convey technical details?",
       },
@@ -86,6 +88,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     defaultRule?.samplingRate || DEFAULT_SAMPLING_RATE,
   );
   const [type] = useState(defaultRule?.type || EVALUATORS_RULE_TYPE.llm_judge);
+
+  // ------------------------------ LLM related
+
   const [model, setModel] = useState(
     get(defaultRule, ["code", "model", "name"]) || "",
   );
@@ -98,6 +103,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const [schemas, setSchemas] = useState(
     get(DEBUG_EXAMPLE, ["code", "schema"]) || [],
   ); // TODO lala
+
+  const [template, setTemplate] = useState<LLM_JUDGE>(LLM_JUDGE.custom);
 
   const { mutate: createMutate } = useRuleCreateMutation();
   const { mutate: updateMutate } = useRuleUpdateMutation();
@@ -146,11 +153,22 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         </div>
         <div className="flex flex-col gap-2 pb-4">
           <Label htmlFor="name">Prompt</Label>
-          <div className="flex h-10 items-center justify-center gap-2">
-            PROMPT SELECT WITH MESSAGES
-          </div>
+          <SelectBox
+            value={template}
+            onChange={(value) => setTemplate(value as LLM_JUDGE)}
+            options={LLM_PROMPT_TEMPLATES}
+            className="justify-start"
+          />
+          <LLMPromptMessages
+            messages={[]}
+            onChange={() => {
+              console.log("on change");
+            }}
+            onAddMessage={() => {
+              console.log("onAddMessage");
+            }}
+          />
         </div>
-
         <div className="flex flex-col gap-2 pb-4">
           <Label htmlFor="name">Score</Label>
           <LLMJudgeScores scores={schemas} onChange={setSchemas} />
