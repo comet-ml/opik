@@ -1,7 +1,6 @@
 import React from "react";
-import { IntegrationComponentProps } from "@/components/pages/QuickstartPage/integrations/types";
-import liteLLMLogoUrl from "/images/integrations/litellm.png";
 import IntegrationTemplate from "@/components/pages/QuickstartPage/integrations/IntegrationTemplate";
+import { FrameworkIntegrationComponentProps } from "@/components/shared/FrameworkIntegrations/types";
 
 const CODE_TITLE = "You can configure LiteLLM to log all LLM calls to Opik:";
 
@@ -18,15 +17,9 @@ response = litellm.completion(
     ]
 )`;
 
-const LiteLLM: React.FC<IntegrationComponentProps> = ({ apiKey }) => {
+const LiteLLM: React.FC<FrameworkIntegrationComponentProps> = ({ apiKey }) => {
   return (
-    <IntegrationTemplate
-      apiKey={apiKey}
-      integration="LiteLLM"
-      url={liteLLMLogoUrl}
-      codeTitle={CODE_TITLE}
-      code={CODE}
-    />
+    <IntegrationTemplate apiKey={apiKey} codeTitle={CODE_TITLE} code={CODE} />
   );
 };
 

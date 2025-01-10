@@ -1,0 +1,45 @@
+import React from "react";
+import FrameworkIntegrations from "@/components/shared/FrameworkIntegrations/FrameworkIntegrations";
+import { QUICKSTART_INTEGRATIONS } from "../QuickstartPage/integrations/quickstart-integrations";
+import { Button } from "@/components/ui/button";
+import { Link } from "@tanstack/react-router";
+import useAppStore from "@/store/AppStore";
+
+type GetStartedProps = {
+  apiKey?: string;
+  showColabLinks?: boolean;
+};
+
+const GetStarted: React.FunctionComponent<GetStartedProps> = ({
+  apiKey,
+  showColabLinks = true,
+}) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  return (
+    <div className="flex w-full min-w-fit flex-col pb-12 pt-10">
+      <div>
+        <div className="comet-body-s text-center">Get started with Opik</div>
+        <h1 className="comet-title-xl mt-4 text-center">
+          Log your first trace
+        </h1>
+        <div className="comet-body-s text-muted-slate m-auto mt-4 h-[92px] w-[468px] self-center text-center">
+          Select a framework and follow the instructions to integrate Comet with
+          your code, or explore our ready-to-run examples on the right
+        </div>
+      </div>
+      <FrameworkIntegrations
+        integrationList={QUICKSTART_INTEGRATIONS}
+        apiKey={apiKey}
+        showColabLinks={showColabLinks}
+      />
+      <Button variant="link" className="mt-2 font-light" size="sm" asChild>
+        <Link to="/$workspaceName/home" params={{ workspaceName }}>
+          Skip, explore the platform on my own
+        </Link>
+      </Button>
+    </div>
+  );
+};
+
+export default GetStarted;

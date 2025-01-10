@@ -1,7 +1,6 @@
 import React from "react";
-import { IntegrationComponentProps } from "@/components/pages/QuickstartPage/integrations/types";
-import pythonLogoUrl from "/images/integrations/python.png";
 import IntegrationTemplate from "@/components/pages/QuickstartPage/integrations/IntegrationTemplate";
+import { FrameworkIntegrationComponentProps } from "@/components/shared/FrameworkIntegrations/types";
 
 const CODE_TITLE =
   "Each function decorated by the `track` decorator will be logged to the Opik platform:";
@@ -13,17 +12,11 @@ def my_llm_chain(input_text):
     # Call the different parts of my chain
     return “Hello, world!”`;
 
-const FunctionDecorators: React.FC<IntegrationComponentProps> = ({
+const FunctionDecorators: React.FC<FrameworkIntegrationComponentProps> = ({
   apiKey,
 }) => {
   return (
-    <IntegrationTemplate
-      apiKey={apiKey}
-      integration="Functional Decorators"
-      url={pythonLogoUrl}
-      codeTitle={CODE_TITLE}
-      code={CODE}
-    />
+    <IntegrationTemplate apiKey={apiKey} codeTitle={CODE_TITLE} code={CODE} />
   );
 };
 

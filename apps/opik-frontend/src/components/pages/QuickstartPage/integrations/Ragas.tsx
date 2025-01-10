@@ -1,7 +1,6 @@
 import React from "react";
-import { IntegrationComponentProps } from "@/components/pages/QuickstartPage/integrations/types";
-import ragasLogoUrl from "/images/integrations/ragas.png";
 import IntegrationTemplate from "@/components/pages/QuickstartPage/integrations/IntegrationTemplate";
+import { FrameworkIntegrationComponentProps } from "@/components/shared/FrameworkIntegrations/types";
 
 const CODE_TITLE =
   "You can use the `OpikTracer` provided as part of the Ragas integration to log all Ragas scores to Opik:";
@@ -27,15 +26,9 @@ answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
 answer_relevancy_metric.single_turn_ascore(row, callbacks=[OpikTracer()])
 `;
 
-const Ragas: React.FC<IntegrationComponentProps> = ({ apiKey }) => {
+const Ragas: React.FC<FrameworkIntegrationComponentProps> = ({ apiKey }) => {
   return (
-    <IntegrationTemplate
-      apiKey={apiKey}
-      integration="Ragas"
-      url={ragasLogoUrl}
-      codeTitle={CODE_TITLE}
-      code={CODE}
-    />
+    <IntegrationTemplate apiKey={apiKey} codeTitle={CODE_TITLE} code={CODE} />
   );
 };
 

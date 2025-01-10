@@ -1,7 +1,6 @@
 import React from "react";
-import { IntegrationComponentProps } from "@/components/pages/QuickstartPage/integrations/types";
-import langChainLogoUrl from "/images/integrations/langchain.png";
 import IntegrationTemplate from "@/components/pages/QuickstartPage/integrations/IntegrationTemplate";
+import { FrameworkIntegrationComponentProps } from "@/components/shared/FrameworkIntegrations/types";
 
 const CODE_TITLE =
   "You can use the `OpikTracer` provided by the Opik SDK to log all LangChains calls to Opik:";
@@ -28,15 +27,11 @@ llm_chain = LLMChain(llm=llm, prompt=prompt_template)
 translation = llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
 print(translation)`;
 
-const LangChain: React.FC<IntegrationComponentProps> = ({ apiKey }) => {
+const LangChain: React.FC<FrameworkIntegrationComponentProps> = ({
+  apiKey,
+}) => {
   return (
-    <IntegrationTemplate
-      apiKey={apiKey}
-      integration="LanfChain"
-      url={langChainLogoUrl}
-      codeTitle={CODE_TITLE}
-      code={CODE}
-    />
+    <IntegrationTemplate apiKey={apiKey} codeTitle={CODE_TITLE} code={CODE} />
   );
 };
 
