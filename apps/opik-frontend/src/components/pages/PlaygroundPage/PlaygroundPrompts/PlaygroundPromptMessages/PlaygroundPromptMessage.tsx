@@ -22,6 +22,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 
 const MESSAGE_TYPE_OPTIONS = Object.values(PLAYGROUND_MESSAGE_ROLE);
 
@@ -149,7 +150,7 @@ const PlaygroundPromptMessage = ({
             lineNumbers: false,
             highlightActiveLine: false,
           }}
-          extensions={[EditorView.lineWrapping]}
+          extensions={[EditorView.lineWrapping, mustachePlugin]}
         />
       </CardContent>
     </Card>

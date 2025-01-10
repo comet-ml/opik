@@ -31,8 +31,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(AutomationRuleEvaluatorServiceImpl.class)
 public interface AutomationRuleEvaluatorService {
 
-    <E, T extends AutomationRuleEvaluator<E>> T save(T automationRuleEvaluator, @NonNull String workspaceId,
-            @NonNull String userName);
+    <E, T extends AutomationRuleEvaluator<E>> T save(T automationRuleEvaluator, @NonNull UUID projectId,
+            @NonNull String workspaceId, @NonNull String userName);
 
     void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
             AutomationRuleEvaluatorUpdate automationRuleEvaluator);
@@ -58,10 +58,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
-    private final int DEFAULT_PAGE_LIMIT = 10;
 
     @Override
     public <E, T extends AutomationRuleEvaluator<E>> T save(T inputRuleEvaluator,
+            @NonNull UUID projectId,
             @NonNull String workspaceId,
             @NonNull String userName) {
 
@@ -75,6 +75,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
                     var definition = llmAsJudge.toBuilder()
                             .id(id)
+                            .projectId(projectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
