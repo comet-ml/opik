@@ -209,7 +209,7 @@ const PlaygroundOutputActions = ({
           }
           isLoading={isLoadingDatasets}
           optionsCount={DEFAULT_LOADED_DATASETS}
-          buttonClassName={cn("w-[300px]", {
+          buttonClassName={cn("w-[310px]", {
             "rounded-r-none": !!datasetId,
           })}
           renderTitle={(option) => {

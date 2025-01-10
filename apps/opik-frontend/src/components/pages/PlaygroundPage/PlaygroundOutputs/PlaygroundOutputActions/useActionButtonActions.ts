@@ -2,7 +2,8 @@ import { useCallback, useRef, useState } from "react";
 import asyncLib from "async";
 import mustache from "mustache";
 import isUndefined from "lodash/isUndefined";
-import isObject from "lodash/isObject";
+import get from "lodash/get";
+import set from "lodash/set";
 
 import { DatasetItem } from "@/types/datasets";
 import {
@@ -21,65 +22,32 @@ import useCreateOutputTraceAndSpan, {
   CreateTraceSpanParams,
 } from "@/api/playground/useCreateOutputTraceAndSpan";
 import { getPromptMustacheTags } from "@/lib/prompt";
+import isObject from "lodash/isObject";
 
 const LIMIT_STREAMING_CALLS = 5;
 const LIMIT_LOG_CALLS = 2;
 
-interface FlattenStackItem {
-  obj: object;
-  prefix: string;
-}
+// ALEX
+const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
+  const newDatasetItem = { ...datasetItem };
 
-function flattenObject(obj: object): Record<string, unknown> {
-  const stack: FlattenStackItem[] = [{ obj, prefix: "" }];
-  const result: Record<string, unknown> = {};
+  tags.forEach((tag) => {
+    const value = get(newDatasetItem, tag);
+    set(newDatasetItem, tag, isObject(value) ? JSON.stringify(value) : value);
+  });
 
-  while (stack.length) {
-    const { obj: currentObj, prefix: currentPrefix } = stack.pop()!;
-
-    for (const [key, value] of Object.entries(currentObj)) {
-      const fullKey = currentPrefix ? `${currentPrefix}.${key}` : key;
-
-      if (Array.isArray(value)) {
-        value.forEach((item, index) => {
-          if (typeof item === "string") {
-            result[`${fullKey}.${index}`] = item;
-            return;
-          }
-
-          if (item !== null && isObject(item)) {
-            // nested
-            stack.push({ obj: item, prefix: `${fullKey}[${index}]` });
-            return;
-          }
-
-          // primitive
-          result[`${fullKey}.${index}`] = item;
-        });
-        continue;
-      }
-
-      if (value !== null && isObject(value)) {
-        stack.push({ obj: value, prefix: fullKey });
-        continue;
-      }
-
-      result[fullKey] = value;
-    }
-  }
-
-  return result;
-}
+  return newDatasetItem;
+};
 
 export const transformMessageIntoProviderMessage = (
   message: PlaygroundMessageType,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {
   const messageTags = getPromptMustacheTags(message.content);
-  const flattenedDatasetItem = flattenObject(datasetItem);
+  const serializedDatasetItem = serializeTags(datasetItem, messageTags);
 
   const notDefinedVariables = messageTags.filter((tag) =>
-    isUndefined(flattenedDatasetItem[tag]),
+    isUndefined(get(serializedDatasetItem, tag)),
   );
 
   if (notDefinedVariables.length > 0) {
@@ -88,7 +56,14 @@ export const transformMessageIntoProviderMessage = (
 
   return {
     role: message.role,
-    content: mustache.render(message.content, datasetItem),
+    content: mustache.render(
+      message.content,
+      serializedDatasetItem,
+      {},
+      {
+        escape: (val: string) => val,
+      },
+    ),
   };
 };
 
@@ -140,9 +115,7 @@ const useActionButtonActions = ({
     setIsRunning(true);
 
     const asyncLogQueue = asyncLib.queue<CreateTraceSpanParams>(
-      async (task) => {
-        await createTraceSpan(task);
-      },
+      createTraceSpan,
       LIMIT_LOG_CALLS,
     );
 
@@ -161,12 +134,11 @@ const useActionButtonActions = ({
       }));
     }
 
-    const processCombination = async (
-      { datasetItem, prompt }: DatasetItemPromptCombination,
-      processCallback: asyncLib.AsyncResultCallback<DatasetItemPromptCombination>,
-    ) => {
+    const processCombination = async ({
+      datasetItem,
+      prompt,
+    }: DatasetItemPromptCombination) => {
       if (isToStopRef.current) {
-        processCallback(null);
         return;
       }
 
@@ -215,8 +187,6 @@ const useActionButtonActions = ({
         if (error) {
           throw new Error(error);
         }
-
-        processCallback(null);
       } catch (error) {
         const typedError = error as Error;
 
@@ -224,16 +194,13 @@ const useActionButtonActions = ({
           value: typedError.message,
           isLoading: false,
         });
-        processCallback(null);
       }
     };
 
     asyncLib.mapLimit(
       combinations,
       LIMIT_STREAMING_CALLS,
-      (combination: DatasetItemPromptCombination, callback) => {
-        processCombination(combination, callback);
-      },
+      processCombination,
       () => {
         setIsRunning(false);
         isToStopRef.current = false;
