@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { devtools, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 
 import { PlaygroundPromptType } from "@/types/playground";
@@ -46,106 +46,102 @@ export type PlaygroundStore = {
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
-  devtools(
-    persist(
-      (set) => ({
-        promptIds: [],
-        promptMap: {},
-        outputMap: {},
+  persist(
+    (set) => ({
+      promptIds: [],
+      promptMap: {},
+      outputMap: {},
 
-        updatePrompt: (promptId, changes) => {
-          set((state) => {
-            return {
-              ...state,
-              promptMap: {
-                ...state.promptMap,
-                [promptId]: {
-                  ...state.promptMap[promptId],
-                  ...changes,
-                },
+      updatePrompt: (promptId, changes) => {
+        set((state) => {
+          return {
+            ...state,
+            promptMap: {
+              ...state.promptMap,
+              [promptId]: {
+                ...state.promptMap[promptId],
+                ...changes,
               },
-            };
-          });
-        },
-        setPromptMap: (promptIds, promptMap) => {
-          set((state) => {
-            return {
-              ...state,
-              promptIds,
-              promptMap,
-              outputMap: pick(state.outputMap, promptIds),
-            };
-          });
-        },
-        addPrompt: (prompt, position) => {
-          set((state) => {
-            const newPromptIds = [...state.promptIds];
-            const pos = !isUndefined(position) ? position : newPromptIds.length;
-
-            newPromptIds.splice(pos, 0, prompt.id);
-
-            return {
-              ...state,
-              promptIds: newPromptIds,
-              promptMap: {
-                ...state.promptMap,
-                [prompt.id]: prompt,
-              },
-            };
-          });
-        },
-        deletePrompt: (promptId) => {
-          set((state) => {
-            const newPromptIds = state.promptIds.filter(
-              (id) => id !== promptId,
-            );
-            const newPromptMap = { ...state.promptMap };
-
-            delete newPromptMap[promptId];
-
-            return {
-              ...state,
-              promptIds: newPromptIds,
-              promptMap: newPromptMap,
-              outputMap: pick(state.outputMap, newPromptIds),
-            };
-          });
-        },
-        resetOutputMap: () => {
-          set((state) => {
-            return {
-              ...state,
-              outputMap: {},
-            };
-          });
-        },
-        updateOutput: (
-          promptId,
-          datasetItemId,
-          changes: Partial<PlaygroundOutput>,
-        ) => {
-          set((state) => {
-            const key = datasetItemId
-              ? [promptId, "datasetItemMap", datasetItemId]
-              : [promptId];
-
-            const output = get(state.outputMap, key);
-            const newOutput = { ...output, ...changes };
-            const newOutputMap = { ...state.outputMap };
-
-            lodashSet(newOutputMap, key, newOutput);
-
-            return {
-              ...state,
-              outputMap: newOutputMap,
-            };
-          });
-        },
-      }),
-      {
-        name: "PLAYGROUND_STATE",
+            },
+          };
+        });
       },
-    ),
+      setPromptMap: (promptIds, promptMap) => {
+        set((state) => {
+          return {
+            ...state,
+            promptIds,
+            promptMap,
+            outputMap: pick(state.outputMap, promptIds),
+          };
+        });
+      },
+      addPrompt: (prompt, position) => {
+        set((state) => {
+          const newPromptIds = [...state.promptIds];
+          const pos = !isUndefined(position) ? position : newPromptIds.length;
+
+          newPromptIds.splice(pos, 0, prompt.id);
+
+          return {
+            ...state,
+            promptIds: newPromptIds,
+            promptMap: {
+              ...state.promptMap,
+              [prompt.id]: prompt,
+            },
+          };
+        });
+      },
+      deletePrompt: (promptId) => {
+        set((state) => {
+          const newPromptIds = state.promptIds.filter((id) => id !== promptId);
+          const newPromptMap = { ...state.promptMap };
+
+          delete newPromptMap[promptId];
+
+          return {
+            ...state,
+            promptIds: newPromptIds,
+            promptMap: newPromptMap,
+            outputMap: pick(state.outputMap, newPromptIds),
+          };
+        });
+      },
+      resetOutputMap: () => {
+        set((state) => {
+          return {
+            ...state,
+            outputMap: {},
+          };
+        });
+      },
+      updateOutput: (
+        promptId,
+        datasetItemId,
+        changes: Partial<PlaygroundOutput>,
+      ) => {
+        set((state) => {
+          const key = datasetItemId
+            ? [promptId, "datasetItemMap", datasetItemId]
+            : [promptId];
+
+          const output = get(state.outputMap, key);
+          const newOutput = { ...output, ...changes };
+          const newOutputMap = { ...state.outputMap };
+
+          lodashSet(newOutputMap, key, newOutput);
+
+          return {
+            ...state,
+            outputMap: newOutputMap,
+          };
+        });
+      },
+    }),
+    {
+      name: "PLAYGROUND_STATE",
+    },
   ),
 );
 
