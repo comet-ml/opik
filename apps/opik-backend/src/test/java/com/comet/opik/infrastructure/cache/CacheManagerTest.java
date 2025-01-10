@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.cache;
 
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
-import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -21,7 +20,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
-import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.time.Duration;
@@ -71,11 +69,8 @@ class CacheManagerTest {
                         .build());
     }
 
-    private String baseURI;
-    private ClientSupport client;
-
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
+    void setUpAll(Jdbi jdbi) throws Exception {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -84,10 +79,6 @@ class CacheManagerTest {
                     ClickHouseContainerUtils.migrationParameters());
         }
 
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.client = client;
-
-        ClientSupportUtils.config(client);
     }
 
     @Test
@@ -230,4 +221,57 @@ class CacheManagerTest {
         Assertions.assertThat(dto).isNotEqualTo(dto3);
     }
 
+    //Test error handling
+
+    @Test
+    void testCacheable__whenKeyInvalidExpression__shouldIgnoreCache(CachedService service) {
+
+        String id = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        // first call, should call real method
+        var dto = service.getWithKeyInvalidExpression(id, workspaceId);
+
+        // second call, should return cached value
+        var dto2 = service.getWithKeyInvalidExpression(id, workspaceId);
+
+        Assertions.assertThat(dto).isNotEqualTo(dto2);
+    }
+
+    @Test
+    void testCacheable__whenAnExceptionHappens__shouldIgnoreCacheAndPropagateIt(CachedService service) {
+
+        String id = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        // first call, should call real method
+        Assertions.assertThatThrownBy(() -> service.getWithException(id, workspaceId))
+                .isInstanceOf(IndexOutOfBoundsException.class);
+    }
+
+    @Test
+    void testCacheable__whenKeyInvalidExpression__shouldIgnoreCache2(CachedService service) {
+
+        String id = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        // first call, should call real method
+        var dto = service.get2WithInvalidKeyExpression(id, workspaceId).block();
+
+        // second call, should return cached value
+        var dto2 = service.get2WithInvalidKeyExpression(id, workspaceId).block();
+
+        Assertions.assertThat(dto).isNotEqualTo(dto2);
+    }
+
+    @Test
+    void testCacheable__whenAnExceptionHappens__shouldIgnoreCacheAndPropagateIt2(CachedService service) {
+
+        String id = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        // first call, should call real method
+        Assertions.assertThatThrownBy(() -> service.get2WithException(id, workspaceId).block())
+                .isInstanceOf(IndexOutOfBoundsException.class);
+    }
 }

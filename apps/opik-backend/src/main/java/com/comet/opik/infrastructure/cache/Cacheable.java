@@ -12,7 +12,21 @@ import java.lang.annotation.Target;
 @Inherited
 @Documented
 public @interface Cacheable {
+
+    /**
+     * @return the name of the cache group.
+     * */
     String name();
+
+    /**
+     * key is a SpEL expression implemented using MVEL. Please refer to the <a href="http://mvel.documentnode.com/">MVEL documentation for more information</a>.
+     *
+     * @return SpEL expression evaluated to generate the cache key.
+     * */
     String key();
+
+    /**
+     * @return the return type of the method annotated with this annotation.
+     * */
     Class<?> returnType();
 }

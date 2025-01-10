@@ -14,6 +14,7 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -65,7 +66,7 @@ public class CacheInterceptor implements MethodInterceptor {
             key = getKeyName(name, keyAgs, invocation);
         } catch (Exception e) {
             // If there is an error evaluating the key, proceed without caching
-            log.warn("Error getting key using expression: {}", keyAgs, e);
+            log.warn("Cache will be skipped due to error evaluating key expression");
             return invocation.proceed();
         }
 
@@ -178,8 +179,12 @@ public class CacheInterceptor implements MethodInterceptor {
         }
 
         try {
-            String evaluatedKey = MVEL.evalToString(key, params);
-            return "%s-%s".formatted(name, evaluatedKey);
+            String evaluatedKey = Objects.requireNonNull(MVEL.evalToString(key, params),
+                    "Key expression cannot return be null");
+            if (evaluatedKey.isEmpty() || evaluatedKey.equals("null")) {
+                throw new IllegalArgumentException("Key expression cannot return an empty string");
+            }
+            return "%s:-%s".formatted(name, evaluatedKey);
         } catch (Exception e) {
             log.error("Error evaluating key expression: {}", key, e);
             throw new IllegalArgumentException("Error evaluating key expression: " + key);

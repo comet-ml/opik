@@ -13,6 +13,15 @@ import java.lang.annotation.Target;
 @Documented
 public @interface CacheEvict {
 
+    /**
+     * @return the name of the cache group.
+     * */
     String name();
+
+    /**
+     * key is a SpEL expression implemented using MVEL. Please refer to the <a href="http://mvel.documentnode.com/">MVEL documentation for more information</a>.
+     *
+     * @return SpEL expression evaluated to generate the cache key.
+     * */
     String key();
 }

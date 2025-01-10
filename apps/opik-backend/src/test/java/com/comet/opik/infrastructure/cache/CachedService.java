@@ -40,4 +40,24 @@ public class CachedService {
         return Mono.empty();
     }
 
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_1, key = "$id-$workspaceId", returnType = DTO.class)
+    public DTO getWithKeyInvalidExpression(String id, String workspaceId) {
+        return new DTO(id, workspaceId, UUID.randomUUID().toString());
+    }
+
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_1, key = "$id + '-' + $workspaceId", returnType = DTO.class)
+    public DTO getWithException(String id, String workspaceId) {
+        throw new IndexOutOfBoundsException("Simulate runtime exception");
+    }
+
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_2, key = "$id-$workspaceId", returnType = DTO.class)
+    public Mono<DTO> get2WithInvalidKeyExpression(String id, String workspaceId) {
+        return Mono.just(new DTO(id, workspaceId, UUID.randomUUID().toString()));
+    }
+
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_2, key = "$id +'-'+ $workspaceId", returnType = DTO.class)
+    public Mono<DTO> get2WithException(String id, String workspaceId) {
+        return Mono.error(new IndexOutOfBoundsException("Simulate runtime exception"));
+    }
+
 }
