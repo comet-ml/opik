@@ -27,7 +27,6 @@ import isObject from "lodash/isObject";
 const LIMIT_STREAMING_CALLS = 5;
 const LIMIT_LOG_CALLS = 2;
 
-// ALEX
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
   const newDatasetItem = { ...datasetItem };
 
@@ -61,6 +60,7 @@ export const transformMessageIntoProviderMessage = (
       serializedDatasetItem,
       {},
       {
+        // avoid escaping of a mustache
         escape: (val: string) => val,
       },
     ),
