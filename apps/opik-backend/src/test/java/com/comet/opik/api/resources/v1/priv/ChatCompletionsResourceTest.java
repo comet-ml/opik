@@ -54,7 +54,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /// - **Openai**: runs against a demo server and doesn't require an API key
 /// - **Anthropic**: set `ANTHROPIC_API_KEY` to your anthropic api key
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Disabled
 class ChatCompletionsResourceTest {
 
     private static final String API_KEY = RandomStringUtils.randomAlphanumeric(25);
@@ -117,6 +116,7 @@ class ChatCompletionsResourceTest {
     class Create {
         @ParameterizedTest
         @MethodSource("testModelsProvider")
+        @Disabled
         void create(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 
@@ -185,6 +185,7 @@ class ChatCompletionsResourceTest {
 
         @ParameterizedTest
         @MethodSource("testModelsProvider")
+        @Disabled
         void createAndStreamResponse(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 
