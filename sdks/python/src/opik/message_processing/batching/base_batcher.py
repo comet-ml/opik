@@ -46,5 +46,5 @@ class BaseBatcher(abc.ABC):
     def add(self, message: messages.BaseMessage) -> None:
         with self._lock:
             self._accumulated_messages.append(message)
-            if len(self._accumulated_messages) == self._max_batch_size:
+            if len(self._accumulated_messages) >= self._max_batch_size:
                 self.flush()
