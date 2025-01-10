@@ -15,7 +15,7 @@ import java.time.Duration;
 @RequiredArgsConstructor
 class RedisCacheManager implements CacheManager {
 
-    private final RedissonReactiveClient redisClient;
+    private final @NonNull RedissonReactiveClient redisClient;
 
     public Mono<Boolean> evict(@NonNull String key) {
         return redisClient.getBucket(key).delete();

@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.utils.TypeReferenceUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.inject.Provider;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
@@ -25,8 +26,8 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 public class CacheInterceptor implements MethodInterceptor {
 
-    private final Provider<CacheManager> cacheManager;
-    private final CacheConfiguration cacheConfiguration;
+    private final @NonNull Provider<CacheManager> cacheManager;
+    private final @NonNull CacheConfiguration cacheConfiguration;
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
