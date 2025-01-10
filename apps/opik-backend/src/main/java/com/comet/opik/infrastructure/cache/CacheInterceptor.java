@@ -3,7 +3,6 @@ package com.comet.opik.infrastructure.cache;
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.utils.TypeReferenceUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.thoughtworks.paranamer.BytecodeReadingParanamer;
 import jakarta.inject.Provider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +12,7 @@ import org.mvel2.MVEL;
 import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
@@ -25,7 +25,6 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 public class CacheInterceptor implements MethodInterceptor {
 
-    private static final BytecodeReadingParanamer PARANAMER = new BytecodeReadingParanamer();
     private final Provider<CacheManager> cacheManager;
     private final CacheConfiguration cacheConfiguration;
 
@@ -189,13 +188,13 @@ public class CacheInterceptor implements MethodInterceptor {
         Map<String, Object> params = new HashMap<>();
 
         // Use Paranamer to resolve parameter names
-        String[] parameters = PARANAMER.lookupParameterNames(invocation.getMethod());
+        Parameter[] parameters = invocation.getMethod().getParameters();
         Object[] args = invocation.getArguments();
 
         // Populate the context map with parameter names and values
         for (int i = 0; i < invocation.getMethod().getParameterCount(); i++) {
             Object value = args[i];
-            params.put("$" + parameters[i], value != null ? value : ""); // Null safety
+            params.put("$" + parameters[i].getName(), value != null ? value : ""); // Null safety
         }
 
         try {
