@@ -110,7 +110,8 @@ const PlaygroundOutputActions = ({
 
     const areAllPromptsValid = Object.values(promptMap).every((p) => !!p.model);
     const isDatasetEmpty = !!datasetId && datasetItems.length === 0;
-    const isDatasetRemoved = !datasets.find((d) => d.id === datasetId);
+    const isDatasetRemoved =
+      datasetId && !datasets.find((d) => d.id === datasetId);
 
     const isDisabled =
       !areAllPromptsValid ||
