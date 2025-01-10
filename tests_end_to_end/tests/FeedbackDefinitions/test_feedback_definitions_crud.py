@@ -5,7 +5,7 @@ from collections import Counter
 
 
 class TestFeedbacksCrud:
-    def test_feedback_visibility(
+    def test_feedback_definition_visibility(
         self,
         page: Page,
         create_feedback_definition_categorical_ui,
@@ -25,7 +25,7 @@ class TestFeedbacksCrud:
             create_feedback_definition_numerical_ui["name"]
         )
 
-    def test_feedback_edit(
+    def test_feedback_definition_edit(
         self,
         page: Page,
         create_feedback_definition_categorical_ui,
