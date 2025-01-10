@@ -8,7 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonProps } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -22,11 +22,14 @@ export type LoadableSelectBoxProps = {
   placeholder?: string;
   onChange: (value: string) => void;
   options: DropdownOption<string>[];
-  widthClass?: string;
   variant?: "outline" | "ghost";
   optionsCount?: number;
   isLoading?: boolean;
+  disabled?: boolean;
   onLoadMore?: () => void;
+
+  buttonSize?: ButtonProps["size"];
+  buttonClassName?: string;
 };
 
 export const LoadableSelectBox = ({
@@ -34,9 +37,11 @@ export const LoadableSelectBox = ({
   placeholder = "Select value",
   onChange,
   options,
-  widthClass = "w-full",
+  buttonSize = "default",
+  buttonClassName = "w-full",
   optionsCount = 25,
   isLoading = false,
+  disabled,
   onLoadMore,
 }: LoadableSelectBoxProps) => {
   const [open, setOpen] = useState(false);
@@ -74,8 +79,10 @@ export const LoadableSelectBox = ({
     <Popover onOpenChange={openChangeHandler} open={open} modal>
       <PopoverTrigger asChild>
         <Button
-          className={cn("justify-between", widthClass)}
+          className={cn("justify-between", buttonClassName)}
+          size={buttonSize}
           variant="outline"
+          disabled={disabled}
           ref={ref}
         >
           {title ? (
@@ -96,7 +103,7 @@ export const LoadableSelectBox = ({
               }
             : {}
         }
-        className={cn("p-1 relative pt-12", hasMoreSection && "pb-10")}
+        className="relative p-1 pt-12"
         hideWhenDetached
       >
         <div className="absolute inset-x-1 top-0 h-12">
@@ -136,7 +143,7 @@ export const LoadableSelectBox = ({
         </div>
 
         {hasMoreSection && (
-          <div className="absolute inset-x-0 bottom-0 flex h-10 items-center justify-between px-4">
+          <div className="sticky inset-x-0 bottom-0 flex items-center justify-between px-4">
             <div className="comet-body-s text-muted-slate">
               {`Showing first ${optionsCount} items.`}
             </div>

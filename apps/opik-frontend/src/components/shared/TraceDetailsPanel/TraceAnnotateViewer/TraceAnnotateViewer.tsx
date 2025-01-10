@@ -25,6 +25,8 @@ type TraceAnnotateViewerProps = {
   setAnnotateOpen: (open: boolean) => void;
 };
 
+const HOTKEYS = ["Esc"];
+
 const TraceAnnotateViewer: React.FunctionComponent<
   TraceAnnotateViewerProps
 > = ({ data, spanId, traceId, annotateOpen, setAnnotateOpen }) => {
@@ -95,7 +97,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
           <div className="flex items-center gap-2 overflow-x-hidden">
             <div className="comet-title-m truncate">Annotate</div>
           </div>
-          <TooltipWrapper content="Close annotate" hotkey="Esc">
+          <TooltipWrapper content="Close annotate" hotkeys={HOTKEYS}>
             <Button
               variant="ghost"
               size="sm"

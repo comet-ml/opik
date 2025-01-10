@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { CopyPlus, Trash } from "lucide-react";
 import last from "lodash/last";
 
@@ -6,21 +6,31 @@ import {
   PLAYGROUND_MESSAGE_ROLE,
   PlaygroundMessageType,
   PlaygroundPromptConfigsType,
-  PlaygroundPromptType,
 } from "@/types/playground";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 import {
   generateDefaultPlaygroundPromptMessage,
+  generateDefaultPrompt,
+  getDefaultConfigByProvider,
   getModelProvider,
 } from "@/lib/playground";
-import PlaygroundPromptMessages from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessages";
-import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSelect/PromptModelSelect";
+import PlaygroundPromptMessages from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPromptMessages/PlaygroundPromptMessages";
+import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSelect/PromptModelSelect";
 import { getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import PromptModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/PromptModelConfigs";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import PromptModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSettings/PromptModelConfigs";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import {
+  useAddPrompt,
+  useDeletePrompt,
+  usePromptById,
+  useUpdateOutput,
+  useUpdatePrompt,
+} from "@/store/PlaygroundStore";
+import { getDefaultProviderKey } from "@/lib/provider";
+import { PROVIDERS } from "@/constants/providers";
 
 const getNextMessageType = (
   previousMessage: PlaygroundMessageType,
@@ -32,23 +42,31 @@ const getNextMessageType = (
   return PLAYGROUND_MESSAGE_ROLE.user;
 };
 
-interface PlaygroundPromptProps extends PlaygroundPromptType {
+interface PlaygroundPromptProps {
   workspaceName: string;
   index: number;
-  onChange: (id: string, changes: Partial<PlaygroundPromptType>) => void;
-  onClickRemove: (id: string) => void;
-  onClickDuplicate: (prompt: PlaygroundPromptType, position: number) => void;
+  promptId: string;
+  providerKeys: PROVIDER_TYPE[];
+  isPendingProviderKeys: boolean;
 }
 
 const PlaygroundPrompt = ({
   workspaceName,
+  promptId,
   index,
-  onChange,
-  onClickRemove,
-  onClickDuplicate,
-  ...prompt
+  providerKeys,
+  isPendingProviderKeys,
 }: PlaygroundPromptProps) => {
-  const { name, id, messages, model, configs } = prompt;
+  const checkedIfModelIsValidRef = useRef(false);
+
+  const prompt = usePromptById(promptId);
+
+  const { model, messages, configs, name } = prompt;
+
+  const addPrompt = useAddPrompt();
+  const updatePrompt = useUpdatePrompt();
+  const deletePrompt = useDeletePrompt();
+  const updateOutput = useUpdateOutput();
 
   const provider = model ? getModelProvider(model) : "";
 
@@ -60,36 +78,88 @@ const PlaygroundPrompt = ({
       ? getNextMessageType(lastMessage!)
       : PLAYGROUND_MESSAGE_ROLE.system;
 
-    onChange(id, {
+    updatePrompt(promptId, {
       messages: [...messages, newMessage],
     });
-  }, [messages, onChange, id]);
+  }, [messages, updatePrompt, promptId]);
+
+  const handleDuplicatePrompt = () => {
+    const newPrompt = generateDefaultPrompt({
+      initPrompt: prompt,
+      setupProviders: providerKeys,
+    });
+
+    addPrompt(newPrompt, index + 1);
+  };
 
   const handleUpdateMessage = useCallback(
     (messages: PlaygroundMessageType[]) => {
-      onChange(id, { messages });
+      updatePrompt(promptId, { messages });
     },
-    [onChange, id],
+    [updatePrompt, promptId],
   );
 
   const handleUpdateConfig = useCallback(
     (newConfigs: Partial<PlaygroundPromptConfigsType>) => {
-      onChange(id, {
+      updatePrompt(promptId, {
         configs: {
           ...configs,
           ...newConfigs,
         } as PlaygroundPromptConfigsType,
       });
     },
-    [configs, id, onChange],
+    [configs, promptId, updatePrompt],
   );
 
   const handleUpdateModel = useCallback(
     (model: PROVIDER_MODEL_TYPE) => {
-      onChange(id, { model });
+      updatePrompt(promptId, { model });
     },
-    [onChange, id],
+    [updatePrompt, promptId],
   );
+
+  useEffect(() => {
+    // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
+    if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
+      checkedIfModelIsValidRef.current = true;
+
+      const modelProvider = model ? getModelProvider(model) : "";
+
+      const noModelProviderWhenProviderKeysSet =
+        !modelProvider && providerKeys.length > 0;
+      const modelProviderIsNotFromProviderKeys =
+        modelProvider && !providerKeys.includes(modelProvider);
+
+      const needToChangeProvider =
+        noModelProviderWhenProviderKeysSet ||
+        modelProviderIsNotFromProviderKeys;
+
+      if (!needToChangeProvider) {
+        return;
+      }
+
+      const newProvider = getDefaultProviderKey(providerKeys);
+      const newModel = newProvider ? PROVIDERS[newProvider].defaultModel : "";
+
+      const newDefaultConfigs = newProvider
+        ? getDefaultConfigByProvider(newProvider)
+        : {};
+
+      updatePrompt(promptId, {
+        model: newModel,
+        configs: newDefaultConfigs,
+      });
+
+      updateOutput(promptId, "", { value: "" });
+    }
+  }, [
+    providerKeys,
+    isPendingProviderKeys,
+    updateOutput,
+    updatePrompt,
+    promptId,
+    model,
+  ]);
 
   return (
     <div className="w-full min-w-[var(--min-prompt-width)]">
@@ -117,7 +187,7 @@ const PlaygroundPrompt = ({
             <Button
               variant="outline"
               size="icon-sm"
-              onClick={() => onClickDuplicate(prompt, index + 1)}
+              onClick={handleDuplicatePrompt}
             >
               <CopyPlus className="size-3.5" />
             </Button>
@@ -127,7 +197,7 @@ const PlaygroundPrompt = ({
             <Button
               variant="outline"
               size="icon-sm"
-              onClick={() => onClickRemove(id)}
+              onClick={() => deletePrompt(promptId)}
             >
               <Trash className="size-3.5" />
             </Button>

@@ -24,7 +24,7 @@ const USAGE_FIELDS_TO_SEND = [
 
 const PLAYGROUND_PROJECT_NAME = "playground";
 
-interface CreateTraceSpanParams extends RunStreamingReturn {
+export interface CreateTraceSpanParams extends RunStreamingReturn {
   model: PROVIDER_MODEL_TYPE | "";
   providerMessages: ProviderMessageType[];
   configs: PlaygroundPromptConfigsType;

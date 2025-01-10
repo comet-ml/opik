@@ -31,7 +31,7 @@ const tooltipVariants = cva(
     variants: {
       variant: {
         default: "px-3 py-0.5",
-        hotkey: "flex gap-2 py-1 pl-3 pr-2",
+        hotkey: "flex py-1.5 pl-3 pr-2",
       },
     },
     defaultVariants: {

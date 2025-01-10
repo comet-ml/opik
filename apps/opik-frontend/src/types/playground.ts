@@ -21,15 +21,12 @@ export type PlaygroundPromptConfigsType =
   | Record<string, never>
   | PlaygroundOpenAIConfigsType;
 
-export type PlaygroundOutputType = string | null;
-
 export interface PlaygroundPromptType {
   name: string;
   id: string;
   messages: PlaygroundMessageType[];
   model: PROVIDER_MODEL_TYPE | "";
   configs: PlaygroundPromptConfigsType;
-  output: PlaygroundOutputType;
 }
 
 export interface ProviderMessageType {
