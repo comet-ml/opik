@@ -1,7 +1,7 @@
 import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import PromptModelSettingsTooltipContent from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import PromptModelSettingsTooltipContent from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { PlaygroundOpenAIConfigsType } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/playground";
 
