@@ -33,7 +33,7 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Tracing",
+      label: "Observability",
       collapsed: false,
       items: [
         "tracing/log_traces",
@@ -75,11 +75,12 @@ const sidebars: SidebarsConfig = {
       label: "Evaluation",
       collapsed: false,
       items: [
+        "evaluation/overview",
         "evaluation/concepts",
-        "evaluation/manage_datasets",
+        "evaluation/evaluate_prompt",
         "evaluation/evaluate_your_llm",
         "evaluation/update_existing_experiment",
-        "evaluation/playground",
+        "evaluation/manage_datasets",
         {
           type: "category",
           label: "Metrics",
@@ -101,9 +102,13 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Prompt Management",
+      label: "Prompt engineering",
       collapsed: true,
-      items: ["library/prompt_management", "library/managing_prompts_in_code"],
+      items: [
+        "prompt_engineering/prompt_management",
+        "prompt_engineering/managing_prompts_in_code",
+        "prompt_engineering/playground",
+      ],
     },
     {
       type: "category",

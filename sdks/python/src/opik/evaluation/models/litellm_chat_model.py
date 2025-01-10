@@ -50,6 +50,11 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             litellm.get_supported_openai_params(model=self.model_name)
         )
         self._ensure_supported_params(supported_params)
+
+        # Add metadata and success_callback as a parameter that is always supported
+        supported_params.add("metadata")
+        supported_params.add("success_callback")
+
         return supported_params
 
     def _ensure_supported_params(self, params: Set[str]) -> None:

@@ -157,7 +157,7 @@ cd apps/opik-documentation/documentation
 npm install
 
 # Run the documentation website locally
-npm run start
+npm run dev
 ```
 
 You can then access the documentation website at `http://localhost:3000`. Any change you make to the documentation will be updated in real-time.

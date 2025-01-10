@@ -1,12 +1,16 @@
 ---
-sidebar_label: Evaluate your LLM Application
+sidebar_label: Evaluate Complex LLM Applications
 description: Step by step guide on how to evaluate your LLM application
 pytest_codeblocks_execute_previous: true
 ---
 
-# Evaluate your LLM Application
+# Evaluate Complex LLM Applications
 
-Evaluating your LLM application allows you to have confidence in the performance of your LLM application. This evaluation set is often performed both during the development and as part of the testing of an application.
+Evaluating your LLM application allows you to have confidence in the performance of your LLM application. In this guide, we will walk through the process of evaluating complex applications like LLM chains or agents.
+
+:::tip
+In this guide, we will focus on evaluating complex LLM applications, if you are looking at evaluating single prompts you can referto the [Evaluate a prompt](/evaluation/evaluate_prompt.md) guide.
+:::
 
 The evaluation is done in five steps:
 
