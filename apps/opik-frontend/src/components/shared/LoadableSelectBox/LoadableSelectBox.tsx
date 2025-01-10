@@ -29,7 +29,7 @@ export type LoadableSelectBoxProps = {
   onLoadMore?: () => void;
   buttonSize?: ButtonProps["size"];
   buttonClassName?: string;
-  renderTitle?: (option: DropdownOption<string>) => void;
+  renderTitle?: (option: DropdownOption<string>) => ReactElement;
 };
 
 export const LoadableSelectBox = ({
@@ -43,7 +43,7 @@ export const LoadableSelectBox = ({
   isLoading = false,
   disabled,
   onLoadMore,
-  renderTitle,
+  renderTitle: parentRenderTitle,
 }: LoadableSelectBoxProps) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -56,11 +56,20 @@ export const LoadableSelectBox = ({
       ? `No search results for the first ${optionsCount} items`
       : "No search results"
     : "No data";
-  const valueOption = options.find((o) => o.value === value);
-  const title =
-    valueOption && isFunction(renderTitle)
-      ? renderTitle(valueOption)
-      : valueOption?.label;
+
+  const renderTitle = () => {
+    const valueOption = options.find((o) => o.value === value);
+
+    if (!valueOption) {
+      return <div className="truncate text-light-slate">{placeholder}</div>;
+    }
+
+    if (isFunction(parentRenderTitle)) {
+      return parentRenderTitle(valueOption);
+    }
+
+    return <div>{valueOption?.label}</div>;
+  };
 
   const filteredOptions = useMemo(() => {
     return options.filter((o) => toLower(o.label).includes(toLower(search)));
@@ -90,11 +99,7 @@ export const LoadableSelectBox = ({
           disabled={disabled}
           ref={ref}
         >
-          {title ? (
-            <div className="truncate">{title}</div>
-          ) : (
-            <div className="truncate text-light-slate">{placeholder}</div>
-          )}
+          {renderTitle()}
 
           <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />
         </Button>
@@ -136,11 +141,11 @@ export const LoadableSelectBox = ({
                   openChangeHandler(false);
                 }}
               >
-                <span className="w-4">
+                <div className="min-w-4">
                   {option.value === value && (
                     <Check className="size-3.5 shrink-0" strokeWidth="3" />
                   )}
-                </span>
+                </div>
 
                 <div className="comet-body-s truncate">{option.label}</div>
               </div>
