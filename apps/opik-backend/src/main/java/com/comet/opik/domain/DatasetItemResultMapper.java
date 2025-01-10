@@ -105,28 +105,9 @@ class DatasetItemResultMapper {
 
             Map<String, JsonNode> data = getData(row);
 
-            JsonNode input = getJsonNode(row, data, "input");
-            JsonNode expectedOutput = getJsonNode(row, data, "expected_output");
-            JsonNode metadata = getJsonNode(row, data, "metadata");
-
-            if (!data.containsKey("input")) {
-                data.put("input", input);
-            }
-
-            if (!data.containsKey("expected_output")) {
-                data.put("expected_output", expectedOutput);
-            }
-
-            if (!data.containsKey("metadata")) {
-                data.put("metadata", metadata);
-            }
-
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
-                    .input(input)
                     .data(data)
-                    .expectedOutput(expectedOutput)
-                    .metadata(metadata)
                     .source(DatasetItemSource.fromString(row.get("source", String.class)))
                     .traceId(Optional.ofNullable(row.get("trace_id", String.class))
                             .filter(s -> !s.isBlank())
@@ -154,26 +135,6 @@ class DatasetItemResultMapper {
                 .flatMap(Collection::stream)
                 .map(entry -> Map.entry(entry.getKey(), JsonUtils.getJsonNodeFromString(entry.getValue())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
-    private static JsonNode getJsonNode(Row row, Map<String, JsonNode> data, String key) {
-        JsonNode json = null;
-
-        if (data.containsKey(key)) {
-            json = data.get(key);
-        }
-
-        if (json == null) {
-            json = Optional.ofNullable(row.get(key, String.class))
-                    .filter(s -> !s.isBlank())
-                    .map(JsonUtils::getJsonNodeFromString).orElse(null);
-        }
-
-        return json;
-    }
-
-    static String getOrDefault(JsonNode jsonNode) {
-        return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
     }
 
     static Map<String, String> getOrDefault(Map<String, JsonNode> data) {
