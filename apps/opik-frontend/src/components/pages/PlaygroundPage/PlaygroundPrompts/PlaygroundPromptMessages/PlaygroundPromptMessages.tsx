@@ -14,7 +14,7 @@ import { SortableContext } from "@dnd-kit/sortable";
 
 import { PlaygroundMessageType } from "@/types/playground";
 import { generateDefaultPlaygroundPromptMessage } from "@/lib/playground";
-import PlaygroundPromptMessage from "@/components/pages/PlaygroundPage/PlaygroundPrompt/PlaygroundPromptMessages/PlaygroundPromptMessage";
+import PlaygroundPromptMessage from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPromptMessages/PlaygroundPromptMessage";
 import { Button } from "@/components/ui/button";
 
 interface PlaygroundPromptMessagesProps {

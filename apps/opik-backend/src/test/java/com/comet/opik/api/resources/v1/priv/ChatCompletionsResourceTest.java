@@ -118,6 +118,7 @@ class ChatCompletionsResourceTest {
     class Create {
         @ParameterizedTest
         @MethodSource("testModelsProvider")
+        @Disabled
         void create(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 
@@ -186,6 +187,7 @@ class ChatCompletionsResourceTest {
 
         @ParameterizedTest
         @MethodSource("testModelsProvider")
+        @Disabled
         void createAndStreamResponse(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 

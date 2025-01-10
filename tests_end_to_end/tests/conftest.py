@@ -7,6 +7,7 @@ from page_objects.TracesPage import TracesPage
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.ExperimentsPage import ExperimentsPage
 from page_objects.PromptLibraryPage import PromptLibraryPage
+from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
 from tests.sdk_helpers import (
     create_project_sdk,
     delete_project_by_name_sdk,
@@ -205,3 +206,37 @@ def create_10_test_traces(page: Page, client, create_delete_project_sdk):
         )
     wait_for_number_of_traces_to_be_visible(project_name=proj_name, number_of_traces=10)
     yield
+
+
+@pytest.fixture
+def create_feedback_definition_categorical_ui(client: opik.Opik, page: Page):
+    feedbacks_page = FeedbackDefinitionsPage(page)
+    feedbacks_page.go_to_page()
+    feedbacks_page.create_new_feedback(
+        feedback_name="feedback_c_test", feedback_type="categorical"
+    )
+
+    # passing it to the test as a mutable type to cover name change edits
+    data = {"name": "feedback_c_test"}
+    yield data
+    try:
+        feedbacks_page.check_feedback_not_exists_by_name(feedback_name=data["name"])
+    except AssertionError as _:
+        feedbacks_page.delete_feedback_by_name(data["name"])
+
+
+@pytest.fixture
+def create_feedback_definition_numerical_ui(client: opik.Opik, page: Page):
+    feedbacks_page = FeedbackDefinitionsPage(page)
+    feedbacks_page.go_to_page()
+    feedbacks_page.create_new_feedback(
+        feedback_name="feedback_n_test", feedback_type="numerical"
+    )
+
+    # passing it to the test as a mutable type to cover name change edits
+    data = {"name": "feedback_n_test"}
+    yield data
+    try:
+        feedbacks_page.check_feedback_not_exists_by_name(feedback_name=data["name"])
+    except AssertionError as _:
+        feedbacks_page.delete_feedback_by_name(data["name"])

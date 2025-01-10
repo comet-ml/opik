@@ -45,7 +45,7 @@ public class OnlineScoringEventListenerTest {
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+    private static final String WORKSPACE_NAME = "workspace-" + UUID.randomUUID();
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
@@ -93,7 +93,7 @@ public class OnlineScoringEventListenerTest {
 
         ClientSupportUtils.config(client);
 
-        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+        mockTargetWorkspace(API_KEY, WORKSPACE_NAME, WORKSPACE_ID);
 
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.evaluatorResourceClient = new AutomationRuleEvaluatorResourceClient(this.client, baseURI);
@@ -117,20 +117,20 @@ public class OnlineScoringEventListenerTest {
         @DisplayName("when a new trace is created, OnlineScoring should see it within a event")
         void when__newTracesIsCreated__onlineScoringShouldKnow() {
             var projectName = factory.manufacturePojo(String.class);
-            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
-                    .toBuilder().projectId(projectId).build();
+                    .toBuilder().projectId(null).build();
 
-            evaluatorResourceClient.createEvaluator(evaluator, TEST_WORKSPACE, API_KEY);
+            evaluatorResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .build();
 
-            UUID traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+            UUID traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
-            Trace returnTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            Trace returnTrace = traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY);
 
             // TODO: run the actual test checking for if we have a FeedbackScore by the end. Prob mocking AI Proxy.
         }
