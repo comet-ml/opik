@@ -168,7 +168,13 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
                     "value": 0.75,
                     "category_name": "trace-score-category",
                     "reason": "trace-score-reason",
-                }
+                },
+                {
+                    "name": "trace-feedback-score-2",
+                    "value": 0.5,
+                    "category_name": "trace-score-category-2",
+                    "reason": "trace-score-reason-2",
+                },
             ]
         )
 
@@ -192,6 +198,13 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
             "value": 0.75,
             "category_name": "trace-score-category",
             "reason": "trace-score-reason",
+        },
+        {
+            "id": ID_STORAGE["f_outer-trace-id"],
+            "name": "trace-feedback-score-2",
+            "value": 0.5,
+            "category_name": "trace-score-category-2",
+            "reason": "trace-score-reason-2",
         },
     ]
 

@@ -21,12 +21,6 @@ class BaseBatcher(abc.ABC):
         self._last_time_flush_callback_called: float = time.time()
         self._lock = threading.RLock()
 
-    def add(self, message: messages.BaseMessage) -> None:
-        with self._lock:
-            self._accumulated_messages.append(message)
-            if len(self._accumulated_messages) == self._max_batch_size:
-                self.flush()
-
     def flush(self) -> None:
         with self._lock:
             if len(self._accumulated_messages) > 0:
@@ -47,3 +41,10 @@ class BaseBatcher(abc.ABC):
 
     @abc.abstractmethod
     def _create_batch_from_accumulated_messages(self) -> messages.BaseMessage: ...
+
+    @abc.abstractmethod
+    def add(self, message: messages.BaseMessage) -> None:
+        with self._lock:
+            self._accumulated_messages.append(message)
+            if len(self._accumulated_messages) >= self._max_batch_size:
+                self.flush()

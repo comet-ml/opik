@@ -137,7 +137,7 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Batch of spans feedbacks scores request: %s", scores)
+        LOGGER.debug("Add spans feedbacks scores request of size: %d", len(scores))
 
         self._rest_client.spans.score_batch_of_spans(
             scores=scores,
@@ -152,7 +152,7 @@ class MessageSender(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Batch of traces feedbacks scores request: %s", scores)
+        LOGGER.debug("Add traces feedbacks scores request: %d", len(scores))
 
         self._rest_client.traces.score_batch_of_traces(
             scores=scores,
