@@ -997,7 +997,7 @@ class SpanDAO {
         Optional.ofNullable(spanUpdate.errorInfo())
                 .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
 
-        if (Objects.nonNull(spanUpdate.totalEstimatedCost())) {
+        if (spanUpdate.totalEstimatedCost() != null) {
             // Update with new manually set cost
             statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
             statement.bind("total_estimated_cost_version", "");
@@ -1032,9 +1032,11 @@ class SpanDAO {
                 .ifPresent(usage -> template.add("usage", usage.toString()));
         Optional.ofNullable(spanUpdate.errorInfo())
                 .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
+
         // If we have manual cost in update OR if we can calculate it and user didn't set manual cost before
-        if ((!isManualCostExist && StringUtils.isNotBlank(spanUpdate.model()) && Objects.nonNull(spanUpdate.usage()))
-                || Objects.nonNull(spanUpdate.totalEstimatedCost())) {
+        boolean shouldRecalculateEstimatedCost = !isManualCostExist && StringUtils.isNotBlank(spanUpdate.model())
+                && spanUpdate.usage() != null;
+        if (spanUpdate.totalEstimatedCost() != null || shouldRecalculateEstimatedCost) {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
         }

@@ -52,8 +52,7 @@ public record Span(
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({
                 Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScore> feedbackScores,
-        @JsonView({Span.View.Public.class,
-                Span.View.Write.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @DecimalMin("0.0") BigDecimal totalEstimatedCost,
+        @JsonView({Span.View.Public.class, Span.View.Write.class}) @DecimalMin("0.0") BigDecimal totalEstimatedCost,
         String totalEstimatedCostVersion,
         @JsonView({
                 Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration){
