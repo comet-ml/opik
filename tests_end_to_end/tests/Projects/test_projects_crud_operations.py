@@ -49,6 +49,7 @@ class TestProjectsCrud:
         try:
             projects_page.go_to_page()
             projects_page.create_new_project(project_name=project_name)
+            projects_page.go_to_page()
             projects_page.check_project_exists_on_current_page(
                 project_name=project_name
             )
