@@ -2,8 +2,11 @@ import { useCallback, useRef, useState } from "react";
 import asyncLib from "async";
 import mustache from "mustache";
 import isUndefined from "lodash/isUndefined";
+
 import get from "lodash/get";
 import set from "lodash/set";
+import isObject from "lodash/isObject";
+import cloneDeep from "lodash/cloneDeep";
 
 import { DatasetItem } from "@/types/datasets";
 import {
@@ -22,13 +25,12 @@ import useCreateOutputTraceAndSpan, {
   CreateTraceSpanParams,
 } from "@/api/playground/useCreateOutputTraceAndSpan";
 import { getPromptMustacheTags } from "@/lib/prompt";
-import isObject from "lodash/isObject";
 
 const LIMIT_STREAMING_CALLS = 5;
 const LIMIT_LOG_CALLS = 2;
 
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
-  const newDatasetItem = { ...datasetItem };
+  const newDatasetItem = cloneDeep({ ...datasetItem });
 
   tags.forEach((tag) => {
     const value = get(newDatasetItem, tag);
