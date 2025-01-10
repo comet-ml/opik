@@ -1,8 +1,8 @@
 import sys
 from pathlib import Path
 
-OPIK_API_KEY_PY_LINE = "# INJECT_OPIK_API_KEY\n"
-OPIK_API_KEY_TSX_LINE = 'os.environ["OPIK_API_KEY"] = "${OPIK_API_KEY}"'
+OPIK_API_KEY_PY_LINE = "# INJECT_OPIK_CONFIGURATION\n"
+OPIK_API_KEY_TSX_LINE = 'os.environ["OPIK_API_KEY"] = "${OPIK_API_KEY}"\n'
 
 FINAL_TEMPLATE = """
 const CODE = `{code}`

@@ -4,7 +4,7 @@ import os
 from openai import OpenAI
 from opik.integrations.openai import track_openai
 
-# INJECT_OPIK_API_KEY
+# INJECT_OPIK_CONFIGURATION
 
 if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")

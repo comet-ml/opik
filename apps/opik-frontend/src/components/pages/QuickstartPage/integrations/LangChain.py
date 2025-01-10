@@ -5,7 +5,7 @@ from langchain.prompts import PromptTemplate
 from langchain_openai import OpenAI
 from opik.integrations.langchain import OpikTracer
 
-# os.environ["OPIK_API_KEY"] = "{TODO_REPLACE_ME}"
+# INJECT_OPIK_CONFIGURATION
 
 if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")

@@ -4,7 +4,7 @@ import os
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
 
-# os.environ["OPIK_API_KEY"] = "{TODO_REPLACE_ME}"
+# INJECT_OPIK_CONFIGURATION
 
 if "GEMINI_API_KEY" not in os.environ:
     os.environ["GEMINI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")

@@ -9,7 +9,7 @@ from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.dataclasses import ChatMessage
 from opik.integrations.haystack import OpikConnector
 
-# os.environ["OPIK_API_KEY"] = "{TODO_REPLACE_ME}"
+# INJECT_OPIK_CONFIGURATION
 
 
 if "OPENAI_API_KEY" not in os.environ:
