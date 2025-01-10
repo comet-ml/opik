@@ -30,7 +30,7 @@ const LIMIT_STREAMING_CALLS = 5;
 const LIMIT_LOG_CALLS = 2;
 
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
-  const newDatasetItem = cloneDeep({ ...datasetItem });
+  const newDatasetItem = cloneDeep(datasetItem);
 
   tags.forEach((tag) => {
     const value = get(newDatasetItem, tag);
