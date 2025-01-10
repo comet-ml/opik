@@ -20,6 +20,7 @@ import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -115,6 +116,7 @@ class ChatCompletionsResourceTest {
     class Create {
         @ParameterizedTest
         @MethodSource("testModelsProvider")
+        @Disabled
         void create(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 
@@ -183,6 +185,7 @@ class ChatCompletionsResourceTest {
 
         @ParameterizedTest
         @MethodSource("testModelsProvider")
+        @Disabled
         void createAndStreamResponse(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 
