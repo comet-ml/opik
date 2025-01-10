@@ -29,6 +29,7 @@ const PlaygroundPage = () => {
     },
   );
 
+  // @todo: remove later
   // this field is not used anymore
   useEffect(() => {
     localStorage.removeItem(LEGACY_PLAYGROUND_PROMPTS_KEY);

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { ReactElement, useCallback, useMemo, useState } from "react";
 import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
 import { Check, ChevronDown } from "lucide-react";
@@ -19,7 +19,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
 export type LoadableSelectBoxProps = {
   value?: string;
-  placeholder?: string;
+  placeholder?: ReactElement | string;
   onChange: (value: string) => void;
   options: DropdownOption<string>[];
   variant?: "outline" | "ghost";
@@ -27,9 +27,9 @@ export type LoadableSelectBoxProps = {
   isLoading?: boolean;
   disabled?: boolean;
   onLoadMore?: () => void;
-
   buttonSize?: ButtonProps["size"];
   buttonClassName?: string;
+  renderTitle?: (option: DropdownOption<string>) => void;
 };
 
 export const LoadableSelectBox = ({
@@ -43,6 +43,7 @@ export const LoadableSelectBox = ({
   isLoading = false,
   disabled,
   onLoadMore,
+  renderTitle,
 }: LoadableSelectBoxProps) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -52,10 +53,14 @@ export const LoadableSelectBox = ({
 
   const noDataText = search
     ? hasMore
-      ? `No search results the first ${optionsCount} items`
+      ? `No search results for the first ${optionsCount} items`
       : "No search results"
     : "No data";
-  const title = options.find((o) => o.value === value)?.label;
+  const valueOption = options.find((o) => o.value === value);
+  const title =
+    valueOption && isFunction(renderTitle)
+      ? renderTitle(valueOption)
+      : valueOption?.label;
 
   const filteredOptions = useMemo(() => {
     return options.filter((o) => toLower(o.label).includes(toLower(search)));
@@ -125,16 +130,19 @@ export const LoadableSelectBox = ({
             filteredOptions.map((option) => (
               <div
                 key={option.value}
-                className="flex h-10 cursor-pointer items-center justify-between gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
                 onClick={() => {
                   onChange && onChange(option.value);
-                  setOpen(false);
+                  openChangeHandler(false);
                 }}
               >
+                <span className="w-4">
+                  {option.value === value && (
+                    <Check className="size-3.5 shrink-0" strokeWidth="3" />
+                  )}
+                </span>
+
                 <div className="comet-body-s truncate">{option.label}</div>
-                {option.value === value && (
-                  <Check className="size-3 shrink-0" strokeWidth="3" />
-                )}
               </div>
             ))
           ) : (
