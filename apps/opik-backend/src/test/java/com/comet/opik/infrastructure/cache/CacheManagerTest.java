@@ -307,4 +307,54 @@ class CacheManagerTest {
         Assertions.assertThat(dto).isEqualTo(dto2);
     }
 
+    // Test Flux
+
+    @Test
+    void testCacheable__whenCacheableFlux__shouldCallRealMethodAgain(CachedService service) {
+
+        String id = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        // first call, should call real method
+        var dto = service.getFlux(id, workspaceId).collectList().block();
+
+        Mono.delay(Duration.ofMillis(50)).block();
+
+        // second call, should return cached value
+        var dto2 = service.getFlux(id, workspaceId).collectList().block();
+
+        Assertions.assertThat(dto).isEqualTo(dto2);
+
+        Mono.delay(Duration.ofMillis(500)).block();
+
+        // third call, should call real method again
+        var dto3 = service.getFlux(id, workspaceId).collectList().block();
+
+        Assertions.assertThat(dto).isNotEqualTo(dto3);
+    }
+
+    @Test
+    void testCacheable__whenCacheableFlux__shouldCallRealMethodAgain2(CachedService service) {
+
+        String id = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        // first call, should call real method
+        var dto = service.getFlux2(id, workspaceId).collectList().block();
+
+        Mono.delay(Duration.ofMillis(50)).block();
+
+        // second call, should return cached value
+        var dto2 = service.getFlux2(id, workspaceId).collectList().block();
+
+        Assertions.assertThat(dto).isEqualTo(dto2);
+
+        Mono.delay(Duration.ofMillis(500)).block();
+
+        // third call, should call real method again
+        var dto3 = service.getFlux(id, workspaceId).collectList().block();
+
+        Assertions.assertThat(dto).isNotEqualTo(dto3);
+    }
+
 }

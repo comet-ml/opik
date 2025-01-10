@@ -2,7 +2,8 @@ package com.comet.opik.infrastructure.cache;
 
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.utils.TypeReferenceUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.type.CollectionType;
+import com.fasterxml.jackson.databind.type.TypeFactory;
 import jakarta.inject.Provider;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -10,17 +11,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.mvel2.MVEL;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -37,7 +42,8 @@ public class CacheInterceptor implements MethodInterceptor {
             return invocation.proceed();
         }
 
-        boolean isReactive = method.getReturnType().isAssignableFrom(Mono.class);
+        boolean isReactive = Stream.of(Mono.class, Flux.class)
+                .anyMatch(clazz -> clazz.isAssignableFrom(method.getReturnType()));
 
         var cacheable = method.getAnnotation(Cacheable.class);
         if (cacheable != null) {
@@ -61,7 +67,7 @@ public class CacheInterceptor implements MethodInterceptor {
     }
 
     private Object runCacheAwareAction(MethodInvocation invocation, boolean isReactive, String name, String keyAgs,
-            BiFunction<String, String, Mono<Object>> action) throws Throwable {
+            BiFunction<String, String, Object> action) throws Throwable {
 
         String key;
 
@@ -77,7 +83,7 @@ public class CacheInterceptor implements MethodInterceptor {
             return action.apply(key, name);
         }
 
-        return action.apply(key, name).block();
+        return ((Mono<?>) action.apply(key, name)).block();
     }
 
     private Mono<Object> processCacheEvictMethod(MethodInvocation invocation, boolean isReactive, String key) {
@@ -121,26 +127,20 @@ public class CacheInterceptor implements MethodInterceptor {
         }
     }
 
-    private Mono<Object> processCacheableMethod(MethodInvocation invocation, boolean isReactive, String key,
+    private Object processCacheableMethod(MethodInvocation invocation, boolean isReactive, String key,
             String name, Cacheable cacheable) {
 
         if (isReactive) {
 
-            if (cacheable.collectionType() != Collection.class) {
-                TypeReference<Object> typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
-                        cacheable.returnType());
-
-                return cacheManager.get().get(key, typeReference)
-                        .switchIfEmpty(processCacheMiss(invocation, key, name));
+            if (invocation.getMethod().getReturnType().isAssignableFrom(Mono.class)) {
+                return handleMono(invocation, key, name, cacheable);
+            } else {
+                return handleFlux(invocation, key, name, cacheable);
             }
-
-            return cacheManager.get().get(key, cacheable.returnType())
-                    .map(Object.class::cast)
-                    .switchIfEmpty(processCacheMiss(invocation, key, name));
         } else {
 
             if (cacheable.collectionType() != Collection.class) {
-                TypeReference<Object> typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
+                CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
                         cacheable.returnType());
 
                 return cacheManager.get().get(key, typeReference)
@@ -151,6 +151,44 @@ public class CacheInterceptor implements MethodInterceptor {
                     .map(Object.class::cast)
                     .switchIfEmpty(processSyncCacheMiss(invocation, key, name));
         }
+    }
+
+    private Flux<Object> handleFlux(MethodInvocation invocation, String key, String name, Cacheable cacheable) {
+        if (cacheable.collectionType() != Collection.class) {
+            CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
+                    cacheable.returnType());
+
+            CollectionType collectionType = TypeFactory.defaultInstance().constructCollectionType(List.class,
+                    typeReference);
+            return getFromCacheOrCallMethod(invocation, key, name, collectionType);
+        }
+
+        CollectionType collectionType = TypeFactory.defaultInstance().constructCollectionType(List.class,
+                cacheable.returnType());
+        return getFromCacheOrCallMethod(invocation, key, name, collectionType);
+    }
+
+    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String name,
+            CollectionType collectionType) {
+        return cacheManager.get()
+                .get(key, collectionType)
+                .map(Collection.class::cast)
+                .flatMapMany(Flux::fromIterable)
+                .switchIfEmpty(processFluxCacheMiss(invocation, key, name));
+    }
+
+    private Mono<Object> handleMono(MethodInvocation invocation, String key, String name, Cacheable cacheable) {
+        if (cacheable.collectionType() != Collection.class) {
+            CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
+                    cacheable.returnType());
+
+            return cacheManager.get().get(key, typeReference)
+                    .switchIfEmpty(processCacheMiss(invocation, key, name));
+        }
+
+        return cacheManager.get().get(key, cacheable.returnType())
+                .map(Object.class::cast)
+                .switchIfEmpty(processCacheMiss(invocation, key, name));
     }
 
     private Mono<Object> processSyncCacheMiss(MethodInvocation invocation, String key, String name) {
@@ -170,6 +208,27 @@ public class CacheInterceptor implements MethodInterceptor {
                         .flatMap(value -> cachePut(value, key, name));
             } catch (Throwable e) {
                 return Mono.error(e);
+            }
+        });
+    }
+
+    private Flux<Object> processFluxCacheMiss(MethodInvocation invocation, String key, String name) {
+        return Flux.defer(() -> {
+            try {
+                Flux<Object> flux = (Flux<Object>) invocation.proceed();
+
+                var cacheable = flux.cache()
+                        .collectList()
+                        .flatMap(value -> cachePut(value, key, name));
+
+                return flux
+                        .doOnSubscribe(subscription -> Schedulers.boundedElastic().schedule(() -> {
+                            cacheable.subscribe(
+                                    __ -> log.info("Flux value put in cache"),
+                                    e -> log.error("Error putting flux value in cache", e));
+                        }));
+            } catch (Throwable e) {
+                return Flux.error(e);
             }
         });
     }

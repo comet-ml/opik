@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.cache;
 
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -69,6 +70,21 @@ public class CachedService {
     @Cacheable(name = CacheManagerTest.CACHE_NAME_2, key = "$id +'-'+ $workspaceId", returnType = DTO.class, collectionType = List.class)
     public Mono<List<DTO>> getCollection2(String id, String workspaceId) {
         return Mono.just(List.of(new DTO(id, workspaceId, UUID.randomUUID().toString())));
+    }
+
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_1, key = "$id +'-'+ $workspaceId", returnType = DTO.class)
+    public Flux<DTO> getFlux(String id, String workspaceId) {
+        String value = UUID.randomUUID().toString();
+        String value2 = UUID.randomUUID().toString();
+        log.info("getFlux: id={}, workspaceId={}, value={}, value2={}", id, workspaceId, value, value2);
+        return Flux.just(new DTO(id, workspaceId, value), new DTO(id, workspaceId, value2));
+    }
+
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_2, key = "$id +'-'+ $workspaceId", returnType = DTO.class, collectionType = List.class)
+    public Flux<List<DTO>> getFlux2(String id, String workspaceId) {
+        return Flux.just(
+                List.of(new DTO(id, workspaceId, UUID.randomUUID().toString())),
+                List.of(new DTO(id, workspaceId, UUID.randomUUID().toString())));
     }
 
 }

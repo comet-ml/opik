@@ -2,7 +2,7 @@ package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.infrastructure.cache.CacheManager;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.type.CollectionType;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -36,11 +36,12 @@ class RedisCacheManager implements CacheManager {
                         .subscribeOn(Schedulers.boundedElastic()));
     }
 
-    public <T> Mono<T> get(@NonNull String key, @NonNull TypeReference<T> clazz) {
+    public <T> Mono<T> get(@NonNull String key, @NonNull CollectionType clazz) {
         return redisClient.<String>getBucket(key)
                 .get()
                 .filter(StringUtils::isNotEmpty)
-                .flatMap(json -> Mono.fromCallable(() -> JsonUtils.readValue(json, clazz))
+                .flatMap(json -> Mono.fromCallable(() -> JsonUtils.readCollectionValue(json, clazz))
+                        .map(list -> (T) list)
                         .subscribeOn(Schedulers.boundedElastic()));
     }
 
