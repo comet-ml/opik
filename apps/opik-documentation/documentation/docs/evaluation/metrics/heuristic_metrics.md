@@ -101,43 +101,61 @@ print(score)
 
 ### BLEU
 
-The `BLEU` metric can be used to check if the output of an LLM is a valid translation of a reference text. `score()` computes the sentence-level BLEU score for a single candidate against one or more reference translations. It can be used in the following way:
+The BLEU metric calculates how close the LLM output is to one or more reference translations. This single metric class can compute:
+- Single-sentence BLEU: Pass a single output string and one or more reference strings.
+- Corpus-level BLEU: Pass a list of output strings and a parallel list of reference strings (or lists of references).
 
-```python
-from opik.evaluation.metrics import BLEU
-
-metric = BLEU()
-
-score = metric.score(output="Hello world!", reference="Hello world")
-print(score)
-```
-
-You can also configure the `BLEU` metric when instantiating it:
-
-```python
-from opik.evaluation.metrics import BLEU
-
-metric = BLEU(n_grams=4, smoothing_method="method1", epsilon=0.1, alpha=5.0, k=5.0)
-
-score = metric.score(output="Hello world !", reference="Hello world")
-print(score)
-```
-
-`score_corpus()` computes the corpus-level BLEU score for multiple candidate sentences and their corresponding references. It can be used in the following way:
+Single-Sentence BLEU
 
 ```python
 from opik.evaluation.metrics import BLEU
 
 bleu_metric = BLEU()
 
-outputs = ["This is a test.", "Another test sentence."]
+score = bleu_metric.score(
+    output="Hello world!",
+    reference="Hello world"
+)
+print(score.value, score.reason)
 
-references_list = [
-    ["This is a test.", "This is also a test."],
-    ["Another test sentence.", "Yet another test sentence."],
+score = bleu_metric.score(
+    output="Hello world!",
+    reference=["Hello planet", "Hello world"]
+)
+print(score.value, score.reason)
+```
+
+Corpus-Level BLEU
+
+```python
+from opik.evaluation.metrics import BLEU
+
+bleu_metric = BLEU()
+
+outputs = ["Hello there", "This is a test."]
+references = [
+    ["Hello world", "Hello there"],
+    "This is a test."
 ]
 
-result = bleu_metric.score_corpus(outputs, references_list)
+result = bleu_metric.score(output=outputs, reference=references)
+print(result.value, result.reason)
+```
 
-print(f"Corpus BLEU score: {result.value:.4f}, Reason: {result.reason}")
+You can also customize n-grams, smoothing methods, or weights:
+
+```python
+from opik.evaluation.metrics import BLEU
+
+metric = BLEU(
+    n_grams=4,
+    smoothing_method="method1",
+    weights=[0.25, 0.25, 0.25, 0.25]
+)
+
+score = metric.score(
+    output="The cat sat on the mat",
+    reference=["The cat is on the mat", "A cat sat here on the mat"]
+)
+print(score.value, score.reason)
 ```

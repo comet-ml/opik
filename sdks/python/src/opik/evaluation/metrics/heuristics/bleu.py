@@ -1,18 +1,48 @@
-from typing import Any, List, Union, Optional
+from typing import Any, List, Union, Optional, Tuple, cast
+
+from opik.evaluation.metrics.exceptions import MetricComputationError
+from opik.evaluation.metrics import base_metric, score_result
 
 try:
     import nltk
-    from nltk.translate.bleu_score import sentence_bleu, corpus_bleu, SmoothingFunction
+    from nltk.translate import bleu_score as nltk_bleu_score
 except ImportError:
     nltk = None
-
-from opik.evaluation.metrics import base_metric, score_result
 
 
 class BLEU(base_metric.BaseMetric):
     """
-    BLEU metric relying on the `nltk.translate.bleu_score` implementation.
-    If `nltk` is not installed, this class will raise an ImportError upon instantiation.
+    A metric that calculates the BLEU (Bilingual Evaluation Understudy) score
+    for translation-like tasks.
+
+    This class can compute either **single-sentence** BLEU or **corpus-level** BLEU
+    depending on the type of `output` and `reference` passed to the `score()` method:
+
+    - **Single-sentence BLEU**:
+      - `output`: a single string (the candidate translation).
+      - `reference`: either a single string or a list of reference strings.
+      - If there is any empty string in either `output` or `reference`, a
+        `MetricComputationError` is raised.
+
+    - **Corpus-level BLEU**:
+      - `output`: a list of candidate strings (one per sample).
+      - `reference`: a list of references, where each element is either a single string
+        or a list of reference strings, corresponding to each candidate.
+      - The number of candidates must match the number of reference items. Any empty
+        candidate or reference triggers a `MetricComputationError`.
+
+    This metric uses the NLTK library under the hood and supports various
+    smoothing methods from NLTK's BLEU implementation:
+    https://www.nltk.org/api/nltk.translate.bleu_score.html#nltk.translate.bleu_score.SmoothingFunction
+
+    Args:
+        name: The name of the metric. Defaults to "bleu_metric".
+        track: Whether or not to track the metric. Defaults to True.
+        n_grams: Up to which n-gram order to use (1 through n_grams). Defaults to 4.
+        smoothing_method: One of NLTK's SmoothingFunction methods (e.g., "method0",
+            "method1", "method2", etc.). Defaults to "method1".
+        weights: Optional custom weights for n-gram orders. Must sum to 1.0. If None,
+            defaults to uniform weights across `n_grams`.
     """
 
     def __init__(
@@ -23,16 +53,8 @@ class BLEU(base_metric.BaseMetric):
         smoothing_method: str = "method1",
         weights: Optional[List[float]] = None,
     ):
-        """
-        :param name: Name for this metric instance.
-        :param track: Whether or not this metric is tracked (depends on your system).
-        :param n_grams: Up to which n-gram order to use (1 through n_grams).
-        :param smoothing_method: One of NLTK's SmoothingFunction methods (e.g., "method0", "method1", "method2", etc.).
-        :param weights: Optional manual weighting for n-gram orders. If None, defaults to uniform across n_grams.
-        """
         super().__init__(name=name, track=track)
 
-        # Ensure nltk is installed; if not, raise an ImportError now.
         if nltk is None:
             raise ImportError(
                 "`nltk` library is required for BLEU score calculation. "
@@ -42,7 +64,6 @@ class BLEU(base_metric.BaseMetric):
         self.n_grams = n_grams
         self.smoothing_method = smoothing_method
 
-        # Set up weights: if not provided, default to uniform among the up to n_grams orders
         if weights is None:
             self.weights = [1.0 / n_grams] * n_grams
         else:
@@ -54,165 +75,168 @@ class BLEU(base_metric.BaseMetric):
                 raise ValueError("Weights must sum to 1.0")
             self.weights = weights
 
-        self._nltk_smoother = SmoothingFunction()
+        self._smoother = nltk_bleu_score.SmoothingFunction()
 
-    def _get_smoothing_func(self):
-        """
-        Retrieve the corresponding smoothing function from nltk's SmoothingFunction
-        based on the self.smoothing_method name, e.g. "method0", "method1", etc.
-        Fallback to method0 if not found.
-        """
-        return getattr(self._nltk_smoother, self.smoothing_method, self._nltk_smoother.method0)
+    def _get_smoothing_func(self) -> nltk_bleu_score.SmoothingFunction:
+        return getattr(self._smoother, self.smoothing_method, self._smoother.method0)
 
-    def _truncate_weights(self, candidate_len: int) -> tuple:
-        """
-        Truncate the n-gram weights to min(self.n_grams, candidate_len),
-        then re-normalize them so that they sum to 1.0.
-        """
-        max_order = min(self.n_grams, candidate_len)
-        used_weights = self.weights[:max_order]
-        w_sum = sum(used_weights) or 1.0
-        # Re-normalize to sum to 1.0
-        normalized = [w / w_sum for w in used_weights]
+    def _truncate_weights(self, max_len: int) -> Tuple[float, ...]:
+        used_order = min(self.n_grams, max_len)
+        used_weights = self.weights[:used_order]
+        total = sum(used_weights) or 1.0
+        normalized = [w / total for w in used_weights]
         return tuple(normalized)
 
-    ###########################################################################
-    # SINGLE-SENTENCE BLEU
-    ###########################################################################
     def score(
-        self, output: str, reference: Union[str, List[str]], **ignored_kwargs: Any
-    ) -> score_result.ScoreResult:
-        """
-        Computes a single-sentence BLEU score using nltk.translate.bleu_score.sentence_bleu.
-        If reference is a single string, it will be treated as one reference.
-        If reference is a list of strings, multiple references are used.
-        """
-        # 1) Handle empty candidate
-        if not output.strip():
-            return score_result.ScoreResult(
-                value=0.0,
-                name=self.name,
-                reason="Candidate is empty"
-            )
-
-        # 2) Process references
-        if isinstance(reference, str):
-            if not reference.strip():
-                return score_result.ScoreResult(
-                    value=0.0,
-                    name=self.name,
-                    reason="Reference is empty"
-                )
-            references = [reference.lower().split()]
-        else:
-            references = []
-            for ref in reference:
-                if not ref.strip():
-                    return score_result.ScoreResult(
-                        value=0.0,
-                        name=self.name,
-                        reason="Reference is empty"
-                    )
-                references.append(ref.lower().split())
-
-        candidate = output.lower().split()
-
-        # Truncate & normalize weights to the candidate length
-        used_weights = self._truncate_weights(len(candidate))
-
-        smoothing_func = self._get_smoothing_func()
-
-        try:
-            bleu_value = sentence_bleu(
-                references,
-                candidate,
-                weights=used_weights,
-                smoothing_function=smoothing_func
-            )
-        except ZeroDivisionError:
-            # edge case if references or candidate is basically empty after splitting
-            bleu_value = 0.0
-
-        return score_result.ScoreResult(
-            value=bleu_value,
-            name=self.name,
-            reason=f"Sentence-level BLEU (nltk, method={self.smoothing_method}): {bleu_value:.4f}",
-        )
-
-    ###########################################################################
-    # CORPUS-LEVEL BLEU
-    ###########################################################################
-    def score_corpus(
         self,
-        outputs: List[str],
-        references_list: List[Union[str, List[str]]],
-        **ignored_kwargs: Any
+        output: Union[str, List[str]],
+        reference: Union[str, List[str], List[Union[str, List[str]]]],
+        **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
-        Computes a corpus-level BLEU score using nltk.translate.bleu_score.corpus_bleu.
+        Computes the BLEU score (single-sentence or corpus-level) based on the
+        types of `output` and `reference`.
+
+        If `output` is a single string, we compute **single-sentence** BLEU.
+        If `output` is a list of strings, we compute **corpus-level** BLEU.
+
+        Args:
+            output: A single candidate string or a list of candidate strings.
+            reference:
+                - For single-sentence BLEU: either a single reference string or
+                  a list of reference strings.
+                - For corpus-level BLEU: a list of references, each of which can be
+                  a single string or a list of strings (one list per candidate).
+            **ignored_kwargs: Additional keyword arguments that are ignored.
+
+        Returns:
+            A `ScoreResult` object containing:
+            - `value`: The BLEU score (float).
+            - `name`: The name of this metric (e.g. "bleu_metric").
+            - `reason`: A string explaining whether it's sentence-level or corpus-level BLEU.
+
+        Raises:
+            MetricComputationError:
+                - If an empty candidate or reference is found.
+                - If lengths of output and reference lists do not match in corpus mode.
         """
-
-        if len(outputs) != len(references_list):
-            return score_result.ScoreResult(
-                value=0.0,
-                name=self.name,
-                reason="Mismatch: number of candidates != number of references.",
-            )
-
-        all_candidates = []
-        all_references = []
-
-        for output, ref_item in zip(outputs, references_list):
-            if not output.strip():
-                # If candidate is empty, skip it (leading to zero or ignoring).
-                continue
-
-            candidate_tokens = output.lower().split()
-
-            if isinstance(ref_item, str):
-                if not ref_item.strip():
-                    continue
-                refs = [ref_item.lower().split()]
-            else:
-                refs = []
-                skip_this = False
-                for r in ref_item:
-                    if not r.strip():
-                        skip_this = True
-                        break
-                    refs.append(r.lower().split())
-                if skip_this or not refs:
-                    continue
-
-            all_candidates.append(candidate_tokens)
-            all_references.append(refs)
-
-        if not all_candidates:
-            return score_result.ScoreResult(
-                value=0.0,
-                name=self.name,
-                reason="No valid candidate/reference pairs"
-            )
-
-        # Determine the largest candidate length
-        max_len = max(len(c) for c in all_candidates)
-        # Truncate & normalize weights to this largest order
-        used_weights = self._truncate_weights(max_len)
-
         smoothing_func = self._get_smoothing_func()
 
-        try:
-            bleu_value = corpus_bleu(
-                all_references,
-                all_candidates,
-                weights=used_weights,
-                smoothing_function=smoothing_func
-            )
-        except ZeroDivisionError:
-            bleu_value = 0.0
+        if isinstance(output, str):
+            candidate_str = output
+            if not candidate_str.strip():
+                raise MetricComputationError(
+                    "Candidate is empty (single-sentence BLEU)."
+                )
 
-        return score_result.ScoreResult(
-            value=bleu_value,
-            name=self.name,
-            reason=f"Corpus-level BLEU (nltk, method={self.smoothing_method}): {bleu_value:.4f}",
-        )
+            if isinstance(reference, str):
+                reference_str: str = reference
+                if not reference_str.strip():
+                    raise MetricComputationError(
+                        "Reference is empty (single-sentence BLEU)."
+                    )
+
+                ref_lists = [reference_str.lower().split()]
+
+            elif isinstance(reference, list):
+                references_list_of_str: List[str] = cast(List[str], reference)
+                ref_lists = []
+                for ref_str in references_list_of_str:
+                    if not ref_str.strip():
+                        raise MetricComputationError(
+                            "Encountered empty reference (single-sentence BLEU)."
+                        )
+                    ref_lists.append(ref_str.lower().split())
+            else:
+                raise MetricComputationError(
+                    "Reference must be a string or list of strings for single-sentence BLEU."
+                )
+
+            candidate_tokens = candidate_str.lower().split()
+            used_weights = self._truncate_weights(len(candidate_tokens))
+
+            try:
+                bleu_val = nltk_bleu_score.sentence_bleu(
+                    ref_lists,
+                    candidate_tokens,
+                    weights=used_weights,
+                    smoothing_function=smoothing_func,
+                )
+            except ZeroDivisionError:
+                bleu_val = 0.0
+
+            return score_result.ScoreResult(
+                value=bleu_val,
+                name=self.name,
+                reason=(
+                    f"Sentence-level BLEU (nltk, method={self.smoothing_method}): {bleu_val:.4f}"
+                ),
+            )
+
+        else:
+            output_list_of_str: List[str] = cast(List[str], output)
+
+            if not isinstance(reference, list):
+                raise MetricComputationError(
+                    "For corpus-level BLEU, `reference` must be a list "
+                    "parallel to `output`."
+                )
+
+            if len(output_list_of_str) != len(reference):
+                raise MetricComputationError(
+                    "Mismatch: number of candidates != number of references (corpus BLEU)."
+                )
+
+            all_candidates: List[List[str]] = []
+            all_references: List[List[List[str]]] = []
+
+            for candidate_str, ref_item in zip(output_list_of_str, reference):
+                if not candidate_str.strip():
+                    raise MetricComputationError("Candidate is empty (corpus BLEU).")
+
+                candidate_tokens = candidate_str.lower().split()
+
+                if isinstance(ref_item, str):
+                    if not ref_str.strip():
+                        raise MetricComputationError(
+                            "Reference is empty (corpus BLEU)."
+                        )
+                    ref_lists = [ref_str.lower().split()]
+
+                elif isinstance(ref_item, list):
+                    ref_item_list: List[str] = cast(List[str], ref_item)
+                    ref_lists = []
+                    for r_line in ref_item_list:
+                        if not r_line.strip():
+                            raise MetricComputationError(
+                                "Encountered empty reference (corpus BLEU)."
+                            )
+                        ref_lists.append(r_line.lower().split())
+                else:
+                    raise MetricComputationError(
+                        "Reference in corpus BLEU must be either a string or a list of strings."
+                    )
+
+                all_candidates.append(candidate_tokens)
+                all_references.append(ref_lists)
+
+            max_candidate_len = max(len(cand) for cand in all_candidates)
+            used_weights = self._truncate_weights(max_candidate_len)
+
+            try:
+                bleu_val = nltk_bleu_score.corpus_bleu(
+                    all_references,
+                    all_candidates,
+                    weights=used_weights,
+                    smoothing_function=smoothing_func,
+                )
+            except ZeroDivisionError:
+                bleu_val = 0.0
+
+            return score_result.ScoreResult(
+                value=bleu_val,
+                name=self.name,
+                reason=(
+                    f"Corpus-level BLEU (nltk, method={self.smoothing_method}): {bleu_val:.4f}"
+                ),
+            )
