@@ -52,7 +52,7 @@ dataset.insert([
 
 # Run the evaluation
 result = evaluate_prompt(
-    dataset=your_dataset,
+    dataset=dataset,
     messages=[{"role": "user", "content": "Translate the following text to French: {{input}}"}],
     model="gpt-3.5-turbo",  # or your preferred model
     scoring_metrics=[Hallucination()]

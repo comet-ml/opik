@@ -1,7 +1,6 @@
 ---
 sidebar_label: Evaluate Prompts
 description: Step by step guide on how to evaluate LLM prompts
-pytest_codeblocks_execute_previous: true
 ---
 
 # Evaluate Prompts
@@ -99,6 +98,7 @@ You can customize the model used by create a new model using the [`LiteLLMChatMo
 import opik
 from opik.evaluation import evaluate_prompt
 from opik.evaluation.metrics import Hallucination
+from opik.evaluation.models import litellm_chat_model
 
 # Create a dataset that contains the samples you want to evaluate
 opik_client = opik.Opik()
@@ -114,7 +114,7 @@ evaluate_prompt(
     messages=[
         {"role": "user", "content": "Translate the following text to French: {{input}}"},
     ],
-    model=opik.LiteLLMChatModel(model="gpt-3.5-turbo", temperature=0),
+    model=litellm_chat_model.LiteLLMChatModel(model="gpt-3.5-turbo", temperature=0),
     scoring_metrics=[Hallucination()],
 )
 ```
