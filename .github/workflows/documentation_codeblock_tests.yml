@@ -5,7 +5,7 @@ on:
       install_opik:
         description: 'Enable opik installation from source files'
         required: false
-        default: 'true'
+        default: 'false'
         type: choice
         options:
           - 'false'
@@ -70,7 +70,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest
           pip install -r requirements.txt
-          if [ "${{ github.event.inputs.install_opik }}" = "true" ]; then
+          if [ "${{ github.event.inputs.install_opik }}" = "true" ] || [ "${{ github.event_name }}" = "pull_request" ]; then
             pip install -e ../../../sdks/python
           fi
           
