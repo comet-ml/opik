@@ -11,7 +11,11 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicMessage;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicRole;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicTextContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicUsage;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.Response;
@@ -72,6 +76,44 @@ public class LlmProviderClientsMappersTest {
                     .completionTokens(usage.outputTokens)
                     .totalTokens(usage.inputTokens + usage.outputTokens)
                     .build());
+        }
+
+        @Test
+        void toCreateMessage() {
+            var userMessageContent = podamFactory.manufacturePojo(String.class);
+            var assistantMessageContent = podamFactory.manufacturePojo(String.class);
+            var systemMessageContent = podamFactory.manufacturePojo(String.class);
+            ChatCompletionRequest request = ChatCompletionRequest.builder()
+                    .model(podamFactory.manufacturePojo(String.class))
+                    .stream(podamFactory.manufacturePojo(Boolean.class))
+                    .temperature(podamFactory.manufacturePojo(Double.class))
+                    .topP(podamFactory.manufacturePojo(Double.class))
+                    .stop(podamFactory.manufacturePojo(String.class))
+                    .addUserMessage(userMessageContent)
+                    .addAssistantMessage(assistantMessageContent)
+                    .addSystemMessage(systemMessageContent)
+                    .maxCompletionTokens(podamFactory.manufacturePojo(Integer.class))
+                    .build();
+
+            AnthropicCreateMessageRequest actual = AnthropicToChatCompletionsMapper.INSTANCE
+                    .toCreateMessageRequest(request);
+
+            assertThat(actual).isNotNull();
+            assertThat(actual.model).isEqualTo(request.model());
+            assertThat(actual.stream).isEqualTo(request.stream());
+            assertThat(actual.temperature).isEqualTo(request.temperature());
+            assertThat(actual.topP).isEqualTo(request.topP());
+            assertThat(actual.stopSequences).isEqualTo(request.stop());
+            assertThat(actual.messages).containsExactlyInAnyOrder(
+                    AnthropicMessage.builder()
+                            .role(AnthropicRole.USER)
+                            .content(List.of(new AnthropicTextContent(userMessageContent)))
+                            .build(),
+                    AnthropicMessage.builder()
+                            .role(AnthropicRole.ASSISTANT)
+                            .content(List.of(new AnthropicTextContent(assistantMessageContent)))
+                            .build());
+            assertThat(actual.system).isEqualTo(List.of(new AnthropicTextContent(systemMessageContent)));
         }
     }
 
