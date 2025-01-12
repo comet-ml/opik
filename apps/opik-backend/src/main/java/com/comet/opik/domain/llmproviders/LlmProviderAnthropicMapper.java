@@ -18,6 +18,7 @@ import dev.langchain4j.model.anthropic.internal.api.AnthropicRole;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicTextContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicUsage;
 import jakarta.ws.rs.BadRequestException;
+import lombok.NonNull;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -31,14 +32,14 @@ public interface LlmProviderAnthropicMapper {
 
     @Mapping(source = "response", target = "choices", qualifiedByName = "mapToChoices")
     @Mapping(source = "usage", target = "usage", qualifiedByName = "mapToUsage")
-    ChatCompletionResponse toResponse(AnthropicCreateMessageResponse response);
+    ChatCompletionResponse toResponse(@NonNull AnthropicCreateMessageResponse response);
 
     @Mapping(source = "content", target = "message")
     @Mapping(source = "response.stopReason", target = "finishReason")
-    ChatCompletionChoice toChoice(AnthropicContent content, AnthropicCreateMessageResponse response);
+    ChatCompletionChoice toChoice(@NonNull AnthropicContent content, @NonNull AnthropicCreateMessageResponse response);
 
     @Mapping(source = "text", target = "content")
-    AssistantMessage toAssistantMessage(AnthropicContent content);
+    AssistantMessage toAssistantMessage(@NonNull AnthropicContent content);
 
     @Mapping(expression = "java(request.model())", target = "model")
     @Mapping(expression = "java(request.stream())", target = "stream")
@@ -48,10 +49,10 @@ public interface LlmProviderAnthropicMapper {
     @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxTokens")
     @Mapping(source = "request", target = "messages", qualifiedByName = "mapToMessages")
     @Mapping(source = "request", target = "system", qualifiedByName = "mapToSystemMessages")
-    AnthropicCreateMessageRequest toCreateMessageRequest(ChatCompletionRequest request);
+    AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request);
 
     @Named("mapToChoices")
-    default List<ChatCompletionChoice> mapToChoices(AnthropicCreateMessageResponse response) {
+    default List<ChatCompletionChoice> mapToChoices(@NonNull AnthropicCreateMessageResponse response) {
         if (response.content == null || response.content.isEmpty()) {
             return List.of();
         }
@@ -72,20 +73,20 @@ public interface LlmProviderAnthropicMapper {
     }
 
     @Named("mapToMessages")
-    default List<AnthropicMessage> mapToMessages(ChatCompletionRequest request) {
+    default List<AnthropicMessage> mapToMessages(@NonNull ChatCompletionRequest request) {
         return request.messages().stream()
                 .filter(message -> List.of(Role.ASSISTANT, Role.USER).contains(message.role()))
                 .map(this::mapToAnthropicMessage).toList();
     }
 
     @Named("mapToSystemMessages")
-    default List<AnthropicTextContent> mapToSystemMessages(ChatCompletionRequest request) {
+    default List<AnthropicTextContent> mapToSystemMessages(@NonNull ChatCompletionRequest request) {
         return request.messages().stream()
                 .filter(message -> message.role() == Role.SYSTEM)
                 .map(this::mapToSystemMessage).toList();
     }
 
-    default AnthropicMessage mapToAnthropicMessage(Message message) {
+    default AnthropicMessage mapToAnthropicMessage(@NonNull Message message) {
         if (message instanceof AssistantMessage assistantMessage) {
             return AnthropicMessage.builder()
                     .role(AnthropicRole.ASSISTANT)
@@ -103,7 +104,7 @@ public interface LlmProviderAnthropicMapper {
         throw new BadRequestException("unexpected message role: " + message.role());
     }
 
-    default AnthropicMessageContent toAnthropicMessageContent(Object rawContent) {
+    default AnthropicMessageContent toAnthropicMessageContent(@NonNull Object rawContent) {
         if (rawContent instanceof String content) {
             return new AnthropicTextContent(content);
         }
@@ -111,7 +112,7 @@ public interface LlmProviderAnthropicMapper {
         throw new BadRequestException("only text content is supported");
     }
 
-    default AnthropicTextContent mapToSystemMessage(Message message) {
+    default AnthropicTextContent mapToSystemMessage(@NonNull Message message) {
         if (message.role() != Role.SYSTEM) {
             throw new BadRequestException("expecting only system role, got: " + message.role());
         }
