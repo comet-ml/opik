@@ -10,6 +10,7 @@ from ..api_objects import opik_client
 from . import scorer, scores_logger, report, evaluation_result, utils
 import pystache
 
+
 def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
@@ -189,28 +190,28 @@ def evaluate_experiment(
 
     return evaluation_result_
 
+
 def _build_prompt_evaluation_task(
-    model: base_model.OpikBaseModel,
-    messages: List[Dict[str, Any]]
-):
+    model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
+) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     from litellm.integrations.opik.opik import OpikLogger
     from opik.opik_context import get_current_span_data
-    
+
     opik_logger = OpikLogger()
 
-    def _prompt_evaluation_task(
-        prompt_variables
-    ):
+    def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         processed_messages = []
         for message in messages:
-            processed_messages.append({
-                "role": message["role"],
-                "content": pystache.render(message["content"], prompt_variables)
-            })
-        
+            processed_messages.append(
+                {
+                    "role": message["role"],
+                    "content": pystache.render(message["content"], prompt_variables),
+                }
+            )
+
         llm_output = model.generate_provider_response(
             messages=processed_messages,
-            metadata = {
+            metadata={
                 "opik": {
                     "current_span_data": get_current_span_data(),
                     "tags": ["streaming-test"],
@@ -221,10 +222,11 @@ def _build_prompt_evaluation_task(
 
         return {
             "input": processed_messages,
-            "output": llm_output.choices[0].message.content
+            "output": llm_output.choices[0].message.content,
         }
-    
+
     return _prompt_evaluation_task
+
 
 def evaluate_prompt(
     dataset: dataset.Dataset,
@@ -237,7 +239,7 @@ def evaluate_prompt(
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None
+    prompt: Optional[Prompt] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -268,21 +270,19 @@ def evaluate_prompt(
         pass
     else:
         raise ValueError("`model` must be either a string or an OpikBaseModel instance")
-    
+
     if experiment_config is None:
-        experiment_config = {
-            "prompt_template": messages
-        }
+        experiment_config = {"prompt_template": messages}
 
         if isinstance(model, str):
             experiment_config["model"] = model
     else:
         if "prompt_template" not in experiment_config:
             experiment_config["prompt_template"] = messages
-        
+
         if "model" not in experiment_config and isinstance(model, str):
             experiment_config["model"] = model
-        
+
     if scoring_metrics is None:
         scoring_metrics = []
 
