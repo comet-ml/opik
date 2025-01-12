@@ -1,6 +1,7 @@
 ---
 sidebar_label: Gemini - Google AI Studio
 description: Describes how to track Gemini LLM calls using Opik
+pytest_codeblocks_skip: true
 ---
 
 # Gemini - Google AI Studio

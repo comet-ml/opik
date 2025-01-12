@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 description: High-level overview on how to self-host Opik
-test_code_snippets: false
+pytest_codeblocks_skip: true
 ---
 
 # Self-hosting Opik

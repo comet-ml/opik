@@ -1,7 +1,7 @@
 ---
 sidebar_label: watsonx
 description: Describes how to track watsonx LLM calls using Opik
-test_code_snippets: false
+pytest_codeblocks_skip: true
 ---
 
 # watsonx
