@@ -74,12 +74,12 @@ opik_client = opik.Opik()
 dataset = opik_client.get_or_create_dataset("RAG evaluation dataset")
 dataset.insert([
     {
-        "question": "What are the key features of Python?",
+        "input": "What are the key features of Python?",
         "context": "Python is known for its simplicity and readability. Key features include dynamic typing, automatic memory management, and an extensive standard library.",
         "expected_answer": "Python's key features include dynamic typing, automatic memory management, and an extensive standard library."
     },
     {
-        "question": "How does garbage collection work in Python?",
+        "input": "How does garbage collection work in Python?",
         "context": "Python uses reference counting and a cyclic garbage collector. When an object's reference count drops to zero, it is deallocated.",
         "expected_answer": "Python uses reference counting for garbage collection. Objects are deallocated when their reference count reaches zero."
     }
@@ -87,14 +87,10 @@ dataset.insert([
 
 def rag_task(item):
     # Simulate RAG pipeline
-    context = retrieve_relevant_context(item["question"])
-    response = generate_response(item["question"], context)
+    output = "<LLM response placeholder>"
+
     return {
-        "question": item["question"],
-        "generated_response": response,
-        "retrieved_context": context,
-        "expected_answer": item["expected_answer"],
-        "ground_truth_context": item["context"]
+        "output": output
     }
 
 # Run the evaluation
