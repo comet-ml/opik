@@ -31,6 +31,8 @@ pytest
 
 ## Advanced usage
 
+### Skipping code blocks
+
 The `pytest-codeblocks` extension supports the following features:
 
 - Skipping all code blocks in a file: By setting `pytest_codeblocks_skip: true` in the frontmatter of the markdown file, all code blocks in the file will be skipped.
@@ -46,3 +48,11 @@ The `pytest-codeblocks` extension supports the following features:
   ````
 
 - Executing all previous code blocks: By setting `pytest_codeblocks_execute_previous: true` in the frontmatter of the markdown file, all code blocks in the file will be executed before the current code block. This is useful if you have multiple code blocks that depend on variables defined in a previous code block for example.
+
+### Installing default packages
+
+When running the pytest command, you can use the argument `--default-package` to install a package before running the tests. For example, to install a local version of the Opik Python SDK, you can use:
+
+```bash
+pytest --default-package=../../../sdks/python
+```
