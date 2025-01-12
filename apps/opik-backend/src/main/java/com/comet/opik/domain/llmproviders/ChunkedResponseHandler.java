@@ -11,6 +11,7 @@ import dev.langchain4j.model.output.Response;
 import lombok.NonNull;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public record ChunkedResponseHandler(
@@ -20,12 +21,12 @@ public record ChunkedResponseHandler(
         @NonNull String model) implements StreamingResponseHandler<AiMessage> {
 
     @Override
-    public void onNext(@NonNull String s) {
+    public void onNext(@NonNull String content) {
         handleMessage.accept(ChatCompletionResponse.builder()
                 .model(model)
                 .choices(List.of(ChatCompletionChoice.builder()
                         .delta(Delta.builder()
-                                .content(s)
+                                .content(content)
                                 .role(Role.ASSISTANT)
                                 .build())
                         .build()))
@@ -47,7 +48,7 @@ public record ChunkedResponseHandler(
                         .completionTokens(response.tokenUsage().outputTokenCount())
                         .totalTokens(response.tokenUsage().totalTokenCount())
                         .build())
-                .id((String) response.metadata().get("id"))
+                .id(Optional.ofNullable(response.metadata().get("id")).map(Object::toString).orElse(null))
                 .build());
         handleClose.run();
     }
