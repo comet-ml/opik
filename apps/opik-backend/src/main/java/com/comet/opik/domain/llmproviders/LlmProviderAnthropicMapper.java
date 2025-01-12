@@ -26,8 +26,8 @@ import org.mapstruct.factory.Mappers;
 import java.util.List;
 
 @Mapper
-public interface AnthropicToChatCompletionsMapper {
-    AnthropicToChatCompletionsMapper INSTANCE = Mappers.getMapper(AnthropicToChatCompletionsMapper.class);
+public interface LlmProviderAnthropicMapper {
+    LlmProviderAnthropicMapper INSTANCE = Mappers.getMapper(LlmProviderAnthropicMapper.class);
 
     @Mapping(source = "response", target = "choices", qualifiedByName = "mapToChoices")
     @Mapping(source = "usage", target = "usage", qualifiedByName = "mapToUsage")

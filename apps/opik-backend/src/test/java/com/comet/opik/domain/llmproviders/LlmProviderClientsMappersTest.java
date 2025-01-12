@@ -61,7 +61,7 @@ public class LlmProviderClientsMappersTest {
             response.content = List.of(content);
             response.usage = usage;
 
-            var actual = AnthropicToChatCompletionsMapper.INSTANCE.toResponse(response);
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
             assertThat(actual).isNotNull();
             assertThat(actual.id()).isEqualTo(response.id);
             assertThat(actual.choices()).isEqualTo(List.of(ChatCompletionChoice.builder()
@@ -95,7 +95,7 @@ public class LlmProviderClientsMappersTest {
                     .maxCompletionTokens(podamFactory.manufacturePojo(Integer.class))
                     .build();
 
-            AnthropicCreateMessageRequest actual = AnthropicToChatCompletionsMapper.INSTANCE
+            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
                     .toCreateMessageRequest(request);
 
             assertThat(actual).isNotNull();

@@ -24,7 +24,7 @@ class LlmProviderAnthropic implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var mapper = AnthropicToChatCompletionsMapper.INSTANCE;
+        var mapper = LlmProviderAnthropicMapper.INSTANCE;
         var response = anthropicClient.createMessage(mapper.toCreateMessageRequest(request));
 
         return mapper.toResponse(response);
@@ -37,7 +37,7 @@ class LlmProviderAnthropic implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose, @NonNull Consumer<Throwable> handleError) {
         validateRequest(request);
-        anthropicClient.createMessage(AnthropicToChatCompletionsMapper.INSTANCE.toCreateMessageRequest(request),
+        anthropicClient.createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request),
                 new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
     }
 
