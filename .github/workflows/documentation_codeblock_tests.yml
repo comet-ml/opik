@@ -1,15 +1,6 @@
 name: Documentation - Test codeblocks
 on:
   workflow_dispatch:
-    inputs:
-      install_opik:
-        description: 'Enable opik installation from source files'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
   pull_request:
     paths:
       - 'apps/opik-documentation/documentation/docs/*.md'
@@ -82,13 +73,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest
           pip install -r requirements.txt
-          if [ "${{ github.event.inputs.install_opik }}" != "false" ]; then
-            pip install -e ../../../sdks/python
-          fi
           
       - name: Run tests
         working-directory: apps/opik-documentation/documentation
         run: |
           if [ -n "${{ matrix.path }}" ]; then
-            pytest ${{ matrix.path }} -v --suppress-no-test-exit-code
+            pytest ${{ matrix.path }} -v --suppress-no-test-exit-code --default-package=../../../sdks/python
           fi
