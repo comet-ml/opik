@@ -1,16 +1,16 @@
 ---
-sidebar_label: Evaluate a prompt
+sidebar_label: Evaluate Prompts
 description: Step by step guide on how to evaluate LLM prompts
 pytest_codeblocks_execute_previous: true
 ---
 
-# Evaluate a prompt
+# Evaluate Prompts
 
 When developing prompts and performing prompt engineering, it can be challenging to know if a new prompt is better than the previous version.
 
 Opik Experiments allow you to evaluate the prompt on multiple samples, score each LLM output and compare the performance of different prompts.
 
-<!-- Image of prompt experiments -->
+![Experiment page](/img/evaluation/experiment_items.png)
 
 There are two way to evaluate a prompt in Opik:
 
@@ -25,7 +25,7 @@ You can compare multiple prompts to each other by clicking the `+ Add prompt` bu
 
 In order to evaluate the prompts on samples, you can add variables to the prompt messages using the `{{variable}}` syntax. You can then connect a dataset and run the prompts on each dataset item.
 
-<!-- Image of playground -->
+![Playground evaluation](/img/evaluation/playground_evaluation.gif)
 
 ## Using the Python SDK
 
@@ -57,7 +57,7 @@ evaluate_prompt(
 
 Once the evaluation is complete, you can view the responses in the Opik UI and score each LLM output.
 
-<!-- Screenshot of experiment UI  -->
+![Experiment page](/img/evaluation/experiment_items.png)
 
 ### Automate the scoring process
 
@@ -118,3 +118,7 @@ evaluate_prompt(
     scoring_metrics=[Hallucination()],
 )
 ```
+
+## Next steps
+
+To evaluate comples LLM applications like RAG applications or agents, you can use the [`evaluate`](/evaluation/evaluate_your_llm.md) function.

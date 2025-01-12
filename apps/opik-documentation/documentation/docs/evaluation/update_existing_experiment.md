@@ -1,9 +1,9 @@
 ---
-sidebar_label: Update an existing experiment
+sidebar_label: Update an Existing Experiment
 description: Guides you through the process of updating an existing experiment
 ---
 
-# Update an existing experiment
+# Update an Existing Experiment
 
 Sometimes you may want to update an existing experiment with new scores, or update existing scores for an experiment. You can do this using the [`evaluate_experiment` function](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/evaluate_existing.html).
 

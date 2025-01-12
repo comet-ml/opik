@@ -182,7 +182,7 @@ evaluation = evaluate(
 
 ### Linking prompts to experiments
 
-The [Opik prompt library](/library/prompt_management.mdx) can be used to version your prompt templates.
+The [Opik prompt library](/prompt_engineering/prompt_management.mdx) can be used to version your prompt templates.
 
 When creating an Experiment, you can link the Experiment to a specific prompt version:
 

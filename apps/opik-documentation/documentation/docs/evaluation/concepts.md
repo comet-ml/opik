@@ -67,6 +67,6 @@ Experiment items store the input, expected output, actual output and feedback sc
 
 We have provided some guides to help you get started with Opik's evaluation framework:
 
-1. [Overview of Opik's evaluation features](/docs/evaluation/overview.md)
+1. [Overview of Opik's evaluation features](/docs/evaluation/overview.mdx)
 2. [Evaluate prompts](/docs/evaluation/evaluate_prompt.md)
 3. [Evaluate your LLM application](/docs/evaluation/evaluate_your_llm.md)

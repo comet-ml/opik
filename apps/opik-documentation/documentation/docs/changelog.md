@@ -162,7 +162,7 @@ pytest_codeblocks_skip: true
 
 **SDK**:
 
-- Introduced the `Prompt` object in the SDK to manage prompts stored in the library. See the [Prompt Management](/library/managing_prompts_in_code.mdx) guide for more details.
+- Introduced the `Prompt` object in the SDK to manage prompts stored in the library. See the [Prompt Management](/prompt_engineering/managing_prompts_in_code.mdx) guide for more details.
 - Introduced a `Opik.search_spans` method to search for spans in a project. See the [Search spans](/tracing/export_data.md#exporting-spans) guide for more details.
 - Released a new integration with [AWS Bedrock](/tracing/integrations/bedrock.md) for using Opik with Bedrock models.
 
