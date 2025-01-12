@@ -8,18 +8,19 @@ import dev.ai4j.openai4j.shared.Usage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.output.Response;
+import lombok.NonNull;
 
 import java.util.List;
 import java.util.function.Consumer;
 
 public record ChunkedResponseHandler(
-        Consumer<ChatCompletionResponse> handleMessage,
-        Runnable handleClose,
-        Consumer<Throwable> handleError,
-        String model) implements StreamingResponseHandler<AiMessage> {
+        @NonNull Consumer<ChatCompletionResponse> handleMessage,
+        @NonNull Runnable handleClose,
+        @NonNull Consumer<Throwable> handleError,
+        @NonNull String model) implements StreamingResponseHandler<AiMessage> {
 
     @Override
-    public void onNext(String s) {
+    public void onNext(@NonNull String s) {
         handleMessage.accept(ChatCompletionResponse.builder()
                 .model(model)
                 .choices(List.of(ChatCompletionChoice.builder()
@@ -32,7 +33,7 @@ public record ChunkedResponseHandler(
     }
 
     @Override
-    public void onComplete(Response<AiMessage> response) {
+    public void onComplete(@NonNull Response<AiMessage> response) {
         handleMessage.accept(ChatCompletionResponse.builder()
                 .model(model)
                 .choices(List.of(ChatCompletionChoice.builder()
@@ -52,7 +53,7 @@ public record ChunkedResponseHandler(
     }
 
     @Override
-    public void onError(Throwable throwable) {
+    public void onError(@NonNull Throwable throwable) {
         handleError.accept(throwable);
     }
 }

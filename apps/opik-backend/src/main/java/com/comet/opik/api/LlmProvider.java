@@ -12,7 +12,8 @@ import java.util.Arrays;
 public enum LlmProvider {
     OPEN_AI("openai"),
     ANTHROPIC("anthropic"),
-    GEMINI("gemini");
+    GEMINI("gemini"),
+    ;
 
     @JsonValue
     private final String value;

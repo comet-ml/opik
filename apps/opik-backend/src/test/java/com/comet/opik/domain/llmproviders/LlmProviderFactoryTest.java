@@ -25,6 +25,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
@@ -85,6 +86,6 @@ class LlmProviderFactoryTest {
         var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.GEMINI, LlmProviderGemini.class));
 
-        return Stream.of(openAiModels, anthropicModels, geminiModels).flatMap(s -> s);
+        return Stream.of(openAiModels, anthropicModels, geminiModels).flatMap(Function.identity());
     }
 }
