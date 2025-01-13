@@ -31,7 +31,9 @@ interface PlaygroundOutputActionsProps {
   loadingDatasetItems: boolean;
 }
 
-const DEFAULT_LOADED_DATASETS = 25;
+const DEFAULT_LOADED_DATASETS = 1000;
+const MAX_LOADED_DATASETS = 10000;
+
 const RUN_HOT_KEYS = ["⌘", "⏎"];
 
 const PlaygroundOutputActions = ({
@@ -52,7 +54,7 @@ const PlaygroundOutputActions = ({
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
     workspaceName,
     page: 1,
-    size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : 1000,
+    size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
   });
 
   const datasets = datasetsData?.content || EMPTY_DATASETS;
