@@ -1,15 +1,15 @@
-import { FrameworkIntegration } from "@/components/shared/FrameworkIntegrations/types";
 import { buildDocsUrl } from "@/lib/utils";
 import pythonLogoUrl from "/images/integrations/python.png";
 import langChainLogoUrl from "/images/integrations/langchain.png";
 import liteLLMLogoUrl from "/images/integrations/litellm.png";
 import openAILogoUrl from "/images/integrations/openai.png";
 import ragasLogoUrl from "/images/integrations/ragas.png";
-import FunctionDecorators from "@/components/pages/QuickstartPage/integrations/FunctionDecorators";
-import LangChain from "@/components/pages/QuickstartPage/integrations/LangChain";
-import LiteLLM from "@/components/pages/QuickstartPage/integrations/LiteLLM";
-import OpenAI from "@/components/pages/QuickstartPage/integrations/OpenAI";
-import Ragas from "@/components/pages/QuickstartPage/integrations/Ragas";
+import FunctionDecorators from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/FunctionDecorators";
+import LangChain from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/LangChain";
+import LiteLLM from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/LiteLLM";
+import OpenAI from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/OpenAI";
+import Ragas from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/Ragas";
+import { FrameworkIntegration } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
 
 export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
   {

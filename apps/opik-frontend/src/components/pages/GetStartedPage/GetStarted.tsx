@@ -1,9 +1,9 @@
 import React from "react";
-import FrameworkIntegrations from "@/components/shared/FrameworkIntegrations/FrameworkIntegrations";
-import { QUICKSTART_INTEGRATIONS } from "../QuickstartPage/integrations/quickstart-integrations";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
+import { QUICKSTART_INTEGRATIONS } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/quickstart-integrations";
+import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 
 type GetStartedProps = {
   apiKey?: string;

@@ -1,6 +1,6 @@
 import React from "react";
-import IntegrationTemplate from "@/components/pages/QuickstartPage/integrations/IntegrationTemplate";
-import { FrameworkIntegrationComponentProps } from "@/components/shared/FrameworkIntegrations/types";
+import { FrameworkIntegrationComponentProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
+import IntegrationTemplate from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/IntegrationTemplate";
 
 const CODE_TITLE =
   "Each function decorated by the `track` decorator will be logged to the Opik platform:";

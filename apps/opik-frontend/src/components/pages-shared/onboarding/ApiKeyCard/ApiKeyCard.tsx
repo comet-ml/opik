@@ -1,5 +1,5 @@
 import React from "react";
-import ApiKeyInput from "../ApiKeyInput/ApiKeyInput";
+import ApiKeyInput from "@/components/shared/ApiKeyInput/ApiKeyInput";
 
 type ApiKeyCardProps = {
   apiKey: string;

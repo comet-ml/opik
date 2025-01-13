@@ -2,8 +2,8 @@ import React from "react";
 import { useRouter } from "@tanstack/react-router";
 import { MoveLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import FrameworkIntegrations from "@/components/shared/FrameworkIntegrations/FrameworkIntegrations";
-import { QUICKSTART_INTEGRATIONS } from "./integrations/quickstart-integrations";
+import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
+import { QUICKSTART_INTEGRATIONS } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/quickstart-integrations";
 
 type QuickstartProps = {
   apiKey?: string;

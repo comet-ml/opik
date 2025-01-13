@@ -1,6 +1,6 @@
 import React from "react";
-import IntegrationTemplate from "@/components/pages/QuickstartPage/integrations/IntegrationTemplate";
-import { FrameworkIntegrationComponentProps } from "@/components/shared/FrameworkIntegrations/types";
+import IntegrationTemplate from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/IntegrationTemplate";
+import { FrameworkIntegrationComponentProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
 
 const CODE_TITLE =
   "You can use the `OpikTracer` provided as part of the Ragas integration to log all Ragas scores to Opik:";

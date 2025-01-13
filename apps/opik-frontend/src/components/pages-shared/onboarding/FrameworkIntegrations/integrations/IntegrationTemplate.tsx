@@ -1,6 +1,6 @@
 import React from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
-import { FrameworkIntegrationComponentProps } from "@/components/shared/FrameworkIntegrations/types";
+import { FrameworkIntegrationComponentProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
 
 const CODE_BLOCK_1 = "pip install opik";
 
