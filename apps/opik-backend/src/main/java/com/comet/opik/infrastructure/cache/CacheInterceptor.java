@@ -2,7 +2,8 @@ package com.comet.opik.infrastructure.cache;
 
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.utils.TypeReferenceUtils;
-import com.fasterxml.jackson.databind.type.CollectionType;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import jakarta.inject.Provider;
 import lombok.NonNull;
@@ -17,6 +18,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.Type;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
@@ -139,8 +141,8 @@ public class CacheInterceptor implements MethodInterceptor {
             }
         } else {
 
-            if (cacheable.collectionType() != Collection.class) {
-                CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
+            if (cacheable.wrapperType() != Object.class) {
+                TypeReference typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(),
                         cacheable.returnType());
 
                 return cacheManager.get().get(key, typeReference)
@@ -154,22 +156,31 @@ public class CacheInterceptor implements MethodInterceptor {
     }
 
     private Flux<Object> handleFlux(MethodInvocation invocation, String key, String name, Cacheable cacheable) {
-        if (cacheable.collectionType() != Collection.class) {
-            CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
+        if (cacheable.wrapperType() != Object.class) {
+            TypeReference typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(),
                     cacheable.returnType());
 
-            CollectionType collectionType = TypeFactory.defaultInstance().constructCollectionType(List.class,
-                    typeReference);
+            TypeReference<List<?>> collectionType = new TypeReference<>() {
+                @Override
+                public Type getType() {
+                    return TypeFactory.defaultInstance().constructCollectionType(List.class, (JavaType) typeReference.getType());
+                }
+            };
+
             return getFromCacheOrCallMethod(invocation, key, name, collectionType);
         }
 
-        CollectionType collectionType = TypeFactory.defaultInstance().constructCollectionType(List.class,
-                cacheable.returnType());
+        TypeReference<List<?>> collectionType = new TypeReference<>() {
+            @Override
+            public Type getType() {
+                return TypeFactory.defaultInstance().constructCollectionType(List.class, cacheable.returnType());
+            }
+        };
+
         return getFromCacheOrCallMethod(invocation, key, name, collectionType);
     }
 
-    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String name,
-            CollectionType collectionType) {
+    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String name, TypeReference<List<?>> collectionType) {
         return cacheManager.get()
                 .get(key, collectionType)
                 .map(Collection.class::cast)
@@ -178,8 +189,8 @@ public class CacheInterceptor implements MethodInterceptor {
     }
 
     private Mono<Object> handleMono(MethodInvocation invocation, String key, String name, Cacheable cacheable) {
-        if (cacheable.collectionType() != Collection.class) {
-            CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
+        if (cacheable.wrapperType() != Object.class) {
+            TypeReference typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(),
                     cacheable.returnType());
 
             return cacheManager.get().get(key, typeReference)
