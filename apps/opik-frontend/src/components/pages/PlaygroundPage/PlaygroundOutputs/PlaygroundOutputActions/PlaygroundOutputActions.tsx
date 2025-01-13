@@ -8,7 +8,7 @@ import React, {
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset, DatasetItem } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
-import { Pause, Play, X } from "lucide-react";
+import { Database, Pause, Play, X } from "lucide-react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 import {
@@ -18,8 +18,8 @@ import {
 } from "@/store/PlaygroundStore";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
-import { useLocation } from "@tanstack/react-router";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
+import { cn } from "@/lib/utils";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -31,7 +31,9 @@ interface PlaygroundOutputActionsProps {
   loadingDatasetItems: boolean;
 }
 
-const DEFAULT_LOADED_DATASETS = 25;
+const DEFAULT_LOADED_DATASETS = 1000;
+const MAX_LOADED_DATASETS = 10000;
+
 const RUN_HOT_KEYS = ["⌘", "⏎"];
 
 const PlaygroundOutputActions = ({
@@ -42,7 +44,6 @@ const PlaygroundOutputActions = ({
   loadingDatasetItems,
 }: PlaygroundOutputActionsProps) => {
   const actionButtonRef = useRef<HTMLButtonElement>(null);
-  const location = useLocation();
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
@@ -53,7 +54,7 @@ const PlaygroundOutputActions = ({
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
     workspaceName,
     page: 1,
-    size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : 1000,
+    size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
   });
 
   const datasets = datasetsData?.content || EMPTY_DATASETS;
@@ -167,7 +168,7 @@ const PlaygroundOutputActions = ({
   useEffect(() => {
     // stop streaming whenever the location changes
     return () => stopAll();
-  }, [location, stopAll]);
+  }, [stopAll]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -180,8 +181,6 @@ const PlaygroundOutputActions = ({
         } else {
           runAll();
         }
-
-        actionButtonRef.current?.focus();
       }
     };
 
@@ -198,7 +197,12 @@ const PlaygroundOutputActions = ({
         <LoadableSelectBox
           options={datasetOptions}
           value={datasetId || ""}
-          placeholder="Select a dataset"
+          placeholder={
+            <div className="flex w-full items-center text-foreground">
+              <Database className="mr-2 size-4" />
+              <span className="truncate">Dataset</span>
+            </div>
+          }
           onChange={handleChangeDatasetId}
           buttonSize="sm"
           onLoadMore={
@@ -208,17 +212,29 @@ const PlaygroundOutputActions = ({
           }
           isLoading={isLoadingDatasets}
           optionsCount={DEFAULT_LOADED_DATASETS}
-          buttonClassName="w-48 rounded-r-none"
+          buttonClassName={cn("w-[310px]", {
+            "rounded-r-none": !!datasetId,
+          })}
+          renderTitle={(option) => {
+            return (
+              <div className="flex w-full items-center text-foreground">
+                <Database className="mr-2 size-4" />
+                <span className="max-w-[90%] truncate">{option.label}</span>
+              </div>
+            );
+          }}
         />
 
-        <Button
-          variant="outline"
-          size="icon-sm"
-          className="rounded-l-none border-l-0 "
-          onClick={() => handleChangeDatasetId(null)}
-        >
-          <X className="size-4 text-light-slate" />
-        </Button>
+        {datasetId && (
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="rounded-l-none border-l-0 "
+            onClick={() => handleChangeDatasetId(null)}
+          >
+            <X className="size-4 text-light-slate" />
+          </Button>
+        )}
       </div>
 
       {renderActionButton()}
