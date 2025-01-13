@@ -166,6 +166,19 @@ class OpikConfig(pydantic_settings.BaseSettings):
     it might lead to unexpected results for the features that rely on spans/traces created.
     """
 
+    sentry_enable: bool = True
+    """
+    If set to True, Opik will send the information about the errors to Sentry.
+    """
+
+    sentry_dsn: str = "https://f887746f8ad15949ebb1f9538a4a1b31@o168229.ingest.us.sentry.io/4508620148441088"
+    """
+    Sentry project DSN which is used as a destination for sentry events.
+    In case there is a need to update reporting rules and stop receiving events from existing users,
+    current DSN should disabled in Sentry project settings, a new DSN should be created and placed here
+    instead of the old one.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
@@ -228,5 +241,8 @@ def get_from_user_inputs(**user_inputs: Any) -> OpikConfig:
     Instantiates an OpikConfig using provided user inputs.
     """
     cleaned_user_inputs = dict_utils.remove_none_from_dict(user_inputs)
+
+    for key, value in cleaned_user_inputs.items():
+        update_session_config(key, value)
 
     return OpikConfig(**cleaned_user_inputs)
