@@ -765,17 +765,6 @@ class SpanDAO {
                         .bind("created_by" + i, userName)
                         .bind("last_updated_by" + i, userName);
 
-                if (span.totalEstimatedCost() != null) {
-                    // Cost is set manually by the user
-                    statement.bind("total_estimated_cost" + i, span.totalEstimatedCost().toString());
-                    statement.bind("total_estimated_cost_version" + i, "");
-                } else {
-                    BigDecimal estimatedCost = calculateCost(span);
-                    statement.bind("total_estimated_cost" + i, estimatedCost.toString());
-                    statement.bind("total_estimated_cost_version" + i,
-                            estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
-                }
-
                 if (span.endTime() != null) {
                     statement.bind("end_time" + i, span.endTime().toString());
                 } else {
@@ -799,6 +788,8 @@ class SpanDAO {
                     statement.bind("usage_keys" + i, new String[]{});
                     statement.bind("usage_values" + i, new Integer[]{});
                 }
+
+                bindCost(span, statement, String.valueOf(i));
 
                 i++;
             }
@@ -855,17 +846,6 @@ class SpanDAO {
             statement.bind("provider", "");
         }
 
-        if (span.totalEstimatedCost() != null) {
-            // Cost is set manually by the user
-            statement.bind("total_estimated_cost", span.totalEstimatedCost().toString());
-            statement.bind("total_estimated_cost_version", "");
-        } else {
-            BigDecimal estimatedCost = calculateCost(span);
-            statement.bind("total_estimated_cost", estimatedCost.toString());
-            statement.bind("total_estimated_cost_version",
-                    estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
-        }
-
         if (span.tags() != null) {
             statement.bind("tags", span.tags().toArray(String[]::new));
         } else {
@@ -895,6 +875,8 @@ class SpanDAO {
         } else {
             statement.bind("error_info", "");
         }
+
+        bindCost(span, statement, "");
 
         Segment segment = startSegment("spans", "Clickhouse", "insert");
 
@@ -1001,15 +983,14 @@ class SpanDAO {
             // Update with new manually set cost
             statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
             statement.bind("total_estimated_cost_version", "");
-        } else {
-            // Calculate estimated cost only in case Span doesn't have manually set cost
+        } else
             if (!isManualCostExist && StringUtils.isNotBlank(spanUpdate.model())
                     && Objects.nonNull(spanUpdate.usage())) {
-                statement.bind("total_estimated_cost",
-                        ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()).toString());
-                statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
-            }
-        }
+                        // Calculate estimated cost only in case Span doesn't have manually set cost
+                        statement.bind("total_estimated_cost",
+                                ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()).toString());
+                        statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
+                    }
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
@@ -1307,5 +1288,18 @@ class SpanDAO {
 
     private boolean isManualCost(Span span) {
         return span.totalEstimatedCost() != null && StringUtils.isBlank(span.totalEstimatedCostVersion());
+    }
+
+    private void bindCost(Span span, Statement statement, String index) {
+        if (span.totalEstimatedCost() != null) {
+            // Cost is set manually by the user
+            statement.bind("total_estimated_cost" + index, span.totalEstimatedCost().toString());
+            statement.bind("total_estimated_cost_version" + index, "");
+        } else {
+            BigDecimal estimatedCost = calculateCost(span);
+            statement.bind("total_estimated_cost" + index, estimatedCost.toString());
+            statement.bind("total_estimated_cost_version" + index,
+                    estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
+        }
     }
 }
