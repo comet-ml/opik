@@ -18,11 +18,9 @@ public class LlmProviderClientConfig {
     public record AnthropicClientConfig(String url, String version) {
     }
 
-    @Min(1)
-    private Integer maxAttempts;
+    @Min(1) private Integer maxAttempts;
 
-    @Min(1)
-    private int delayMillis = 500;
+    @Min(1) private int delayMillis = 500;
 
     @Positive private Double jitterScale;
 
@@ -44,9 +42,7 @@ public class LlmProviderClientConfig {
 
     private Boolean logResponses;
 
-    @Valid
-    private LlmProviderClientConfig.OpenAiClientConfig openAiClient;
+    @Valid private LlmProviderClientConfig.OpenAiClientConfig openAiClient;
 
-    @Valid
-    private LlmProviderClientConfig.AnthropicClientConfig anthropicClient;
+    @Valid private LlmProviderClientConfig.AnthropicClientConfig anthropicClient;
 }

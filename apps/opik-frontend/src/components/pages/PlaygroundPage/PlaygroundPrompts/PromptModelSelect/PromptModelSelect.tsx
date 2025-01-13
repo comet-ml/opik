@@ -35,6 +35,7 @@ interface PromptModelSelectProps {
   workspaceName: string;
   onChange: (value: PROVIDER_MODEL_TYPE) => void;
   provider: PROVIDER_TYPE | "";
+  onAddProvider?: (provider: PROVIDER_TYPE) => void;
 }
 
 const STALE_TIME = 1000;
@@ -44,6 +45,7 @@ const PromptModelSelect = ({
   workspaceName,
   onChange,
   provider,
+  onAddProvider,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -290,6 +292,7 @@ const PromptModelSelect = ({
         key={resetDialogKeyRef.current}
         open={openConfigDialog}
         setOpen={setOpenConfigDialog}
+        onAddProvider={onAddProvider}
       />
     </>
   );

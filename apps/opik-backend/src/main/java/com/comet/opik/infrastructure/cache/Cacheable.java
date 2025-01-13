@@ -31,7 +31,7 @@ public @interface Cacheable {
     Class<?> returnType();
 
     /**
-     * @return the type of the collection to be used. Only applicable when the returnType is a collection based class.
+     * @return the type of the wrapper class for the return type of the method annotated with this annotation.
      * */
     Class<?> wrapperType() default Object.class;
 }
