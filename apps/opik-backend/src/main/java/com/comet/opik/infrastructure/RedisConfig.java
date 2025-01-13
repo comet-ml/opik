@@ -13,8 +13,7 @@ import java.util.Objects;
 @Data
 public class RedisConfig {
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private String singleNodeUrl;
 
     public Config build() {

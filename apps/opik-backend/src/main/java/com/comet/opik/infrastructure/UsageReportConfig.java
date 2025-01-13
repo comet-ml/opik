@@ -6,12 +6,10 @@ import lombok.Data;
 
 @Data
 public class UsageReportConfig {
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private boolean enabled;
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private String url;
 
 }

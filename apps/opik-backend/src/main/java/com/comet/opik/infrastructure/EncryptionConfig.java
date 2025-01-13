@@ -9,8 +9,7 @@ import lombok.ToString;
 @Data
 public class EncryptionConfig {
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     @NotNull @ToString.Exclude
     private String key;
 }
