@@ -5,10 +5,11 @@ from .types import LLMTask
 from .metrics import base_metric
 from .models import base_model, models_factory
 from .. import Prompt
+from ..api_objects.prompt import prompt_template
 from ..api_objects.dataset import dataset
 from ..api_objects import opik_client
 from . import scorer, scores_logger, report, evaluation_result, utils
-import pystache
+
 
 
 def evaluate(
@@ -194,30 +195,19 @@ def evaluate_experiment(
 def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
-    from litellm.integrations.opik.opik import OpikLogger
-    from opik.opik_context import get_current_span_data
-
-    opik_logger = OpikLogger()
-
+    
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         processed_messages = []
         for message in messages:
             processed_messages.append(
                 {
                     "role": message["role"],
-                    "content": pystache.render(message["content"], prompt_variables),
+                    "content": prompt_template.PromptTemplate(message["content"], validate_placeholders=False).format(**prompt_variables),
                 }
             )
 
         llm_output = model.generate_provider_response(
-            messages=processed_messages,
-            metadata={
-                "opik": {
-                    "current_span_data": get_current_span_data(),
-                    "tags": ["streaming-test"],
-                },
-            },
-            success_callback=[opik_logger],
+            messages=processed_messages
         )
 
         return {
@@ -266,22 +256,17 @@ def evaluate_prompt(
     """
     if isinstance(model, str):
         model = models_factory.get(model_name=model)
-    elif isinstance(model, base_model.OpikBaseModel):
-        pass
-    else:
+    elif not isinstance(model, base_model.OpikBaseModel):
         raise ValueError("`model` must be either a string or an OpikBaseModel instance")
 
     if experiment_config is None:
-        experiment_config = {"prompt_template": messages}
-
-        if isinstance(model, str):
-            experiment_config["model"] = model
+        experiment_config = {"prompt_template": messages, "model": model.model_name}
     else:
         if "prompt_template" not in experiment_config:
             experiment_config["prompt_template"] = messages
 
-        if "model" not in experiment_config and isinstance(model, str):
-            experiment_config["model"] = model
+        if "model" not in experiment_config:
+            experiment_config["model"] = model.model_name
 
     if scoring_metrics is None:
         scoring_metrics = []

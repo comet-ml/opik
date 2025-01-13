@@ -2,11 +2,14 @@ import logging
 import importlib.metadata
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Set
+import warnings
 
 import litellm
 from litellm.types.utils import ModelResponse
+from litellm.integrations.opik.opik import OpikLogger
 
 from . import base_model
+from ... import opik_context
 from opik import semantic_version
 
 LOGGER = logging.getLogger(__name__)
@@ -42,7 +45,21 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             completion_kwargs
         )
 
+        self._add_warning_filters()
         self._engine = litellm
+
+    def _add_warning_filters(self) -> None:
+        # TODO: This should be removed when we have fixed the error messages in the LiteLLM library
+        warnings.filterwarnings("ignore", message="coroutine '.*' was never awaited")
+        warnings.filterwarnings("ignore", message="Enable tracemalloc to get the object allocation traceback")
+        
+        class NoEventLoopFilterLiteLLM(logging.Filter):
+            def filter(self, record):
+                return "Asynchronous processing not initialized as we are not running in an async context" not in record.getMessage()
+
+        # Add filter to multiple possible loggers
+        filter = NoEventLoopFilterLiteLLM()
+        logging.getLogger("LiteLLM").addFilter(filter)
 
     @cached_property
     def supported_params(self) -> Set[str]:
@@ -102,7 +119,54 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 valid_params[key] = value
 
         return valid_params
+    
+    def _add_span_metadata_to_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        current_span = opik_context.get_current_span_data()
 
+        if current_span is None:
+            return params
+        
+        if "current_span_data" in params.get("metadata", {}).get("opik", {}):
+            return params
+        
+        return {
+            **params,
+            "metadata": {
+                **params.get("metadata", {}),
+                "opik": {
+                    **params.get("metadata", {}).get("opik", {}),
+                    "current_span_data": current_span
+                }       
+            }
+        }
+    
+    def _add_success_callback_to_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        has_global_opik_logger = any(
+            isinstance(callback, OpikLogger) for callback in litellm.callbacks
+        )
+
+        has_local_opik_logger = any(
+            isinstance(callback, OpikLogger) for callback in params.get("success_callback", [])
+        )
+
+        if has_global_opik_logger or has_local_opik_logger:
+            return params
+        else:
+            opik_logger = OpikLogger()
+
+            return {
+                **params,
+                "success_callback": [
+                    opik_logger,
+                    *params.get("success_callback", [])
+                ]
+            }
+    
+    def _add_opik_monitoring(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        params = self._add_span_metadata_to_params(params)
+        params = self._add_success_callback_to_params(params)
+        return params
+    
     def generate_string(self, input: str, **kwargs: Any) -> str:
         """
         Simplified interface to generate a string output from the model.
@@ -151,6 +215,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         valid_litellm_params = self._filter_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
+
+        all_kwargs = self._add_opik_monitoring(all_kwargs)
 
         response = self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs
@@ -203,6 +269,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         valid_litellm_params = self._filter_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
+
+        all_kwargs = self._add_opik_monitoring(all_kwargs)
 
         response = await self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs

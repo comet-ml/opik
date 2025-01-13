@@ -1,6 +1,12 @@
 import opik
 from opik.evaluation import evaluate_prompt
 
+from litellm.integrations.opik.opik import OpikLogger
+import litellm
+
+#opik_logger = OpikLogger()
+#litellm.callbacks = [opik_logger]
+
 # Create a dataset that contains the samples you want to evaluate
 opik_client = opik.Opik()
 dataset = opik_client.get_or_create_dataset("my_dataset")
@@ -14,7 +20,7 @@ dataset.insert(
 # Run the evaluation
 evaluate_prompt(
     dataset=dataset,
-    llm_messages=[
+    messages=[
         {
             "role": "user",
             "content": "Translate the following text to French: {{question}}",
