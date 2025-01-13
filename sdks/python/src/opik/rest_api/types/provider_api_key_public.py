@@ -2,6 +2,7 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
+from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
@@ -9,7 +10,9 @@ import pydantic
 
 class ProviderApiKeyPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
-    provider: typing.Literal["openai"] = "openai"
+    provider: ProviderApiKeyPublicProvider
+    api_key: str
+    name: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
