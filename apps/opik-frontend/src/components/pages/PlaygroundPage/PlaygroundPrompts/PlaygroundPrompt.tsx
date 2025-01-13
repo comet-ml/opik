@@ -136,7 +136,7 @@ const PlaygroundPrompt = ({
         });
       }
     },
-    [model],
+    [model, promptId, updatePrompt],
   );
 
   useEffect(() => {
