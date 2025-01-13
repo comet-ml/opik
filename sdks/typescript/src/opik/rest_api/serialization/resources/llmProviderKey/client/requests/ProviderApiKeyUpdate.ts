@@ -11,10 +11,12 @@ export const ProviderApiKeyUpdate: core.serialization.Schema<
     OpikApi.ProviderApiKeyUpdate
 > = core.serialization.object({
     apiKey: core.serialization.property("api_key", core.serialization.string()),
+    name: core.serialization.string().optional(),
 });
 
 export declare namespace ProviderApiKeyUpdate {
     interface Raw {
         api_key: string;
+        name?: string | null;
     }
 }

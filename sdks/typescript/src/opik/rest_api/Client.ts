@@ -8,6 +8,7 @@ import urlJoin from "url-join";
 import * as errors from "./errors/index";
 import { SystemUsage } from "./api/resources/systemUsage/client/Client";
 import { Check } from "./api/resources/check/client/Client";
+import { AutomationRuleEvaluators } from "./api/resources/automationRuleEvaluators/client/Client";
 import { ChatCompletions } from "./api/resources/chatCompletions/client/Client";
 import { Datasets } from "./api/resources/datasets/client/Client";
 import { Experiments } from "./api/resources/experiments/client/Client";
@@ -184,6 +185,12 @@ export class OpikApiClient {
 
     public get check(): Check {
         return (this._check ??= new Check(this._options));
+    }
+
+    protected _automationRuleEvaluators: AutomationRuleEvaluators | undefined;
+
+    public get automationRuleEvaluators(): AutomationRuleEvaluators {
+        return (this._automationRuleEvaluators ??= new AutomationRuleEvaluators(this._options));
     }
 
     protected _chatCompletions: ChatCompletions | undefined;

@@ -2,7 +2,6 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
-from .json_node_write import JsonNodeWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .json_node import JsonNode
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
@@ -11,13 +10,10 @@ import pydantic
 
 class DatasetItemWrite(UniversalBaseModel):
     id: typing.Optional[str] = None
-    input: typing.Optional[JsonNodeWrite] = None
-    expected_output: typing.Optional[JsonNodeWrite] = None
-    metadata: typing.Optional[JsonNodeWrite] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemWriteSource
-    data: typing.Optional[JsonNode] = None
+    data: JsonNode
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
