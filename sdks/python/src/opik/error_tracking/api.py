@@ -8,7 +8,7 @@ import sentry_sdk
 import opik.config
 from opik import _logging
 
-from . import before_send, environment_details, logger_setup, shutdown
+from . import before_send, environment_details, logger_setup, shutdown_hooks
 
 LOGGER = logging.getLogger(__name__)
 PYTEST_ENV = "pytest" in sys.modules
@@ -53,7 +53,7 @@ def setup_sentry_error_tracker() -> None:
     root_logger = logging.getLogger("opik")
     logger_setup.setup_sentry_error_handlers(root_logger)
 
-    shutdown.register_flush()
+    shutdown_hooks.register_flush_hook()
 
 
 @_logging.convert_exception_to_log_message(
