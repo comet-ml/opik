@@ -69,7 +69,9 @@ def in_aws_lambda() -> bool:
 def get_installation_type() -> Literal["cloud", "self-hosted", "local"]:
     config = opik.config.OpikConfig()
     url_override = config.url_override
-    if url_helpers.get_base_url(url_override) == url_helpers.get_base_url(opik.config.OPIK_URL_CLOUD):
+    if url_helpers.get_base_url(url_override) == url_helpers.get_base_url(
+        opik.config.OPIK_URL_CLOUD
+    ):
         return "cloud"
 
     if "localhost" in url_override:
