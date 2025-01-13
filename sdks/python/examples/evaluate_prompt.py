@@ -1,10 +1,6 @@
 import opik
 from opik.evaluation import evaluate_prompt
 
-
-# opik_logger = OpikLogger()
-# litellm.callbacks = [opik_logger]
-
 # Create a dataset that contains the samples you want to evaluate
 opik_client = opik.Opik()
 dataset = opik_client.get_or_create_dataset("my_dataset")
