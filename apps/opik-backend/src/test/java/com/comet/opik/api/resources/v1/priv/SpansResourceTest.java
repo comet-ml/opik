@@ -3514,6 +3514,19 @@ class SpansResourceTest {
     }
 
     @Test
+    void createSpanFaiWithNegativeManualCost() {
+        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .totalEstimatedCost(
+                        podamFactory.manufacturePojo(BigDecimal.class).abs().negate().setScale(8, RoundingMode.DOWN))
+                .build();
+
+        try (var response = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE, 422)) {
+            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst())
+                    .isEqualTo("totalEstimatedCost must be greater than or equal to 0.0");
+        }
+    }
+
+    @Test
     void createAndGet__whenSpanInputIsBig__thenReturnSpan() {
 
         int size = 1000;
