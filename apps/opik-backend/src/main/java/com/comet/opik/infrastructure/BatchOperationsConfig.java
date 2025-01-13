@@ -14,8 +14,7 @@ public class BatchOperationsConfig {
         private @Valid @JsonProperty @Positive int maxExperimentInClauseSize;
     }
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     @NotNull private DatasetsConfig datasets;
 
 }

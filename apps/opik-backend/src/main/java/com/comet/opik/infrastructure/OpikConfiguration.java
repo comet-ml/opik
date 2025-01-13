@@ -11,56 +11,43 @@ import lombok.ToString;
 @Getter
 public class OpikConfiguration extends JobConfiguration {
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private DataSourceFactory database = new DataSourceFactory();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private DataSourceFactory databaseAnalyticsMigrations = new DataSourceFactory();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private RedisConfig redis = new RedisConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private DistributedLockConfig distributedLock = new DistributedLockConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private RateLimitConfig rateLimit = new RateLimitConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private MetadataConfig metadata = new MetadataConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private UsageReportConfig usageReport = new UsageReportConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private CorsConfig cors = new CorsConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private BatchOperationsConfig batchOperations = new BatchOperationsConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     @ToString.Exclude
     private EncryptionConfig encryption = new EncryptionConfig();
 
-    @Valid
-    @NotNull @JsonProperty
+    @Valid @NotNull @JsonProperty
     private LlmProviderClientConfig llmProviderClient = new LlmProviderClientConfig();
 }

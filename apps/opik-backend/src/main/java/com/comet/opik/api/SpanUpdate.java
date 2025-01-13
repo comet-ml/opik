@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
@@ -32,5 +34,6 @@ public record SpanUpdate(
         String provider,
         Set<String> tags,
         Map<String, Integer> usage,
+        @DecimalMin("0.0") BigDecimal totalEstimatedCost,
         ErrorInfo errorInfo) {
 }

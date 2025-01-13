@@ -15,16 +15,13 @@ public class RateLimitConfig {
             @Valid @JsonProperty @Positive long durationInSeconds) {
     }
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private boolean enabled;
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private LimitConfig generalLimit;
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private Map<String, LimitConfig> customLimits;
 
 }

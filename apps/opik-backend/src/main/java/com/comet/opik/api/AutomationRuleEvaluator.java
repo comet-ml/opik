@@ -39,8 +39,7 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     private UUID projectId;
 
     @JsonView({View.Public.class, View.Write.class})
-    @NotBlank
-    private String name;
+    @NotBlank private String name;
 
     @JsonView({View.Public.class, View.Write.class})
     private Float samplingRate;

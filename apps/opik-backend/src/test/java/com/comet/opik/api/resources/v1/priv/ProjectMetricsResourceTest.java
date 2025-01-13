@@ -708,6 +708,7 @@ class ProjectMetricsResourceTest {
                                     "prompt_tokens", RANDOM.nextInt(),
                                     "completion_tokens", RANDOM.nextInt()))
                             .traceId(trace.id())
+                            .totalEstimatedCost(null)
                             .build())
                     .toList();
 

@@ -98,8 +98,7 @@ public abstract sealed class FeedbackDefinition<T> {
         @JsonIgnoreProperties(ignoreUnknown = true)
         public static class CategoricalFeedbackDetail {
 
-            @NotNull @Size(min = 2)
-            @JsonView({View.Public.class, View.Create.class, View.Update.class})
+            @NotNull @Size(min = 2) @JsonView({View.Public.class, View.Create.class, View.Update.class})
             private final Map<String, Double> categories;
 
             @ConstructorProperties({"categories"})
@@ -149,8 +148,7 @@ public abstract sealed class FeedbackDefinition<T> {
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final UUID id;
 
-    @NotBlank
-    @JsonView({View.Public.class, View.Create.class, View.Update.class})
+    @NotBlank @JsonView({View.Public.class, View.Create.class, View.Update.class})
     private final String name;
 
     /**

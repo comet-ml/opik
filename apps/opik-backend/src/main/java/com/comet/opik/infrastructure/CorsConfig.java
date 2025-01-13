@@ -6,7 +6,6 @@ import lombok.Data;
 
 @Data
 public class CorsConfig {
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private boolean enabled;
 }
