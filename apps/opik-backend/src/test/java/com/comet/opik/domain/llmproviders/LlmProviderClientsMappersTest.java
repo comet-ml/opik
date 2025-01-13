@@ -5,18 +5,14 @@ import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.Message;
+import dev.ai4j.openai4j.chat.Role;
 import dev.ai4j.openai4j.shared.Usage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
-import dev.langchain4j.model.anthropic.internal.api.AnthropicMessage;
-import dev.langchain4j.model.anthropic.internal.api.AnthropicRole;
-import dev.langchain4j.model.anthropic.internal.api.AnthropicTextContent;
-import dev.langchain4j.model.anthropic.internal.api.AnthropicUsage;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.output.TokenUsage;
@@ -41,59 +37,30 @@ public class LlmProviderClientsMappersTest {
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class AnthropicMappers {
-        // anthropic POJOs don't have setters or builders, therefore podam can't manufacture objects correctly
-
         @Test
         void testToResponse() {
-            var content = new AnthropicContent();
-            content.name = podamFactory.manufacturePojo(String.class);
-            content.text = podamFactory.manufacturePojo(String.class);
-            content.id = podamFactory.manufacturePojo(String.class);
-
-            var usage = new AnthropicUsage();
-            usage.inputTokens = podamFactory.manufacturePojo(Integer.class);
-            usage.outputTokens = podamFactory.manufacturePojo(Integer.class);
-
-            var response = new AnthropicCreateMessageResponse();
-            response.id = podamFactory.manufacturePojo(String.class);
-            response.model = podamFactory.manufacturePojo(String.class);
-            response.stopReason = podamFactory.manufacturePojo(String.class);
-            response.content = List.of(content);
-            response.usage = usage;
+            var response = podamFactory.manufacturePojo(AnthropicCreateMessageResponse.class);
 
             var actual = LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
             assertThat(actual).isNotNull();
             assertThat(actual.id()).isEqualTo(response.id);
             assertThat(actual.choices()).isEqualTo(List.of(ChatCompletionChoice.builder()
                     .message(AssistantMessage.builder()
-                            .name(content.name)
-                            .content(content.text)
+                            .name(response.content.getFirst().name)
+                            .content(response.content.getFirst().text)
                             .build())
                     .finishReason(response.stopReason)
                     .build()));
             assertThat(actual.usage()).isEqualTo(Usage.builder()
-                    .promptTokens(usage.inputTokens)
-                    .completionTokens(usage.outputTokens)
-                    .totalTokens(usage.inputTokens + usage.outputTokens)
+                    .promptTokens(response.usage.inputTokens)
+                    .completionTokens(response.usage.outputTokens)
+                    .totalTokens(response.usage.inputTokens + response.usage.outputTokens)
                     .build());
         }
 
         @Test
         void toCreateMessage() {
-            var userMessageContent = podamFactory.manufacturePojo(String.class);
-            var assistantMessageContent = podamFactory.manufacturePojo(String.class);
-            var systemMessageContent = podamFactory.manufacturePojo(String.class);
-            ChatCompletionRequest request = ChatCompletionRequest.builder()
-                    .model(podamFactory.manufacturePojo(String.class))
-                    .stream(podamFactory.manufacturePojo(Boolean.class))
-                    .temperature(podamFactory.manufacturePojo(Double.class))
-                    .topP(podamFactory.manufacturePojo(Double.class))
-                    .stop(podamFactory.manufacturePojo(String.class))
-                    .addUserMessage(userMessageContent)
-                    .addAssistantMessage(assistantMessageContent)
-                    .addSystemMessage(systemMessageContent)
-                    .maxCompletionTokens(podamFactory.manufacturePojo(Integer.class))
-                    .build();
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
                     .toCreateMessageRequest(request);
@@ -104,16 +71,16 @@ public class LlmProviderClientsMappersTest {
             assertThat(actual.temperature).isEqualTo(request.temperature());
             assertThat(actual.topP).isEqualTo(request.topP());
             assertThat(actual.stopSequences).isEqualTo(request.stop());
-            assertThat(actual.messages).containsExactlyInAnyOrder(
-                    AnthropicMessage.builder()
-                            .role(AnthropicRole.USER)
-                            .content(List.of(new AnthropicTextContent(userMessageContent)))
-                            .build(),
-                    AnthropicMessage.builder()
-                            .role(AnthropicRole.ASSISTANT)
-                            .content(List.of(new AnthropicTextContent(assistantMessageContent)))
-                            .build());
-            assertThat(actual.system).isEqualTo(List.of(new AnthropicTextContent(systemMessageContent)));
+            assertThat(actual.messages).usingRecursiveComparison().ignoringCollectionOrder().isEqualTo(
+                    request.messages().stream()
+                            .filter(message -> List.of(Role.USER, Role.ASSISTANT).contains(message.role()))
+                            .map(LlmProviderAnthropicMapper.INSTANCE::mapToAnthropicMessage)
+                            .toList());
+            assertThat(actual.system).usingRecursiveComparison().ignoringCollectionOrder().isEqualTo(
+                    request.messages().stream()
+                            .filter(message -> message.role() == Role.SYSTEM)
+                            .map(LlmProviderAnthropicMapper.INSTANCE::mapToAnthropicMessage)
+                            .toList());
         }
     }
 

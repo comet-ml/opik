@@ -87,21 +87,17 @@ public interface LlmProviderAnthropicMapper {
     }
 
     default AnthropicMessage mapToAnthropicMessage(@NonNull Message message) {
-        if (message instanceof AssistantMessage assistantMessage) {
-            return AnthropicMessage.builder()
+        return switch (message) {
+            case AssistantMessage assistantMessage -> AnthropicMessage.builder()
                     .role(AnthropicRole.ASSISTANT)
                     .content(List.of(new AnthropicTextContent(assistantMessage.content())))
                     .build();
-        }
-
-        if (message instanceof UserMessage userMessage) {
-            return AnthropicMessage.builder()
+            case UserMessage userMessage -> AnthropicMessage.builder()
                     .role(AnthropicRole.USER)
                     .content(List.of(toAnthropicMessageContent(userMessage.content())))
                     .build();
-        }
-
-        throw new BadRequestException("unexpected message role: " + message.role());
+            default -> throw new BadRequestException("unexpected message role: " + message.role());
+        };
     }
 
     default AnthropicMessageContent toAnthropicMessageContent(@NonNull Object rawContent) {

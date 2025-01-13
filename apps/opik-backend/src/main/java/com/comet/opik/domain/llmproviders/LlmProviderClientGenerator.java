@@ -20,18 +20,12 @@ public class LlmProviderClientGenerator {
         var anthropicClientBuilder = AnthropicClient.builder();
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(LlmProviderClientConfig.AnthropicClientConfig::url)
-                .ifPresent(url -> {
-                    if (StringUtils.isNotEmpty(url)) {
-                        anthropicClientBuilder.baseUrl(url);
-                    }
-                });
+                .filter(StringUtils::isNotEmpty)
+                .ifPresent(anthropicClientBuilder::baseUrl);
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(LlmProviderClientConfig.AnthropicClientConfig::version)
-                .ifPresent(version -> {
-                    if (StringUtils.isNotBlank(version)) {
-                        anthropicClientBuilder.version(version);
-                    }
-                });
+                .filter(StringUtils::isNotBlank)
+                .ifPresent(anthropicClientBuilder::version);
         Optional.ofNullable(llmProviderClientConfig.getLogRequests())
                 .ifPresent(anthropicClientBuilder::logRequests);
         Optional.ofNullable(llmProviderClientConfig.getLogResponses())
@@ -48,11 +42,8 @@ public class LlmProviderClientGenerator {
         var openAiClientBuilder = OpenAiClient.builder();
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
                 .map(LlmProviderClientConfig.OpenAiClientConfig::url)
-                .ifPresent(baseUrl -> {
-                    if (StringUtils.isNotBlank(baseUrl)) {
-                        openAiClientBuilder.baseUrl(baseUrl);
-                    }
-                });
+                .filter(StringUtils::isNotBlank)
+                .ifPresent(openAiClientBuilder::baseUrl);
         Optional.ofNullable(llmProviderClientConfig.getCallTimeout())
                 .ifPresent(callTimeout -> openAiClientBuilder.callTimeout(callTimeout.toJavaDuration()));
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
