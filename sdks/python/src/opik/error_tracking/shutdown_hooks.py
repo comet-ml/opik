@@ -15,6 +15,8 @@ def register_flush_hook() -> None:
 
 
 def register_exception_hook() -> None:
+    original_exception_hook = sys.excepthook
+
     def exception_hook(
         exception_type: Type[BaseException],
         exception_value: BaseException,
@@ -22,7 +24,7 @@ def register_exception_hook() -> None:
     ) -> Any:
         client = sentry_sdk.Hub.current.client
         if client is None:
-            return sys.excepthook(exception_type, exception_value, traceback)
+            return original_exception_hook(exception_type, exception_value, traceback)
 
         is_opik_related = False
 
@@ -34,6 +36,6 @@ def register_exception_hook() -> None:
         if is_opik_related:
             sentry_sdk.capture_exception(error=exception_value)
 
-        return sys.excepthook(exception_type, exception_value, traceback)
+        return original_exception_hook(exception_type, exception_value, traceback)
 
     sys.excepthook = exception_hook
