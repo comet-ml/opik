@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AutomationRuleEvaluator;
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Page;
@@ -59,14 +60,14 @@ public class AutomationRuleEvaluatorsResource {
     })
     @JsonView(AutomationRuleEvaluator.View.Public.class)
     public Response find(@PathParam("projectId") UUID projectId,
-                         @QueryParam("name") String name,
-                         @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-                         @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
+            @QueryParam("name") String name,
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
                 workspaceId, page);
-        Page<AutomationRuleEvaluator.AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(projectId, workspaceId, name, page, size);
+        Page<AutomationRuleEvaluatorLlmAsJudge> definitionPage = service.find(projectId, workspaceId, name, page, size);
         log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
                 definitionPage.size(), projectId, workspaceId, page, definitionPage.total());
 
@@ -99,8 +100,8 @@ public class AutomationRuleEvaluatorsResource {
     })
     @RateLimited
     public Response createEvaluator(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class)))
-            @JsonView(AutomationRuleEvaluator.View.Write.class) @NotNull @Valid AutomationRuleEvaluator<?> evaluator,
+            @PathParam("projectId") UUID projectId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class))) @JsonView(AutomationRuleEvaluator.View.Write.class) @NotNull @Valid AutomationRuleEvaluator<?> evaluator,
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -108,7 +109,7 @@ public class AutomationRuleEvaluatorsResource {
 
         log.info("Creating {} evaluator for project_id '{}' on workspace_id '{}'", evaluator.type(),
                 evaluator.getProjectId(), workspaceId);
-        AutomationRuleEvaluator<?> savedEvaluator = service.save(evaluator, workspaceId, userName);
+        AutomationRuleEvaluator<?> savedEvaluator = service.save(evaluator, projectId, workspaceId, userName);
         log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", evaluator.type(),
                 savedEvaluator.getId(), evaluator.getProjectId(), workspaceId);
 
@@ -148,12 +149,15 @@ public class AutomationRuleEvaluatorsResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
     public Response deleteEvaluators(
-            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete, @PathParam("projectId") UUID projectId) {
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete,
+            @PathParam("projectId") UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+        log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'",
+                batchDelete.ids().size(),
                 workspaceId);
         service.delete(batchDelete.ids(), projectId, workspaceId);
-        log.info("Deleted automation rule evaluators by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+        log.info("Deleted automation rule evaluators by ids, count '{}', on workspace_id '{}'",
+                batchDelete.ids().size(),
                 workspaceId);
         return Response.noContent().build();
     }

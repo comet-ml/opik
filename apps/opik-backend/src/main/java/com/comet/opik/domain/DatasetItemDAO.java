@@ -74,10 +74,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     source,
                     trace_id,
                     span_id,
-                    input,
                     data,
-                    expected_output,
-                    metadata,
                     created_at,
                     workspace_id,
                     created_by,
@@ -91,10 +88,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                              :source<item.index>,
                              :traceId<item.index>,
                              :spanId<item.index>,
-                             :input<item.index>,
                              :data<item.index>,
-                             :expectedOutput<item.index>,
-                             :metadata<item.index>,
                              now64(9),
                              :workspace_id,
                              :createdBy<item.index>,
@@ -144,10 +138,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 SELECT
                     id,
                     dataset_id,
-                    input,
                     <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), data) as data <else> data <endif>,
-                    expected_output,
-                    metadata,
                     trace_id,
                     span_id,
                     source,
@@ -366,7 +357,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     category_name,
                     value,
                     reason,
-                    source
+                    source,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by
                 FROM feedback_scores
                 WHERE workspace_id = :workspace_id
                 AND entity_type = :entityType
@@ -406,10 +401,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             SELECT
                 di.id AS id,
                 di.dataset_id AS dataset_id,
-                di.input AS input,
                 <if(truncate)> mapApply((k, v) -> (k, replaceRegexpAll(v, '<truncate>', '"[image]"')), di.data) as data <else> di.data <endif>,
-                di.expected_output AS expected_output,
-                di.metadata AS metadata,
                 di.trace_id AS trace_id,
                 di.span_id AS span_id,
                 di.source AS source,
@@ -458,10 +450,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             GROUP BY
                 di.id,
                 di.dataset_id,
-                di.input,
                 di.data,
-                di.expected_output,
-                di.metadata,
                 di.trace_id,
                 di.span_id,
                 di.source,
@@ -567,28 +556,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             for (DatasetItem item : items) {
                 Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.data()).orElse(Map.of()));
 
-                if (!data.containsKey("input") && item.input() != null) {
-                    data.put("input", item.input());
-                }
-
-                if (!data.containsKey("expected_output") && item.expectedOutput() != null) {
-                    data.put("expected_output", item.expectedOutput());
-                }
-
-                if (!data.containsKey("metadata") && item.metadata() != null) {
-                    data.put("metadata", item.metadata());
-                }
-
                 statement.bind("id" + i, item.id());
                 statement.bind("datasetId" + i, datasetId);
                 statement.bind("source" + i, item.source().getValue());
                 statement.bind("traceId" + i, DatasetItemResultMapper.getOrDefault(item.traceId()));
                 statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
-                statement.bind("input" + i, DatasetItemResultMapper.getOrDefault(item.input()));
                 statement.bind("data" + i, DatasetItemResultMapper.getOrDefault(data));
-                statement.bind("expectedOutput" + i,
-                        DatasetItemResultMapper.getOrDefault(item.expectedOutput()));
-                statement.bind("metadata" + i, DatasetItemResultMapper.getOrDefault(item.metadata()));
                 statement.bind("createdBy" + i, userName);
                 statement.bind("lastUpdatedBy" + i, userName);
                 i++;

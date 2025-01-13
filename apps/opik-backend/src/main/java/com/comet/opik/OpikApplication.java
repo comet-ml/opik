@@ -82,6 +82,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
     @Override
     public void run(OpikConfiguration configuration, Environment environment) {
         EncryptionUtils.setConfig(configuration);
+
         // Resources
         var jersey = environment.jersey();
 

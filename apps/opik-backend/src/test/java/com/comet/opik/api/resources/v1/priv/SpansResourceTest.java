@@ -102,11 +102,11 @@ import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackSc
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.infrastructure.auth.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.MIN_FEEDBACK_SCORE_VALUE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -3426,7 +3426,8 @@ class SpansResourceTest {
         }
     }
 
-    private void createAndAssertErrorMessage(Span span, String apiKey, String workspaceName, int status, String errorMessage) {
+    private void createAndAssertErrorMessage(Span span, String apiKey, String workspaceName, int status,
+            String errorMessage) {
         try (var response = spanResourceClient.createSpan(span, apiKey, workspaceName, status)) {
             assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
         }
@@ -3572,7 +3573,8 @@ class SpansResourceTest {
                 .build();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-        createAndAssertErrorMessage(span2, apiKey, workspaceName, HttpStatus.SC_CONFLICT, PROJECT_AND_WORKSPACE_NAME_MISMATCH);
+        createAndAssertErrorMessage(span2, apiKey, workspaceName, HttpStatus.SC_CONFLICT,
+                PROJECT_AND_WORKSPACE_NAME_MISMATCH);
     }
 
     @Test

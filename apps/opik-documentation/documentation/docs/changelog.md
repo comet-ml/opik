@@ -1,9 +1,20 @@
 ---
 sidebar_label: Changelog
 description: Weelkly changelog for Opik
+pytest_codeblocks_skip: true
 ---
 
 # Weekly Changelog
+
+## Week of 2025-01-06
+
+**Opik Dashboard**:
+
+- Fixed an issue with the trace viewer in Safari
+
+**SDK**:
+
+- Added a new `py.typed` file to the SDK to make it compatible with mypy
 
 ## Week of 2024-12-30
 
