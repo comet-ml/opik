@@ -1,4 +1,6 @@
 import React from "react";
+import { TooltipProps } from "@radix-ui/react-tooltip";
+
 import {
   Tooltip,
   TooltipArrow,
@@ -14,6 +16,7 @@ export type TooltipWrapperProps = {
   side?: "top" | "right" | "bottom" | "left";
   hotkeys?: React.ReactNode[];
   delayDuration?: number;
+  defaultOpen?: TooltipProps["defaultOpen"];
 };
 
 const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
@@ -22,10 +25,11 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
   side,
   hotkeys = null,
   delayDuration = 500,
+  defaultOpen,
 }) => {
   return (
     <TooltipProvider delayDuration={delayDuration}>
-      <Tooltip>
+      <Tooltip defaultOpen={defaultOpen}>
         <TooltipTrigger asChild>{children}</TooltipTrigger>
         <TooltipPortal>
           <TooltipContent
