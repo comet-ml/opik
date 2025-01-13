@@ -12,16 +12,13 @@ import java.util.Optional;
 @Data
 public class CacheConfiguration {
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private boolean enabled = false;
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     @NotNull private Duration defaultDuration;
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private Map<String, Duration> caches;
 
     public Map<String, Duration> getCaches() {

@@ -163,7 +163,8 @@ public class CacheInterceptor implements MethodInterceptor {
             TypeReference<List<?>> collectionType = new TypeReference<>() {
                 @Override
                 public Type getType() {
-                    return TypeFactory.defaultInstance().constructCollectionType(List.class, (JavaType) typeReference.getType());
+                    return TypeFactory.defaultInstance().constructCollectionType(List.class,
+                            (JavaType) typeReference.getType());
                 }
             };
 
@@ -180,7 +181,8 @@ public class CacheInterceptor implements MethodInterceptor {
         return getFromCacheOrCallMethod(invocation, key, name, collectionType);
     }
 
-    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String name, TypeReference<List<?>> collectionType) {
+    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String name,
+            TypeReference<List<?>> collectionType) {
         return cacheManager.get()
                 .get(key, collectionType)
                 .map(Collection.class::cast)
