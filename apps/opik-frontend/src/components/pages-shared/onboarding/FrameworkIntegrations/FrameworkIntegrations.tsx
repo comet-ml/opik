@@ -34,7 +34,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
               <img
                 alt={item.label}
                 src={item.logo}
-                className="size-[22px] shrink-0"
+                className="size-[32px] shrink-0"
               />
               <div className="ml-1 truncate">{item.label}</div>
             </li>

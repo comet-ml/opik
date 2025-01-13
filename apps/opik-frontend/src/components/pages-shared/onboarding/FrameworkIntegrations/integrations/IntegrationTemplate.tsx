@@ -4,11 +4,18 @@ import { FrameworkIntegrationComponentProps } from "@/components/pages-shared/on
 
 const CODE_BLOCK_1 = "pip install opik";
 
-const CODE_BLOCK_2 = `import opik
-opik.configure()`;
+export const OPIK_API_KEY_TEMPLATE = "{OPIK_API_KEY}";
 
-const CODE_BLOCK_2_LOCAL = `import opik
-opik.configure(use_local=True)`;
+const putApiKeyInCode = (code: string, apiKey?: string): string => {
+  if (apiKey) {
+    return code.replace(
+      OPIK_API_KEY_TEMPLATE,
+      `\nos.environ["OPIK_API_KEY"] = "${apiKey}"\n`,
+    );
+  }
+
+  return code.replace(OPIK_API_KEY_TEMPLATE, "");
+};
 
 type IntegrationTemplateProps = FrameworkIntegrationComponentProps & {
   codeTitle: string;
@@ -20,6 +27,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   codeTitle,
   code,
 }) => {
+  console.log("code", putApiKeyInCode(code, apiKey).trim());
   return (
     <div className="flex flex-col gap-6 rounded-md border bg-white p-6">
       <div>
@@ -31,14 +39,8 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
         </div>
       </div>
       <div>
-        <div className="comet-body-s mb-3">2. Configure the Opik SDK</div>
-        <div className="min-h-12">
-          <CodeHighlighter data={apiKey ? CODE_BLOCK_2 : CODE_BLOCK_2_LOCAL} />
-        </div>
-      </div>
-      <div>
-        <div className="comet-body-s mb-3">3. {codeTitle}</div>
-        <CodeHighlighter data={code} />
+        <div className="comet-body-s mb-3">2. {codeTitle}</div>
+        <CodeHighlighter data={putApiKeyInCode(code, apiKey)} />
       </div>
     </div>
   );
