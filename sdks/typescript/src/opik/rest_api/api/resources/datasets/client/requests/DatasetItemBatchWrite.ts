@@ -8,7 +8,10 @@ import * as OpikApi from "../../../../index";
  * @example
  *     {
  *         items: [{
- *                 source: "manual"
+ *                 source: "manual",
+ *                 data: {
+ *                     "key": "value"
+ *                 }
  *             }]
  *     }
  */

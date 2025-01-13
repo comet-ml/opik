@@ -1313,6 +1313,7 @@ class ProjectsResourceTest {
                                 .model(spanResourceClient.randomModelPrice().getName())
                                 .traceId(trace.id())
                                 .projectName(trace.projectName())
+                                .totalEstimatedCost(null)
                                 .build())
                         .toList();
 

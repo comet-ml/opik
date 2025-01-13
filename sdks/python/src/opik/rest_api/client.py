@@ -6,6 +6,7 @@ import httpx
 from .core.client_wrapper import SyncClientWrapper
 from .system_usage.client import SystemUsageClient
 from .check.client import CheckClient
+from .automation_rule_evaluators.client import AutomationRuleEvaluatorsClient
 from .chat_completions.client import ChatCompletionsClient
 from .datasets.client import DatasetsClient
 from .experiments.client import ExperimentsClient
@@ -22,6 +23,7 @@ from .core.api_error import ApiError
 from .core.client_wrapper import AsyncClientWrapper
 from .system_usage.client import AsyncSystemUsageClient
 from .check.client import AsyncCheckClient
+from .automation_rule_evaluators.client import AsyncAutomationRuleEvaluatorsClient
 from .chat_completions.client import AsyncChatCompletionsClient
 from .datasets.client import AsyncDatasetsClient
 from .experiments.client import AsyncExperimentsClient
@@ -101,6 +103,9 @@ class OpikApi:
         )
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.check = CheckClient(client_wrapper=self._client_wrapper)
+        self.automation_rule_evaluators = AutomationRuleEvaluatorsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.chat_completions = ChatCompletionsClient(
             client_wrapper=self._client_wrapper
         )
@@ -272,6 +277,9 @@ class AsyncOpikApi:
         )
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
+        self.automation_rule_evaluators = AsyncAutomationRuleEvaluatorsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.chat_completions = AsyncChatCompletionsClient(
             client_wrapper=self._client_wrapper
         )

@@ -10,4 +10,5 @@
  */
 export interface ProviderApiKeyUpdate {
     apiKey: string;
+    name?: string;
 }

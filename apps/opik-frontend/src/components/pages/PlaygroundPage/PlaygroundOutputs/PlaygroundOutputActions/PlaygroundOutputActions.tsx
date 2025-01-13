@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset, DatasetItem } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
@@ -43,8 +37,6 @@ const PlaygroundOutputActions = ({
   datasetItems,
   loadingDatasetItems,
 }: PlaygroundOutputActionsProps) => {
-  const actionButtonRef = useRef<HTMLButtonElement>(null);
-
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
   const promptMap = usePromptMap();
@@ -100,7 +92,6 @@ const PlaygroundOutputActions = ({
             className="mt-2.5"
             variant="outline"
             onClick={stopAll}
-            ref={actionButtonRef}
           >
             <Pause className="mr-1 size-4" />
             Stop all
@@ -110,18 +101,28 @@ const PlaygroundOutputActions = ({
     }
 
     const areAllPromptsValid = Object.values(promptMap).every((p) => !!p.model);
-    const isDatasetEmpty = !!datasetId && datasetItems.length === 0;
-    const isDatasetRemoved =
-      datasetId && !datasets.find((d) => d.id === datasetId);
+    const isDatasetEmpty =
+      !loadingDatasetItems && !!datasetId && datasetItems.length === 0;
 
-    const isDisabled =
+    const isDatasetRemoved =
+      !isLoadingDatasets &&
+      datasetId &&
+      !datasets.find((d) => d.id === datasetId);
+
+    const isDisabledButton =
       !areAllPromptsValid ||
       loadingDatasetItems ||
       isLoadingDatasets ||
       isDatasetRemoved ||
       isDatasetEmpty;
 
-    const style: React.CSSProperties = isDisabled
+    const shouldTooltipAppear = !!(
+      isDatasetEmpty ||
+      !areAllPromptsValid ||
+      isDatasetRemoved
+    );
+
+    const style: React.CSSProperties = isDisabledButton
       ? { pointerEvents: "auto" }
       : {};
 
@@ -141,22 +142,27 @@ const PlaygroundOutputActions = ({
     const runMessage =
       promptCount === 1 ? "Run your prompt" : "Run your prompts";
 
-    const tooltipMessage = isDisabled
+    const tooltipMessage = isDisabledButton
       ? datasetRemovedMessage || emptyDatasetMessage || selectLLMModelMessage
       : runMessage;
+
+    const tooltipKey = shouldTooltipAppear
+      ? "action-tooltip-open-tooltip"
+      : "action-tooltip";
 
     return (
       <TooltipWrapper
         content={tooltipMessage}
-        hotkeys={isDisabled ? undefined : RUN_HOT_KEYS}
+        key={tooltipKey}
+        defaultOpen={shouldTooltipAppear}
+        hotkeys={isDisabledButton ? undefined : RUN_HOT_KEYS}
       >
         <Button
           size="sm"
           className="mt-2.5"
           onClick={runAll}
-          disabled={isDisabled}
+          disabled={isDisabledButton}
           style={style}
-          ref={actionButtonRef}
         >
           <Play className="mr-1 size-4" />
           Run all
@@ -166,7 +172,7 @@ const PlaygroundOutputActions = ({
   };
 
   useEffect(() => {
-    // stop streaming whenever the location changes
+    // stop streaming whenever a user leaves a page
     return () => stopAll();
   }, [stopAll]);
 

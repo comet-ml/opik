@@ -11,20 +11,16 @@ public class AuthenticationConfig {
     public record UrlConfig(@Valid @JsonProperty @NotNull String url) {
     }
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private boolean enabled;
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private int apiKeyResolutionCacheTTLInSec;
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private UrlConfig ui;
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     private UrlConfig sdk;
 
 }

@@ -579,6 +579,7 @@ class ExperimentsClient:
         experiment_name: str,
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -591,6 +592,9 @@ class ExperimentsClient:
         limit : typing.Optional[int]
 
         last_retrieved_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -607,6 +611,7 @@ class ExperimentsClient:
                 "experiment_name": experiment_name,
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
@@ -1261,6 +1266,7 @@ class AsyncExperimentsClient:
         experiment_name: str,
         limit: typing.Optional[int] = OMIT,
         last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -1273,6 +1279,9 @@ class AsyncExperimentsClient:
         limit : typing.Optional[int]
 
         last_retrieved_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1289,6 +1298,7 @@ class AsyncExperimentsClient:
                 "experiment_name": experiment_name,
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",

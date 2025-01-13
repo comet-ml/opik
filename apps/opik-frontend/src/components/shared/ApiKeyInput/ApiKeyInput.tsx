@@ -13,7 +13,7 @@ const ApiKeyInput: React.FunctionComponent<ApiKeyInputProps> = ({ apiKey }) => {
     <div className="flex flex-row items-center">
       <KeyRound className="mr-3 size-6" />
       <Input
-        className="mr-2"
+        className="mr-2 truncate"
         readOnly
         value={maskAPIKey(apiKey)}
         onFocus={(e) => {

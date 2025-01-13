@@ -69,7 +69,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         UUID id = idGenerator.generateId();
         IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
 
-        return template.inTransaction(WRITE, handle -> {
+        var savedEvaluator = template.inTransaction(WRITE, handle -> {
             var evaluatorsDAO = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             AutomationRuleEvaluatorModel<?> evaluator = switch (inputRuleEvaluator) {
@@ -93,8 +93,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 evaluatorsDAO.saveBaseRule(evaluator, workspaceId);
                 evaluatorsDAO.saveEvaluator(evaluator);
 
-                return findById(evaluator.id(), evaluator.projectId(), workspaceId);
-
+                return evaluator;
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     log.info(EVALUATOR_ALREADY_EXISTS, e);
@@ -104,6 +103,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 }
             }
         });
+
+        return findById(savedEvaluator.id(), savedEvaluator.projectId(), workspaceId);
     }
 
     @Override
@@ -190,8 +191,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId,
-            String name, int pageNum, int size) {
+    public AutomationRuleEvaluatorPage find(@NonNull UUID projectId,
+            @NonNull String workspaceId,
+            String name,
+            int pageNum, int size) {
 
         log.debug("Finding AutomationRuleEvaluators with name pattern '{}' in projectId '{}' and workspaceId '{}'",
                 name, projectId, workspaceId);
@@ -202,17 +205,19 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var offset = (pageNum - 1) * size;
 
             var criteria = AutomationRuleEvaluatorCriteria.builder().name(name).build();
-            var automationRuleEvaluators = dao.find(workspaceId, projectId, criteria, offset, size)
-                    .stream()
-                    .map(evaluator -> switch (evaluator) {
-                        case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
-                            AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
-                    })
-                    .toList();
+            List<AutomationRuleEvaluator<?>> automationRuleEvaluators = List.copyOf(
+                    dao.find(workspaceId, projectId, criteria, offset, size)
+                            .stream()
+                            .map(evaluator -> switch (evaluator) {
+                                case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
+                                    AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                            })
+                            .toList());
+
             log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(),
                     projectId);
-
-            return new AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(), total,
+            return new AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(),
+                    total,
                     automationRuleEvaluators);
         });
     }
