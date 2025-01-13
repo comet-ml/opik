@@ -1,11 +1,9 @@
 import opik
 from opik.evaluation import evaluate_prompt
 
-from litellm.integrations.opik.opik import OpikLogger
-import litellm
 
-#opik_logger = OpikLogger()
-#litellm.callbacks = [opik_logger]
+# opik_logger = OpikLogger()
+# litellm.callbacks = [opik_logger]
 
 # Create a dataset that contains the samples you want to evaluate
 opik_client = opik.Opik()

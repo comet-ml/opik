@@ -51,11 +51,17 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
     def _add_warning_filters(self) -> None:
         # TODO: This should be removed when we have fixed the error messages in the LiteLLM library
         warnings.filterwarnings("ignore", message="coroutine '.*' was never awaited")
-        warnings.filterwarnings("ignore", message="Enable tracemalloc to get the object allocation traceback")
-        
+        warnings.filterwarnings(
+            "ignore",
+            message="Enable tracemalloc to get the object allocation traceback",
+        )
+
         class NoEventLoopFilterLiteLLM(logging.Filter):
-            def filter(self, record):
-                return "Asynchronous processing not initialized as we are not running in an async context" not in record.getMessage()
+            def filter(self, record: Any) -> bool:
+                return (
+                    "Asynchronous processing not initialized as we are not running in an async context"
+                    not in record.getMessage()
+                )
 
         # Add filter to multiple possible loggers
         filter = NoEventLoopFilterLiteLLM()
@@ -119,34 +125,35 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 valid_params[key] = value
 
         return valid_params
-    
+
     def _add_span_metadata_to_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         current_span = opik_context.get_current_span_data()
 
         if current_span is None:
             return params
-        
+
         if "current_span_data" in params.get("metadata", {}).get("opik", {}):
             return params
-        
+
         return {
             **params,
             "metadata": {
                 **params.get("metadata", {}),
                 "opik": {
                     **params.get("metadata", {}).get("opik", {}),
-                    "current_span_data": current_span
-                }       
-            }
+                    "current_span_data": current_span,
+                },
+            },
         }
-    
+
     def _add_success_callback_to_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         has_global_opik_logger = any(
             isinstance(callback, OpikLogger) for callback in litellm.callbacks
         )
 
         has_local_opik_logger = any(
-            isinstance(callback, OpikLogger) for callback in params.get("success_callback", [])
+            isinstance(callback, OpikLogger)
+            for callback in params.get("success_callback", [])
         )
 
         if has_global_opik_logger or has_local_opik_logger:
@@ -156,17 +163,14 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
             return {
                 **params,
-                "success_callback": [
-                    opik_logger,
-                    *params.get("success_callback", [])
-                ]
+                "success_callback": [opik_logger, *params.get("success_callback", [])],
             }
-    
+
     def _add_opik_monitoring(self, params: Dict[str, Any]) -> Dict[str, Any]:
         params = self._add_span_metadata_to_params(params)
         params = self._add_success_callback_to_params(params)
         return params
-    
+
     def generate_string(self, input: str, **kwargs: Any) -> str:
         """
         Simplified interface to generate a string output from the model.

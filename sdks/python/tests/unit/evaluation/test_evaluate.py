@@ -610,13 +610,7 @@ def test_evaluate_prompt_happyflow(fake_backend):
     mock_model = mock.Mock()
     mock_model.model_name = MODEL_NAME
     mock_model.generate_provider_response.return_value = mock.Mock(
-        choices=[
-            mock.Mock(
-                message=mock.Mock(
-                    content="Hello, world!"
-                )
-            )
-        ]
+        choices=[mock.Mock(message=mock.Mock(content="Hello, world!"))]
     )
     mock_LiteLLMChatModel.return_value = mock_model
 
@@ -627,7 +621,9 @@ def test_evaluate_prompt_happyflow(fake_backend):
             url_helpers, "get_experiment_url", mock_get_experiment_url
         ):
             with mock.patch.object(
-                evaluation.models.litellm_chat_model, "LiteLLMChatModel", mock_LiteLLMChatModel
+                evaluation.models.litellm_chat_model,
+                "LiteLLMChatModel",
+                mock_LiteLLMChatModel,
             ):
                 evaluation.evaluate_prompt(
                     dataset=mock_dataset,
@@ -645,7 +641,10 @@ def test_evaluate_prompt_happyflow(fake_backend):
     mock_create_experiment.assert_called_once_with(
         dataset_name="the-dataset-name",
         name="the-experiment-name",
-        experiment_config={"prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}], "model": "gpt-3.5-turbo"},
+        experiment_config={
+            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
+            "model": "gpt-3.5-turbo",
+        },
         prompt=None,
     )
 
@@ -680,7 +679,12 @@ def test_evaluate_prompt_happyflow(fake_backend):
                             "reference": "Hello, world!",
                         }
                     },
-                    output={'input': [{'role': 'user', 'content': 'LLM response: {{input}}'}], 'output': 'Hello, world!'},
+                    output={
+                        "input": [
+                            {"role": "user", "content": "LLM response: {{input}}"}
+                        ],
+                        "output": "Hello, world!",
+                    },
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
@@ -728,7 +732,12 @@ def test_evaluate_prompt_happyflow(fake_backend):
                             "reference": "Paris",
                         }
                     },
-                    output={'input': [{'role': 'user', 'content': 'LLM response: {{input}}'}], 'output': 'Hello, world!'},
+                    output={
+                        "input": [
+                            {"role": "user", "content": "LLM response: {{input}}"}
+                        ],
+                        "output": "Hello, world!",
+                    },
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],

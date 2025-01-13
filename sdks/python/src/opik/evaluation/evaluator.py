@@ -11,7 +11,6 @@ from ..api_objects import opik_client
 from . import scorer, scores_logger, report, evaluation_result, utils
 
 
-
 def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
@@ -195,20 +194,19 @@ def evaluate_experiment(
 def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
-    
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         processed_messages = []
         for message in messages:
             processed_messages.append(
                 {
                     "role": message["role"],
-                    "content": prompt_template.PromptTemplate(message["content"], validate_placeholders=False).format(**prompt_variables),
+                    "content": prompt_template.PromptTemplate(
+                        message["content"], validate_placeholders=False
+                    ).format(**prompt_variables),
                 }
             )
 
-        llm_output = model.generate_provider_response(
-            messages=processed_messages
-        )
+        llm_output = model.generate_provider_response(messages=processed_messages)
 
         return {
             "input": processed_messages,
