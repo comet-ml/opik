@@ -9,7 +9,7 @@ import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { EvaluatorsRule } from "@/types/automations";
 import { CellContext } from "@tanstack/react-table";
-import AddEditRuleDialog from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog";
+import AddEditRuleDialog from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/AddEditRuleDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useRulesBatchDeleteMutation from "@/api/automations/useRulesBatchDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";

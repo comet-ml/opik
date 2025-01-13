@@ -15,12 +15,16 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
 } from "@/lib/playground";
-import { generateDefaultLLMPromptMessage, getModelProvider } from "@/lib/llm";
-import LLMPromptMessages from "@/components/pages/LLMShared/LLMPromptMessages/LLMPromptMessages";
-import PromptModelSelect from "@/components/pages/LLMShared/PromptModelSelect/PromptModelSelect";
+import {
+  generateDefaultLLMPromptMessage,
+  getModelProvider,
+  getNextMessageType,
+} from "@/lib/llm";
+import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
+import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import { getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import PromptModelConfigs from "@/components/pages/LLMShared/PromptModelSettings/PromptModelConfigs";
+import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import {
   useAddPrompt,
   useDeletePrompt,
@@ -30,14 +34,6 @@ import {
 } from "@/store/PlaygroundStore";
 import { getDefaultProviderKey } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
-
-const getNextMessageType = (previousMessage: LLMMessage): LLM_MESSAGE_ROLE => {
-  if (previousMessage.role === LLM_MESSAGE_ROLE.user) {
-    return LLM_MESSAGE_ROLE.assistant;
-  }
-
-  return LLM_MESSAGE_ROLE.user;
-};
 
 interface PlaygroundPromptProps {
   workspaceName: string;

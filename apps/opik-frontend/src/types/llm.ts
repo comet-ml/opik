@@ -29,8 +29,8 @@ export enum LLM_JUDGE {
   context_precision = "context_precision",
 }
 
-export type LLMPPromptTemplate = {
-  messages: ProviderMessageType[];
+export type LLMPromptTemplate = {
+  messages: LLMMessage[];
   variables: Record<string, string>;
   schema: LLMJudgeSchema[];
 } & DropdownOption<LLM_JUDGE>;

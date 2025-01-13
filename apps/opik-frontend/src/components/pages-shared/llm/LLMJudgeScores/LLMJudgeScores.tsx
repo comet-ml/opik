@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { LLMJudgeSchema } from "@/types/automations";
 import { LLM_SCHEMA_TYPE } from "@/types/llm";
 import { Button } from "@/components/ui/button";
-import LLMJudgeScore from "@/components/pages/LLMShared/LLMJudgeScores/LLMJudgeScore";
+import LLMJudgeScore from "@/components/pages-shared/llm/LLMJudgeScores/LLMJudgeScore";
 
 interface LLMJudgeScoresProps {
   scores: LLMJudgeSchema[];

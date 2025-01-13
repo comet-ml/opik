@@ -105,7 +105,7 @@ const DialogAutoScrollBody: React.FC<DialogBodyProps> = ({
       style={style}
       className={cn(
         "overflow-y-auto",
-        hasScroll && "border-b border-t",
+        hasScroll && "border-b border-t py-4",
         className,
       )}
     >

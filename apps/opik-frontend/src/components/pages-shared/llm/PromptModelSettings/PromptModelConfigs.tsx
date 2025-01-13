@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-import OpenAIModelConfigs from "@/components/pages/LLMShared/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
+import OpenAIModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";

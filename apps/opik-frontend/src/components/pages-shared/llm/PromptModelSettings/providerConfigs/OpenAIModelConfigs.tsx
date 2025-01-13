@@ -1,7 +1,7 @@
 import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import PromptModelSettingsTooltipContent from "@/components/pages/LLMShared/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { LLMOpenAIConfigsType } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 

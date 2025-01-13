@@ -13,7 +13,7 @@ import {
 import { SortableContext } from "@dnd-kit/sortable";
 
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
-import LLMPromptMessage from "@/components/pages/LLMShared/LLMPromptMessages/LLMPromptMessage";
+import LLMPromptMessage from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessage";
 import { Button } from "@/components/ui/button";
 import { LLMMessage } from "@/types/llm";
 

@@ -27,7 +27,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import { formatDate } from "@/lib/date";
 import useRulesList from "@/api/automations/useRulesList";
-import AddEditRuleDialog from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog";
+import AddEditRuleDialog from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/AddEditRuleDialog";
 import RulesActionsPanel from "@/components/pages/TracesPage/RulesTab/RulesActionsPanel";
 import { RuleRowActionsCell } from "@/components/pages/TracesPage/RulesTab/RuleRowActionsCell";
 
