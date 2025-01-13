@@ -1,7 +1,10 @@
 package com.comet.opik.domain.llmproviders;
 
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 
@@ -23,4 +26,7 @@ public interface LlmProviderService {
     void validateRequest(@NonNull ChatCompletionRequest request);
 
     @NonNull Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException);
+
+    ChatResponse structuredResponseChat(@NonNull ChatRequest chatRequest,
+            @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters);
 }
