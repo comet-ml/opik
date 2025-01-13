@@ -1,5 +1,5 @@
 ---
-sidebar_label: CreAI
+sidebar_label: CrewAI
 description: Describes how to track CrewAI calls using Opik
 ---
 
