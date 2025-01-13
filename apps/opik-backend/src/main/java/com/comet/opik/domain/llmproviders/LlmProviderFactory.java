@@ -3,7 +3,6 @@ package com.comet.opik.domain.llmproviders;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.EncryptionUtils;
-import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import dev.ai4j.openai4j.chat.ChatCompletionModel;
 import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import jakarta.inject.Inject;
@@ -12,7 +11,6 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.EnumUtils;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.function.Function;
 
@@ -21,16 +19,18 @@ import java.util.function.Function;
 public class LlmProviderFactory {
     public static final String ERROR_MODEL_NOT_SUPPORTED = "model not supported %s";
 
-    private final @NonNull @Config LlmProviderClientConfig llmProviderClientConfig;
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
+    private final @NonNull LlmProviderClientGenerator llmProviderClientGenerator;
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
         var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
 
         return switch (llmProvider) {
-            case LlmProvider.OPEN_AI -> new LlmProviderOpenAi(llmProviderClientConfig, apiKey);
-            case LlmProvider.ANTHROPIC -> new LlmProviderAnthropic(llmProviderClientConfig, apiKey);
+            case LlmProvider.OPEN_AI -> new LlmProviderOpenAi(llmProviderClientGenerator.newOpenAiClient(apiKey));
+            case LlmProvider.ANTHROPIC ->
+                new LlmProviderAnthropic(llmProviderClientGenerator.newAnthropicClient(apiKey));
+            case LlmProvider.GEMINI -> new LlmProviderGemini(llmProviderClientGenerator, apiKey);
         };
     }
 
@@ -43,6 +43,9 @@ public class LlmProviderFactory {
         }
         if (isModelBelongToProvider(model, AnthropicChatModelName.class, AnthropicChatModelName::toString)) {
             return LlmProvider.ANTHROPIC;
+        }
+        if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
+            return LlmProvider.GEMINI;
         }
 
         throw new BadRequestException(ERROR_MODEL_NOT_SUPPORTED.formatted(model));

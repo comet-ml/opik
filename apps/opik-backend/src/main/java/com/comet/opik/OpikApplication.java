@@ -1,6 +1,7 @@
 package com.comet.opik;
 
 import com.comet.opik.api.error.JsonInvalidFormatExceptionMapper;
+import com.comet.opik.domain.llmproviders.LlmProviderClientModule;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -72,7 +73,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
-                        new ConfigurationModule(), new BiModule())
+                        new ConfigurationModule(), new BiModule(), new LlmProviderClientModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()

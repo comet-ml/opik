@@ -11,7 +11,9 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public enum LlmProvider {
     OPEN_AI("openai"),
-    ANTHROPIC("anthropic");
+    ANTHROPIC("anthropic"),
+    GEMINI("gemini"),
+    ;
 
     @JsonValue
     private final String value;

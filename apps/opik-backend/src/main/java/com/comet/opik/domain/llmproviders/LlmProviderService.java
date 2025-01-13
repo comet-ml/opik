@@ -22,5 +22,5 @@ public interface LlmProviderService {
 
     void validateRequest(@NonNull ChatCompletionRequest request);
 
-    @NonNull Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException);
+    Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable runtimeException);
 }
