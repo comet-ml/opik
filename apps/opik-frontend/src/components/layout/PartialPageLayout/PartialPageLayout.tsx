@@ -32,7 +32,7 @@ export const PartialPageLayout = ({
           {UserMenu ? <UserMenu /> : null}
         </nav>
 
-        <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-[#FCFCFD] px-6">
+        <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-white px-6">
           {children}
         </section>
       </main>

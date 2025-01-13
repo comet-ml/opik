@@ -28,6 +28,7 @@ import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
+import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -85,17 +86,11 @@ const quickstartRoute = createRoute({
   component: QuickstartPage,
 });
 
-// TODO @deprecated, should be deleted after changes in EM app
 // ----------- get started
 const getStartedRoute = createRoute({
   path: "/$workspaceName/get-started",
   getParentRoute: () => workspaceGuardPartialLayoutRoute,
-  component: () => (
-    <Navigate
-      to="/$workspaceName/home"
-      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
-    />
-  ),
+  component: GetStartedPage,
 });
 
 // ----------- home
