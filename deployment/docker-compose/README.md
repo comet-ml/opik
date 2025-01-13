@@ -73,9 +73,6 @@ docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
 Stop backend container, cause you don't need it..
 
 
-3. Update your Opik Backend configuration to connect to all databases on the localhost, and run it
-
-
 ## Stop opik
 
 ```bash
