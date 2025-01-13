@@ -22,10 +22,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GPT_4O_MINI_2024_07_18,
       label: "GPT 4o Mini 2024-07-18",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.GPT_4O_2024_11_20,
-      label: "GPT 4o 2024-11-20",
-    },
+    // {
+    //   value: PROVIDER_MODEL_TYPE.GPT_4O_2024_11_20,
+    //   label: "GPT 4o 2024-11-20",
+    // },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_2024_08_06,
       label: "GPT 4o 2024-08-06",
@@ -70,10 +70,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO,
       label: "GPT 3.5 Turbo",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO_16K,
-      label: "GPT 3.5 Turbo 16k",
-    },
+    // {
+    //   value: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO_16K,
+    //   label: "GPT 3.5 Turbo 16k",
+    // },
     {
       value: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO_1106,
       label: "GPT 3.5 Turbo 1106",
@@ -84,28 +84,28 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
 
     // Reasoning Models
-    {
-      value: PROVIDER_MODEL_TYPE.O1_PREVIEW,
-      label: "O1 Preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.O1_MINI,
-      label: "O1 Mini",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.O1_MINI_2024_09_12,
-      label: "O1 Mini 2024-09-12",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.O1_PREVIEW_2024_09_12,
-      label: "O1 Preview 2024-09-12",
-    },
+    // {
+    //   value: PROVIDER_MODEL_TYPE.O1_PREVIEW,
+    //   label: "O1 Preview",
+    // },
+    // {
+    //   value: PROVIDER_MODEL_TYPE.O1_MINI,
+    //   label: "O1 Mini",
+    // },
+    // {
+    //   value: PROVIDER_MODEL_TYPE.O1_MINI_2024_09_12,
+    //   label: "O1 Mini 2024-09-12",
+    // },
+    // {
+    //   value: PROVIDER_MODEL_TYPE.O1_PREVIEW_2024_09_12,
+    //   label: "O1 Preview 2024-09-12",
+    // },
 
     // Other Models
-    {
-      value: PROVIDER_MODEL_TYPE.CHATGPT_4O_LATEST,
-      label: "ChatGPT 4o Latest",
-    },
+    // {
+    //   value: PROVIDER_MODEL_TYPE.CHATGPT_4O_LATEST,
+    //   label: "ChatGPT 4o Latest",
+    // },
   ],
 };
 
