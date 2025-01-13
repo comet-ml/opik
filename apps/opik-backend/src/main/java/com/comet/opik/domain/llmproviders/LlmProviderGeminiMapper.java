@@ -11,6 +11,8 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
+import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import dev.langchain4j.model.output.Response;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -19,6 +21,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
 
+import java.time.Duration;
 import java.util.List;
 
 @Mapper
@@ -76,4 +79,20 @@ public interface LlmProviderGeminiMapper {
                 .totalTokens(response.tokenUsage().totalTokenCount())
                 .build();
     }
+
+    @Mapping(expression = "java(request.model())", target = "modelName")
+    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
+    @Mapping(expression = "java(request.stop())", target = "stopSequences")
+    @Mapping(expression = "java(request.temperature())", target = "temperature")
+    @Mapping(expression = "java(request.topP())", target = "topP")
+    GoogleAiGeminiChatModel toGeminiChatModel(
+            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries);
+
+    @Mapping(expression = "java(request.model())", target = "modelName")
+    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
+    @Mapping(expression = "java(request.stop())", target = "stopSequences")
+    @Mapping(expression = "java(request.temperature())", target = "temperature")
+    @Mapping(expression = "java(request.topP())", target = "topP")
+    GoogleAiGeminiStreamingChatModel toGeminiStreamingChatModel(
+            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries);
 }

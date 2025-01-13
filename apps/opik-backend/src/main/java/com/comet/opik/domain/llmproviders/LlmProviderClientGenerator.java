@@ -14,6 +14,8 @@ import java.util.Optional;
 
 @RequiredArgsConstructor
 public class LlmProviderClientGenerator {
+    private static final int MAX_RETRIES = 1;
+
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
     public AnthropicClient newAnthropicClient(@NonNull String apiKey) {
@@ -57,32 +59,14 @@ public class LlmProviderClientGenerator {
                 .build();
     }
 
-    // TODO: mapper
     public GoogleAiGeminiChatModel newGeminiClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
-        return GoogleAiGeminiChatModel.builder()
-                .apiKey(apiKey)
-                .modelName(request.model())
-                .maxOutputTokens(request.maxCompletionTokens())
-                .maxRetries(1)
-                .stopSequences(request.stop())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
-                .build();
+        return LlmProviderGeminiMapper.INSTANCE.toGeminiChatModel(apiKey, request,
+                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
     }
 
-    // TODO: mapper
     public GoogleAiGeminiStreamingChatModel newGeminiStreamingClient(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request) {
-        return GoogleAiGeminiStreamingChatModel.builder()
-                .apiKey(apiKey)
-                .modelName(request.model())
-                .maxOutputTokens(request.maxCompletionTokens())
-                .maxRetries(1)
-                .stopSequences(request.stop())
-                .temperature(request.temperature())
-                .topP(request.topP())
-                .timeout(llmProviderClientConfig.getCallTimeout().toJavaDuration())
-                .build();
+        return LlmProviderGeminiMapper.INSTANCE.toGeminiStreamingChatModel(apiKey, request,
+                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
     }
 }
