@@ -22,6 +22,7 @@ export const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, O
         provider: core.serialization.string().optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+        totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
     });
 
@@ -39,6 +40,7 @@ export declare namespace SpanUpdate {
         provider?: string | null;
         tags?: string[] | null;
         usage?: Record<string, number> | null;
+        total_estimated_cost?: number | null;
         error_info?: ErrorInfo.Raw | null;
     }
 }

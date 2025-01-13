@@ -6,4 +6,6 @@ export interface ExperimentItemStreamRequest {
     experimentName: string;
     limit?: number;
     lastRetrievedId?: string;
+    /** Truncate image included in either input, output or metadata */
+    truncate?: boolean;
 }

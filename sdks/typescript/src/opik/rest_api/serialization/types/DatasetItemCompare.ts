@@ -5,7 +5,6 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNodeCompare } from "./JsonNodeCompare";
 import { DatasetItemCompareSource } from "./DatasetItemCompareSource";
 import { JsonNode } from "./JsonNode";
 import { ExperimentItemCompare } from "./ExperimentItemCompare";
@@ -15,13 +14,10 @@ export const DatasetItemCompare: core.serialization.ObjectSchema<
     OpikApi.DatasetItemCompare
 > = core.serialization.object({
     id: core.serialization.string().optional(),
-    input: JsonNodeCompare.optional(),
-    expectedOutput: core.serialization.property("expected_output", JsonNodeCompare.optional()),
-    metadata: JsonNodeCompare.optional(),
     traceId: core.serialization.property("trace_id", core.serialization.string().optional()),
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemCompareSource,
-    data: JsonNode.optional(),
+    data: JsonNode,
     experimentItems: core.serialization.property(
         "experiment_items",
         core.serialization.list(ExperimentItemCompare).optional()
@@ -35,13 +31,10 @@ export const DatasetItemCompare: core.serialization.ObjectSchema<
 export declare namespace DatasetItemCompare {
     interface Raw {
         id?: string | null;
-        input?: JsonNodeCompare.Raw | null;
-        expected_output?: JsonNodeCompare.Raw | null;
-        metadata?: JsonNodeCompare.Raw | null;
         trace_id?: string | null;
         span_id?: string | null;
         source: DatasetItemCompareSource.Raw;
-        data?: JsonNode.Raw | null;
+        data: JsonNode.Raw;
         experiment_items?: ExperimentItemCompare.Raw[] | null;
         created_at?: string | null;
         last_updated_at?: string | null;

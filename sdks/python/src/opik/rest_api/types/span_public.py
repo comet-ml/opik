@@ -34,6 +34,7 @@ class SpanPublic(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScorePublic]] = None
     total_estimated_cost: typing.Optional[float] = None
+    total_estimated_cost_version: typing.Optional[str] = None
     duration: typing.Optional[float] = pydantic.Field(default=None)
     """
     Duration in milliseconds as a decimal number to support sub-millisecond precision

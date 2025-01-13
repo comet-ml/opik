@@ -6,11 +6,8 @@ import * as OpikApi from "../index";
 
 export interface DatasetItemWrite {
     id?: string;
-    input?: OpikApi.JsonNodeWrite;
-    expectedOutput?: OpikApi.JsonNodeWrite;
-    metadata?: OpikApi.JsonNodeWrite;
     traceId?: string;
     spanId?: string;
     source: OpikApi.DatasetItemWriteSource;
-    data?: OpikApi.JsonNode;
+    data: OpikApi.JsonNode;
 }

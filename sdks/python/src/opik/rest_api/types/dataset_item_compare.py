@@ -2,7 +2,6 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
-from .json_node_compare import JsonNodeCompare
 from .dataset_item_compare_source import DatasetItemCompareSource
 from .json_node import JsonNode
 from .experiment_item_compare import ExperimentItemCompare
@@ -13,13 +12,10 @@ import pydantic
 
 class DatasetItemCompare(UniversalBaseModel):
     id: typing.Optional[str] = None
-    input: typing.Optional[JsonNodeCompare] = None
-    expected_output: typing.Optional[JsonNodeCompare] = None
-    metadata: typing.Optional[JsonNodeCompare] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemCompareSource
-    data: typing.Optional[JsonNode] = None
+    data: JsonNode
     experiment_items: typing.Optional[typing.List[ExperimentItemCompare]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

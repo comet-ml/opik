@@ -201,6 +201,7 @@ export class LlmProviderKey {
      *
      * @example
      *     await client.llmProviderKey.storeLlmProviderApiKey({
+     *         provider: "openai",
      *         apiKey: "api_key"
      *     })
      */
@@ -229,10 +230,7 @@ export class LlmProviderKey {
                     },
                     contentType: "application/json",
                     requestType: "json",
-                    body: {
-                        ...serializers.ProviderApiKeyWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                        provider: "openai",
-                    },
+                    body: serializers.ProviderApiKeyWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
                     timeoutMs:
                         requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
                     maxRetries: requestOptions?.maxRetries,

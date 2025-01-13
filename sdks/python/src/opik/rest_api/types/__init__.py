@@ -3,6 +3,30 @@
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
 from .auth_details_holder import AuthDetailsHolder
+from .automation_rule_evaluator import (
+    AutomationRuleEvaluator,
+    AutomationRuleEvaluator_LlmAsJudge,
+)
+from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
+from .automation_rule_evaluator_llm_as_judge_public import (
+    AutomationRuleEvaluatorLlmAsJudgePublic,
+)
+from .automation_rule_evaluator_llm_as_judge_write import (
+    AutomationRuleEvaluatorLlmAsJudgeWrite,
+)
+from .automation_rule_evaluator_object_public import (
+    AutomationRuleEvaluatorObjectPublic,
+    AutomationRuleEvaluatorObjectPublic_LlmAsJudge,
+)
+from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
+from .automation_rule_evaluator_public import (
+    AutomationRuleEvaluatorPublic,
+    AutomationRuleEvaluatorPublic_LlmAsJudge,
+)
+from .automation_rule_evaluator_write import (
+    AutomationRuleEvaluatorWrite,
+    AutomationRuleEvaluatorWrite_LlmAsJudge,
+)
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
 from .bi_information import BiInformation
@@ -82,6 +106,7 @@ from .feedback_score_batch_item import FeedbackScoreBatchItem
 from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
 from .feedback_score_compare import FeedbackScoreCompare
 from .feedback_score_compare_source import FeedbackScoreCompareSource
+from .feedback_score_names import FeedbackScoreNames
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
@@ -100,6 +125,24 @@ from .json_node_write import JsonNodeWrite
 from .json_object_schema import JsonObjectSchema
 from .json_schema import JsonSchema
 from .json_schema_element import JsonSchemaElement
+from .llm_as_judge_code import LlmAsJudgeCode
+from .llm_as_judge_code_public import LlmAsJudgeCodePublic
+from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
+from .llm_as_judge_message import LlmAsJudgeMessage
+from .llm_as_judge_message_public import LlmAsJudgeMessagePublic
+from .llm_as_judge_message_public_role import LlmAsJudgeMessagePublicRole
+from .llm_as_judge_message_role import LlmAsJudgeMessageRole
+from .llm_as_judge_message_write import LlmAsJudgeMessageWrite
+from .llm_as_judge_message_write_role import LlmAsJudgeMessageWriteRole
+from .llm_as_judge_model_parameters import LlmAsJudgeModelParameters
+from .llm_as_judge_model_parameters_public import LlmAsJudgeModelParametersPublic
+from .llm_as_judge_model_parameters_write import LlmAsJudgeModelParametersWrite
+from .llm_as_judge_output_schema import LlmAsJudgeOutputSchema
+from .llm_as_judge_output_schema_public import LlmAsJudgeOutputSchemaPublic
+from .llm_as_judge_output_schema_public_type import LlmAsJudgeOutputSchemaPublicType
+from .llm_as_judge_output_schema_type import LlmAsJudgeOutputSchemaType
+from .llm_as_judge_output_schema_write import LlmAsJudgeOutputSchemaWrite
+from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteType
 from .message import Message
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
@@ -111,6 +154,7 @@ from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
 from .page_columns import PageColumns
 from .percentage_value_stat_public import PercentageValueStatPublic
+from .percentage_values import PercentageValues
 from .percentage_values_public import PercentageValuesPublic
 from .project import Project
 from .project_metric_response_public import ProjectMetricResponsePublic
@@ -139,10 +183,13 @@ from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
 from .provider_api_key import ProviderApiKey
+from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
+from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .results_number_public import ResultsNumberPublic
+from .score_name import ScoreName
 from .span import Span
 from .span_batch import SpanBatch
 from .span_page_public import SpanPagePublic
@@ -167,6 +214,18 @@ __all__ = [
     "AssistantMessage",
     "AssistantMessageRole",
     "AuthDetailsHolder",
+    "AutomationRuleEvaluator",
+    "AutomationRuleEvaluatorLlmAsJudge",
+    "AutomationRuleEvaluatorLlmAsJudgePublic",
+    "AutomationRuleEvaluatorLlmAsJudgeWrite",
+    "AutomationRuleEvaluatorObjectPublic",
+    "AutomationRuleEvaluatorObjectPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorPagePublic",
+    "AutomationRuleEvaluatorPublic",
+    "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorWrite",
+    "AutomationRuleEvaluatorWrite_LlmAsJudge",
+    "AutomationRuleEvaluator_LlmAsJudge",
     "AvgValueStatPublic",
     "BatchDelete",
     "BiInformation",
@@ -240,6 +299,7 @@ __all__ = [
     "FeedbackScoreBatchItemSource",
     "FeedbackScoreCompare",
     "FeedbackScoreCompareSource",
+    "FeedbackScoreNames",
     "FeedbackScorePublic",
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
@@ -258,6 +318,24 @@ __all__ = [
     "JsonObjectSchema",
     "JsonSchema",
     "JsonSchemaElement",
+    "LlmAsJudgeCode",
+    "LlmAsJudgeCodePublic",
+    "LlmAsJudgeCodeWrite",
+    "LlmAsJudgeMessage",
+    "LlmAsJudgeMessagePublic",
+    "LlmAsJudgeMessagePublicRole",
+    "LlmAsJudgeMessageRole",
+    "LlmAsJudgeMessageWrite",
+    "LlmAsJudgeMessageWriteRole",
+    "LlmAsJudgeModelParameters",
+    "LlmAsJudgeModelParametersPublic",
+    "LlmAsJudgeModelParametersWrite",
+    "LlmAsJudgeOutputSchema",
+    "LlmAsJudgeOutputSchemaPublic",
+    "LlmAsJudgeOutputSchemaPublicType",
+    "LlmAsJudgeOutputSchemaType",
+    "LlmAsJudgeOutputSchemaWrite",
+    "LlmAsJudgeOutputSchemaWriteType",
     "Message",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
@@ -269,6 +347,7 @@ __all__ = [
     "NumericalFeedbackDetailUpdate",
     "PageColumns",
     "PercentageValueStatPublic",
+    "PercentageValues",
     "PercentageValuesPublic",
     "Project",
     "ProjectMetricResponsePublic",
@@ -293,10 +372,13 @@ __all__ = [
     "PromptVersionPagePublic",
     "PromptVersionPublic",
     "ProviderApiKey",
+    "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
+    "ProviderApiKeyPublicProvider",
     "ResponseFormat",
     "ResponseFormatType",
     "ResultsNumberPublic",
+    "ScoreName",
     "Span",
     "SpanBatch",
     "SpanPagePublic",

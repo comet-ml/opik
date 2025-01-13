@@ -39,6 +39,8 @@ tags:
   description: System usage related resource
 - name: Check
   description: Access check resources
+- name: Automation rule evaluators
+  description: Automation rule evaluators resource
 - name: Chat Completions
   description: Chat Completions related resources
 - name: Datasets
@@ -141,6 +143,149 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
+  /v1/private/automations/projects/{projectId}/evaluators:
+    get:
+      tags:
+      - Automation rule evaluators
+      summary: Find project Evaluators
+      description: Find project Evaluators
+      operationId: findEvaluators
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Evaluators resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRuleEvaluatorPage_Public'
+    post:
+      tags:
+      - Automation rule evaluators
+      summary: Create automation rule evaluator
+      description: Create automation rule evaluator
+      operationId: createAutomationRuleEvaluator
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationRuleEvaluator_Write'
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}"
+  /v1/private/automations/projects/{projectId}/evaluators/delete:
+    post:
+      tags:
+      - Automation rule evaluators
+      summary: Delete automation rule evaluators
+      description: Delete automation rule evaluators batch
+      operationId: deleteAutomationRuleEvaluatorBatch
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
+  /v1/private/automations/projects/{projectId}/evaluators/{id}:
+    get:
+      tags:
+      - Automation rule evaluators
+      summary: Get automation rule evaluator by id
+      description: Get automation rule by id
+      operationId: getEvaluatorById
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Automation Rule resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRuleEvaluator_Public'
+    patch:
+      tags:
+      - Automation rule evaluators
+      summary: update Automation Rule Evaluator by id
+      description: update Automation Rule Evaluator by id
+      operationId: updateAutomationRuleEvaluator
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationRuleEvaluatorUpdate'
+      responses:
+        "204":
+          description: No content
   /v1/private/chat/completions:
     post:
       tags:
@@ -394,6 +539,7 @@ paths:
         in: query
         schema:
           type: boolean
+          description: "Truncate image included in either input, output or metadata"
       responses:
         "200":
           description: Dataset item resource
@@ -473,6 +619,7 @@ paths:
         in: query
         schema:
           type: boolean
+          description: "Truncate image included in either input, output or metadata"
       responses:
         "200":
           description: Dataset items resource
@@ -1191,6 +1338,25 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/projects/feedback-scores/names:
+    get:
+      tags:
+      - Projects
+      summary: Find Feedback Score names By Project Ids
+      description: Find Feedback Score names By Project Ids
+      operationId: findFeedbackScoreNamesByProjectIds
+      parameters:
+      - name: project_ids
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackScoreNames'
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -1653,6 +1819,7 @@ paths:
         in: query
         schema:
           type: boolean
+          description: "Truncate image included in either input, output or metadata"
       responses:
         "200":
           description: Spans resource
@@ -1932,6 +2099,7 @@ paths:
         in: query
         schema:
           type: boolean
+          description: "Truncate image included in either input, output or metadata"
       responses:
         "200":
           description: Trace resource
@@ -2197,6 +2365,438 @@ components:
           type: string
     AuthDetailsHolder:
       type: object
+    AutomationRuleEvaluator:
+      required:
+      - name
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        projectId:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        samplingRate:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        createdBy:
+          type: string
+          readOnly: true
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        lastUpdatedBy:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+          - llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
+      discriminator:
+        propertyName: type
+        mapping:
+          llm_as_judge: '#/components/schemas/AutomationRuleEvaluatorLlmAsJudge'
+    AutomationRuleEvaluatorLlmAsJudge:
+      required:
+      - code
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/AutomationRuleEvaluator'
+      - type: object
+        properties:
+          code:
+            $ref: '#/components/schemas/LlmAsJudgeCode'
+    LlmAsJudgeCode:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: '#/components/schemas/LlmAsJudgeModelParameters'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmAsJudgeMessage'
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmAsJudgeOutputSchema'
+    LlmAsJudgeMessage:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+          - SYSTEM
+          - USER
+          - AI
+          - TOOL_EXECUTION_RESULT
+        content:
+          type: string
+    LlmAsJudgeModelParameters:
+      required:
+      - name
+      - temperature
+      type: object
+      properties:
+        name:
+          type: string
+        temperature:
+          type: number
+          format: double
+    LlmAsJudgeOutputSchema:
+      required:
+      - description
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - BOOLEAN
+          - INTEGER
+          - DOUBLE
+        description:
+          type: string
+    AutomationRuleEvaluatorLlmAsJudge_Write:
+      required:
+      - code
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/AutomationRuleEvaluator_Write'
+      - type: object
+        properties:
+          code:
+            $ref: '#/components/schemas/LlmAsJudgeCode_Write'
+    AutomationRuleEvaluator_Write:
+      required:
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          type: string
+        samplingRate:
+          type: number
+          format: float
+        type:
+          type: string
+          enum:
+          - llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
+      discriminator:
+        propertyName: type
+        mapping:
+          llm_as_judge: '#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Write'
+    LlmAsJudgeCode_Write:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: '#/components/schemas/LlmAsJudgeModelParameters_Write'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmAsJudgeMessage_Write'
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmAsJudgeOutputSchema_Write'
+    LlmAsJudgeMessage_Write:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+          - SYSTEM
+          - USER
+          - AI
+          - TOOL_EXECUTION_RESULT
+        content:
+          type: string
+    LlmAsJudgeModelParameters_Write:
+      required:
+      - name
+      - temperature
+      type: object
+      properties:
+        name:
+          type: string
+        temperature:
+          type: number
+          format: double
+    LlmAsJudgeOutputSchema_Write:
+      required:
+      - description
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - BOOLEAN
+          - INTEGER
+          - DOUBLE
+        description:
+          type: string
+    BatchDelete:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+    AutomationRuleEvaluatorLlmAsJudge_Public:
+      required:
+      - code
+      - name
+      - type
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/AutomationRuleEvaluator_Public'
+      - type: object
+        properties:
+          code:
+            $ref: '#/components/schemas/LlmAsJudgeCode_Public'
+    AutomationRuleEvaluatorObject_Public:
+      required:
+      - name
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        projectId:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        samplingRate:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        createdBy:
+          type: string
+          readOnly: true
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        lastUpdatedBy:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+          - llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
+      discriminator:
+        propertyName: type
+        mapping:
+          llm_as_judge: '#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public'
+    AutomationRuleEvaluatorPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationRuleEvaluatorObject_Public'
+    LlmAsJudgeCode_Public:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: '#/components/schemas/LlmAsJudgeModelParameters_Public'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmAsJudgeMessage_Public'
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmAsJudgeOutputSchema_Public'
+    LlmAsJudgeMessage_Public:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+          - SYSTEM
+          - USER
+          - AI
+          - TOOL_EXECUTION_RESULT
+        content:
+          type: string
+    LlmAsJudgeModelParameters_Public:
+      required:
+      - name
+      - temperature
+      type: object
+      properties:
+        name:
+          type: string
+        temperature:
+          type: number
+          format: double
+    LlmAsJudgeOutputSchema_Public:
+      required:
+      - description
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - BOOLEAN
+          - INTEGER
+          - DOUBLE
+        description:
+          type: string
+    AutomationRuleEvaluator_Public:
+      required:
+      - name
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        projectId:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        samplingRate:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        createdBy:
+          type: string
+          readOnly: true
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        lastUpdatedBy:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+          - llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
+      discriminator:
+        propertyName: type
+        mapping:
+          llm_as_judge: '#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public'
+    AutomationRuleEvaluatorUpdate:
+      required:
+      - code
+      - name
+      - sampling_rate
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          $ref: '#/components/schemas/LlmAsJudgeCode'
+        sampling_rate:
+          type: number
+          format: float
     AssistantMessage:
       type: object
       properties:
@@ -2505,18 +3105,13 @@ components:
           type: string
     DatasetItem:
       required:
+      - data
       - source
       type: object
       properties:
         id:
           type: string
           format: uuid
-        input:
-          $ref: '#/components/schemas/JsonNode'
-        expected_output:
-          $ref: '#/components/schemas/JsonNode'
-        metadata:
-          $ref: '#/components/schemas/JsonNode'
         trace_id:
           type: string
           format: uuid
@@ -2674,18 +3269,13 @@ components:
             $ref: '#/components/schemas/DatasetItem_Write'
     DatasetItem_Write:
       required:
+      - data
       - source
       type: object
       properties:
         id:
           type: string
           format: uuid
-        input:
-          $ref: '#/components/schemas/JsonNode_Write'
-        expected_output:
-          $ref: '#/components/schemas/JsonNode_Write'
-        metadata:
-          $ref: '#/components/schemas/JsonNode_Write'
         trace_id:
           type: string
           format: uuid
@@ -2701,8 +3291,6 @@ components:
           - sdk
         data:
           $ref: '#/components/schemas/JsonNode'
-    JsonNode_Write:
-      type: object
     DatasetIdentifier:
       required:
       - dataset_name
@@ -2718,19 +3306,6 @@ components:
         item_ids:
           maxItems: 1000
           minItems: 1
-          type: array
-          items:
-            type: string
-            format: uuid
-    BatchDelete:
-      required:
-      - ids
-      type: object
-      properties:
-        ids:
-          maxItems: 1000
-          minItems: 1
-          uniqueItems: true
           type: array
           items:
             type: string
@@ -2781,18 +3356,13 @@ components:
             $ref: '#/components/schemas/Column_Compare'
     DatasetItem_Compare:
       required:
+      - data
       - source
       type: object
       properties:
         id:
           type: string
           format: uuid
-        input:
-          $ref: '#/components/schemas/JsonNode_Compare'
-        expected_output:
-          $ref: '#/components/schemas/JsonNode_Compare'
-        metadata:
-          $ref: '#/components/schemas/JsonNode_Compare'
         trace_id:
           type: string
           format: uuid
@@ -2980,18 +3550,13 @@ components:
           type: string
     DatasetItem_Public:
       required:
+      - data
       - source
       type: object
       properties:
         id:
           type: string
           format: uuid
-        input:
-          $ref: '#/components/schemas/JsonNode_Public'
-        expected_output:
-          $ref: '#/components/schemas/JsonNode_Public'
-        metadata:
-          $ref: '#/components/schemas/JsonNode_Public'
         trace_id:
           type: string
           format: uuid
@@ -3059,8 +3624,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-    JsonNode_Public:
-      type: object
     Column_Public:
       type: object
       properties:
@@ -3253,6 +3816,8 @@ components:
           $ref: '#/components/schemas/JsonNode_Write'
         prompt_version:
           $ref: '#/components/schemas/PromptVersionLink_Write'
+    JsonNode_Write:
+      type: object
     PromptVersionLink_Write:
       required:
       - id
@@ -3369,6 +3934,8 @@ components:
         value:
           type: number
       readOnly: true
+    JsonNode_Public:
+      type: object
     PromptVersionLink_Public:
       required:
       - id
@@ -3411,6 +3978,10 @@ components:
         last_retrieved_id:
           type: string
           format: uuid
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
     CategoricalFeedbackDefinition:
       required:
       - details
@@ -3833,6 +4404,7 @@ components:
             type: string
     ProviderApiKey_Public:
       required:
+      - api_key
       - provider
       type: object
       properties:
@@ -3844,6 +4416,13 @@ components:
           type: string
           enum:
           - openai
+          - anthropic
+        api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
         created_at:
           type: string
           format: date-time
@@ -3872,7 +4451,12 @@ components:
           type: string
           enum:
           - openai
+          - anthropic
         api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
           type: string
         created_at:
           type: string
@@ -3898,7 +4482,12 @@ components:
           type: string
           enum:
           - openai
+          - anthropic
         api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
           type: string
     ProviderApiKeyUpdate:
       required:
@@ -3907,6 +4496,20 @@ components:
       properties:
         api_key:
           type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+    PercentageValues:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+      readOnly: true
     Project:
       required:
       - name
@@ -3938,6 +4541,24 @@ components:
           type: string
           format: date-time
           readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/FeedbackScoreAverage'
+        duration:
+          $ref: '#/components/schemas/PercentageValues'
+        total_estimated_cost:
+          type: number
+          format: double
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            readOnly: true
+          readOnly: true
     Project_Write:
       required:
       - name
@@ -3947,6 +4568,15 @@ components:
           type: string
         description:
           type: string
+    PercentageValues_Public:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
     Project_Public:
       required:
       - name
@@ -3978,6 +4608,36 @@ components:
           type: string
           format: date-time
           readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/FeedbackScoreAverage_Public'
+        duration:
+          $ref: '#/components/schemas/PercentageValues_Public'
+        total_estimated_cost:
+          type: number
+          format: double
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            readOnly: true
+          readOnly: true
+    FeedbackScoreNames:
+      type: object
+      properties:
+        scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreName'
+    ScoreName:
+      type: object
+      properties:
+        name:
+          type: string
     DataPointNumber_Public:
       required:
       - time
@@ -4457,8 +5117,11 @@ components:
           items:
             $ref: '#/components/schemas/FeedbackScore'
         total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
           type: number
-          readOnly: true
+        total_estimated_cost_version:
+          type: string
         duration:
           type: number
           description: Duration in milliseconds as a decimal number to support sub-millisecond
@@ -4534,6 +5197,12 @@ components:
             format: int32
         error_info:
           $ref: '#/components/schemas/ErrorInfo_Write'
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        total_estimated_cost_version:
+          type: string
     SpanBatch:
       required:
       - spans
@@ -4691,8 +5360,11 @@ components:
           items:
             $ref: '#/components/schemas/FeedbackScore_Public'
         total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
           type: number
-          readOnly: true
+        total_estimated_cost_version:
+          type: string
         duration:
           type: number
           description: Duration in milliseconds as a decimal number to support sub-millisecond
@@ -4741,15 +5413,6 @@ components:
         properties:
           value:
             $ref: '#/components/schemas/PercentageValues_Public'
-    PercentageValues_Public:
-      type: object
-      properties:
-        p50:
-          type: number
-        p90:
-          type: number
-        p99:
-          type: number
     ProjectStatItemObject_Public:
       type: object
       properties:
@@ -4860,6 +5523,10 @@ components:
           additionalProperties:
             type: integer
             format: int32
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
         error_info:
           $ref: '#/components/schemas/ErrorInfo'
     Trace:

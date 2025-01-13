@@ -6,13 +6,10 @@ import * as OpikApi from "../index";
 
 export interface DatasetItemPublic {
     id?: string;
-    input?: OpikApi.JsonNodePublic;
-    expectedOutput?: OpikApi.JsonNodePublic;
-    metadata?: OpikApi.JsonNodePublic;
     traceId?: string;
     spanId?: string;
     source: OpikApi.DatasetItemPublicSource;
-    data?: OpikApi.JsonNode;
+    data: OpikApi.JsonNode;
     experimentItems?: OpikApi.ExperimentItemPublic[];
     createdAt?: Date;
     lastUpdatedAt?: Date;

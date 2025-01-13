@@ -7,6 +7,7 @@ from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from ..types.project_page_public import ProjectPagePublic
 from ..core.pydantic_utilities import parse_obj_as
+from .types.provider_api_key_write_provider import ProviderApiKeyWriteProvider
 from ..errors.unauthorized_error import UnauthorizedError
 from ..types.error_message import ErrorMessage
 from ..errors.forbidden_error import ForbiddenError
@@ -118,14 +119,23 @@ class LlmProviderKeyClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def store_llm_provider_api_key(
-        self, *, api_key: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        provider: ProviderApiKeyWriteProvider,
+        api_key: str,
+        name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Store LLM Provider's ApiKey
 
         Parameters
         ----------
+        provider : ProviderApiKeyWriteProvider
+
         api_key : str
+
+        name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -143,6 +153,7 @@ class LlmProviderKeyClient:
             workspace_name="YOUR_WORKSPACE_NAME",
         )
         client.llm_provider_key.store_llm_provider_api_key(
+            provider="openai",
             api_key="api_key",
         )
         """
@@ -150,8 +161,9 @@ class LlmProviderKeyClient:
             "v1/private/llm-provider-key",
             method="POST",
             json={
+                "provider": provider,
                 "api_key": api_key,
-                "provider": "openai",
+                "name": name,
             },
             headers={
                 "content-type": "application/json",
@@ -251,6 +263,7 @@ class LlmProviderKeyClient:
         id: str,
         *,
         api_key: str,
+        name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -261,6 +274,8 @@ class LlmProviderKeyClient:
         id : str
 
         api_key : str
+
+        name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -287,6 +302,7 @@ class LlmProviderKeyClient:
             method="PATCH",
             json={
                 "api_key": api_key,
+                "name": name,
             },
             headers={
                 "content-type": "application/json",
@@ -448,14 +464,23 @@ class AsyncLlmProviderKeyClient:
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def store_llm_provider_api_key(
-        self, *, api_key: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        provider: ProviderApiKeyWriteProvider,
+        api_key: str,
+        name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Store LLM Provider's ApiKey
 
         Parameters
         ----------
+        provider : ProviderApiKeyWriteProvider
+
         api_key : str
+
+        name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -478,6 +503,7 @@ class AsyncLlmProviderKeyClient:
 
         async def main() -> None:
             await client.llm_provider_key.store_llm_provider_api_key(
+                provider="openai",
                 api_key="api_key",
             )
 
@@ -488,8 +514,9 @@ class AsyncLlmProviderKeyClient:
             "v1/private/llm-provider-key",
             method="POST",
             json={
+                "provider": provider,
                 "api_key": api_key,
-                "provider": "openai",
+                "name": name,
             },
             headers={
                 "content-type": "application/json",
@@ -597,6 +624,7 @@ class AsyncLlmProviderKeyClient:
         id: str,
         *,
         api_key: str,
+        name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -607,6 +635,8 @@ class AsyncLlmProviderKeyClient:
         id : str
 
         api_key : str
+
+        name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -641,6 +671,7 @@ class AsyncLlmProviderKeyClient:
             method="PATCH",
             json={
                 "api_key": api_key,
+                "name": name,
             },
             headers={
                 "content-type": "application/json",

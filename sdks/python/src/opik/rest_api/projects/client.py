@@ -12,6 +12,7 @@ from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.project_public import ProjectPublic
 from ..core.jsonable_encoder import jsonable_encoder
 from ..errors.conflict_error import ConflictError
+from ..types.feedback_score_names import FeedbackScoreNames
 from .types.project_metric_request_public_metric_type import (
     ProjectMetricRequestPublicMetricType,
 )
@@ -396,6 +397,59 @@ class ProjectsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def find_feedback_score_names_by_project_ids(
+        self,
+        *,
+        project_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> FeedbackScoreNames:
+        """
+        Find Feedback Score names By Project Ids
+
+        Parameters
+        ----------
+        project_ids : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        FeedbackScoreNames
+            Feedback Scores resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.projects.find_feedback_score_names_by_project_ids()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/projects/feedback-scores/names",
+            method="GET",
+            params={
+                "project_ids": project_ids,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    FeedbackScoreNames,
+                    parse_obj_as(
+                        type_=FeedbackScoreNames,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -999,6 +1053,67 @@ class AsyncProjectsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def find_feedback_score_names_by_project_ids(
+        self,
+        *,
+        project_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> FeedbackScoreNames:
+        """
+        Find Feedback Score names By Project Ids
+
+        Parameters
+        ----------
+        project_ids : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        FeedbackScoreNames
+            Feedback Scores resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.projects.find_feedback_score_names_by_project_ids()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/projects/feedback-scores/names",
+            method="GET",
+            params={
+                "project_ids": project_ids,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    FeedbackScoreNames,
+                    parse_obj_as(
+                        type_=FeedbackScoreNames,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)

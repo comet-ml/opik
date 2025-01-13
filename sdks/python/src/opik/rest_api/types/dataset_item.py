@@ -2,8 +2,8 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
-from .json_node import JsonNode
 from .dataset_item_source import DatasetItemSource
+from .json_node import JsonNode
 from .experiment_item import ExperimentItem
 import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
@@ -12,13 +12,10 @@ import pydantic
 
 class DatasetItem(UniversalBaseModel):
     id: typing.Optional[str] = None
-    input: typing.Optional[JsonNode] = None
-    expected_output: typing.Optional[JsonNode] = None
-    metadata: typing.Optional[JsonNode] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemSource
-    data: typing.Optional[JsonNode] = None
+    data: JsonNode
     experiment_items: typing.Optional[typing.List[ExperimentItem]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

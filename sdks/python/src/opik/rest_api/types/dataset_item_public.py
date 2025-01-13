@@ -2,7 +2,6 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
-from .json_node_public import JsonNodePublic
 from .dataset_item_public_source import DatasetItemPublicSource
 from .json_node import JsonNode
 from .experiment_item_public import ExperimentItemPublic
@@ -13,13 +12,10 @@ import pydantic
 
 class DatasetItemPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
-    input: typing.Optional[JsonNodePublic] = None
-    expected_output: typing.Optional[JsonNodePublic] = None
-    metadata: typing.Optional[JsonNodePublic] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemPublicSource
-    data: typing.Optional[JsonNode] = None
+    data: JsonNode
     experiment_items: typing.Optional[typing.List[ExperimentItemPublic]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

@@ -221,7 +221,10 @@ export class Datasets {
      * @example
      *     await client.datasets.createOrUpdateDatasetItems({
      *         items: [{
-     *                 source: "manual"
+     *                 source: "manual",
+     *                 data: {
+     *                     "key": "value"
+     *                 }
      *             }]
      *     })
      */
