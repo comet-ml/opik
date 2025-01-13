@@ -10,19 +10,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.domain.LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode;
+
 @Builder(toBuilder = true)
 public record LlmAsJudgeAutomationRuleEvaluatorModel(
         UUID id,
         UUID projectId,
         String name,
         Float samplingRate,
-        @Json LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode code,
+        @Json LlmAsJudgeCode code,
         Instant createdAt,
         String createdBy,
         Instant lastUpdatedAt,
         String lastUpdatedBy)
         implements
-            AutomationRuleEvaluatorModel<LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode> {
+            AutomationRuleEvaluatorModel<LlmAsJudgeCode> {
 
     @Override
     public AutomationRuleEvaluatorType type() {

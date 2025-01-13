@@ -3,7 +3,6 @@ package com.comet.opik.api;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import dev.langchain4j.data.message.ChatMessageType;
-import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -18,16 +17,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+
 @EqualsAndHashCode(callSuper = true)
 @Data
 @SuperBuilder(toBuilder = true)
 @ToString(callSuper = true)
-public final class AutomationRuleEvaluatorLlmAsJudge
-        extends
-            AutomationRuleEvaluator<AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode> {
+public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvaluator<LlmAsJudgeCode> {
 
     @NotNull @JsonView({View.Public.class, View.Write.class})
-    @Schema(accessMode = Schema.AccessMode.READ_WRITE)
     private LlmAsJudgeCode code;
 
     @Builder(toBuilder = true)
@@ -68,14 +66,15 @@ public final class AutomationRuleEvaluatorLlmAsJudge
     @ConstructorProperties({"id", "projectId", "name", "samplingRate", "code", "createdAt", "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, Float samplingRate,
-            @NotNull LlmAsJudgeCode code,
-            Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
+            @NotNull LlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
+            String lastUpdatedBy) {
         super(id, projectId, name, samplingRate, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
         this.code = code;
     }
 
     @Override
-    public AutomationRuleEvaluatorType type() {
+    public AutomationRuleEvaluatorType getType() {
         return AutomationRuleEvaluatorType.LLM_AS_JUDGE;
     }
+
 }

@@ -1,11 +1,13 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,54 +21,50 @@ import java.util.UUID;
 @SuperBuilder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = AutomationRuleEvaluatorLlmAsJudge.class, name = "llm_as_judge")
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE)
 })
 @Schema(name = "AutomationRuleEvaluator", discriminatorProperty = "type", discriminatorMapping = {
-        @DiscriminatorMapping(value = "llm_as_judge", schema = AutomationRuleEvaluatorLlmAsJudge.class)
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE, schema = AutomationRuleEvaluatorLlmAsJudge.class)
 })
 @AllArgsConstructor
-public abstract sealed class AutomationRuleEvaluator<T>
-        implements
-            AutomationRule<T>
+public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRule<T>
         permits AutomationRuleEvaluatorLlmAsJudge {
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    UUID id;
+    private UUID id;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    UUID projectId;
+    private UUID projectId;
 
     @JsonView({View.Public.class, View.Write.class})
-    @Schema(accessMode = Schema.AccessMode.READ_WRITE)
     @NotBlank
-    String name;
+    private String name;
 
     @JsonView({View.Public.class, View.Write.class})
-    @Schema(accessMode = Schema.AccessMode.READ_WRITE)
-    Float samplingRate;
+    private Float samplingRate;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    Instant createdAt;
+    private Instant createdAt;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    String createdBy;
+    private String createdBy;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    Instant lastUpdatedAt;
+    private Instant lastUpdatedAt;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    String lastUpdatedBy;
+    private String lastUpdatedBy;
 
-    @JsonView({View.Public.class})
-    public abstract AutomationRuleEvaluatorType type();
+    @NotNull @JsonView({View.Public.class, View.Write.class})
+    public abstract AutomationRuleEvaluatorType getType();
 
-    @JsonView({View.Public.class, View.Write.class})
+    @JsonIgnore
     public abstract T getCode();
 
     @Override
@@ -87,12 +85,12 @@ public abstract sealed class AutomationRuleEvaluator<T>
                     View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
-            @JsonView({View.Public.class}) List<AutomationRuleEvaluatorLlmAsJudge> content)
+            @JsonView({View.Public.class}) List<AutomationRuleEvaluator<?>> content)
             implements
-                Page<AutomationRuleEvaluatorLlmAsJudge>{
+                Page<AutomationRuleEvaluator<?>>{
 
-        public static AutomationRuleEvaluator.AutomationRuleEvaluatorPage empty(int page) {
-            return new AutomationRuleEvaluator.AutomationRuleEvaluatorPage(page, 0, 0, List.of());
+        public static AutomationRuleEvaluatorPage empty(int page) {
+            return new AutomationRuleEvaluatorPage(page, 0, 0, List.of());
         }
     }
 }

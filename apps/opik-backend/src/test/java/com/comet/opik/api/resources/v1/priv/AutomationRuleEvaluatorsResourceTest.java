@@ -257,7 +257,7 @@ class AutomationRuleEvaluatorsResourceTest {
             assertThat(actualEntity.size()).isEqualTo(1);
             assertThat(actualEntity.total()).isEqualTo(1);
 
-            List<AutomationRuleEvaluatorLlmAsJudge> content = actualEntity.content();
+            List<AutomationRuleEvaluator<?>> content = actualEntity.content();
             assertThat(content.stream().map(AutomationRuleEvaluator::getName).toList()).contains(name);
         }
 
