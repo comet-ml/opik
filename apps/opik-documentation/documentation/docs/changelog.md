@@ -6,6 +6,17 @@ pytest_codeblocks_skip: true
 
 # Weekly Changelog
 
+## Week of 2025-01-13
+
+**Opik Dashboard**:
+
+- Datasets are now supported in the playground allowing you to quickly evaluate prompts on multiple samples
+- Updated the models supported in the playground
+
+**SDK**:
+
+- New integration with [CrewAI](https://docs.crewai.com/introduction)
+
 ## Week of 2025-01-06
 
 **Opik Dashboard**:
