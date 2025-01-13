@@ -118,6 +118,27 @@ const PlaygroundPrompt = ({
     [updatePrompt, promptId],
   );
 
+  const handleAddProvider = useCallback(
+    (provider: PROVIDER_TYPE) => {
+      const modelProvider = model ? getModelProvider(model) : "";
+      const noCurrentModel = !modelProvider;
+
+      if (noCurrentModel) {
+        const newModel = PROVIDERS[provider].defaultModel;
+
+        const newDefaultConfigs = provider
+          ? getDefaultConfigByProvider(provider)
+          : {};
+
+        updatePrompt(promptId, {
+          model: newModel,
+          configs: newDefaultConfigs,
+        });
+      }
+    },
+    [model],
+  );
+
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
     if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
@@ -175,6 +196,7 @@ const PlaygroundPrompt = ({
               onChange={handleUpdateModel}
               provider={provider}
               workspaceName={workspaceName}
+              onAddProvider={handleAddProvider}
             />
           </div>
           <PromptModelConfigs
