@@ -15,5 +15,6 @@ public class CacheModule extends DropwizardAwareModule<OpikConfiguration> {
         bindInterceptor(Matchers.any(), Matchers.annotatedWith(Cacheable.class), cacheInterceptor);
         bindInterceptor(Matchers.any(), Matchers.annotatedWith(CachePut.class), cacheInterceptor);
         bindInterceptor(Matchers.any(), Matchers.annotatedWith(CacheEvict.class), cacheInterceptor);
+
     }
 }

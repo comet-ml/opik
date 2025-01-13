@@ -6,7 +6,6 @@ import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.util.Collection;
 
 @Target({ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
@@ -34,5 +33,5 @@ public @interface Cacheable {
     /**
      * @return the type of the collection to be used. Only applicable when the returnType is a collection based class.
      * */
-    Class<? extends Collection> collectionType() default Collection.class;
+    Class<?> wrapperType() default Object.class;
 }

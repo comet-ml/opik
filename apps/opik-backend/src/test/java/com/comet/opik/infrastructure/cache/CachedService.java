@@ -62,12 +62,12 @@ public class CachedService {
         return Mono.error(new IndexOutOfBoundsException("Simulate runtime exception"));
     }
 
-    @Cacheable(name = CacheManagerTest.CACHE_NAME_1, key = "$id +'-'+ $workspaceId", returnType = DTO.class, collectionType = List.class)
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_1, key = "$id +'-'+ $workspaceId", returnType = DTO.class, wrapperType = List.class)
     public List<DTO> getCollection(String id, String workspaceId) {
         return List.of(new DTO(id, workspaceId, UUID.randomUUID().toString()));
     }
 
-    @Cacheable(name = CacheManagerTest.CACHE_NAME_2, key = "$id +'-'+ $workspaceId", returnType = DTO.class, collectionType = List.class)
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_2, key = "$id +'-'+ $workspaceId", returnType = DTO.class, wrapperType = List.class)
     public Mono<List<DTO>> getCollection2(String id, String workspaceId) {
         return Mono.just(List.of(new DTO(id, workspaceId, UUID.randomUUID().toString())));
     }
@@ -80,7 +80,7 @@ public class CachedService {
         return Flux.just(new DTO(id, workspaceId, value), new DTO(id, workspaceId, value2));
     }
 
-    @Cacheable(name = CacheManagerTest.CACHE_NAME_2, key = "$id +'-'+ $workspaceId", returnType = DTO.class, collectionType = List.class)
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_2, key = "$id +'-'+ $workspaceId", returnType = DTO.class, wrapperType = List.class)
     public Flux<List<DTO>> getFlux2(String id, String workspaceId) {
         return Flux.just(
                 List.of(new DTO(id, workspaceId, UUID.randomUUID().toString())),

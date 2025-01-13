@@ -2,7 +2,8 @@ package com.comet.opik.infrastructure.cache;
 
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.utils.TypeReferenceUtils;
-import com.fasterxml.jackson.databind.type.CollectionType;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import jakarta.inject.Provider;
 import lombok.NonNull;
@@ -17,7 +18,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.time.Duration;
+import java.lang.reflect.Type;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -60,19 +61,19 @@ public class CacheInterceptor implements MethodInterceptor {
         var cacheEvict = method.getAnnotation(CacheEvict.class);
         if (cacheEvict != null) {
             return runCacheAwareAction(invocation, isReactive, cacheEvict.name(), cacheEvict.key(),
-                    (key, name) -> processCacheEvictMethod(invocation, isReactive, key));
+                    (key, name) -> processCacheEvictMethod(invocation, isReactive, key, name));
         }
 
         return invocation.proceed();
     }
 
-    private Object runCacheAwareAction(MethodInvocation invocation, boolean isReactive, String name, String keyAgs,
+    private Object runCacheAwareAction(MethodInvocation invocation, boolean isReactive, String group, String keyAgs,
             BiFunction<String, String, Object> action) throws Throwable {
 
         String key;
 
         try {
-            key = getKeyName(name, keyAgs, invocation);
+            key = getKeyName(group, keyAgs, invocation);
         } catch (Exception e) {
             // If there is an error evaluating the key, proceed without caching
             log.warn("Cache will be skipped due to error evaluating key expression");
@@ -80,18 +81,18 @@ public class CacheInterceptor implements MethodInterceptor {
         }
 
         if (isReactive) {
-            return action.apply(key, name);
+            return action.apply(key, group);
         }
 
-        return ((Mono<?>) action.apply(key, name)).block();
+        return ((Mono<?>) action.apply(key, group)).block();
     }
 
-    private Mono<Object> processCacheEvictMethod(MethodInvocation invocation, boolean isReactive, String key) {
+    private Mono<Object> processCacheEvictMethod(MethodInvocation invocation, boolean isReactive, String key, String group) {
         if (isReactive) {
             try {
                 return ((Mono<?>) invocation.proceed())
-                        .flatMap(value -> cacheManager.get().evict(key).thenReturn(value))
-                        .switchIfEmpty(cacheManager.get().evict(key).then(Mono.empty()))
+                        .flatMap(value -> cacheManager.get().evict(group, key).thenReturn(value))
+                        .switchIfEmpty(cacheManager.get().evict(group, key).then(Mono.empty()))
                         .map(Function.identity());
             } catch (Throwable e) {
                 return Mono.error(e);
@@ -100,9 +101,9 @@ public class CacheInterceptor implements MethodInterceptor {
             try {
                 var value = invocation.proceed();
                 if (value == null) {
-                    return cacheManager.get().evict(key).then(Mono.empty());
+                    return cacheManager.get().evict(group, key).then(Mono.empty());
                 }
-                return cacheManager.get().evict(key).thenReturn(value);
+                return cacheManager.get().evict(group, key).thenReturn(value);
             } catch (Throwable e) {
                 return Mono.error(e);
             }
@@ -128,67 +129,74 @@ public class CacheInterceptor implements MethodInterceptor {
     }
 
     private Object processCacheableMethod(MethodInvocation invocation, boolean isReactive, String key,
-            String name, Cacheable cacheable) {
+            String group, Cacheable cacheable) {
 
         if (isReactive) {
 
             if (invocation.getMethod().getReturnType().isAssignableFrom(Mono.class)) {
-                return handleMono(invocation, key, name, cacheable);
+                return handleMono(invocation, key, group, cacheable);
             } else {
-                return handleFlux(invocation, key, name, cacheable);
+                return handleFlux(invocation, key, group, cacheable);
             }
         } else {
 
-            if (cacheable.collectionType() != Collection.class) {
-                CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
-                        cacheable.returnType());
+            if (cacheable.wrapperType() != Object.class) {
+                TypeReference typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(), cacheable.returnType());
 
-                return cacheManager.get().get(key, typeReference)
-                        .switchIfEmpty(processSyncCacheMiss(invocation, key, name));
+                return cacheManager.get().get(group, key, typeReference)
+                        .switchIfEmpty(processSyncCacheMiss(invocation, key, group));
             }
 
-            return cacheManager.get().get(key, invocation.getMethod().getReturnType())
+            return cacheManager.get().get(group, key, invocation.getMethod().getReturnType())
                     .map(Object.class::cast)
-                    .switchIfEmpty(processSyncCacheMiss(invocation, key, name));
+                    .switchIfEmpty(processSyncCacheMiss(invocation, key, group));
         }
     }
 
     private Flux<Object> handleFlux(MethodInvocation invocation, String key, String name, Cacheable cacheable) {
-        if (cacheable.collectionType() != Collection.class) {
-            CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
-                    cacheable.returnType());
+        if (cacheable.wrapperType() != Object.class) {
+            TypeReference<?> typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(), cacheable.returnType());
 
-            CollectionType collectionType = TypeFactory.defaultInstance().constructCollectionType(List.class,
-                    typeReference);
+            TypeReference<List<?>> collectionType = new TypeReference<>() {
+                @Override
+                public Type getType() {
+                    return TypeFactory.defaultInstance().constructCollectionType(List.class, (JavaType) typeReference.getType());
+                }
+            };
+
             return getFromCacheOrCallMethod(invocation, key, name, collectionType);
         }
 
-        CollectionType collectionType = TypeFactory.defaultInstance().constructCollectionType(List.class,
-                cacheable.returnType());
+        TypeReference<List<?>> collectionType = new TypeReference<>() {
+            @Override
+            public Type getType() {
+                return TypeFactory.defaultInstance().constructCollectionType(List.class, cacheable.returnType());
+            }
+        };
+
         return getFromCacheOrCallMethod(invocation, key, name, collectionType);
     }
 
-    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String name,
-            CollectionType collectionType) {
+    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String group, TypeReference<List<?>> type) {
         return cacheManager.get()
-                .get(key, collectionType)
+                .get(group, key, type)
                 .map(Collection.class::cast)
                 .flatMapMany(Flux::fromIterable)
-                .switchIfEmpty(processFluxCacheMiss(invocation, key, name));
+                .switchIfEmpty(processFluxCacheMiss(invocation, key, group));
     }
 
-    private Mono<Object> handleMono(MethodInvocation invocation, String key, String name, Cacheable cacheable) {
-        if (cacheable.collectionType() != Collection.class) {
-            CollectionType typeReference = TypeReferenceUtils.forCollection(cacheable.collectionType(),
-                    cacheable.returnType());
+    private Mono<Object> handleMono(MethodInvocation invocation, String key, String group, Cacheable cacheable) {
+        if (cacheable.wrapperType() != Object.class) {
+            TypeReference<?> typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(), cacheable.returnType());
 
-            return cacheManager.get().get(key, typeReference)
-                    .switchIfEmpty(processCacheMiss(invocation, key, name));
+            return cacheManager.get().get(group, key, typeReference)
+                    .map(Object.class::cast)
+                    .switchIfEmpty(processCacheMiss(invocation, key, group));
         }
 
-        return cacheManager.get().get(key, cacheable.returnType())
+        return cacheManager.get().get(group, key, cacheable.returnType())
                 .map(Object.class::cast)
-                .switchIfEmpty(processCacheMiss(invocation, key, name));
+                .switchIfEmpty(processCacheMiss(invocation, key, group));
     }
 
     private Mono<Object> processSyncCacheMiss(MethodInvocation invocation, String key, String name) {
@@ -233,10 +241,8 @@ public class CacheInterceptor implements MethodInterceptor {
         });
     }
 
-    private Mono<Object> cachePut(Object value, String key, String name) {
-        Duration ttlDuration = cacheConfiguration.getCaches().getOrDefault(name,
-                cacheConfiguration.getDefaultDuration());
-        return cacheManager.get().put(key, value, ttlDuration)
+    private Mono<Object> cachePut(Object value, String key, String group) {
+        return cacheManager.get().put(group, key, value)
                 .thenReturn(value)
                 .onErrorResume(e -> {
                     log.error("Error putting value in cache", e);
