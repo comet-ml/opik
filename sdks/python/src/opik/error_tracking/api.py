@@ -54,6 +54,7 @@ def setup_sentry_error_tracker() -> None:
     logger_setup.setup_sentry_error_handlers(root_logger)
 
     shutdown_hooks.register_flush_hook()
+    shutdown_hooks.register_exception_hook()
 
 
 @_logging.convert_exception_to_log_message(
