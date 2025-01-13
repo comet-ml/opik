@@ -79,7 +79,7 @@ public class LlmProviderClientsMappersTest {
             assertThat(actual.system).usingRecursiveComparison().ignoringCollectionOrder().isEqualTo(
                     request.messages().stream()
                             .filter(message -> message.role() == Role.SYSTEM)
-                            .map(LlmProviderAnthropicMapper.INSTANCE::mapToAnthropicMessage)
+                            .map(LlmProviderAnthropicMapper.INSTANCE::mapToSystemMessage)
                             .toList());
         }
     }
