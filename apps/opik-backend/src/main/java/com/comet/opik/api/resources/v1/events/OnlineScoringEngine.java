@@ -46,11 +46,11 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOut
 @Slf4j
 public class OnlineScoringEngine {
 
-    final String SCORE_FIELD_NAME = "score";
-    final String REASON_FIELD_NAME = "reason";
-    final String SCORE_FIELD_DESCRIPTION = "the score for ";
-    final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
-    final String DEFAULT_SCHEMA_NAME = "scoring_schema";
+    static final String SCORE_FIELD_NAME = "score";
+    static final String REASON_FIELD_NAME = "reason";
+    static final String SCORE_FIELD_DESCRIPTION = "the score for ";
+    static final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
+    static final String DEFAULT_SCHEMA_NAME = "scoring_schema";
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
