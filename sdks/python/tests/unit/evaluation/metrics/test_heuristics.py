@@ -3,7 +3,7 @@ import pytest
 from opik.evaluation.metrics.exceptions import MetricComputationError
 from opik.evaluation.metrics.heuristics import equals, levenshtein_ratio, regex_match
 from opik.evaluation.metrics.score_result import ScoreResult
-from opik.evaluation.metrics.heuristics.bleu import BLEU
+from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU, CorpusBLEU
 
 
 def test_evaluation__equals():
@@ -69,16 +69,14 @@ def test_evaluation__levenshtein_ratio():
         ("hello", "hello world", 0.05, 0.5),
     ],
 )
-def test_bleu_score_sentence_level(candidate, reference, expected_min, expected_max):
-    """
-    Single-sentence BLEU tests. We pass strings for both candidate & reference.
-    """
-    metric = BLEU()
+def test_sentence_bleu_score(candidate, reference, expected_min, expected_max):
+    metric = SentenceBLEU()
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
+
     assert expected_min <= result.value <= expected_max, (
         f"For candidate='{candidate}' vs reference='{reference}', "
-        f"expected BLEU in [{expected_min}, {expected_max}], got {result.value:.4f}"
+        f"expected sentence BLEU in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
 
 
@@ -89,8 +87,8 @@ def test_bleu_score_sentence_level(candidate, reference, expected_min, expected_
         ("The quick brown fox", ""),
     ],
 )
-def test_bleu_score_sentence_level_empty_inputs(candidate, reference):
-    metric = BLEU()
+def test_sentence_bleu_score_empty_inputs(candidate, reference):
+    metric = SentenceBLEU()
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(candidate, reference)
     assert "empty" in str(exc_info.value).lower()
@@ -107,11 +105,11 @@ def test_bleu_score_sentence_level_empty_inputs(candidate, reference):
         ("The cat", "cat The", "method2"),
     ],
 )
-def test_bleu_score_different_smoothing(candidate, reference, method):
-    metric = BLEU(smoothing_method=method)
+def test_sentence_bleu_score_different_smoothing(candidate, reference, method):
+    metric = SentenceBLEU(smoothing_method=method)
     res = metric.score(output=candidate, reference=reference)
     assert res.value >= 0.0
-    assert res.name == "bleu_metric"
+    assert metric.name == "sentence_bleu_metric"
 
 
 @pytest.mark.parametrize(
@@ -124,7 +122,7 @@ def test_bleu_score_different_smoothing(candidate, reference, method):
             0.99,
             1.01,
         ),
-        # Multiple partial matches => BLEU in [0,1]
+        # Multiple partial matches => expect BLEU in [0,1]
         (
             ["The quick brown fox", "Hello world"],
             [
@@ -149,13 +147,14 @@ def test_bleu_score_different_smoothing(candidate, reference, method):
         ),
     ],
 )
-def test_bleu_score_corpus(outputs, references, expected_min, expected_max):
-    metric = BLEU()
+def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
+    metric = CorpusBLEU()
     res = metric.score(output=outputs, reference=references)
     assert isinstance(res, ScoreResult)
+
     assert expected_min <= res.value <= expected_max, (
-        f"For outputs={outputs} vs references={references}, "
-        f"expected corpus BLEU in [{expected_min}, {expected_max}], got {res.value:.4f}"
+        f"For corpus outputs={outputs} vs references={references}, "
+        f"expected BLEU in [{expected_min}, {expected_max}], got {res.value:.4f}"
     )
 
 
@@ -177,8 +176,8 @@ def test_bleu_score_corpus(outputs, references, expected_min, expected_max):
         ),
     ],
 )
-def test_bleu_score_corpus_empty_inputs(outputs, references):
-    metric = BLEU()
+def test_corpus_bleu_score_empty_inputs(outputs, references):
+    metric = CorpusBLEU()
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
     assert "empty" in str(exc_info.value).lower()
