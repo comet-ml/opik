@@ -26,7 +26,7 @@ To start tracking your Anthropic LLM calls, you'll need to have both the `opik` 
 pip install opik anthropic
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
 ```bash
 opik configure

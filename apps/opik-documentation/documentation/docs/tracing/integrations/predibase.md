@@ -27,7 +27,7 @@ To use the Opik integration with Predibase, you'll need to have both the `opik`,
 pip install --upgrade --quiet opik predibase langchain
 ```
 
-You can then configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+You can then configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
 ```bash
 opik configure
