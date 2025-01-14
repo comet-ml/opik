@@ -1,7 +1,6 @@
 import functools
 import logging
 import random
-import sys
 
 import sentry_sdk
 
@@ -11,7 +10,6 @@ from opik import _logging
 from . import before_send, environment_details, logger_setup, shutdown_hooks
 
 LOGGER = logging.getLogger(__name__)
-PYTEST_ENV = "pytest" in sys.modules
 
 SESSION_REPORTING_PROBABILITY = 1.0
 
