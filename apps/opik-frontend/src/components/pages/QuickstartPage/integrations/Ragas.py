@@ -24,6 +24,7 @@ answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
 
 os.environ["OPIK_PROJECT_NAME"] = "ragas-integration"
 
+
 # Define the scoring function
 def compute_metric(metric, row):
     row = SingleTurnSample(**row)
