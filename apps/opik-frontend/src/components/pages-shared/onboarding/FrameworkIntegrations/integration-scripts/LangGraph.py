@@ -7,7 +7,6 @@ from opik.integrations.langchain import OpikTracer
 
 # INJECT_OPIK_CONFIGURATION
 
-
 # We will start by creating simple functions to classify the input question
 # and handle the greeting and search questions.
 def classify(question: str) -> str:

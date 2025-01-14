@@ -1,33 +1,42 @@
 import React from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
-import { FrameworkIntegrationComponentProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
+import useAppStore from "@/store/AppStore";
+import { BASE_API_URL } from "@/api/api";
 
 const CODE_BLOCK_1 = "pip install opik";
 
-export const OPIK_API_KEY_TEMPLATE = "{OPIK_API_KEY}";
+export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
 
-const putApiKeyInCode = (code: string, apiKey?: string): string => {
+const putConfigInCode = (
+  code: string,
+  workspaceName: string,
+  apiKey?: string,
+): string => {
   if (apiKey) {
     return code.replace(
       OPIK_API_KEY_TEMPLATE,
-      `\nos.environ["OPIK_API_KEY"] = "${apiKey}"\n`,
+      `os.environ["OPIK_API_KEY"] = "${apiKey}"\nos.environ["OPIK_WORKSPACE"] = "${workspaceName}"`,
     );
   }
 
-  return code.replace(OPIK_API_KEY_TEMPLATE, "");
+  return code.replace(
+    OPIK_API_KEY_TEMPLATE,
+    `os.environ["COMET_URL_OVERRIDE"] = "${window.location.origin}${BASE_API_URL}"`,
+  );
 };
 
-type IntegrationTemplateProps = FrameworkIntegrationComponentProps & {
-  codeTitle?: string;
+type IntegrationTemplateProps = {
+  apiKey?: string;
   code: string;
 };
 
 const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   apiKey,
-  codeTitle,
   code,
 }) => {
-  console.log("code", putApiKeyInCode(code, apiKey).trim());
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const codeWithConfig = putConfigInCode(code, workspaceName, apiKey);
+
   return (
     <div className="flex flex-col gap-6 rounded-md border bg-white p-6">
       <div>
@@ -40,9 +49,9 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
       </div>
       <div>
         <div className="comet-body-s mb-3">
-          2. {codeTitle || "Run the following code to get started"}
+          2. Run the following code to get started
         </div>
-        <CodeHighlighter data={putApiKeyInCode(code, apiKey)} />
+        <CodeHighlighter data={codeWithConfig} />
       </div>
     </div>
   );

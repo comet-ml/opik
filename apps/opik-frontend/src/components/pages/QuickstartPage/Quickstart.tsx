@@ -3,7 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 import { MoveLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
-import { QUICKSTART_INTEGRATIONS } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/quickstart-integrations";
+import { QUICKSTART_INTEGRATIONS } from "@/components/pages-shared/onboarding/FrameworkIntegrations/quickstart-integrations";
 
 type QuickstartProps = {
   apiKey?: string;

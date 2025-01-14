@@ -1,10 +1,4 @@
-import React from "react";
-import { FrameworkIntegrationComponentProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
-import IntegrationTemplate, {
-  OPIK_API_KEY_TEMPLATE,
-} from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/IntegrationTemplate";
-
-const CODE = `import getpass
+import getpass
 import os
 
 os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true"
@@ -14,7 +8,9 @@ from haystack.components.builders import ChatPromptBuilder
 from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.dataclasses import ChatMessage
 from opik.integrations.haystack import OpikConnector
-${OPIK_API_KEY_TEMPLATE}
+
+# INJECT_OPIK_CONFIGURATION
+
 if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 
@@ -48,10 +44,4 @@ response = pipe.run(
     },
 )
 
-print(response["llm"]["replies"][0])`;
-
-const Haystack: React.FC<FrameworkIntegrationComponentProps> = ({ apiKey }) => {
-  return <IntegrationTemplate apiKey={apiKey} code={CODE} />;
-};
-
-export default Haystack;
+print(response["llm"]["replies"][0])
