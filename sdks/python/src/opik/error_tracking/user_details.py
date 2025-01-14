@@ -17,6 +17,9 @@ def get_id() -> Optional[str]:
     """
     config = opik.config.OpikConfig()
 
+    if config.workspace != opik.config.OPIK_WORKSPACE_DEFAULT_NAME:
+        return config.workspace
+
     hashed_part = (
         _compute_hash(config.api_key)
         if config.api_key is not None
