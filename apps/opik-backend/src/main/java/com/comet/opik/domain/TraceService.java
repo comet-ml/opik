@@ -107,8 +107,7 @@ class TraceServiceImpl implements TraceService {
                         new LockService.Lock(id, TRACE_KEY),
                         Mono.defer(() -> insertTrace(trace, project, id)))
                         .doOnSuccess(__ -> {
-                            // forwards the trace with its actual projectId
-                            var savedTrace = trace.toBuilder().projectId(project.id()).build();
+                            var savedTrace = trace.toBuilder().projectId(project.id()).projectName(projectName).build();
                             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                             String userName = ctx.get(RequestContext.USER_NAME);
 
@@ -157,7 +156,7 @@ class TraceServiceImpl implements TraceService {
                     UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
                     IdGenerator.validateVersion(id, TRACE_KEY);
 
-                    return trace.toBuilder().id(id).projectId(project.id()).build();
+                    return trace.toBuilder().id(id).projectId(project.id()).projectName(project.name()).build();
                 })
                 .toList();
     }
