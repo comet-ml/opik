@@ -94,27 +94,19 @@ public class ChatCompletionService {
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
             @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, modelParameters.name());
+        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
 
         ChatResponse chatResponse;
         try {
             log.info("Initiating chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             chatResponse = retryPolicy
-                    .withRetry(() -> llmProviderClient.structuredResponseChat(chatRequest, modelParameters));
+                    .withRetry(() -> languageModelClient.chat(chatRequest));
             log.info("Completed chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             return chatResponse;
         } catch (RuntimeException runtimeException) {
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            llmProviderClient.getLlmProviderError(runtimeException).ifPresent(llmProviderError -> {
-                if (familyOf(llmProviderError.getCode()) == Response.Status.Family.CLIENT_ERROR) {
-                    throw new ClientErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
-                }
-
-                throw new ServerErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
-            });
-
             throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
         }
     }

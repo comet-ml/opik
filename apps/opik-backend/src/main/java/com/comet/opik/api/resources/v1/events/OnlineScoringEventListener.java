@@ -21,7 +21,7 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.*;
+import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 
 @EagerSingleton
 @Slf4j
@@ -101,7 +101,7 @@ public class OnlineScoringEventListener {
 
         var scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
                 .map(item -> item.toBuilder()
-                        .id(generator.generateId())
+                        .id(trace.id())
                         .projectId(trace.projectId())
                         .projectName(trace.projectName())
                         .build())
