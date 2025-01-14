@@ -7,7 +7,6 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
@@ -30,15 +29,12 @@ public class OnlineScoringEventListener {
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final ChatCompletionService aiProxyService;
     private final FeedbackScoreService feedbackScoreService;
-    private final IdGenerator generator;
 
     @Inject
     public OnlineScoringEventListener(EventBus eventBus,
-            IdGenerator generator,
             AutomationRuleEvaluatorService ruleEvaluatorService,
             ChatCompletionService aiProxyService,
             FeedbackScoreService feedbackScoreService) {
-        this.generator = generator;
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.aiProxyService = aiProxyService;
         this.feedbackScoreService = feedbackScoreService;

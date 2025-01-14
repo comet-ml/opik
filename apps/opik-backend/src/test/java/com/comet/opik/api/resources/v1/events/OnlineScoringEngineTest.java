@@ -7,7 +7,6 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,8 +43,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("LlmAsJudge Message Render")
 public class OnlineScoringEngineTest {
-    @Mock
-    IdGenerator idGenerator;
     @Mock
     AutomationRuleEvaluatorService ruleEvaluatorService;
     @Mock
@@ -105,7 +102,7 @@ public class OnlineScoringEngineTest {
     void setUp() throws JsonProcessingException {
         MockitoAnnotations.openMocks(this);
         Mockito.doNothing().when(eventBus).register(Mockito.any());
-        onlineScoringEventListener = new OnlineScoringEventListener(eventBus, idGenerator, ruleEvaluatorService,
+        onlineScoringEventListener = new OnlineScoringEventListener(eventBus, ruleEvaluatorService,
                 aiProxyService, feedbackScoreService);
 
         var mapper = new ObjectMapper();
