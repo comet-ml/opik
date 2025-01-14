@@ -93,7 +93,8 @@ public class LlmProviderClientGenerator {
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
     }
 
-    public ChatLanguageModel newOpenAiChatLanguageModel(String apiKey, AutomationRuleEvaluatorLlmAsJudge.@NonNull LlmAsJudgeModelParameters modelParameters) {
+    public ChatLanguageModel newOpenAiChatLanguageModel(String apiKey,
+            AutomationRuleEvaluatorLlmAsJudge.@NonNull LlmAsJudgeModelParameters modelParameters) {
         var builder = OpenAiChatModel.builder()
                 .modelName(modelParameters.name())
                 .apiKey(apiKey)

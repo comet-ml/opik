@@ -36,7 +36,8 @@ public class LlmProviderFactory {
         };
     }
 
-    public ChatLanguageModel getLanguageModel(@NonNull String workspaceId, @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
+    public ChatLanguageModel getLanguageModel(@NonNull String workspaceId,
+            @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
         var llmProvider = getLlmProvider(modelParameters.name());
         var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
 
