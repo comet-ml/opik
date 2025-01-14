@@ -5,7 +5,6 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNodePublic } from "./JsonNodePublic";
 import { DatasetItemPublicSource } from "./DatasetItemPublicSource";
 import { JsonNode } from "./JsonNode";
 import { ExperimentItemPublic } from "./ExperimentItemPublic";
@@ -15,13 +14,10 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
     OpikApi.DatasetItemPublic
 > = core.serialization.object({
     id: core.serialization.string().optional(),
-    input: JsonNodePublic.optional(),
-    expectedOutput: core.serialization.property("expected_output", JsonNodePublic.optional()),
-    metadata: JsonNodePublic.optional(),
     traceId: core.serialization.property("trace_id", core.serialization.string().optional()),
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemPublicSource,
-    data: JsonNode.optional(),
+    data: JsonNode,
     experimentItems: core.serialization.property(
         "experiment_items",
         core.serialization.list(ExperimentItemPublic).optional()
@@ -35,13 +31,10 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
 export declare namespace DatasetItemPublic {
     interface Raw {
         id?: string | null;
-        input?: JsonNodePublic.Raw | null;
-        expected_output?: JsonNodePublic.Raw | null;
-        metadata?: JsonNodePublic.Raw | null;
         trace_id?: string | null;
         span_id?: string | null;
         source: DatasetItemPublicSource.Raw;
-        data?: JsonNode.Raw | null;
+        data: JsonNode.Raw;
         experiment_items?: ExperimentItemPublic.Raw[] | null;
         created_at?: string | null;
         last_updated_at?: string | null;

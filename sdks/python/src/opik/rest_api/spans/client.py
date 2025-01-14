@@ -224,6 +224,8 @@ class SpansClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        total_estimated_cost: typing.Optional[float] = OMIT,
+        total_estimated_cost_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -263,6 +265,10 @@ class SpansClient:
         usage : typing.Optional[typing.Dict[str, int]]
 
         error_info : typing.Optional[ErrorInfoWrite]
+
+        total_estimated_cost : typing.Optional[float]
+
+        total_estimated_cost_version : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -312,6 +318,8 @@ class SpansClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
+                "total_estimated_cost": total_estimated_cost,
+                "total_estimated_cost_version": total_estimated_cost_version,
             },
             request_options=request_options,
             omit=OMIT,
@@ -518,6 +526,7 @@ class SpansClient:
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
+        total_estimated_cost: typing.Optional[float] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -553,6 +562,8 @@ class SpansClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         usage : typing.Optional[typing.Dict[str, int]]
+
+        total_estimated_cost : typing.Optional[float]
 
         error_info : typing.Optional[ErrorInfo]
 
@@ -592,6 +603,7 @@ class SpansClient:
                 "provider": provider,
                 "tags": tags,
                 "usage": usage,
+                "total_estimated_cost": total_estimated_cost,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
@@ -1067,6 +1079,8 @@ class AsyncSpansClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        total_estimated_cost: typing.Optional[float] = OMIT,
+        total_estimated_cost_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1106,6 +1120,10 @@ class AsyncSpansClient:
         usage : typing.Optional[typing.Dict[str, int]]
 
         error_info : typing.Optional[ErrorInfoWrite]
+
+        total_estimated_cost : typing.Optional[float]
+
+        total_estimated_cost_version : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1162,6 +1180,8 @@ class AsyncSpansClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
+                "total_estimated_cost": total_estimated_cost,
+                "total_estimated_cost_version": total_estimated_cost_version,
             },
             request_options=request_options,
             omit=OMIT,
@@ -1391,6 +1411,7 @@ class AsyncSpansClient:
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
+        total_estimated_cost: typing.Optional[float] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -1426,6 +1447,8 @@ class AsyncSpansClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         usage : typing.Optional[typing.Dict[str, int]]
+
+        total_estimated_cost : typing.Optional[float]
 
         error_info : typing.Optional[ErrorInfo]
 
@@ -1473,6 +1496,7 @@ class AsyncSpansClient:
                 "provider": provider,
                 "tags": tags,
                 "usage": usage,
+                "total_estimated_cost": total_estimated_cost,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),

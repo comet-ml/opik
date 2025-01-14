@@ -101,7 +101,7 @@ const ExperimentsFiltersButton: React.FunctionComponent<
                           ? loadMoreHandler
                           : undefined
                       }
-                      widthClass="w-[320px]"
+                      buttonClassName="w-[320px]"
                       isLoading={isLoading}
                       optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
                     />

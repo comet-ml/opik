@@ -7,6 +7,7 @@ type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
   UserMenu: React.ComponentType | null;
   QuickstartPage: React.ComponentType | null;
+  GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
@@ -17,6 +18,7 @@ const PLUGIN_NAMES = [
   "Logo",
   "UserMenu",
   "QuickstartPage",
+  "GetStartedPage",
   "WorkspacePreloader",
   "init",
 ];
@@ -25,6 +27,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   Logo: null,
   UserMenu: null,
   QuickstartPage: null,
+  GetStartedPage: null,
   WorkspacePreloader: null,
   init: null,
   setupPlugins: async (folderName: string) => {

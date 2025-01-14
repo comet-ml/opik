@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.google.common.eventbus.EventBus;
+import com.google.inject.AbstractModule;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.collections4.CollectionUtils;
@@ -16,6 +17,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 
@@ -45,7 +47,8 @@ public class TestDropwizardAppExtensionUtils {
             String metadataVersion,
             EventBus mockEventBus,
             boolean corsEnabled,
-            List<CustomConfig> customConfigs) {
+            List<CustomConfig> customConfigs,
+            List<AbstractModule> modules) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -124,6 +127,10 @@ public class TestDropwizardAppExtensionUtils {
 
         GuiceyConfigurationHook hook = injector -> {
             injector.modulesOverride(TestHttpClientUtils.testAuthModule());
+
+            Optional.ofNullable(appContextConfig.modules)
+                    .orElse(List.of())
+                    .forEach(injector::modulesOverride);
 
             if (appContextConfig.mockEventBus() != null) {
                 injector.modulesOverride(new EventModule() {

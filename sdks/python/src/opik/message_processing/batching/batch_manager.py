@@ -23,6 +23,9 @@ class BatchManager:
         self._flushing_thread.close()
 
     def message_supports_batching(self, message: messages.BaseMessage) -> bool:
+        if hasattr(message, "supports_batching"):
+            return message.supports_batching
+
         return message.__class__ in self._message_to_batcher_mapping
 
     def process_message(self, message: messages.BaseMessage) -> None:

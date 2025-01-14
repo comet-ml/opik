@@ -75,6 +75,7 @@ const SliderInputControl = ({
   };
 
   const handleResetValue = () => {
+    onChange(defaultValue);
     setLocalValue(defaultValue.toString());
   };
 

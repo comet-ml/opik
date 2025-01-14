@@ -8,8 +8,7 @@ import lombok.Data;
 @Data
 public class MetadataConfig {
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     @NotNull private String version;
 
 }

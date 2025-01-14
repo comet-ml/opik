@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { ReactElement, useCallback, useMemo, useState } from "react";
 import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
 import { Check, ChevronDown } from "lucide-react";
@@ -8,7 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonProps } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -19,14 +19,17 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
 export type LoadableSelectBoxProps = {
   value?: string;
-  placeholder?: string;
+  placeholder?: ReactElement | string;
   onChange: (value: string) => void;
   options: DropdownOption<string>[];
-  widthClass?: string;
   variant?: "outline" | "ghost";
   optionsCount?: number;
   isLoading?: boolean;
+  disabled?: boolean;
   onLoadMore?: () => void;
+  buttonSize?: ButtonProps["size"];
+  buttonClassName?: string;
+  renderTitle?: (option: DropdownOption<string>) => ReactElement;
 };
 
 export const LoadableSelectBox = ({
@@ -34,10 +37,13 @@ export const LoadableSelectBox = ({
   placeholder = "Select value",
   onChange,
   options,
-  widthClass = "w-full",
+  buttonSize = "default",
+  buttonClassName = "w-full",
   optionsCount = 25,
   isLoading = false,
+  disabled,
   onLoadMore,
+  renderTitle: parentRenderTitle,
 }: LoadableSelectBoxProps) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -47,10 +53,23 @@ export const LoadableSelectBox = ({
 
   const noDataText = search
     ? hasMore
-      ? `No search results the first ${optionsCount} items`
+      ? `No search results for the first ${optionsCount} items`
       : "No search results"
     : "No data";
-  const title = options.find((o) => o.value === value)?.label;
+
+  const renderTitle = () => {
+    const valueOption = options.find((o) => o.value === value);
+
+    if (!valueOption) {
+      return <div className="truncate text-light-slate">{placeholder}</div>;
+    }
+
+    if (isFunction(parentRenderTitle)) {
+      return parentRenderTitle(valueOption);
+    }
+
+    return <div>{valueOption?.label}</div>;
+  };
 
   const filteredOptions = useMemo(() => {
     return options.filter((o) => toLower(o.label).includes(toLower(search)));
@@ -74,15 +93,13 @@ export const LoadableSelectBox = ({
     <Popover onOpenChange={openChangeHandler} open={open} modal>
       <PopoverTrigger asChild>
         <Button
-          className={cn("justify-between", widthClass)}
+          className={cn("justify-between", buttonClassName)}
+          size={buttonSize}
           variant="outline"
+          disabled={disabled}
           ref={ref}
         >
-          {title ? (
-            <div className="truncate">{title}</div>
-          ) : (
-            <div className="truncate text-light-slate">{placeholder}</div>
-          )}
+          {renderTitle()}
 
           <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />
         </Button>
@@ -96,7 +113,7 @@ export const LoadableSelectBox = ({
               }
             : {}
         }
-        className={cn("p-1 relative pt-12", hasMoreSection && "pb-10")}
+        className="relative p-1 pt-12"
         hideWhenDetached
       >
         <div className="absolute inset-x-1 top-0 h-12">
@@ -118,16 +135,19 @@ export const LoadableSelectBox = ({
             filteredOptions.map((option) => (
               <div
                 key={option.value}
-                className="flex h-10 cursor-pointer items-center justify-between gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
                 onClick={() => {
                   onChange && onChange(option.value);
-                  setOpen(false);
+                  openChangeHandler(false);
                 }}
               >
+                <div className="min-w-4">
+                  {option.value === value && (
+                    <Check className="size-3.5 shrink-0" strokeWidth="3" />
+                  )}
+                </div>
+
                 <div className="comet-body-s truncate">{option.label}</div>
-                {option.value === value && (
-                  <Check className="size-3 shrink-0" strokeWidth="3" />
-                )}
               </div>
             ))
           ) : (
@@ -136,7 +156,7 @@ export const LoadableSelectBox = ({
         </div>
 
         {hasMoreSection && (
-          <div className="absolute inset-x-0 bottom-0 flex h-10 items-center justify-between px-4">
+          <div className="sticky inset-x-0 bottom-0 flex items-center justify-between px-4">
             <div className="comet-body-s text-muted-slate">
               {`Showing first ${optionsCount} items.`}
             </div>

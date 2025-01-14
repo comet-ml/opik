@@ -19,6 +19,7 @@ on:
           - haystack
           - guardrails
           - dspy
+          - crewai
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -94,4 +95,10 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["dspy", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-dspy-tests.yml
+    secrets: inherit
+
+  crewai_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["crewai", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-crewai-tests.yml
     secrets: inherit

@@ -6,13 +6,10 @@ import * as OpikApi from "../index";
 
 export interface DatasetItemCompare {
     id?: string;
-    input?: OpikApi.JsonNodeCompare;
-    expectedOutput?: OpikApi.JsonNodeCompare;
-    metadata?: OpikApi.JsonNodeCompare;
     traceId?: string;
     spanId?: string;
     source: OpikApi.DatasetItemCompareSource;
-    data?: OpikApi.JsonNode;
+    data: OpikApi.JsonNode;
     experimentItems?: OpikApi.ExperimentItemCompare[];
     createdAt?: Date;
     lastUpdatedAt?: Date;
