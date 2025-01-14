@@ -14,7 +14,7 @@ on:
           - 'apps/opik-backend/**'
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
-  OPIK_ENABLE_SENTRY: False
+  OPIK_SENTRY_ENABLE: False
 jobs:
     run-e2e:
         name: SDK E2E Tests ${{matrix.python_version}}

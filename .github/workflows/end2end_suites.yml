@@ -1,6 +1,6 @@
 name: Application E2E tests
 env:
-  OPIK_ENABLE_SENTRY: False
+  OPIK_SENTRY_ENABLE: False
 on:
     workflow_dispatch:
         inputs:
