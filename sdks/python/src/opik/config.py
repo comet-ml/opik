@@ -249,7 +249,4 @@ def get_from_user_inputs(**user_inputs: Any) -> OpikConfig:
     """
     cleaned_user_inputs = dict_utils.remove_none_from_dict(user_inputs)
 
-    for key, value in cleaned_user_inputs.items():
-        update_session_config(key, value)
-
     return OpikConfig(**cleaned_user_inputs)
