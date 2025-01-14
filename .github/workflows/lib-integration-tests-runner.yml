@@ -34,7 +34,6 @@ on:
 env:
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
-  OPIK_DISABLE_LITELLM_MODELS_MONITORING: True
 
 jobs:
   init_environment:
