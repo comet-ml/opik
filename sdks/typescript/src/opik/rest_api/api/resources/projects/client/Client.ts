@@ -529,6 +529,89 @@ export class Projects {
     }
 
     /**
+     * Find Feedback Score names By Project Ids
+     *
+     * @param {OpikApi.FindFeedbackScoreNamesByProjectIdsRequest} request
+     * @param {Projects.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.projects.findFeedbackScoreNamesByProjectIds()
+     */
+    public findFeedbackScoreNamesByProjectIds(
+        request: OpikApi.FindFeedbackScoreNamesByProjectIdsRequest = {},
+        requestOptions?: Projects.RequestOptions
+    ): core.APIPromise<OpikApi.FeedbackScoreNames> {
+        return core.APIPromise.from(
+            (async () => {
+                const { projectIds } = request;
+                const _queryParams: Record<string, string | string[] | object | object[]> = {};
+                if (projectIds != null) {
+                    _queryParams["project_ids"] = projectIds;
+                }
+                const _response = await core.fetcher({
+                    url: urlJoin(
+                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
+                        "v1/private/projects/feedback-scores/names"
+                    ),
+                    method: "GET",
+                    headers: {
+                        "Comet-Workspace":
+                            (await core.Supplier.get(this._options.workspaceName)) != null
+                                ? await core.Supplier.get(this._options.workspaceName)
+                                : undefined,
+                        "X-Fern-Language": "JavaScript",
+                        "X-Fern-Runtime": core.RUNTIME.type,
+                        "X-Fern-Runtime-Version": core.RUNTIME.version,
+                        ...(await this._getCustomAuthorizationHeaders()),
+                        ...requestOptions?.headers,
+                    },
+                    contentType: "application/json",
+                    queryParameters: _queryParams,
+                    requestType: "json",
+                    timeoutMs:
+                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+                    maxRetries: requestOptions?.maxRetries,
+                    withCredentials: true,
+                    abortSignal: requestOptions?.abortSignal,
+                });
+                if (_response.ok) {
+                    return {
+                        ok: _response.ok,
+                        body: serializers.FeedbackScoreNames.parseOrThrow(_response.body, {
+                            unrecognizedObjectKeys: "passthrough",
+                            allowUnrecognizedUnionMembers: true,
+                            allowUnrecognizedEnumValues: true,
+                            breadcrumbsPrefix: ["response"],
+                        }),
+                        headers: _response.headers,
+                    };
+                }
+                if (_response.error.reason === "status-code") {
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+                }
+                switch (_response.error.reason) {
+                    case "non-json":
+                        throw new errors.OpikApiError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.rawBody,
+                        });
+                    case "timeout":
+                        throw new errors.OpikApiTimeoutError(
+                            "Timeout exceeded when calling GET /v1/private/projects/feedback-scores/names."
+                        );
+                    case "unknown":
+                        throw new errors.OpikApiError({
+                            message: _response.error.errorMessage,
+                        });
+                }
+            })()
+        );
+    }
+
+    /**
      * Gets specified metrics for a project
      *
      * @param {string} id

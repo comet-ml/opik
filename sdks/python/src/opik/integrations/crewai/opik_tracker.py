@@ -11,6 +11,18 @@ __IS_TRACKING_ENABLED = False
 def track_crewai(
     project_name: Optional[str] = None,
 ) -> None:
+    """
+    Tracks CrewAI activities by enabling tracking decorators for various critical methods.
+
+    The function applies tracking decorators to key CrewAI components and methods, enabling logging
+    or monitoring of activities. Tracking is enabled globally and can only be initialized once.
+
+    If you use this tracker - please avoid using of OpenAI tracker to prevent duplicate
+    logging of LLM calls and token usage.
+
+    Parameters:
+        project_name: The name of the project to associate with the tracking.
+    """
     global __IS_TRACKING_ENABLED
     if __IS_TRACKING_ENABLED:
         return

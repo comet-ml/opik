@@ -50,7 +50,7 @@ public interface AutomationRuleEvaluatorService {
             AutomationRuleEvaluatorType automationRuleEvaluatorType);
 }
 
-@NonNull @Singleton
+@Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorService {
@@ -61,7 +61,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull TransactionTemplate template;
 
     @Override
-    public <E, T extends AutomationRuleEvaluator<E>> T save(T inputRuleEvaluator,
+    public <E, T extends AutomationRuleEvaluator<E>> T save(@NonNull T inputRuleEvaluator,
             @NonNull UUID projectId,
             @NonNull String workspaceId,
             @NonNull String userName) {

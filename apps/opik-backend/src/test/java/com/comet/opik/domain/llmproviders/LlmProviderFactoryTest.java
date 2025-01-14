@@ -26,6 +26,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
@@ -70,7 +71,8 @@ class LlmProviderFactoryTest {
                 .build());
 
         // SUT
-        var llmProviderFactory = new LlmProviderFactory(llmProviderClientConfig, llmProviderApiKeyService);
+        var llmProviderFactory = new LlmProviderFactory(llmProviderApiKeyService,
+                new LlmProviderClientGenerator(llmProviderClientConfig));
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
 
@@ -83,7 +85,9 @@ class LlmProviderFactoryTest {
                 .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, LlmProviderOpenAi.class));
         var anthropicModels = EnumUtils.getEnumList(AnthropicChatModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, LlmProviderAnthropic.class));
+        var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
+                .map(model -> arguments(model.toString(), LlmProvider.GEMINI, LlmProviderGemini.class));
 
-        return Stream.concat(openAiModels, anthropicModels);
+        return Stream.of(openAiModels, anthropicModels, geminiModels).flatMap(Function.identity());
     }
 }

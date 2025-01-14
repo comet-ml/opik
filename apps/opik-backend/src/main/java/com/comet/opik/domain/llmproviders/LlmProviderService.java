@@ -25,8 +25,8 @@ public interface LlmProviderService {
 
     void validateRequest(@NonNull ChatCompletionRequest request);
 
-    @NonNull Optional<ErrorMessage> getLlmProviderError(Throwable runtimeException);
-
     ChatResponse structuredResponseChat(@NonNull ChatRequest chatRequest,
             @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters);
+
+    Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable runtimeException);
 }
