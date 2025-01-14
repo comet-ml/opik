@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+import com.comet.opik.utils.MustacheUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,7 +27,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.text.StringSubstitutor;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -46,11 +46,11 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOut
 @Slf4j
 public class OnlineScoringEngine {
 
-    final String SCORE_FIELD_NAME = "score";
-    final String REASON_FIELD_NAME = "reason";
-    final String SCORE_FIELD_DESCRIPTION = "the score for ";
-    final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
-    final String DEFAULT_SCHEMA_NAME = "scoring_schema";
+    static final String SCORE_FIELD_NAME = "score";
+    static final String REASON_FIELD_NAME = "reason";
+    static final String SCORE_FIELD_DESCRIPTION = "the score for ";
+    static final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
+    static final String DEFAULT_SCHEMA_NAME = "scoring_schema";
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -103,14 +103,10 @@ public class OnlineScoringEngine {
                 .collect(
                         Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
 
-        // will convert all '{{key}}' into 'value'
-        // TODO: replace with Mustache Java to be in confirm with FE
-        var templateRenderer = new StringSubstitutor(replacements, "{{", "}}");
-
         // render the message templates from evaluator rule
         return templateMessages.stream()
                 .map(templateMessage -> {
-                    var renderedMessage = templateRenderer.replace(templateMessage.content());
+                    var renderedMessage = MustacheUtils.render(templateMessage.content(), replacements);
 
                     return switch (templateMessage.role()) {
                         case USER -> UserMessage.from(renderedMessage);

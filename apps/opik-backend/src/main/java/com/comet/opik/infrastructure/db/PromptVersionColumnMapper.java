@@ -2,7 +2,7 @@ package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.MustacheVariableExtractor;
+import com.comet.opik.utils.MustacheUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.jdbi.v3.core.mapper.ColumnMapper;
 import org.jdbi.v3.core.statement.StatementContext;
@@ -35,7 +35,7 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .template(jsonNode.get("template").asText())
                 .metadata(jsonNode.get("metadata"))
                 .changeDescription(jsonNode.get("change_description").asText())
-                .variables(MustacheVariableExtractor.extractVariables(jsonNode.get("template").asText()))
+                .variables(MustacheUtils.extractVariables(jsonNode.get("template").asText()))
                 .createdAt(Instant.from(FORMATTER.parse(jsonNode.get("created_at").asText())))
                 .createdBy(jsonNode.get("created_by").asText())
                 .build();

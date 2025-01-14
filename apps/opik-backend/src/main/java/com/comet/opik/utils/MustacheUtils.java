@@ -7,14 +7,19 @@ import com.github.mustachejava.MustacheFactory;
 import com.github.mustachejava.codes.ValueCode;
 import lombok.experimental.UtilityClass;
 
+import java.io.IOException;
 import java.io.StringReader;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
+import java.io.Writer;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 @UtilityClass
-public class MustacheVariableExtractor {
+public class MustacheUtils {
 
     public static final MustacheFactory MF = new DefaultMustacheFactory();
 
@@ -29,6 +34,18 @@ public class MustacheVariableExtractor {
         collectVariables(codes, variables);
 
         return variables;
+    }
+
+    public static String render(String template, Map<String, ?> context) {
+
+        Mustache mustache = MF.compile(new StringReader(template), "template");
+
+        try (Writer writer = mustache.execute(new StringWriter(), context)) {
+            writer.flush();
+            return writer.toString();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to render template", e);
+        }
     }
 
     private static void collectVariables(Code[] codes, Set<String> variables) {

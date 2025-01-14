@@ -42,7 +42,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("LlmAsJudge Message Render")
-public class OnlineScoringEngineTest {
+class OnlineScoringEngineTest {
     @Mock
     AutomationRuleEvaluatorService ruleEvaluatorService;
     @Mock
