@@ -2,12 +2,14 @@ package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import dev.langchain4j.data.message.ChatMessageType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
@@ -19,17 +21,20 @@ import java.util.UUID;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 
-@EqualsAndHashCode(callSuper = true)
-@Data
-@SuperBuilder(toBuilder = true)
+@Getter
 @ToString(callSuper = true)
+@SuperBuilder(toBuilder = true)
+@EqualsAndHashCode(callSuper = true)
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvaluator<LlmAsJudgeCode> {
 
     @NotNull @JsonView({View.Public.class, View.Write.class})
-    private LlmAsJudgeCode code;
+    private final LlmAsJudgeCode code;
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record LlmAsJudgeCode(
             @JsonView( {
                     View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
@@ -40,6 +45,7 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record LlmAsJudgeMessage(
             @JsonView( {
                     View.Public.class, View.Write.class}) @NotNull ChatMessageType role,
@@ -48,6 +54,7 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record LlmAsJudgeOutputSchema(
             @JsonView( {
                     View.Public.class, View.Write.class}) @NotNull String name,
@@ -57,6 +64,7 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record LlmAsJudgeModelParameters(
             @JsonView( {
                     View.Public.class, View.Write.class}) @NotNull String name,
