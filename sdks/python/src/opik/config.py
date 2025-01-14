@@ -171,7 +171,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If set to True, Opik will send the information about the errors to Sentry.
     """
 
-    sentry_dsn: str = "https://f887746f8ad15949ebb1f9538a4a1b31@o168229.ingest.us.sentry.io/4508620148441088"
+    sentry_dsn: str = "https://18e4b84006b2ad4cb5df85f372b94dd0@o168229.ingest.us.sentry.io/4508620148441088"
     """
     Sentry project DSN which is used as a destination for sentry events.
     In case there is a need to update reporting rules and stop receiving events from existing users,

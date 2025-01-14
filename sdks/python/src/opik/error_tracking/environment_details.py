@@ -24,8 +24,6 @@ def collect_initial_context() -> Dict[str, Any]:
         "pid": environment.get_pid(),
         "os": environment.get_os(),
         "python_version_verbose": environment.get_python_version_verbose(),
-        "github_actions": environment.in_github_actions(),
-        "pytest": environment.in_pytest(),
     }
 
     installed_packages_details = _get_installed_packages_details()
@@ -34,10 +32,14 @@ def collect_initial_context() -> Dict[str, Any]:
     return result
 
 
-def collect_tags() -> Dict[str, Any]:
+def collect_initial_tags() -> Dict[str, Any]:
     """
     Tags are similar to context but can be used for filtering and search
-    in Sentry
+    in Sentry.
+
+    If you need the data which might be set during the script
+    execution - consider adding it directly to sentry event dict
+    inside before_send function.
     """
     result = {
         "os_type": environment.get_os_type(),
@@ -46,6 +48,8 @@ def collect_tags() -> Dict[str, Any]:
         "jupyter": environment.in_jupyter(),
         "colab": environment.in_colab(),
         "aws_lambda": environment.in_aws_lambda(),
+        "github_actions": environment.in_github_actions(),
+        "pytest": environment.in_pytest(),
         "session_id": "".join(random.choice(string.ascii_letters) for _ in range(9)),
     }
 

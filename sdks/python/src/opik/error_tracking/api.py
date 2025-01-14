@@ -30,7 +30,7 @@ def setup_sentry_error_tracker() -> None:
 
     sentry_dsn = config.sentry_dsn
 
-    tags = environment_details.collect_tags()
+    tags = environment_details.collect_initial_tags()
 
     sentry_sdk.init(
         dsn=sentry_dsn,
