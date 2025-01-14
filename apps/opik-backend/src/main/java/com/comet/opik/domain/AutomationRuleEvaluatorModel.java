@@ -9,6 +9,7 @@ public sealed interface AutomationRuleEvaluatorModel<T> extends AutomationRuleMo
 
     @Json
     T code();
+
     AutomationRuleEvaluatorType type();
 
     @Override
