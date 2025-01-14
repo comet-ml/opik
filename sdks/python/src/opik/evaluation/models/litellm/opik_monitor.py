@@ -5,12 +5,23 @@ import litellm
 from litellm.integrations.opik import opik as litellm_opik_logger
 
 from opik import opik_context
+from opik import config
 
 
 def add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    already_decorated = hasattr(litellm.completion, "opik_tracked")
+    if already_decorated:
+        return params
+
     params = _add_span_metadata_to_params(params)
-    params = _add_callback_to_params(params)
+    params = _ensure_params_have_callback(params)
     return params
+
+
+@functools.lru_cache
+def disabled_in_config() -> bool:
+    config_ = config.OpikConfig()
+    return config_.disable_litellm_models_monitoring
 
 
 def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -35,7 +46,7 @@ def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _add_callback_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
     has_global_opik_logger = any(
         isinstance(callback, litellm_opik_logger.OpikLogger)
         for callback in litellm.callbacks

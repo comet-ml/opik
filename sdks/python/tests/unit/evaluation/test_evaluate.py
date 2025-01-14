@@ -8,6 +8,7 @@ from opik import evaluation, exceptions, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
+from opik.evaluation.models import models_factory
 from ...testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
 
@@ -606,13 +607,13 @@ def test_evaluate_prompt_happyflow(fake_backend):
     mock_get_experiment_url = mock.Mock()
     mock_get_experiment_url.return_value = "any_url"
 
-    mock_LiteLLMChatModel = mock.Mock()
+    mock_models_factory_get = mock.Mock()
     mock_model = mock.Mock()
     mock_model.model_name = MODEL_NAME
     mock_model.generate_provider_response.return_value = mock.Mock(
         choices=[mock.Mock(message=mock.Mock(content="Hello, world!"))]
     )
-    mock_LiteLLMChatModel.return_value = mock_model
+    mock_models_factory_get.return_value = mock_model
 
     with mock.patch.object(
         opik_client.Opik, "create_experiment", mock_create_experiment
@@ -621,9 +622,9 @@ def test_evaluate_prompt_happyflow(fake_backend):
             url_helpers, "get_experiment_url", mock_get_experiment_url
         ):
             with mock.patch.object(
-                evaluation.models.litellm_chat_model,
-                "LiteLLMChatModel",
-                mock_LiteLLMChatModel,
+                models_factory,
+                "get",
+                mock_models_factory_get,
             ):
                 evaluation.evaluate_prompt(
                     dataset=mock_dataset,
