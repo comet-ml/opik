@@ -10,6 +10,8 @@ import langGraphLogoUrl from "/images/integrations/langgraph.png";
 import llamaIndexLogoUrl from "/images/integrations/llamaindex.png";
 import haystackLogoUrl from "/images/integrations/haystack.png";
 import dspyLogoUrl from "/images/integrations/dspy.png";
+import geminiLogoUrl from "/images/integrations/gemini.png";
+import groqLogoUrl from "/images/integrations/groq.png";
 import FunctionDecorators from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/FunctionDecorators";
 import LangChain from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/LangChain";
 import LiteLLM from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/LiteLLM";
@@ -22,6 +24,8 @@ import LangGraph from "@/components/pages-shared/onboarding/FrameworkIntegration
 import LlamaIndex from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/LlamaIndex";
 import Haystack from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/Haystack";
 import DSPy from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/DSPy";
+import Gemini from "./Gemini";
+import Groq from "./Groq";
 
 export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
   {
@@ -58,6 +62,14 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/bedrock.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),
     component: Bedrock,
+  },
+  {
+    label: "Gemini",
+    logo: geminiLogoUrl,
+    colab:
+      "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/gemini.ipynb",
+    documentation: buildDocsUrl("/tracing/integrations/openai"),
+    component: Gemini,
   },
   {
     label: "LangChain",
@@ -106,6 +118,14 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/ragas"),
     component: Ragas,
+  },
+  {
+    label: "Groq",
+    logo: groqLogoUrl,
+    colab:
+      "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/groq.ipynb",
+    documentation: buildDocsUrl("/tracing/integrations/ragas"),
+    component: Groq,
   },
   {
     label: "DSPy",

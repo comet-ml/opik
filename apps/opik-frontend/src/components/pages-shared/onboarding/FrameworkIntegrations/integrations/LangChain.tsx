@@ -4,9 +4,6 @@ import IntegrationTemplate, {
   OPIK_API_KEY_TEMPLATE,
 } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/IntegrationTemplate";
 
-const CODE_TITLE =
-  "You can use the `OpikTracer` provided by the Opik SDK to log all LangChains calls to Opik:";
-
 const CODE = `import getpass
 import os
 
@@ -37,9 +34,7 @@ print(llm_chain.invoke({"input": "Hello, how are you?"}, callbacks=[opik_tracer]
 const LangChain: React.FC<FrameworkIntegrationComponentProps> = ({
   apiKey,
 }) => {
-  return (
-    <IntegrationTemplate apiKey={apiKey} codeTitle={CODE_TITLE} code={CODE} />
-  );
+  return <IntegrationTemplate apiKey={apiKey} code={CODE} />;
 };
 
 export default LangChain;

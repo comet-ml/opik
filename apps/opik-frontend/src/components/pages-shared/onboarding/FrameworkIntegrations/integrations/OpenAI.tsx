@@ -4,9 +4,6 @@ import IntegrationTemplate, {
 } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/IntegrationTemplate";
 import { FrameworkIntegrationComponentProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
 
-const CODE_TITLE =
-  "You can use the `track_openai` wrapper to log all OpenAI calls to the Opik platform";
-
 const CODE = `import getpass
 import os
 
@@ -34,9 +31,7 @@ response = openai_client.chat.completions.create(
 print(response.choices[0].message.content)`;
 
 const OpenAI: React.FC<FrameworkIntegrationComponentProps> = ({ apiKey }) => {
-  return (
-    <IntegrationTemplate apiKey={apiKey} codeTitle={CODE_TITLE} code={CODE} />
-  );
+  return <IntegrationTemplate apiKey={apiKey} code={CODE} />;
 };
 
 export default OpenAI;

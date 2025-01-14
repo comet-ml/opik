@@ -30,8 +30,8 @@ dspy.settings.configure(
 cot = dspy.ChainOfThought("question -> answer")
 print(cot(question="What is the meaning of life?"))`;
 
-const DSPy: React.FC<FrameworkIntegrationComponentProps> = ({ apiKey }) => {
+const Gemini: React.FC<FrameworkIntegrationComponentProps> = ({ apiKey }) => {
   return <IntegrationTemplate apiKey={apiKey} code={CODE} />;
 };
 
-export default DSPy;
+export default Gemini;

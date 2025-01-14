@@ -4,8 +4,6 @@ import IntegrationTemplate, {
   OPIK_API_KEY_TEMPLATE,
 } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/IntegrationTemplate";
 
-const CODE_TITLE = "You can configure LlamaIndex to log all LLM calls to Opik:";
-
 const CODE = `import getpass
 import os
 from pathlib import Path
@@ -42,9 +40,7 @@ print(response)`;
 const LlamaIndex: React.FC<FrameworkIntegrationComponentProps> = ({
   apiKey,
 }) => {
-  return (
-    <IntegrationTemplate apiKey={apiKey} codeTitle={CODE_TITLE} code={CODE} />
-  );
+  return <IntegrationTemplate apiKey={apiKey} code={CODE} />;
 };
 
 export default LlamaIndex;

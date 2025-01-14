@@ -18,7 +18,7 @@ const putApiKeyInCode = (code: string, apiKey?: string): string => {
 };
 
 type IntegrationTemplateProps = FrameworkIntegrationComponentProps & {
-  codeTitle: string;
+  codeTitle?: string;
   code: string;
 };
 
@@ -39,7 +39,9 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
         </div>
       </div>
       <div>
-        <div className="comet-body-s mb-3">2. {codeTitle}</div>
+        <div className="comet-body-s mb-3">
+          2. {codeTitle || "Run the following code to get started"}
+        </div>
         <CodeHighlighter data={putApiKeyInCode(code, apiKey)} />
       </div>
     </div>

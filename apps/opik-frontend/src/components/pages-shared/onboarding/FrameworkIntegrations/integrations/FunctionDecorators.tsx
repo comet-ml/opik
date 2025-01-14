@@ -4,9 +4,6 @@ import IntegrationTemplate, {
   OPIK_API_KEY_TEMPLATE,
 } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/IntegrationTemplate";
 
-const CODE_TITLE =
-  "Each function decorated by the `track` decorator will be logged to the Opik platform:";
-
 const CODE = `import getpass
 import os
 
@@ -58,9 +55,7 @@ print(result)`;
 const FunctionDecorators: React.FC<FrameworkIntegrationComponentProps> = ({
   apiKey,
 }) => {
-  return (
-    <IntegrationTemplate apiKey={apiKey} codeTitle={CODE_TITLE} code={CODE} />
-  );
+  return <IntegrationTemplate apiKey={apiKey} code={CODE} />;
 };
 
 export default FunctionDecorators;
