@@ -54,7 +54,7 @@ def _add_callback_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
     return {
         **params,
         "success_callback": [opik_logger, *params.get("success_callback", [])],
-        "error_callback": [opik_logger, *params.get("error_callback", [])],
+        "failure_callback": [opik_logger, *params.get("error_callback", [])],
     }
 
 
