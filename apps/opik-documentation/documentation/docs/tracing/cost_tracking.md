@@ -1,7 +1,7 @@
 ---
 sidebar_label: Cost Tracking
 description: Describes how to track and monitor costs for your LLM applications using Opik
-test_code_snippets: false
+pytest_codeblocks_skip: true
 ---
 
 # Cost Tracking

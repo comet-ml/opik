@@ -1,6 +1,7 @@
 ---
 sidebar_label: Gemini - Google AI Studio
 description: Describes how to track Gemini LLM calls using Opik
+pytest_codeblocks_skip: true
 ---
 
 # Gemini - Google AI Studio
@@ -18,7 +19,7 @@ description: Describes how to track Gemini LLM calls using Opik
 
 ### Configuring Opik
 
-To start tracking your Gemini LLM calls, you can use our [LiteLLM integration](/docs/opik/tracing/integrations/litellm). You'll need to have both the `opik`, `litellm` and `google-generativeai` packages installed. You can install them using pip:
+To start tracking your Gemini LLM calls, you can use our [LiteLLM integration](/tracing/integrations/litellm.md). You'll need to have both the `opik`, `litellm` and `google-generativeai` packages installed. You can install them using pip:
 
 ```bash
 pip install opik litellm google-generativeai
@@ -44,7 +45,7 @@ In order to configure Gemini, you will need to have:
 
 Once you have these, you can set them as environment variables:
 
-```python pytest_codeblocks_skip="true"
+```python pytest_codeblocks_skip=true
 import os
 
 os.environ["GEMINI_API_KEY"] = "" # Your Google AI Studio Gemini API Key
@@ -73,7 +74,7 @@ response = litellm.completion(
 
 ## Logging LLM calls within a tracked function
 
-If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
+If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces.mdx#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 
 ```python
 from opik import track, opik_context

@@ -166,6 +166,13 @@ class OpikConfig(pydantic_settings.BaseSettings):
     it might lead to unexpected results for the features that rely on spans/traces created.
     """
 
+    disable_litellm_models_monitoring: bool = False
+    """
+    If set to True - Opik will not create llm spans for LiteLLMChatModel calls.
+    It is mainly to be used in tests since litellm uses external Opik callback
+    which makes HTTP requests not via the opik package.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

@@ -1,6 +1,7 @@
 ---
 sidebar_label: Groq
 description: Describes how to track Groq LLM calls using Opik
+pytest_codeblocks_skip: true
 ---
 
 # Groq
@@ -18,7 +19,7 @@ description: Describes how to track Groq LLM calls using Opik
 
 ### Configuring Opik
 
-To start tracking your Groq LLM calls, you can use our [LiteLLM integration](/docs/opik/tracing/integrations/litellm). You'll need to have both the `opik` and `litellm` packages installed. You can install them using pip:
+To start tracking your Groq LLM calls, you can use our [LiteLLM integration](/tracing/integrations/litellm.md). You'll need to have both the `opik` and `litellm` packages installed. You can install them using pip:
 
 ```bash
 pip install opik litellm
@@ -73,7 +74,7 @@ response = litellm.completion(
 
 ## Logging LLM calls within a tracked function
 
-If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
+If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces.mdx#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 
 ```python
 from opik import track, opik_context

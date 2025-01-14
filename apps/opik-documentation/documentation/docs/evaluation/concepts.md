@@ -6,7 +6,7 @@ description: Introduces the concepts behind Opik's evaluation framework
 # Evaluation Concepts
 
 :::tip
-If you want to jump straight to running evaluations, you can head to the [Evaluate your LLM application](/docs/evaluation/evaluate_your_llm.md) section.
+If you want to jump straight to running evaluations, you can head to the [Evaluate prompts](/docs/evaluation/evaluate_prompt.md) or [Evaluate your LLM application](/docs/evaluation/evaluate_your_llm.md) guides.
 :::
 
 When working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.
@@ -63,27 +63,10 @@ Experiment items store the input, expected output, actual output and feedback sc
 
 ![Experiment Items](/img/evaluation/experiment_items.png)
 
-## Running an evaluation
+## Learn more
 
-When you run an evaluation, you will need to know the following:
+We have provided some guides to help you get started with Opik's evaluation framework:
 
-1. Dataset: The dataset you want to run the evaluation on.
-2. Evaluation task: This maps the inputs stored in the dataset to the output you would like to score. The evaluation task is typically the LLM application you are building.
-3. Metrics: The metrics you would like to use when scoring the outputs of your LLM
-
-You can then run the evaluation using the `evaluate` function:
-
-```python
-from opik import evaluate
-
-evaluate(
-    dataset=dataset,
-    evaluation_task=evaluation_task,
-    metrics=metrics,
-    experiment_config={"prompt_template": "..."},
-)
-```
-
-:::tip
-You can find a full tutorial on defining evaluations in the [Evaluate your LLM application](/docs/evaluation/evaluate_your_llm.md) section.
-:::
+1. [Overview of Opik's evaluation features](/docs/evaluation/overview.mdx)
+2. [Evaluate prompts](/docs/evaluation/evaluate_prompt.md)
+3. [Evaluate your LLM application](/docs/evaluation/evaluate_your_llm.md)

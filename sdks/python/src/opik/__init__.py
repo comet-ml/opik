@@ -12,7 +12,7 @@ from . import _logging
 from .configurator.configure import configure
 from . import package_version
 from .plugins.pytest.decorator import llm_unit
-from .evaluation import evaluate, evaluate_experiment
+from .evaluation import evaluate, evaluate_experiment, evaluate_prompt
 from .integrations.sagemaker import auth as sagemaker_auth
 
 _logging.setup()
@@ -21,6 +21,7 @@ __version__ = package_version.VERSION
 __all__ = [
     "__version__",
     "evaluate",
+    "evaluate_prompt",
     "evaluate_experiment",
     "ExperimentItemContent",
     "ExperimentItemReferences",

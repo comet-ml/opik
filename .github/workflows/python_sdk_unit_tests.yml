@@ -9,6 +9,8 @@ on:
       - 'main'
     paths:
       - 'sdks/python/**'
+env:
+  OPIK_DISABLE_LITELLM_MODELS_MONITORING: True
 jobs:
   UnitTests:
     name: Units_Python_${{matrix.python_version}}

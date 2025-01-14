@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 description: High-level overview on how to self-host Opik
-test_code_snippets: false
+pytest_codeblocks_skip: true
 ---
 
 # Self-hosting Opik
@@ -17,7 +17,7 @@ If you choose to self-host Opik, you can choose between two deployment options:
 
 If you would like to try out Opik locally, we recommend using our Local installation based on `docker compose`. Assuming you have `git` and `docker` installed, you can get started in a couple of minutes:
 
-```bash pytest_codeblocks_skip="true"
+```bash pytest_codeblocks_skip=true
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
@@ -29,14 +29,14 @@ docker compose up --detach
 
 Opik will now be available at <a href="http://localhost:5173" target="_blank">http://localhost:5173</a> and all traces logged from your local machine will be logged to this local Opik instance. In order for traces and other data to be logged to your Opik instance, you need to make sure that the Opik Python SDK is configured to point to the Opik server you just started. You can do this by running the following command:
 
-```bash pytest_codeblocks_skip="true"
+```bash pytest_codeblocks_skip=true
 # Configure the Python SDK to point to the local Opik platform
 export OPIK_BASE_URL=http://localhost:5173/api
 ```
 
 or in Python:
 
-```python pytest_codeblocks_skip="true"
+```python pytest_codeblocks_skip=true
 import os
 
 os.environ["OPIK_BASE_URL"] = "http://localhost:5173/api"

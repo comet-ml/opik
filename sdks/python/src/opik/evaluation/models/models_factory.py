@@ -1,5 +1,7 @@
 from typing import Optional, Any
-from . import base_model, litellm_chat_model
+
+from .litellm import litellm_chat_model
+from . import base_model
 
 DEFAULT_GPT_MODEL_NAME = "gpt-4o"
 
