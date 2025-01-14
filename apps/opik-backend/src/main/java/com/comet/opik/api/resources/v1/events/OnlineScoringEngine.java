@@ -46,6 +46,12 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOut
 @Slf4j
 public class OnlineScoringEngine {
 
+    final String SCORE_FIELD_NAME = "score";
+    final String REASON_FIELD_NAME = "reason";
+    final String SCORE_FIELD_DESCRIPTION = "the score for ";
+    final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
+    final String DEFAULT_SCHEMA_NAME = "scoring_schema";
+
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
      * Trace variables and with the proper structured output format.
@@ -54,7 +60,7 @@ public class OnlineScoringEngine {
      * @param trace the sampled Trace to be scored
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
-    public static ChatRequest prepareLlmRequest(LlmAsJudgeCode evaluatorCode,
+    public static ChatRequest prepareLlmRequest(@NotNull LlmAsJudgeCode evaluatorCode,
             Trace trace) {
         var responseFormat = toResponseFormat(evaluatorCode.schema());
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace);
@@ -68,7 +74,7 @@ public class OnlineScoringEngine {
     /**
      * Render the rule evaluator message template using the values from an actual trace.
      * <p>
-     * As the rule my consist in multiple messages, we check each one of them for variables to fill.
+     * As the rule may consist in multiple messages, we check each one of them for variables to fill.
      * Then we go through every variable template to replace them for the value from the trace.
      *
      * @param templateMessages a list of messages with variables to fill with a Trace value
@@ -121,7 +127,7 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Parse evaluator\'s variable mapper into a usable list of mappings.
+     * Parse evaluator's variable mapper into a usable list of mappings.
      *
      * @param evaluatorVariables a map with variables and a path into a trace input/output/metadata to replace
      * @return a parsed list of mappings, easier to use for the template rendering
@@ -159,12 +165,6 @@ public class OnlineScoringEngine {
             return null;
         }
     }
-
-    final String SCORE_FIELD_NAME = "score";
-    final String REASON_FIELD_NAME = "reason";
-    final String SCORE_FIELD_DESCRIPTION = "the score for ";
-    final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
-    final String DEFAULT_SCHEMA_NAME = "scoring_schema";
 
     static ResponseFormat toResponseFormat(@NotNull List<LlmAsJudgeOutputSchema> schema) {
         // convert <name, type, description> into something like
