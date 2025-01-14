@@ -1,6 +1,7 @@
 package com.comet.opik;
 
 import com.comet.opik.api.error.JsonInvalidFormatExceptionMapper;
+import com.comet.opik.domain.llmproviders.LlmProviderClientModule;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -8,6 +9,7 @@ import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.bi.BiModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
+import com.comet.opik.infrastructure.cache.CacheModule;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.infrastructure.db.IdGeneratorModule;
 import com.comet.opik.infrastructure.db.NameGeneratorModule;
@@ -72,7 +74,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
-                        new ConfigurationModule(), new BiModule())
+                        new ConfigurationModule(), new BiModule(), new CacheModule(), new LlmProviderClientModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()

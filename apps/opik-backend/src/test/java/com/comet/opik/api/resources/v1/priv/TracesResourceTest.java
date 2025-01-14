@@ -100,11 +100,11 @@ import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackSc
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectTraceStatItems;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -3509,6 +3509,7 @@ class TracesResourceTest {
                             .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
                                     "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
                             .model(model)
+                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toList());
 
@@ -5237,6 +5238,7 @@ class TracesResourceTest {
                             .map(span -> span.toBuilder()
                                     .projectName(projectName)
                                     .traceId(trace.id())
+                                    .totalEstimatedCost(null)
                                     .build()))
                     .collect(Collectors.groupingBy(Span::traceId));
             batchCreateSpansAndAssert(
@@ -5281,6 +5283,7 @@ class TracesResourceTest {
                                     .traceId(trace.id())
                                     .startTime(trace.startTime())
                                     .usage(null)
+                                    .totalEstimatedCost(null)
                                     .build()))
                     .toList();
             batchCreateSpansAndAssert(spans, apiKey, workspaceName);
@@ -5402,6 +5405,7 @@ class TracesResourceTest {
                                 .traceId(trace.id())
                                 .projectName(projectName)
                                 .feedbackScores(null)
+                                .totalEstimatedCost(null)
                                 .build())
                         .toList();
 
@@ -6967,6 +6971,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .traceId(trace.id())
                             .usage(Map.of(usageKey, otherUsageValue))
+                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
@@ -7022,6 +7027,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .traceId(trace.id())
                             .usage(Map.of(usageKey, 123))
+                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
@@ -7072,6 +7078,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .traceId(trace.id())
                             .usage(Map.of(usageKey, 123))
+                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
@@ -7122,6 +7129,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .traceId(trace.id())
                             .usage(Map.of(usageKey, 456))
+                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
@@ -7172,6 +7180,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .traceId(trace.id())
                             .usage(Map.of(usageKey, 456))
+                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()

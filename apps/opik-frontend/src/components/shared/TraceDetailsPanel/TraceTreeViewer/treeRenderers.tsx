@@ -79,6 +79,11 @@ export const treeRenderers: TreeRenderProps = {
             props.context.isFocused && styles.focused,
           )}
           {...(props.context.itemContainerWithoutChildrenProps as object)}
+          onClick={() => {
+            if (props.context.interactiveElementProps.onFocus) {
+              props.context.focusItem();
+            }
+          }}
           onFocus={props.context.interactiveElementProps.onFocus}
         >
           <div className={cn(styles.chainItemContainer)}>

@@ -33,7 +33,7 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Tracing",
+      label: "Observability",
       collapsed: false,
       items: [
         "tracing/log_traces",
@@ -56,7 +56,9 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/aisuite",
             "tracing/integrations/anthropic",
             "tracing/integrations/bedrock",
+            "tracing/integrations/crewai",
             "tracing/integrations/dify",
+            "tracing/integrations/dspy",
             "tracing/integrations/gemini",
             "tracing/integrations/groq",
             "tracing/integrations/haystack",
@@ -75,11 +77,12 @@ const sidebars: SidebarsConfig = {
       label: "Evaluation",
       collapsed: false,
       items: [
+        "evaluation/overview",
         "evaluation/concepts",
-        "evaluation/manage_datasets",
+        "evaluation/evaluate_prompt",
         "evaluation/evaluate_your_llm",
         "evaluation/update_existing_experiment",
-        "evaluation/playground",
+        "evaluation/manage_datasets",
         {
           type: "category",
           label: "Metrics",
@@ -101,9 +104,13 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Prompt Management",
+      label: "Prompt engineering",
       collapsed: true,
-      items: ["library/prompt_management", "library/managing_prompts_in_code"],
+      items: [
+        "prompt_engineering/prompt_management",
+        "prompt_engineering/managing_prompts_in_code",
+        "prompt_engineering/playground",
+      ],
     },
     {
       type: "category",
@@ -129,6 +136,8 @@ const sidebars: SidebarsConfig = {
         "cookbook/aisuite",
         "cookbook/anthropic",
         "cookbook/bedrock",
+        "cookbook/crewai",
+        "cookbook/dspy",
         "cookbook/gemini",
         "cookbook/groq",
         "cookbook/haystack",

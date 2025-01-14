@@ -26,7 +26,7 @@ To start tracking your Anthropic LLM calls, you'll need to have both the `opik` 
 pip install opik anthropic
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
 ```bash
 opik configure
@@ -38,7 +38,7 @@ In order to configure Anthropic, you will need to have your Anthropic API Key se
 
 Once you have it, you can set it as an environment variable:
 
-```bash pytest_codeblocks_skip="true"
+```bash pytest_codeblocks_skip=true
 export ANTHROPIC_API_KEY="YOUR_API_KEY"
 ```
 

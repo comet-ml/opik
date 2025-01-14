@@ -157,7 +157,7 @@ cd apps/opik-documentation/documentation
 npm install
 
 # Run the documentation website locally
-npm run start
+npm run dev
 ```
 
 You can then access the documentation website at `http://localhost:3000`. Any change you make to the documentation will be updated in real-time.
@@ -282,6 +282,23 @@ java -jar target/opik-backend-{project.pom.version}.jar server config.yml
 Replace `{project.pom.version}` with the version of the project in the pom file.
 
 Once the backend is running, you can access the Opik API at `http://localhost:8080`.
+
+#### Formatting the code
+
+Before submitting a PR, please ensure that your code is formatted correctly.
+Run the following command to automatically format your code:
+
+```bash
+mvn spotless:apply
+```
+
+Our CI will check that the code is formatted correctly and will fail if it is not by running the following command:
+
+```bash
+mvn spotless:check
+```
+
+#### Testing the backend
 
 Before submitting a PR, please ensure that your code passes the test suite:
 

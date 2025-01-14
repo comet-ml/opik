@@ -84,7 +84,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -120,10 +119,10 @@ import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -2770,18 +2769,16 @@ class DatasetsResourceTest {
             return Stream.of(
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                                    .input(null)
                                     .data(null)
                                     .build()))
                             .build(),
-                            "items[0].input must provide either input or data field"),
+                            "items[0].data must not be empty"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
-                                    .input(null)
                                     .data(Map.of())
                                     .build()))
                             .build(),
-                            "items[0].input must provide either input or data field"),
+                            "items[0].data must not be empty"),
                     arguments(factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                             .items(List.of(factory.manufacturePojo(DatasetItem.class).toBuilder()
                                     .source(null)
@@ -2972,41 +2969,6 @@ class DatasetsResourceTest {
                         "span workspace and dataset item workspace does not match");
             }
         }
-
-        @Test
-        @DisplayName("when data is null, the accept the request")
-        void create__whenDataIsNull__thenAcceptTheRequest() {
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(null)
-                    .build();
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
-
-            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
-        }
-
-        @Test
-        @DisplayName("when input is null but data is present, the accept the request")
-        void create__whenInputIsNullButDataIsPresent__thenAcceptTheRequest() {
-            var item = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .input(null)
-                    .build();
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(List.of(item))
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
-
-            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
-        }
-
     }
 
     private UUID createTrace(Trace trace, String apiKey, String workspaceName) {
@@ -3160,7 +3122,6 @@ class DatasetsResourceTest {
             var items = IntStream.range(0, 1000)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
                             .experimentItems(null)
-                            .metadata(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
                             .build())
@@ -3232,8 +3193,6 @@ class DatasetsResourceTest {
         Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                 .orElse(Map.of());
 
-        expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
-
         assertThat(actualEntity.id()).isEqualTo(expectedDatasetItem.id());
         assertThat(actualEntity).usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
@@ -3241,37 +3200,6 @@ class DatasetsResourceTest {
 
         assertThat(actualEntity.createdAt()).isInThePast();
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
-    }
-
-    private DatasetItem mergeInputMap(DatasetItem expectedDatasetItem, Map<String, JsonNode> data) {
-
-        Map<String, JsonNode> newMap = new HashMap<>();
-
-        if (expectedDatasetItem.expectedOutput() != null) {
-            newMap.put("expected_output", expectedDatasetItem.expectedOutput());
-        }
-
-        if (expectedDatasetItem.input() != null) {
-            newMap.put("input", expectedDatasetItem.input());
-        }
-
-        if (expectedDatasetItem.metadata() != null) {
-            newMap.put("metadata", expectedDatasetItem.metadata());
-        }
-
-        Map<String, JsonNode> mergedMap = Stream
-                .concat(data.entrySet().stream(), newMap.entrySet().stream())
-                .collect(toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        (v1, v2) -> v2 // In case of conflict, use the value from map2
-                ));
-
-        expectedDatasetItem = expectedDatasetItem.toBuilder()
-                .data(new HashMap<>(mergedMap))
-                .build();
-
-        return expectedDatasetItem;
     }
 
     @Nested
@@ -3393,7 +3321,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3433,7 +3361,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3474,7 +3402,10 @@ class DatasetsResourceTest {
 
             var updatedItems = items
                     .stream()
-                    .map(item -> item.toBuilder().input(factory.manufacturePojo(JsonNode.class)).build())
+                    .map(item -> item.toBuilder()
+                            .data(Map.of(factory.manufacturePojo(String.class),
+                                    factory.manufacturePojo(JsonNode.class)))
+                            .build())
                     .toList();
 
             var updatedBatch = batch.toBuilder()
@@ -3488,7 +3419,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
@@ -3544,7 +3475,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3587,7 +3518,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -3645,8 +3576,6 @@ class DatasetsResourceTest {
 
             Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
                     .orElse(Map.of());
-
-            expectedDatasetItem = mergeInputMap(expectedDatasetItem, data);
 
             assertThat(actualDatasetItem.data()).isEqualTo(expectedDatasetItem.data());
         }
@@ -3784,7 +3713,7 @@ class DatasetsResourceTest {
                     .map(DatasetItem::data)
                     .toList();
 
-            Set<Column> columns = addDeprecatedFields(data);
+            Set<Column> columns = getColumns(data);
 
             var page = 1;
             var pageSize = 5;
@@ -3832,7 +3761,8 @@ class DatasetsResourceTest {
                             .containsExactlyElementsOf(expectedExperimentItems);
 
                     for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
-                        var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(actualDatasetItem.experimentItems().get(j), USER);
+                        var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                                actualDatasetItem.experimentItems().get(j), USER);
                         var expectedExperimentItem = expectedExperimentItems.get(j);
 
                         assertThat(actualExperimentItem.feedbackScores())
@@ -4016,7 +3946,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(items.stream().map(DatasetItem::data).toList());
+            Set<Column> columns = getColumns(items.stream().map(DatasetItem::data).toList());
 
             List<Filter> filters = List.of(ExperimentsComparisonFilter.builder()
                     .type(FieldType.STRING)
@@ -4099,7 +4029,7 @@ class DatasetsResourceTest {
                     apiKey,
                     workspaceName);
 
-            Set<Column> columns = addDeprecatedFields(datasetItems.stream().map(DatasetItem::data).toList());
+            Set<Column> columns = getColumns(datasetItems.stream().map(DatasetItem::data).toList());
 
             List<Filter> filters = List.of(filter);
 
@@ -4196,8 +4126,8 @@ class DatasetsResourceTest {
                 var item = items.get(i);
                 var trace = Trace.builder()
                         .id(GENERATOR.generate())
-                        .input(item.input())
-                        .output(item.expectedOutput())
+                        .input(item.data().get("input"))
+                        .output(item.data().get("expected_output"))
                         .projectName(projectName)
                         .startTime(Instant.now())
                         .name("trace-" + i)
@@ -4213,30 +4143,38 @@ class DatasetsResourceTest {
                 if (i == 0) {
                     DatasetItem item = factory.manufacturePojo(DatasetItem.class)
                             .toBuilder()
-                            .input(JsonUtils
-                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("input", "sql_cost"))))
-                            .expectedOutput(JsonUtils
-                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("output", "sql_cost"))))
-                            .metadata(JsonUtils
-                                    .getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of("sql_cost", 10))))
                             .source(DatasetItemSource.SDK)
-                            .data(Map.of(
-                                    "sql_tag", JsonUtils.readTree("sql_test"),
-                                    "sql_rate", JsonUtils.readTree(100),
-                                    "meta_field", JsonUtils.readTree(Map.of("version", new String[]{"10", "11", "12"})),
-                                    "releases", JsonUtils.readTree(
+                            .data(new HashMap<>() {
+                                {
+                                    put("sql_tag", JsonUtils.readTree("sql_test"));
+                                    put("sql_rate", JsonUtils.readTree(100));
+                                    put("input", JsonUtils
+                                            .getJsonNodeFromString(
+                                                    JsonUtils.writeValueAsString(Map.of("input", "sql_cost"))));
+                                    put("expected_output", JsonUtils
+                                            .getJsonNodeFromString(
+                                                    JsonUtils.writeValueAsString(Map.of("output", "sql_cost"))));
+                                    put("metadata", JsonUtils
+                                            .getJsonNodeFromString(
+                                                    JsonUtils.writeValueAsString(Map.of("sql_cost", 10))));
+                                    put("meta_field",
+                                            JsonUtils.readTree(Map.of("version", new String[]{"10", "11", "12"})));
+                                    put("releases", JsonUtils.readTree(
                                             List.of(
                                                     Map.of("fixes", new String[]{"10", "11", "12"}, "version", "1.0"),
                                                     Map.of("fixes", new String[]{"10", "11", "12"}, "version", "1.1"),
-                                                    Map.of("fixes", new String[]{"10", "45", "30"}, "version", "1.2"))),
-                                    "json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338")),
-                                    RandomStringUtils.randomAlphanumeric(5),
-                                    BigIntegerNode.valueOf(new BigInteger("18446744073709551615")),
-                                    RandomStringUtils.randomAlphanumeric(5), DoubleNode.valueOf(132432432.79995),
-                                    RandomStringUtils.randomAlphanumeric(5),
-                                    DoubleNode.valueOf(1.1844674407370955444555),
-                                    RandomStringUtils.randomAlphanumeric(5), IntNode.valueOf(100000000),
-                                    RandomStringUtils.randomAlphanumeric(5), BooleanNode.valueOf(true)))
+                                                    Map.of("fixes", new String[]{"10", "45", "30"}, "version",
+                                                            "1.2"))));
+                                    put("json_node", JsonUtils.readTree(Map.of("test", "1233", "test2", "12338")));
+                                    put(RandomStringUtils.randomAlphanumeric(5),
+                                            BigIntegerNode.valueOf(new BigInteger("18446744073709551615")));
+                                    put(RandomStringUtils.randomAlphanumeric(5), DoubleNode.valueOf(132432432.79995));
+                                    put(RandomStringUtils.randomAlphanumeric(5),
+                                            DoubleNode.valueOf(1.1844674407370955444555));
+                                    put(RandomStringUtils.randomAlphanumeric(5), IntNode.valueOf(100000000));
+                                    put(RandomStringUtils.randomAlphanumeric(5), BooleanNode.valueOf(true));
+                                }
+                            })
                             .traceId(null)
                             .spanId(null)
                             .build();
@@ -4727,65 +4665,7 @@ class DatasetsResourceTest {
                 .collect(toSet());
     }
 
-    @Nested
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    //TODO: Remove this test class after migration to the new dataset item format
-    class TestNoMigratedDatasetItemRetrieval {
-
-        private DatasetItem datasetItem;
-
-        @BeforeEach
-        void setUp() {
-
-            var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class));
-            var clickhouseConnectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
-                    CLICKHOUSE, DATABASE_NAME).build();
-
-            var datasetItem = factory.manufacturePojo(DatasetItem.class);
-
-            Mono.from(clickhouseConnectionFactory.create())
-                    .flatMap(connection -> Mono.from(connection.createStatement("""
-                            INSERT INTO %s.%s (
-                            id,
-                            input,
-                            expected_output,
-                            metadata,
-                            source,
-                            dataset_id,
-                            workspace_id
-                            ) VALUES (:id, :input, :expected_output, :metadata, :source, :dataset_id, :workspace_id)
-                            """.formatted(DATABASE_NAME, "dataset_items"))
-                            .bind("id", datasetItem.id())
-                            .bind("input", datasetItem.input().toString())
-                            .bind("expected_output", datasetItem.expectedOutput().toString())
-                            .bind("metadata", datasetItem.metadata().toString())
-                            .bind("source", DatasetItemSource.SDK.getValue())
-                            .bind("dataset_id", datasetId)
-                            .bind("workspace_id", WORKSPACE_ID)
-                            .execute()))
-                    .block();
-
-            this.datasetItem = datasetItem;
-        }
-
-        @Test
-        void findById__whenDatasetItemNotMigrated__thenReturnDatasetItemWithData() {
-
-            var item = datasetItem.toBuilder()
-                    .spanId(null)
-                    .traceId(null)
-                    .experimentItems(null)
-                    .source(DatasetItemSource.SDK)
-                    .data(Map.of("input", datasetItem.input(),
-                            "expected_output", datasetItem.expectedOutput(),
-                            "metadata", datasetItem.metadata()))
-                    .build();
-
-            getItemAndAssert(item, TEST_WORKSPACE, API_KEY);
-        }
-    }
-
-    private Set<Column> addDeprecatedFields(List<Map<String, JsonNode>> data) {
+    private Set<Column> getColumns(List<Map<String, JsonNode>> data) {
 
         HashSet<Column> columns = data
                 .stream()
@@ -4797,12 +4677,6 @@ class DatasetsResourceTest {
                         .filterFieldPrefix("data")
                         .build())
                 .collect(Collectors.toCollection(HashSet::new));
-
-        columns.add(Column.builder().name("input").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data").build());
-        columns.add(Column.builder().name("expected_output").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data")
-                .build());
-        columns.add(
-                Column.builder().name("metadata").types(Set.of(ColumnType.OBJECT)).filterFieldPrefix("data").build());
 
         Map<String, Set<ColumnType>> results = columns.stream()
                 .collect(groupingBy(Column::name, mapping(Column::types, flatMapping(Set::stream, toSet()))));
@@ -4841,7 +4715,8 @@ class DatasetsResourceTest {
                     .ignoringFields(IGNORED_FIELDS_LIST)
                     .isEqualTo(experimentItems.get(i));
 
-            var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(actualExperimentItems.getFirst(), USER).feedbackScores();
+            var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                    actualExperimentItems.getFirst(), USER).feedbackScores();
             assertThat(actualFeedbackScores).hasSize(1);
 
             assertThat(actualFeedbackScores.getFirst())

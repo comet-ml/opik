@@ -14,6 +14,8 @@ import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
 import { Project } from "@/types/projects";
 import { Textarea } from "@/components/ui/textarea";
 import useProjectUpdateMutation from "@/api/projects/useProjectUpdateMutation";
+import { useNavigate } from "@tanstack/react-router";
+import useAppStore from "@/store/AppStore";
 
 type AddEditProjectDialogProps = {
   project?: Project;
@@ -26,6 +28,9 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
   open,
   setOpen,
 }) => {
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const { mutate: createMutate } = useProjectCreateMutation();
   const { mutate: updateMutate } = useProjectUpdateMutation();
   const [name, setName] = useState(project ? project.name : "");
@@ -47,14 +52,38 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
         },
       });
     } else {
-      createMutate({
-        project: {
-          name,
-          ...(description && { description }),
+      createMutate(
+        {
+          project: {
+            name,
+            ...(description && { description }),
+          },
         },
-      });
+        {
+          onSuccess(projectData) {
+            if (!projectData.id) return;
+
+            navigate({
+              to: "/$workspaceName/projects/$projectId/traces",
+              params: {
+                projectId: projectData.id,
+                workspaceName,
+              },
+            });
+          },
+        },
+      );
     }
-  }, [createMutate, description, isEdit, name, project, updateMutate]);
+  }, [
+    createMutate,
+    description,
+    isEdit,
+    name,
+    navigate,
+    project,
+    updateMutate,
+    workspaceName,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

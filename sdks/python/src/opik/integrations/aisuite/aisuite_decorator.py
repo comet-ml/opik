@@ -1,12 +1,21 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import (
+    Any,
+    AsyncGenerator,
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import aisuite.framework as aisuite_chat_completion
 from openai.types.chat import chat_completion as openai_chat_completion
 
 from opik import dict_utils
 from opik.decorator import arguments_helpers, base_track_decorator
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -131,6 +140,8 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> None:
-        return None
+        generations_aggregator: Optional[Callable[[List[Any]], str]],
+    ) -> Optional[Union[Generator, AsyncGenerator]]:
+        return super()._generators_handler(
+            output, capture_output, generations_aggregator
+        )

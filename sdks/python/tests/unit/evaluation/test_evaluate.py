@@ -8,6 +8,7 @@ from opik import evaluation, exceptions, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
+from opik.evaluation.models import models_factory
 from ...testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
 
@@ -423,7 +424,7 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
-                        ),
+                        )
                     ],
                 ),
             ],
@@ -579,3 +580,190 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
     )
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_evaluate_prompt_happyflow(fake_backend):
+    MODEL_NAME = "gpt-3.5-turbo"
+
+    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
+        dataset_item.DatasetItem(
+            id="dataset-item-id-1",
+            question="Hello, world!",
+            reference="Hello, world!",
+        ),
+        dataset_item.DatasetItem(
+            id="dataset-item-id-2",
+            question="What is the capital of France?",
+            reference="Paris",
+        ),
+    ]
+
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url = mock.Mock()
+    mock_get_experiment_url.return_value = "any_url"
+
+    mock_models_factory_get = mock.Mock()
+    mock_model = mock.Mock()
+    mock_model.model_name = MODEL_NAME
+    mock_model.generate_provider_response.return_value = mock.Mock(
+        choices=[mock.Mock(message=mock.Mock(content="Hello, world!"))]
+    )
+    mock_models_factory_get.return_value = mock_model
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url", mock_get_experiment_url
+        ):
+            with mock.patch.object(
+                models_factory,
+                "get",
+                mock_models_factory_get,
+            ):
+                evaluation.evaluate_prompt(
+                    dataset=mock_dataset,
+                    messages=[
+                        {"role": "user", "content": "LLM response: {{input}}"},
+                    ],
+                    experiment_name="the-experiment-name",
+                    model=MODEL_NAME,
+                    scoring_metrics=[metrics.Equals()],
+                    task_threads=1,
+                )
+
+    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="the-experiment-name",
+        experiment_config={
+            "prompt_template": [{"role": "user", "content": "LLM response: {{input}}"}],
+            "model": "gpt-3.5-turbo",
+        },
+        prompt=None,
+    )
+
+    mock_experiment.insert.assert_has_calls(
+        [
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+        ]
+    )
+    EXPECTED_TRACE_TREES = [
+        TraceModel(
+            id=ANY_BUT_NONE,
+            name="evaluation_task",
+            input={
+                "question": "Hello, world!",
+                "reference": "Hello, world!",
+            },
+            output={
+                "input": [{"role": "user", "content": "LLM response: {{input}}"}],
+                "output": "Hello, world!",
+            },
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="_prompt_evaluation_task",
+                    input={
+                        "prompt_variables": {
+                            "question": "Hello, world!",
+                            "reference": "Hello, world!",
+                        }
+                    },
+                    output={
+                        "input": [
+                            {"role": "user", "content": "LLM response: {{input}}"}
+                        ],
+                        "output": "Hello, world!",
+                    },
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[],
+                ),
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="metrics_calculation",
+                    input=ANY_BUT_NONE,
+                    output=ANY_BUT_NONE,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[ANY_BUT_NONE],
+                ),
+            ],
+            feedback_scores=[
+                FeedbackScoreModel(
+                    id=ANY_BUT_NONE,
+                    name="equals_metric",
+                    value=1.0,
+                )
+            ],
+        ),
+        TraceModel(
+            id=ANY_BUT_NONE,
+            name="evaluation_task",
+            input={
+                "question": "What is the capital of France?",
+                "reference": "Paris",
+            },
+            output={
+                "input": [{"role": "user", "content": "LLM response: {{input}}"}],
+                "output": "Hello, world!",
+            },
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="_prompt_evaluation_task",
+                    input={
+                        "prompt_variables": {
+                            "question": "What is the capital of France?",
+                            "reference": "Paris",
+                        }
+                    },
+                    output={
+                        "input": [
+                            {"role": "user", "content": "LLM response: {{input}}"}
+                        ],
+                        "output": "Hello, world!",
+                    },
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[],
+                ),
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="metrics_calculation",
+                    input=ANY_BUT_NONE,
+                    output=ANY_BUT_NONE,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[ANY_BUT_NONE],
+                ),
+            ],
+            feedback_scores=[
+                FeedbackScoreModel(
+                    id=ANY_BUT_NONE,
+                    name="equals_metric",
+                    value=0.0,
+                )
+            ],
+        ),
+    ]
+    for expected_trace, actual_trace in zip(
+        EXPECTED_TRACE_TREES, fake_backend.trace_trees
+    ):
+        assert_equal(expected_trace, actual_trace)
