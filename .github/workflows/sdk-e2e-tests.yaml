@@ -12,7 +12,8 @@ on:
         paths: 
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
-
+env:
+  OPIK_DISABLE_LITELLM_MODELS_MONITORING: True
 jobs:
     run-e2e:
         name: SDK E2E Tests ${{matrix.python_version}}
