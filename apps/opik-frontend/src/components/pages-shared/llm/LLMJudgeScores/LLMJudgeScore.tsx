@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import isEqual from "fast-deep-equal";
+import TextareaAutosize from "react-textarea-autosize";
 
 import { Check, Pencil, Trash } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { LLMJudgeSchema } from "@/types/automations";
 import { LLM_SCHEMA_TYPE } from "@/types/llm";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,9 +13,10 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { DropdownOption } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { TEXT_AREA_CLASSES } from "@/components/ui/textarea";
 
 interface LLMJudgeScoreProps {
+  hideRemoveButton: boolean;
   score: LLMJudgeSchema;
   onRemoveScore: () => void;
   onChangeScore: (changes: Partial<LLMJudgeSchema>) => void;
@@ -34,8 +37,8 @@ const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = [
   },
 ];
 
-// TODO lala textarea with autogrow
 const LLMJudgeScore = ({
+  hideRemoveButton,
   score,
   onChangeScore,
   onRemoveScore,
@@ -81,12 +84,13 @@ const LLMJudgeScore = ({
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
-              <Textarea
+              <TextareaAutosize
                 placeholder="Score description"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="min-h-8 leading-none"
-                rows={1}
+                className={cn(TEXT_AREA_CLASSES, "min-h-8 leading-none")}
+                minRows={1}
+                maxRows={3}
               />
             </>
           )}
@@ -131,6 +135,7 @@ const LLMJudgeScore = ({
               size="icon-sm"
               onClick={onRemoveScore}
               className="shrink-0"
+              disabled={hideRemoveButton}
             >
               <Trash className="size-3.5" />
             </Button>

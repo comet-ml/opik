@@ -10,8 +10,7 @@ interface LLMJudgeScoresProps {
   scores: LLMJudgeSchema[];
   onChange: (scores: LLMJudgeSchema[]) => void;
 }
-// TODO lala name validation
-// TODO lala tooltip content for scores
+
 const LLMJudgeScores = ({ scores, onChange }: LLMJudgeScoresProps) => {
   const handleAddScore = useCallback(() => {
     onChange([
@@ -44,6 +43,7 @@ const LLMJudgeScores = ({ scores, onChange }: LLMJudgeScoresProps) => {
         {scores.map((score, index) => (
           <LLMJudgeScore
             key={score.name + index}
+            hideRemoveButton={scores?.length === 1}
             onRemoveScore={() => handleRemoveScore(index)}
             onChangeScore={(changes) => handleChangeScore(index, changes)}
             score={score}

@@ -3,11 +3,7 @@ import { Info } from "lucide-react";
 import find from "lodash/find";
 import last from "lodash/last";
 
-import {
-  LLMAsJudgeConfig,
-  LLMAsJudgeData,
-  LLMJudgeSchema,
-} from "@/types/automations";
+import { LLMAsJudgeData, LLMJudgeSchema } from "@/types/automations";
 import { Label } from "@/components/ui/label";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
@@ -29,7 +25,7 @@ import {
   getNextMessageType,
 } from "@/lib/llm";
 import { OnChangeFn } from "@/types/shared";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { getPromptMustacheTags } from "@/lib/prompt";
 
 type LLMJudgeRuleDetailsProps = {
@@ -56,7 +52,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   );
 
   const setConfig = useCallback(
-    (config: LLMAsJudgeConfig) => {
+    (config: Partial<LLMPromptConfigsType>) => {
       onChange((d) => ({ ...d, config }));
     },
     [onChange],
@@ -134,9 +130,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     });
   }, [onChange]);
 
-  // TODO lala PromptModelSelect size
-  // TODO lala PromptModelConfigs refactor
-
   return (
     <>
       <div className="flex flex-col gap-2 py-4">
@@ -149,8 +142,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             workspaceName={workspaceName}
           />
           <PromptModelConfigs
+            size="icon"
             provider={provider}
-            configs={config as never}
+            configs={config}
             onChange={setConfig as never}
           />
         </div>
@@ -161,7 +155,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           value={template}
           onChange={(value) => handleTemplateChange(value as LLM_JUDGE)}
           options={LLM_PROMPT_TEMPLATES}
-          className="justify-start"
         />
         <LLMPromptMessages
           messages={messages}

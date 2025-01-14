@@ -18,12 +18,14 @@ import OpenAIModelConfigs from "@/components/pages-shared/llm/PromptModelSetting
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
-  configs: LLMPromptConfigsType;
+  size?: "icon" | "icon-sm" | "icon-lg" | "icon-xs" | "icon-xxs";
+  configs: Partial<LLMPromptConfigsType>;
   onChange: (configs: Partial<LLMPromptConfigsType>) => void;
 }
 
 const PromptModelConfigs = ({
   provider,
+  size = "icon-sm",
   configs,
   onChange,
 }: PromptModelConfigsProps) => {
@@ -45,7 +47,7 @@ const PromptModelConfigs = ({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon-sm" disabled={noProvider}>
+        <Button variant="outline" size={size} disabled={noProvider}>
           <Settings2 className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>

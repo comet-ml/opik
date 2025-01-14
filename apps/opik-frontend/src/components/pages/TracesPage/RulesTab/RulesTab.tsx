@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
+import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 
 import {
@@ -19,6 +20,7 @@ import {
 import Loader from "@/components/shared/Loader/Loader";
 import NoRulesPage from "@/components/pages/TracesPage/RulesTab/NoRulesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -60,7 +62,7 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: "samplingRate",
+    id: "sampling_rate",
     label: "Sampling rate",
     type: COLUMN_TYPE.number,
   },
@@ -75,7 +77,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "last_updated_at",
   "created_by",
   "created_at",
-  "samplingRate",
+  "sampling_rate",
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
@@ -104,12 +106,17 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useRulesList({
-    projectId,
-    page: page as number,
-    size: size as number,
-    search: search as string,
-  });
+  const { data, isPending } = useRulesList(
+    {
+      projectId,
+      page: page as number,
+      size: size as number,
+      search: search as string,
+    },
+    {
+      placeholderData: keepPreviousData,
+    },
+  );
 
   const noData = !search;
   const noDataText = noData ? `There are no rules yet` : "No search results";
@@ -173,6 +180,11 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleNewRuleClick = useCallback(() => {
+    setOpenDialog(true);
+    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+  }, []);
+
   if (isPending) {
     return <Loader />;
   }
@@ -180,7 +192,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   if (noData && rows.length === 0 && page === 1) {
     return (
       <>
-        <NoRulesPage openModal={() => setOpenDialog(true)} />;
+        <NoRulesPage openModal={handleNewRuleClick} />;
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
           open={openDialog}
@@ -212,6 +224,9 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
+          <Button variant="default" onClick={handleNewRuleClick}>
+            Create new rule
+          </Button>
         </div>
       </div>
       <DataTable

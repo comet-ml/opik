@@ -4,7 +4,7 @@ import {
   LLMMessage,
   ProviderMessageType,
 } from "@/types/llm";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export enum EVALUATORS_RULE_TYPE {
   llm_judge = "llm_as_judge", // TODO lala
@@ -31,7 +31,7 @@ export interface LLMJudgeObject {
 
 export interface LLMJudgeDetails {
   type: EVALUATORS_RULE_TYPE.llm_judge;
-  code: LLMJudgeObject; // TODO lala
+  code: LLMJudgeObject;
 }
 
 export interface PythonCodeObject {
@@ -40,27 +40,23 @@ export interface PythonCodeObject {
 
 export interface PythonCodeDetails {
   type: EVALUATORS_RULE_TYPE.python_code;
-  code: PythonCodeObject; // TODO lala
+  code: PythonCodeObject;
 }
 
 export type EvaluatorsRule = {
   id: string;
   name: string;
-  projectId: string; // TODO lala
-  samplingRate: number;
+  project_id: string;
+  sampling_rate: number;
   created_at: string;
   created_by: string;
   last_updated_at: string;
   last_updated_by: string;
 } & (LLMJudgeDetails | PythonCodeDetails);
 
-export type LLMAsJudgeConfig = {
-  temperature: number;
-};
-
 export type LLMAsJudgeData = {
   model: PROVIDER_MODEL_TYPE | "";
-  config: LLMAsJudgeConfig;
+  config: Partial<LLMPromptConfigsType>;
   template: LLM_JUDGE;
   messages: LLMMessage[];
   variables: Record<string, string>;

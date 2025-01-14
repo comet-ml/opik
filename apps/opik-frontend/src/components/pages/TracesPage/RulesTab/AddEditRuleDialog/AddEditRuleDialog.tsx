@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -50,19 +50,17 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [name, setName] = useState(defaultRule?.name || "");
   const [samplingRate, setSamplingRate] = useState(
-    defaultRule?.samplingRate || DEFAULT_SAMPLING_RATE,
+    defaultRule?.sampling_rate || DEFAULT_SAMPLING_RATE,
   );
   const [type] = useState(defaultRule?.type || EVALUATORS_RULE_TYPE.llm_judge);
   const isLLMJudge = type === EVALUATORS_RULE_TYPE.llm_judge;
 
-  // TODO lala verify
   const [llmJudgeDetails, setLLMJudgeDetails] = useState(
     isLLMJudge && defaultRule
       ? convertLLMJudgeObjectToLLMJudgeData(defaultRule.code as LLMJudgeObject)
       : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA),
   );
 
-  // TODO lala verify
   const [pythonCodeDetails] = useState(
     !isLLMJudge && defaultRule
       ? (defaultRule.code as PythonCodeObject)
@@ -76,11 +74,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const title = isEdit ? "Edit rule" : "Create a new rule";
   const submitText = isEdit ? "Update rule" : "Create rule";
 
-  const generateRule = useCallback(() => {
+  const rule = useMemo(() => {
     return {
       name,
-      projectId,
-      samplingRate,
+      project_id: projectId,
+      sampling_rate: samplingRate,
       type,
       code: isLLMJudge
         ? convertLLMJudgeDataToLLMJudgeObject(llmJudgeDetails)
@@ -99,18 +97,19 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const createPrompt = useCallback(() => {
     createMutate({
       projectId,
-      rule: generateRule(),
+      rule,
     });
     setOpen(false);
-  }, [createMutate, generateRule, projectId, setOpen]);
+  }, [createMutate, rule, projectId, setOpen]);
 
   const editPrompt = useCallback(() => {
     updateMutate({
+      ruleId: defaultRule!.id,
       projectId,
-      rule: generateRule(),
+      rule,
     });
     setOpen(false);
-  }, [updateMutate, generateRule, projectId, setOpen]);
+  }, [updateMutate, rule, defaultRule, projectId, setOpen]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -135,7 +134,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
             defaultValue={DEFAULT_SAMPLING_RATE}
             value={samplingRate}
             onChange={setSamplingRate}
-            id="samplingRate"
+            id="sampling_rate"
             label="Samping rate"
             tooltip="Percentage of traces to evaluate"
           />
