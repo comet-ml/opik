@@ -47,7 +47,7 @@ Once you have these, you can set them as environment variables:
 ```python
 import os
 
-os.environ["GROQ_API_KEY"] = "" # Your Google AI Studio Groq API Key
+os.environ["GROQ_API_KEY"] = "" # Your Groq API Key
 ```
 
 ## Logging LLM calls
