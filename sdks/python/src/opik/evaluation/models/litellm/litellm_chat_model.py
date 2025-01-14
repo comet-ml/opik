@@ -6,11 +6,10 @@ import warnings
 
 import litellm
 from litellm.types.utils import ModelResponse
-from litellm.integrations.opik.opik import OpikLogger
 
-from . import base_model
-from ... import opik_context
+from .. import base_model
 from opik import semantic_version
+from . import opik_monitor
 
 LOGGER = logging.getLogger(__name__)
 litellm.suppress_debug_info = True  # to disable colorized prints with links to litellm whenever an LLM provider raises an error
@@ -126,51 +125,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         return valid_params
 
-    def _add_span_metadata_to_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        current_span = opik_context.get_current_span_data()
-
-        if current_span is None:
-            return params
-
-        if "current_span_data" in params.get("metadata", {}).get("opik", {}):
-            return params
-
-        return {
-            **params,
-            "metadata": {
-                **params.get("metadata", {}),
-                "opik": {
-                    **params.get("metadata", {}).get("opik", {}),
-                    "current_span_data": current_span,
-                },
-            },
-        }
-
-    def _add_success_callback_to_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        has_global_opik_logger = any(
-            isinstance(callback, OpikLogger) for callback in litellm.callbacks
-        )
-
-        has_local_opik_logger = any(
-            isinstance(callback, OpikLogger)
-            for callback in params.get("success_callback", [])
-        )
-
-        if has_global_opik_logger or has_local_opik_logger:
-            return params
-        else:
-            opik_logger = OpikLogger()
-
-            return {
-                **params,
-                "success_callback": [opik_logger, *params.get("success_callback", [])],
-            }
-
-    def _add_opik_monitoring(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        params = self._add_span_metadata_to_params(params)
-        params = self._add_success_callback_to_params(params)
-        return params
-
     def generate_string(self, input: str, **kwargs: Any) -> str:
         """
         Simplified interface to generate a string output from the model.
@@ -220,7 +174,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         valid_litellm_params = self._filter_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
-        all_kwargs = self._add_opik_monitoring(all_kwargs)
+        all_kwargs = opik_monitor.add_opik_monitoring_to_params(all_kwargs)
 
         response = self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs
@@ -274,7 +228,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         valid_litellm_params = self._filter_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
-        all_kwargs = self._add_opik_monitoring(all_kwargs)
+        all_kwargs = opik_monitor.add_opik_monitoring_to_params(all_kwargs)
 
         response = await self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs
