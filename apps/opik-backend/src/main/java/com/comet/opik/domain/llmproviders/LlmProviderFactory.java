@@ -52,7 +52,7 @@ public class LlmProviderFactory {
         if (isModelBelongToProvider(model, OpenaiModelName.class, OpenaiModelName::toString)) {
             return LlmProvider.OPEN_AI;
         }
-        if (isModelBelongToProvider(model, AnthropicChatModelName.class, AnthropicChatModelName::toString)) {
+        if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString)) {
             return LlmProvider.ANTHROPIC;
         }
         if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
