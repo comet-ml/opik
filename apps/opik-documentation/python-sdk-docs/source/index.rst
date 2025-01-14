@@ -180,6 +180,7 @@ You can learn more about the `opik` python SDK in the following sections:
    
    evaluation/Dataset
    evaluation/evaluate
+   evaluation/evaluate_prompt
    evaluation/evaluate_experiment
    evaluation/metrics/index
 

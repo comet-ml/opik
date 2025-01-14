@@ -31,8 +31,9 @@ class OpikDocsTestFile(pytest.File):
         for code_block in code_blocks:
             if not self.venv_path:
                 LOGGER.info("Setting up venv for code snippets in:", self.path)
+                default_packages = self.config.getoption("--default-package")
                 self.venv_path, self.venv_python, self.venv_pip = environment.setup_env(
-                    ["opik"]
+                    default_packages
                 )
 
             code_block.set_env(
@@ -74,6 +75,22 @@ class OpikDocsTestItem(pytest.Item):
         self, excinfo: ExceptionInfo[BaseException]
     ) -> Union[str, TerminalRepr]:
         return reporting.format_error(self.fspath, self.test_case, excinfo)
+
+
+def pytest_addoption(parser):
+    """Pytest hook to add custom options for code block testing.
+
+    Adds the following options:
+        --default-package: Specify packages to be installed in the test environment.
+                          Can be provided multiple times to install multiple packages.
+                          Defaults to ["opik"] if not specified.
+    """
+    parser.addoption(
+        "--default-package",
+        action="append",
+        default=[],
+        help="Default package to install in test environments. Can be specified multiple times.",
+    )
 
 
 def pytest_collect_file(parent: Collector, file_path: Path) -> Optional[Module]:

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Predibase
 description: Describes how to track Predibase LLM calls using Opik
-test_code_snippets: false
+pytest_codeblocks_skip: true
 ---
 
 # Using Opik with Predibase

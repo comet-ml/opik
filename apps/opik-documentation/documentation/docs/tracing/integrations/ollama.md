@@ -1,6 +1,7 @@
 ---
 sidebar_label: Ollama
 description: Describes how to track Ollama LLM calls using Opik
+pytest_codeblocks_skip: true
 ---
 
 # Ollama

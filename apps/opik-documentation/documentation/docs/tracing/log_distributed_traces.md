@@ -1,7 +1,7 @@
 ---
 sidebar_label: Log Distributed Traces
 description: Describes how to log distributed traces to the Opik platform
-test_code_snippets: false
+pytest_codeblocks_skip: true
 ---
 
 # Log Distributed Traces
