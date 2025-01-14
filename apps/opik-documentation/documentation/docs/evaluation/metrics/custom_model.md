@@ -24,9 +24,9 @@ In order to use many models supported by LiteLLM, you also need to pass addition
 
 ```python
 from opik.evaluation.metrics import Hallucination
-from opik.evaluation.models import LiteLLMChatModel
+from opik.evaluation import models
 
-model = LiteLLMChatModel(
+model = models.LiteLLMChatModel(
     name="<model_name>",
     base_url="<base_url>"
 )

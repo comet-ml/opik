@@ -127,14 +127,14 @@ Opik providers a `LitellmChatModel` class that wraps the `litellm` library and c
 
 ```python
 from opik.evaluation.metrics import base_metric, score_result
-from opik.evaluation.models import litellm_chat_model
+from opik.evaluation import models
 import json
 from typing import Any
 
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
         self.name = name
-        self.llm_client = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+        self.llm_client = models.LiteLLMChatModel(model_name=model_name)
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully
         and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling. The format of the your response
@@ -186,7 +186,7 @@ For this we define the format of the response we expect from the LLM in the `LLM
 
 ```python
 from opik.evaluation.metrics import base_metric, score_result
-from opik.evaluation.models import litellm_chat_model
+from opik.evaluation import models
 from pydantic import BaseModel
 import json
 from typing import Any
@@ -198,7 +198,7 @@ class LLMJudgeResult(BaseModel):
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
         self.name = name
-        self.llm_client = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+        self.llm_client = models.LiteLLMChatModel(model_name=model_name)
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling.
 
