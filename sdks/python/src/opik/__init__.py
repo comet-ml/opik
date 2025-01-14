@@ -9,14 +9,8 @@ from .api_objects.prompt import Prompt
 from .api_objects.span import Span
 from .api_objects.trace import Trace
 from .configurator.configure import configure
-<<<<<<< HEAD
 from .decorator.tracker import flush_tracker, track
-from .evaluation import evaluate, evaluate_experiment
-=======
-from . import package_version
-from .plugins.pytest.decorator import llm_unit
 from .evaluation import evaluate, evaluate_experiment, evaluate_prompt
->>>>>>> main
 from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
 
