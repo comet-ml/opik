@@ -25,7 +25,7 @@ interface AutomationRuleDAO {
 
     @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate) " +
             "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate)")
-    <T> void saveBaseRule(@BindMethods("rule") AutomationRuleModel<T> rule, @Bind("workspaceId") String workspaceId);
+    void saveBaseRule(@BindMethods("rule") AutomationRuleModel rule, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE automation_rules

@@ -13,7 +13,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 import lombok.experimental.SuperBuilder;
 import lombok.experimental.UtilityClass;
 
@@ -21,7 +21,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-@Getter
+@Data
 @SuperBuilder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
 @JsonSubTypes({
