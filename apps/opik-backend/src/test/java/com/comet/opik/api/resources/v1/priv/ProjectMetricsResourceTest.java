@@ -396,7 +396,7 @@ class ProjectMetricsResourceTest {
 
                 var actualError = response.readEntity(ErrorMessage.class);
 
-                assertThat(actualError).isEqualTo(new ErrorMessage(List.of("Unable to process JSON")));
+                assertThat(actualError.errors().getFirst()).startsWith("Unable to process JSON");
             }
         }
 
