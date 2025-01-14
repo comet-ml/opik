@@ -1,18 +1,19 @@
-import logging
 import importlib.metadata
+import logging
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Set
-import warnings
 
 import litellm
 from litellm.types.utils import ModelResponse
 
-from .. import base_model
 from opik import semantic_version
-from . import opik_monitor
+
+from .. import base_model
+from . import opik_monitor, warning_filters
 
 LOGGER = logging.getLogger(__name__)
-litellm.suppress_debug_info = True  # to disable colorized prints with links to litellm whenever an LLM provider raises an error
+
+warning_filters.add_warning_filters()
 
 
 class LiteLLMChatModel(base_model.OpikBaseModel):
@@ -44,27 +45,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             completion_kwargs
         )
 
-        self._add_warning_filters()
         self._engine = litellm
-
-    def _add_warning_filters(self) -> None:
-        # TODO: This should be removed when we have fixed the error messages in the LiteLLM library
-        warnings.filterwarnings("ignore", message="coroutine '.*' was never awaited")
-        warnings.filterwarnings(
-            "ignore",
-            message="Enable tracemalloc to get the object allocation traceback",
-        )
-
-        class NoEventLoopFilterLiteLLM(logging.Filter):
-            def filter(self, record: Any) -> bool:
-                return (
-                    "Asynchronous processing not initialized as we are not running in an async context"
-                    not in record.getMessage()
-                )
-
-        # Add filter to multiple possible loggers
-        filter = NoEventLoopFilterLiteLLM()
-        logging.getLogger("LiteLLM").addFilter(filter)
 
     @cached_property
     def supported_params(self) -> Set[str]:
