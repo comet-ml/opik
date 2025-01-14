@@ -50,7 +50,7 @@ public interface AutomationRuleEvaluatorService {
             AutomationRuleEvaluatorType automationRuleEvaluatorType);
 }
 
-@NonNull @Singleton
+@Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorService {
