@@ -23,7 +23,7 @@ const GetStarted: React.FunctionComponent<GetStartedProps> = ({
         <h1 className="comet-title-xl mt-4 text-center">
           Log your first trace
         </h1>
-        <div className="comet-body-s m-auto mt-4 pb-10 w-[468px] self-center text-center text-muted-slate">
+        <div className="comet-body-s m-auto mt-4 w-[468px] self-center pb-10 text-center text-muted-slate">
           Select a framework and follow the instructions to integrate Comet with
           your code, or explore our ready-to-run examples on the right
         </div>
