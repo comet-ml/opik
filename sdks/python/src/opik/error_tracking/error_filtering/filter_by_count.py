@@ -1,9 +1,10 @@
+from typing import Literal
 from ..types import Event, Hint
 from . import event_filter
 
 
 class FilterByCount(event_filter.EventFilter):
-    def __init__(self, max_count: int, level: str):
+    def __init__(self, max_count: int, level: Literal["error", "warning", "info"]):
         super().__init__()
         self._count = 0
         self._level = level
