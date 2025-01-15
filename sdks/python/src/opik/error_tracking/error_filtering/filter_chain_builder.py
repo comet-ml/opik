@@ -1,8 +1,8 @@
 from typing import List
 from . import filter_by_count, filter_chain, event_filter
 
-DEFAULT_ERROR_QUOTA = 50
-DEFAULT_WARNING_QUOTA = 50
+DEFAULT_ERROR_QUOTA = 25
+DEFAULT_WARNING_QUOTA = 25
 
 
 def build_filter_chain() -> filter_chain.FilterChain:

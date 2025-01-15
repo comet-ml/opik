@@ -33,9 +33,7 @@ def _add_extra_details(event: Event) -> None:
 
     event["tags"]["installation_type"] = opik.environment.get_installation_type()
 
-    if event["contexts"].get("opik_handled") is False:
-        event["tags"]["opik_handled"] = False
-    else:
+    if "opik_handled" not in event["tags"]:
         event["tags"]["opik_handled"] = True
 
     # Put into event all the information that depends on
