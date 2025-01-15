@@ -7,7 +7,7 @@ from opik.integrations.anthropic import track_anthropic
 # INJECT_OPIK_CONFIGURATION
 
 if "ANTHROPIC_API_KEY" not in os.environ:
-    os.environ["ANTHROPIC_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+    os.environ["ANTHROPIC_API_KEY"] = getpass.getpass("Enter your Anthropic API key: ")
 
 anthropic_client = anthropic.Anthropic()
 
