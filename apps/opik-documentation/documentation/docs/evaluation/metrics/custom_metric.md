@@ -2,6 +2,7 @@
 sidebar_label: Custom Metric
 description: Describes how to create your own metric to use with Opik's evaluation framework
 toc_max_heading_level: 4
+pytest_codeblocks_execute_previous: true
 ---
 
 # Custom Metric
@@ -39,6 +40,7 @@ To define a custom heuristic metric, you need to subclass the `BaseMetric` class
 ```python
 from typing import Any
 from opik.evaluation.metrics import base_metric, score_result
+import json
 
 class MyCustomMetric(base_metric.BaseMetric):
     def __init__(self, name: str):
@@ -82,9 +84,15 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         accurate, 0.5 if mixed accuracy, or 0 if inaccurate. The format of the your response
         should be a single number with no other text.
 
-        Claim to evaluate: {output}
-        """
+        The format of the your response should be a JSON object with no additional text or backticks that follows the format:
+        {{
+            "score": <score between 0 and 1>
+        }}
 
+        Claim to evaluate: {output}
+
+        Response:
+        """
     def score(self, output: str, **ignored_kwargs: Any):
         """
         Score the output of an LLM.
@@ -95,17 +103,18 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         """
         # Construct the prompt based on the output of the LLM
         prompt = self.prompt_template.format(output=output)
-
         # Generate and parse the response from the LLM
         response = self.llm_client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}]
         )
-        response_score = float(response.choices[0].message.content)
+        response_dict = json.loads(response.choices[0].message.content)
+
+        response_score = float(response_dict["score"])
 
         return score_result.ScoreResult(
             name=self.name,
-            value=response_score,
+            value=response_score
         )
 ```
 
@@ -137,17 +146,19 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         self.llm_client = models.LiteLLMChatModel(model_name=model_name)
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully
-        and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling. The format of the your response
-        should be:
+        and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate.
+        Then provide one brief sentence explaining your ruling.
 
-        {
+        The format of the your response should be a JSON object with no additional text or backticks that follows the format:
+        {{
             "score": <score between 0 and 1>,
             "reason": "<reason for the score>"
-        }
+        }}
 
         Claim to evaluate: {output}
-        """
 
+        Response:
+        """
     def score(self, output: str, **ignored_kwargs: Any):
         """
         Score the output of an LLM.
@@ -161,6 +172,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
         # Generate and parse the response from the LLM
         response = self.llm_client.generate_string(input=prompt)
+
         response_dict = json.loads(response)
 
         return score_result.ScoreResult(
@@ -202,7 +214,16 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling.
 
+         The format of the your response should be a json with no backticks that returns:
+
+        {{
+            "score": <score between 0 and 1>,
+            "reason": "<reason for the score>"
+        }}
+
         Claim to evaluate: {output}
+
+        Response:
         """
 
     def score(self, output: str, **ignored_kwargs: Any):
