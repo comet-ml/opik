@@ -5,6 +5,7 @@ import { buildDocsUrl } from "@/lib/utils";
 import { SquareArrowOutUpRight } from "lucide-react";
 import ApiKeyCard from "../ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "../GoogleColabCard/GoogleColabCard";
+import IntegrationTemplate from "./IntegrationTemplate";
 
 type FrameworkIntegrationsProps = {
   integrationList: FrameworkIntegration[];
@@ -34,7 +35,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
               <img
                 alt={item.label}
                 src={item.logo}
-                className="size-[22px] shrink-0"
+                className="size-[32px] shrink-0"
               />
               <div className="ml-1 truncate">{item.label}</div>
             </li>
@@ -53,7 +54,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
       </div>
       <div className="flex min-w-[650px] flex-1 gap-6">
         <div className="flex w-full flex-1 flex-col">
-          <integration.component apiKey={apiKey} />
+          <IntegrationTemplate code={integration.code} apiKey={apiKey} />
         </div>
 
         <div className="sticky top-20 flex w-[250px] shrink-0 flex-col gap-6 self-start">
