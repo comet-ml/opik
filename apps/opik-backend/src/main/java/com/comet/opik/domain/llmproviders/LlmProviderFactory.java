@@ -3,9 +3,8 @@ package com.comet.opik.domain.llmproviders;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.domain.cost.OpenaiModelPrice;
 import com.comet.opik.infrastructure.EncryptionUtils;
-import dev.ai4j.openai4j.chat.ChatCompletionModel;
-import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -14,6 +13,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.EnumUtils;
 
+import java.util.Set;
 import java.util.function.Function;
 
 @Singleton
@@ -50,13 +50,14 @@ public class LlmProviderFactory {
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
     private LlmProvider getLlmProvider(String model) {
-        if (isModelBelongToProvider(model, ChatCompletionModel.class, ChatCompletionModel::toString)) {
+        if (isModelBelongToProvider(model, OpenaiModelPrice.class, OpenaiModelPrice::getName,
+                Set.of(OpenaiModelPrice.DEFAULT))) {
             return LlmProvider.OPEN_AI;
         }
-        if (isModelBelongToProvider(model, AnthropicChatModelName.class, AnthropicChatModelName::toString)) {
+        if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString, Set.of())) {
             return LlmProvider.ANTHROPIC;
         }
-        if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
+        if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString, Set.of())) {
             return LlmProvider.GEMINI;
         }
 
@@ -77,8 +78,9 @@ public class LlmProviderFactory {
     }
 
     private static <E extends Enum<E>> boolean isModelBelongToProvider(
-            String model, Class<E> enumClass, Function<E, String> valueGetter) {
+            String model, Class<E> enumClass, Function<E, String> valueGetter, Set<Object> exclude) {
         return EnumUtils.getEnumList(enumClass).stream()
+                .filter(value -> !exclude.contains(value))
                 .map(valueGetter)
                 .anyMatch(model::equals);
     }
