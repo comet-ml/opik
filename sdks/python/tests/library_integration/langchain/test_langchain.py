@@ -211,7 +211,6 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-@pytest.mark.skip
 @pytest.mark.parametrize(
     "llm_model, expected_input_prompt, metadata_usage",
     [
