@@ -155,7 +155,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         valid_litellm_params = self._filter_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
-        if not opik_monitor.disabled_in_config():
+        if opik_monitor.enabled_in_config():
             all_kwargs = opik_monitor.add_opik_monitoring_to_params(all_kwargs)
 
         response = self._engine.completion(
@@ -210,7 +210,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         valid_litellm_params = self._filter_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
-        if not opik_monitor.disabled_in_config():
+        if opik_monitor.enabled_in_config():
             all_kwargs = opik_monitor.add_opik_monitoring_to_params(all_kwargs)
 
         response = await self._engine.completion(

@@ -19,9 +19,9 @@ def add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @functools.lru_cache
-def disabled_in_config() -> bool:
+def enabled_in_config() -> bool:
     config_ = config.OpikConfig()
-    return config_.disable_litellm_models_monitoring
+    return config_.enable_litellm_models_monitoring
 
 
 def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
