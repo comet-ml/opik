@@ -1,18 +1,10 @@
-import dataclasses
 from typing import Any, Dict, Optional
 
 from llama_index.core import Settings
 from llama_index.core.base.llms.types import ChatResponse
 from llama_index.core.callbacks import schema as llama_index_schema
 
-from opik.types import UsageDict
-
-
-@dataclasses.dataclass
-class LLMUsageInfo:
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    usage: Optional[UsageDict] = None
+from opik.integrations.helpers import LLMUsageInfo
 
 
 def get_span_input_from_events(
