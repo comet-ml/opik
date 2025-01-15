@@ -53,7 +53,7 @@ class MessageSender(BaseMessageProcessor):
                 # sometimes retry mechanism works in a way that it sends the same request 2 times.
                 # second request is rejected by the backend, we don't want users to an error.
                 return
-            
+
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
