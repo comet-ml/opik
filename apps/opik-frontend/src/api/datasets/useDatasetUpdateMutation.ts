@@ -4,29 +4,22 @@ import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Dataset } from "@/types/datasets";
 import { useToast } from "@/components/ui/use-toast";
-import { extractIdFromLocation } from "@/lib/utils";
 
-type UseDatasetCreateMutationParams = {
+type UseDatasetUpdateMutationParams = {
   dataset: Partial<Dataset>;
 };
 
-const useDatasetCreateMutation = () => {
+const useDatasetUpdateMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ dataset }: UseDatasetCreateMutationParams) => {
-      const { data, headers } = await api.post(DATASETS_REST_ENDPOINT, {
+    mutationFn: async ({ dataset }: UseDatasetUpdateMutationParams) => {
+      const { data } = await api.put(DATASETS_REST_ENDPOINT + dataset.id, {
         ...dataset,
       });
 
-      // TODO workaround to return just created resource while implementation on BE is not done
-      return data
-        ? data
-        : {
-            ...dataset,
-            id: extractIdFromLocation(headers?.location),
-          };
+      return data;
     },
     onError: (error: AxiosError) => {
       const message = get(
@@ -49,4 +42,4 @@ const useDatasetCreateMutation = () => {
   });
 };
 
-export default useDatasetCreateMutation;
+export default useDatasetUpdateMutation;

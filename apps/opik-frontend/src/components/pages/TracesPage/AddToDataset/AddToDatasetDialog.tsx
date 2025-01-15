@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/components/ui/use-toast";
-import AddDatasetDialog from "@/components/pages/DatasetsPage/AddDatasetDialog";
+import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 
 const DEFAULT_SIZE = 5;
 
@@ -71,6 +71,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const addToDatasetHandler = useCallback(
     (dataset: Dataset) => {
+      console.log(123, dataset);
       setOpen(false);
       datasetItemBatchMutation.mutate(
         {
@@ -221,7 +222,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
           </div>
         </DialogContent>
       </Dialog>
-      <AddDatasetDialog
+      <AddEditDatasetDialog
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={addToDatasetHandler}
