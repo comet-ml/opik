@@ -14,6 +14,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
     variables: data.variables,
+    parsingVariablesError: false,
     schema: data.schema,
   };
 };

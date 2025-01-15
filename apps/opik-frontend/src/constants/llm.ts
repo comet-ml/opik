@@ -10,6 +10,7 @@ type PROVIDER_MODELS_TYPE = {
   [key in PROVIDER_TYPE]: {
     value: PROVIDER_MODEL_TYPE;
     label: string;
+    structuredOutput?: boolean;
   }[];
 };
 
@@ -19,18 +20,22 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O,
       label: "GPT 4o",
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
       label: "GPT 4o Mini",
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_MINI_2024_07_18,
       label: "GPT 4o Mini 2024-07-18",
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_2024_08_06,
       label: "GPT 4o 2024-08-06",
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_2024_05_13,

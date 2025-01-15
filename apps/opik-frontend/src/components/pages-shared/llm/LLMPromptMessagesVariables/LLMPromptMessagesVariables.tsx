@@ -1,13 +1,16 @@
 import React, { useCallback, useMemo } from "react";
 import { DropdownOption } from "@/types/shared";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import LLMPromptMessagesVariable from "@/components/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariable";
 
 interface LLMPromptMessagesVariablesProps {
+  hasError?: boolean;
   variables: Record<string, string>;
   onChange: (variables: Record<string, string>) => void;
 }
 
 const LLMPromptMessagesVariables = ({
+  hasError,
   variables,
   onChange,
 }: LLMPromptMessagesVariablesProps) => {
@@ -32,6 +35,13 @@ const LLMPromptMessagesVariables = ({
       <div className="comet-body-s mb-2 text-light-slate">
         {`Variables are added based on the prompt, all variables as {{variable 1}} will be added to this list.`}
       </div>
+      {hasError && (
+        <Alert variant="destructive">
+          <AlertTitle>
+            Template parsing error. The variables cannot be extracted.
+          </AlertTitle>
+        </Alert>
+      )}
       <div className="flex flex-col gap-2 overflow-hidden">
         {variablesList.map((variable) => (
           <LLMPromptMessagesVariable

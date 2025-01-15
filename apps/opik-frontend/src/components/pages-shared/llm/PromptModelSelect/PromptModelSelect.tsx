@@ -36,6 +36,7 @@ interface PromptModelSelectProps {
   onChange: (value: PROVIDER_MODEL_TYPE) => void;
   provider: PROVIDER_TYPE | "";
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
+  onlyWithStructuredOutput?: boolean;
 }
 
 const STALE_TIME = 1000;
@@ -46,6 +47,7 @@ const PromptModelSelect = ({
   onChange,
   provider,
   onAddProvider,
+  onlyWithStructuredOutput,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -80,15 +82,19 @@ const PromptModelSelect = ({
 
         return {
           label: PROVIDERS[providerName].label,
-          options: providerModels.map((providerModel) => ({
-            label: providerModel.label,
-            value: providerModel.value,
-          })),
+          options: providerModels
+            .filter((m) =>
+              onlyWithStructuredOutput ? m.structuredOutput : true,
+            )
+            .map((providerModel) => ({
+              label: providerModel.label,
+              value: providerModel.value,
+            })),
           icon: PROVIDERS[providerName].icon,
         };
       },
     );
-  }, [configuredProviderKeys]);
+  }, [configuredProviderKeys, onlyWithStructuredOutput]);
 
   const filteredOptions = useMemo(() => {
     if (filterValue === "") {
