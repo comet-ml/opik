@@ -65,7 +65,7 @@ def _get_installed_packages_details() -> Dict[str, str]:
     result = {
         "openai": openai.__version__,
         "pydantic": pydantic.__version__,
-        "litellm": importlib.metadata.version("litellm")
+        "litellm": importlib.metadata.version("litellm"),
     }
 
     return result
