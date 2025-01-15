@@ -6,7 +6,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.MustacheVariableExtractor;
+import com.comet.opik.utils.MustacheUtils;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -396,7 +396,7 @@ class PromptServiceImpl implements PromptService {
             return null;
         }
 
-        return MustacheVariableExtractor.extractVariables(template);
+        return MustacheUtils.extractVariables(template);
     }
 
     private EntityAlreadyExistsException newConflict(String alreadyExists) {
