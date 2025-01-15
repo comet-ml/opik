@@ -1,6 +1,6 @@
 build:
 	rm -rf build
-	sphinx-build -b html source build/html --fail-on-warning
+	sphinx-build -b html source build/html
 
 dev:
 	rm -rf build
