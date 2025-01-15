@@ -67,6 +67,8 @@ class Opik:
             url_override=host,
             api_key=api_key,
         )
+        config.check_for_misconfiguration(config_)
+
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name
         self._flush_timeout: Optional[int] = config_.default_flush_timeout
