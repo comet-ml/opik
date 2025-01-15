@@ -62,26 +62,6 @@ public class LlmProviderClientGenerator {
                 .build();
     }
 
-    private OpenAiChatModel.OpenAiChatModelBuilder newChatLanguageModel(String apiKey) {
-        var builder = OpenAiChatModel.builder()
-                .apiKey(apiKey)
-                .logRequests(true)
-                .logResponses(true);
-
-        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
-                .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
-
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
-                .ifPresent(baseUrl -> {
-                    if (StringUtils.isNotBlank(baseUrl)) {
-                        builder.baseUrl(baseUrl);
-                    }
-                });
-
-        return builder;
-    }
-
     public GoogleAiGeminiChatModel newGeminiClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
         return LlmProviderGeminiMapper.INSTANCE.toGeminiChatModel(apiKey, request,
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
