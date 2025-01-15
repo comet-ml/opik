@@ -33,10 +33,10 @@ def _add_extra_details(event: Event) -> None:
 
     event["tags"] = {"installation_type": opik.environment.get_installation_type()}
 
-    if event["contexts"].get("opik_error_handled") is False:
-        event["tags"]["opik_error_handled"] = False
-    else:
-        event["tags"]["opik_error_handled"] = True
+    if event["contexts"].get("opik_handled") is False:
+        event["tags"]["opik_handled"] = False
+    elif event["level"] == "error":
+        event["tags"]["opik_handled"] = True
 
     # Put into event all the information that depends on
     # configuration which might be set AFTER opik is imported.
