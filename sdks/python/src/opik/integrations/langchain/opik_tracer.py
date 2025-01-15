@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
+
 from opik.types import ErrorInfoDict
 
 from langchain_core import language_models
@@ -7,7 +8,8 @@ from langchain_core.tracers import BaseTracer
 
 from opik import dict_utils, opik_context
 from opik.api_objects import opik_client, span, trace
-from . import base_llm_patcher, openai_run_helpers, opik_encoder_extension
+from . import base_llm_patcher, google_run_helpers, openai_run_helpers, opik_encoder_extension
+from opik.integrations.helpers import LLMUsageInfo
 from ...api_objects import helpers
 
 if TYPE_CHECKING:
@@ -232,11 +234,12 @@ class OpikTracer(BaseTracer):
             # Langchain will call _persist_run for us
         else:
             span_data = self._span_data_map[run.id]
+            usage_info: LLMUsageInfo = LLMUsageInfo()
 
             if openai_run_helpers.is_openai_run(run):
                 usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
-            else:
-                usage_info = openai_run_helpers.get_llm_usage_info()
+            elif google_run_helpers.is_google_run(run):
+                usage_info = google_run_helpers.get_llm_usage_info(run_dict)
 
             span_data.init_end_time().update(
                 output=run_dict["outputs"],
