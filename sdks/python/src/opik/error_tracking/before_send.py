@@ -31,8 +31,8 @@ def _add_extra_details(event: Event) -> None:
     else:
         event["user"] = {"id": user_details.get_id()}
 
-    opik_sdk_context = environment_details.collect_context()
-    tags = environment_details.collect_tags()
+    opik_sdk_context = environment_details.collect_context_once()
+    tags = environment_details.collect_tags_once()
 
     scope = sentry_sdk.get_current_scope()
     scope.set_context("opik-sdk-context", opik_sdk_context)

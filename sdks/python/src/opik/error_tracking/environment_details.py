@@ -14,7 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 @functools.lru_cache
-def collect_context() -> Dict[str, Any]:
+def collect_context_once() -> Dict[str, Any]:
     result = {
         "pid": environment.get_pid(),
         "os": environment.get_os(),
@@ -29,7 +29,13 @@ def collect_context() -> Dict[str, Any]:
 
 
 @functools.lru_cache
-def collect_tags() -> Dict[str, Any]:
+def collect_tags_once() -> Dict[str, Any]:
+    """
+    Some of the tags may be affected by the configurations set by the user
+    after opik has been already imported, so we need to collect this data
+    as late as possible.
+    """
+
     result = {
         "os_type": environment.get_os_type(),
         "python_version": environment.get_python_version(),
