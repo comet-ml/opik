@@ -19,7 +19,7 @@ pytest_codeblocks_skip: true
 
 ### Configuring Opik
 
-To start tracking your watsonx LLM calls, you can use our [LiteLLM integration](/opik/tracing/integrations/litellm.md). You'll need to have both the `opik` and `litellm` packages installed. You can install them using pip:
+To start tracking your watsonx LLM calls, you can use our [LiteLLM integration](/tracing/integrations/litellm.md). You'll need to have both the `opik` and `litellm` packages installed. You can install them using pip:
 
 ```bash
 pip install opik litellm
