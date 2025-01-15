@@ -31,7 +31,7 @@ def _add_extra_details(event: Event) -> None:
     else:
         event["user"] = {"id": user_details.get_id()}
 
-    event["tags"] = {"installation_type": opik.environment.get_installation_type()}
+    event["tags"]["installation_type"] = opik.environment.get_installation_type()
 
     if event["contexts"].get("opik_handled") is False:
         event["tags"]["opik_handled"] = False
