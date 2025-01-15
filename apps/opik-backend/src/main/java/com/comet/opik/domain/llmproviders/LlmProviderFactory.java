@@ -14,6 +14,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.EnumUtils;
 
+import java.util.Set;
 import java.util.function.Function;
 
 @Singleton
@@ -50,13 +51,13 @@ public class LlmProviderFactory {
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
     private LlmProvider getLlmProvider(String model) {
-        if (isModelBelongToProvider(model, ModelPrice.class, ModelPrice::getName)) {
+        if (isModelBelongToProvider(model, ModelPrice.class, ModelPrice::getName, Set.of(ModelPrice.DEFAULT))) {
             return LlmProvider.OPEN_AI;
         }
-        if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString)) {
+        if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString, Set.of())) {
             return LlmProvider.ANTHROPIC;
         }
-        if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
+        if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString, Set.of())) {
             return LlmProvider.GEMINI;
         }
 
@@ -77,8 +78,9 @@ public class LlmProviderFactory {
     }
 
     private static <E extends Enum<E>> boolean isModelBelongToProvider(
-            String model, Class<E> enumClass, Function<E, String> valueGetter) {
+            String model, Class<E> enumClass, Function<E, String> valueGetter, Set<Object> exclude) {
         return EnumUtils.getEnumList(enumClass).stream()
+                .filter(value -> !exclude.contains(value))
                 .map(valueGetter)
                 .anyMatch(model::equals);
     }
