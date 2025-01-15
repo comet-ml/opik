@@ -24,6 +24,7 @@ def collect_initial_context() -> Dict[str, Any]:
         "pid": environment.get_pid(),
         "os": environment.get_os(),
         "python_version_verbose": environment.get_python_version_verbose(),
+        "session_id": "".join(random.choice(string.ascii_letters) for _ in range(9)),
     }
 
     installed_packages_details = _get_installed_packages_details()
@@ -50,7 +51,6 @@ def collect_initial_tags() -> Dict[str, Any]:
         "aws_lambda": environment.in_aws_lambda(),
         "github_actions": environment.in_github_actions(),
         "pytest": environment.in_pytest(),
-        "session_id": "".join(random.choice(string.ascii_letters) for _ in range(9)),
     }
 
     return result
