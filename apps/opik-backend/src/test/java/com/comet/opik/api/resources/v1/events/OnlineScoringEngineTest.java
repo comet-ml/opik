@@ -24,12 +24,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
@@ -42,7 +43,9 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("LlmAsJudge Message Render")
-public class OnlineScoringEngineTest {
+@ExtendWith(MockitoExtension.class)
+class OnlineScoringEngineTest {
+
     @Mock
     AutomationRuleEvaluatorService ruleEvaluatorService;
     @Mock
@@ -98,14 +101,37 @@ public class OnlineScoringEngineTest {
             }
             """.formatted(outputStr).trim();
 
+    String edgeCaseTemplate = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\n";
+    String testEvaluatorEdgeCase = """
+            {
+              "model": { "name": "gpt-4o", "temperature": 0.3 },
+              "messages": [
+                { "role": "USER", "content": "%s" },
+                { "role": "SYSTEM", "content": "You're a helpful AI, be cordial." }
+              ],
+              "variables": {
+                  "summary": "input.questions.question1",
+                  "instruction": "output.output",
+                  "nonUsed": "input.questions.question2",
+                  "toFail1": "metadata.nonexistent.path"
+              },
+              "schema": [
+                { "name": "Relevance",           "type": "INTEGER",   "description": "Relevance of the summary" },
+                { "name": "Conciseness",         "type": "DOUBLE",    "description": "Conciseness of the summary" },
+                { "name": "Technical Accuracy",  "type": "BOOLEAN",   "description": "Technical accuracy of the summary" }
+              ]
+            }
+            """
+            .formatted(edgeCaseTemplate).trim();
+
+    private ObjectMapper mapper = new ObjectMapper();
+
     @BeforeEach
     void setUp() throws JsonProcessingException {
-        MockitoAnnotations.openMocks(this);
         Mockito.doNothing().when(eventBus).register(Mockito.any());
         onlineScoringEventListener = new OnlineScoringEventListener(eventBus, ruleEvaluatorService,
                 aiProxyService, feedbackScoreService);
 
-        var mapper = new ObjectMapper();
         evaluatorCode = mapper.readValue(testEvaluator, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class);
         trace = Trace.builder().input(mapper.readTree(input)).output(mapper.readTree(output)).build();
     }
@@ -237,5 +263,26 @@ public class OnlineScoringEngineTest {
             assertThat(techAccScore.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
 
         }
+    }
+
+    @Test
+    @DisplayName("render a message template with edge cases")
+    void testRenderEdgeCaseTemplate() throws JsonProcessingException {
+
+        var evaluatorEdgeCase = mapper.readValue(testEvaluatorEdgeCase,
+                AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class);
+
+        var renderedMessages = OnlineScoringEngine.renderMessages(evaluatorEdgeCase.messages(),
+                evaluatorEdgeCase.variables(), trace);
+
+        assertThat(renderedMessages).hasSize(2);
+
+        var userMessage = renderedMessages.get(0);
+        assertThat(userMessage.getClass()).isEqualTo(UserMessage.class);
+        assertThat(((UserMessage) userMessage).singleText()).contains(summaryStr);
+        assertThat(((UserMessage) userMessage).singleText()).contains(outputStr);
+
+        var systemMessage = renderedMessages.get(1);
+        assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
     }
 }
