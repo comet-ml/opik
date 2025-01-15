@@ -54,7 +54,11 @@ export const SelectBox = ({
           }
 
           return (
-            <SelectItem key={option.value} value={option.value}>
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              description={option.description}
+            >
               {option.label}
             </SelectItem>
           );
