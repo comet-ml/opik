@@ -6,11 +6,13 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AutomationRuleEvaluatorUpdate(
         @NotNull String name,
-        @NotNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode code,
+        @NotNull LlmAsJudgeCode code,
         @NotNull Float samplingRate) {
 }
