@@ -3,7 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 import { MoveLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
-import { QUICKSTART_INTEGRATIONS } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integrations/quickstart-integrations";
+import { QUICKSTART_INTEGRATIONS } from "@/components/pages-shared/onboarding/FrameworkIntegrations/quickstart-integrations";
 
 type QuickstartProps = {
   apiKey?: string;
@@ -18,7 +18,7 @@ const Quickstart: React.FunctionComponent<QuickstartProps> = ({
 
   return (
     <div className="flex w-full min-w-fit flex-col pb-12 pt-5">
-      <div>
+      <div className="pb-10">
         <div className="sticky top-5 self-start">
           <Button
             variant="link"
@@ -32,7 +32,7 @@ const Quickstart: React.FunctionComponent<QuickstartProps> = ({
         </div>
         <div className="pt-5">
           <h1 className="comet-title-xl text-center">Quickstart guide</h1>
-          <div className="comet-body-s m-auto mt-4 h-[92px] w-[468px] self-center text-center text-muted-slate">
+          <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
             Select the framework and follow the instructions to integrate Opik
             with your own code or use our ready-to-run examples on the right.
           </div>
