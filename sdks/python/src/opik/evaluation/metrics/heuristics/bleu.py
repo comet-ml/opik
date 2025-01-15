@@ -59,7 +59,7 @@ class BaseBLEU(base_metric.BaseMetric):
 
         self._smoother = nltk_bleu_score.SmoothingFunction()
 
-    def _get_smoothing_func(self) -> nltk_bleu_score.SmoothingFunction:
+    def _get_smoothing_func(self) -> "nltk_bleu_score.SmoothingFunction":
         return getattr(self._smoother, self.smoothing_method, self._smoother.method0)
 
     def _truncate_weights(self, max_len: int) -> Tuple[float, ...]:
