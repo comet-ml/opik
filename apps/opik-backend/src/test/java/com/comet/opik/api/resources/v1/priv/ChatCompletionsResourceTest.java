@@ -11,9 +11,9 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
+import com.comet.opik.domain.cost.OpenaiModelPrice;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
-import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -223,7 +223,7 @@ class ChatCompletionsResourceTest {
 
         private static Stream<Arguments> testModelsProvider() {
             return Stream.of(
-                    arguments(ModelPrice.gpt_4o_mini.getName(), LlmProvider.OPEN_AI,
+                    arguments(OpenaiModelPrice.gpt_4o_mini.getName(), LlmProvider.OPEN_AI,
                             UUID.randomUUID().toString()),
                     arguments(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
                             System.getenv("ANTHROPIC_API_KEY")),

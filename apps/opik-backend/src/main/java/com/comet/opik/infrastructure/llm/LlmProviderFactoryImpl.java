@@ -2,7 +2,7 @@ package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.cost.OpenaiModelPrice;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.EncryptionUtils;
@@ -58,7 +58,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
     private LlmProvider getLlmProvider(String model) {
-        if (isModelBelongToProvider(model, ModelPrice.class, ModelPrice::getName, Set.of(ModelPrice.DEFAULT))) {
+        if (isModelBelongToProvider(model, OpenaiModelPrice.class, OpenaiModelPrice::getName,
+                Set.of(OpenaiModelPrice.DEFAULT))) {
             return LlmProvider.OPEN_AI;
         }
         if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString, Set.of())) {

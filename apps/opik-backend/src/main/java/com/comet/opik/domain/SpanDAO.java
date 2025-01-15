@@ -4,7 +4,7 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.cost.OpenaiModelPrice;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.stats.StatsMapper;
@@ -1001,7 +1001,8 @@ class SpanDAO {
                     && Objects.nonNull(spanUpdate.usage())) {
                         // Calculate estimated cost only in case Span doesn't have manually set cost
                         statement.bind("total_estimated_cost",
-                                ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()).toString());
+                                OpenaiModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage())
+                                        .toString());
                         statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
                     }
     }
@@ -1167,7 +1168,7 @@ class SpanDAO {
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
 
-        return ModelPrice.fromString(model).calculateCost(span.usage());
+        return OpenaiModelPrice.fromString(model).calculateCost(span.usage());
     }
 
     private Publisher<? extends Result> find(int page, int size, SpanSearchCriteria spanSearchCriteria,

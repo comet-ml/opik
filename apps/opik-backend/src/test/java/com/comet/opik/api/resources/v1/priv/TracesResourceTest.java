@@ -37,7 +37,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.cost.OpenaiModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -5645,7 +5645,7 @@ class TracesResourceTest {
                 batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
                 BigDecimal totalCost = spans.stream()
-                        .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                        .map(span -> OpenaiModelPrice.fromString(span.model()).calculateCost(span.usage()))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
 
                 Trace expectedTrace = trace.toBuilder()
@@ -8156,7 +8156,7 @@ class TracesResourceTest {
 
     private BigDecimal aggregateSpansCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                .map(span -> OpenaiModelPrice.fromString(span.model()).calculateCost(span.usage()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }
