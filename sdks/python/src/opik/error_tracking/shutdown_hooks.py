@@ -34,9 +34,7 @@ def register_exception_hook() -> None:
             is_opik_related = True
 
         if is_opik_related:
-            with sentry_sdk.configure_scope() as scope:
-                scope.set_tag("opik_handled", False)
-                sentry_sdk.capture_exception(error=exception_value)
+            sentry_sdk.capture_exception(error=exception_value)
 
         return original_exception_hook(exception_type, exception_value, traceback)
 

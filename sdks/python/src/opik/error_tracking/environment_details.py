@@ -1,5 +1,6 @@
 import importlib.metadata
 import logging
+import functools
 import random
 import string
 import importlib
@@ -12,16 +13,8 @@ from .. import environment
 LOGGER = logging.getLogger(__name__)
 
 
-def collect_initial_context() -> Dict[str, Any]:
-    """
-    Returns environment details. It is recommended to collect here only
-    the information which we expect to be set before opik import.
-
-    If you need the data which might be set during the script
-    execution - consider adding it directly to sentry event dict
-    inside before_send function.
-    """
-
+@functools.lru_cache
+def collect_context() -> Dict[str, Any]:
     result = {
         "pid": environment.get_pid(),
         "os": environment.get_os(),
@@ -35,15 +28,8 @@ def collect_initial_context() -> Dict[str, Any]:
     return result
 
 
-def collect_initial_tags() -> Dict[str, Any]:
-    """
-    Tags are similar to context but can be used for filtering and search
-    in Sentry.
-
-    If you need the data which might be set during the script
-    execution - consider adding it directly to sentry event dict
-    inside before_send function.
-    """
+@functools.lru_cache
+def collect_tags() -> Dict[str, Any]:
     result = {
         "os_type": environment.get_os_type(),
         "python_version": environment.get_python_version(),
@@ -53,6 +39,7 @@ def collect_initial_tags() -> Dict[str, Any]:
         "aws_lambda": environment.in_aws_lambda(),
         "github_actions": environment.in_github_actions(),
         "pytest": environment.in_pytest(),
+        "installation_type": environment.get_installation_type(),
     }
 
     return result

@@ -58,10 +58,12 @@ def in_pytest() -> bool:
     return "pytest" in sys.modules
 
 
+@functools.lru_cache
 def in_github_actions() -> bool:
     return "GITHUB_ACTIONS" in os.environ
 
 
+@functools.lru_cache
 def in_aws_lambda() -> bool:
     return "LAMBDA_TASK_ROOT" in os.environ
 

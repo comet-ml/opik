@@ -4,10 +4,11 @@ import random
 
 import sentry_sdk
 
+import opik
 import opik.config
 from opik import _logging
 
-from . import before_send, environment_details, logger_setup, shutdown_hooks
+from . import before_send, logger_setup, shutdown_hooks
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,23 +31,13 @@ def setup_sentry_error_tracker() -> None:
 
     sentry_dsn = config.sentry_dsn
 
-    tags = environment_details.collect_initial_tags()
-
     sentry_sdk.init(
         dsn=sentry_dsn,
         integrations=[],
         default_integrations=False,
         before_send=before_send.callback,
-        release=tags["release"],
+        release=opik.__version__,
     )
-
-    sdk_context = environment_details.collect_initial_context()
-    sentry_sdk.set_context(
-        "opik-sdk-context",
-        sdk_context,
-    )
-    for key, value in tags.items():
-        sentry_sdk.set_tag(key, value)
 
     root_logger = logging.getLogger("opik")
     logger_setup.setup_sentry_error_handlers(root_logger)

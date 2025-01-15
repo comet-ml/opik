@@ -1,9 +1,9 @@
 from typing import Optional
-
-import opik.environment
+import sentry_sdk
 from . import user_details
 from .error_filtering import sentry_filter_chain
 from .types import Event, Hint
+from . import environment_details
 
 
 def callback(event: Event, hint: Hint) -> Optional[Event]:
@@ -31,10 +31,16 @@ def _add_extra_details(event: Event) -> None:
     else:
         event["user"] = {"id": user_details.get_id()}
 
-    event["tags"]["installation_type"] = opik.environment.get_installation_type()
+    opik_sdk_context = environment_details.collect_context()
+    tags = environment_details.collect_tags()
 
-    if "opik_handled" not in event["tags"]:
-        event["tags"]["opik_handled"] = True
+    scope = sentry_sdk.get_current_scope()
+    scope.set_context("opik-sdk-context", opik_sdk_context)
+    scope.set_tags(tags)
+
+    # Also write to event because sometimes sentry ignores the scope (TODO: understand why)
+    event["contexts"]["opik-sdk-context"] = opik_sdk_context
+    event["tags"] = {**event.get("tags", {}), **tags}
 
     # Put into event all the information that depends on
     # configuration which might be set AFTER opik is imported.
