@@ -108,13 +108,24 @@ class FeedbackScoreMessage(BaseMessage):
 
 
 @dataclasses.dataclass
-class AddTraceFeedbackScoresBatchMessage(BaseMessage):
+class AddFeedbackScoresBatchMessage(BaseMessage):
     batch: List[FeedbackScoreMessage]
+    supports_batching: bool = True
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data.pop("supports_batching")
+        return data
 
 
 @dataclasses.dataclass
-class AddSpanFeedbackScoresBatchMessage(BaseMessage):
-    batch: List[FeedbackScoreMessage]
+class AddTraceFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
+    pass
+
+
+@dataclasses.dataclass
+class AddSpanFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
+    pass
 
 
 @dataclasses.dataclass

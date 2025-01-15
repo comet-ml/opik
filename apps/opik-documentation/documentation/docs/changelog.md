@@ -6,6 +6,27 @@ pytest_codeblocks_skip: true
 
 # Weekly Changelog
 
+## Week of 2025-01-13
+
+**Opik Dashboard**:
+
+- Datasets are now supported in the playground allowing you to quickly evaluate prompts on multiple samples
+- Updated the models supported in the playground
+
+**SDK**:
+
+- New integration with [CrewAI](https://docs.crewai.com/introduction)
+
+## Week of 2025-01-06
+
+**Opik Dashboard**:
+
+- Fixed an issue with the trace viewer in Safari
+
+**SDK**:
+
+- Added a new `py.typed` file to the SDK to make it compatible with mypy
+
 ## Week of 2024-12-30
 
 **Opik Dashboard**:
@@ -162,7 +183,7 @@ pytest_codeblocks_skip: true
 
 **SDK**:
 
-- Introduced the `Prompt` object in the SDK to manage prompts stored in the library. See the [Prompt Management](/library/managing_prompts_in_code.mdx) guide for more details.
+- Introduced the `Prompt` object in the SDK to manage prompts stored in the library. See the [Prompt Management](/prompt_engineering/managing_prompts_in_code.mdx) guide for more details.
 - Introduced a `Opik.search_spans` method to search for spans in a project. See the [Search spans](/tracing/export_data.md#exporting-spans) guide for more details.
 - Released a new integration with [AWS Bedrock](/tracing/integrations/bedrock.md) for using Opik with Bedrock models.
 

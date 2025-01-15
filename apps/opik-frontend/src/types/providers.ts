@@ -3,17 +3,10 @@ export enum PROVIDER_TYPE {
 }
 
 export enum PROVIDER_MODEL_TYPE {
-  // Reasoning Models
-  O1_PREVIEW = "o1-preview",
-  O1_MINI = "o1-mini",
-  O1_MINI_2024_09_12 = "o1-mini-2024-09-12",
-  O1_PREVIEW_2024_09_12 = "o1-preview-2024-09-12",
-
   // GPT-4.0 Models
   GPT_4O = "gpt-4o",
   GPT_4O_MINI = "gpt-4o-mini",
   GPT_4O_MINI_2024_07_18 = "gpt-4o-mini-2024-07-18",
-  GPT_4O_2024_11_20 = "gpt-4o-2024-11-20",
   GPT_4O_2024_08_06 = "gpt-4o-2024-08-06",
   GPT_4O_2024_05_13 = "gpt-4o-2024-05-13",
 
@@ -28,12 +21,8 @@ export enum PROVIDER_MODEL_TYPE {
 
   // GPT-3.5 Models
   GPT_3_5_TURBO = "gpt-3.5-turbo",
-  GPT_3_5_TURBO_16K = "gpt-3.5-turbo-16k",
   GPT_3_5_TURBO_1106 = "gpt-3.5-turbo-1106",
   GPT_3_5_TURBO_0125 = "gpt-3.5-turbo-0125",
-
-  // Other Models
-  CHATGPT_4O_LATEST = "chatgpt-4o-latest",
 }
 
 export interface ProviderKey {
@@ -43,7 +32,11 @@ export interface ProviderKey {
   provider: PROVIDER_TYPE;
 }
 
-export interface PlaygroundOpenAIConfigsType {
+export interface ProviderKeyWithAPIKey extends ProviderKey {
+  apiKey: string;
+}
+
+export interface LLMOpenAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
@@ -51,6 +44,4 @@ export interface PlaygroundOpenAIConfigsType {
   presencePenalty: number;
 }
 
-export interface ProviderKeyWithAPIKey extends ProviderKey {
-  apiKey: string;
-}
+export type LLMPromptConfigsType = Record<string, never> | LLMOpenAIConfigsType;

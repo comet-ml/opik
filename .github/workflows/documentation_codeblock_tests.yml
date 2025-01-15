@@ -1,15 +1,6 @@
 name: Documentation - Test codeblocks
 on:
   workflow_dispatch:
-    inputs:
-      install_opik:
-        description: 'Enable opik installation from source files'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
   pull_request:
     paths:
       - 'apps/opik-documentation/documentation/docs/*.md'
@@ -57,12 +48,20 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
       OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
+      OPIK_SENTRY_ENABLE: False
     strategy:
       matrix:
         path: ${{ fromJson(needs.collect_test_paths.outputs.test_paths) }}
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/checkout@v3
+        if: github.event_name != 'pull_request'
       
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -75,13 +74,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest
           pip install -r requirements.txt
-          if [ "${{ github.event.inputs.install_opik }}" = "true" ]; then
-            pip install -e .
-          fi
           
       - name: Run tests
         working-directory: apps/opik-documentation/documentation
         run: |
           if [ -n "${{ matrix.path }}" ]; then
-            pytest ${{ matrix.path }} -v --suppress-no-test-exit-code
+            pytest ${{ matrix.path }} -v --suppress-no-test-exit-code --default-package=../../../sdks/python
           fi

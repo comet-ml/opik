@@ -176,6 +176,7 @@ def client_get_prompt_retries(
 ):
     start_time = time.time()
     delay = initial_delay
+    time.sleep(initial_delay)
 
     while time.time() - start_time < timeout:
         prompt = client.get_prompt(name=prompt_name)

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Production (Kubernetes)
 description: Describes how to run Opik on a Kubernetes cluster
-test_code_snippets: false
+pytest_codeblocks_skip: true
 ---
 
 # Production ready Kubernetes deployment

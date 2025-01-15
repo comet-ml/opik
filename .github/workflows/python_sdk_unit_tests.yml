@@ -9,6 +9,9 @@ on:
       - 'main'
     paths:
       - 'sdks/python/**'
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
 jobs:
   UnitTests:
     name: Units_Python_${{matrix.python_version}}

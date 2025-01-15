@@ -6,13 +6,10 @@ import useSpanCreateMutation from "@/api/traces/useSpanCreateMutation";
 import useTraceCreateMutation from "@/api/traces/useTraceCreateMutation";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 
-import {
-  PlaygroundPromptConfigsType,
-  ProviderMessageType,
-} from "@/types/playground";
+import { ProviderMessageType } from "@/types/llm";
 import { useToast } from "@/components/ui/use-toast";
 import { SPAN_TYPE } from "@/types/traces";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 
@@ -24,10 +21,10 @@ const USAGE_FIELDS_TO_SEND = [
 
 const PLAYGROUND_PROJECT_NAME = "playground";
 
-interface CreateTraceSpanParams extends RunStreamingReturn {
+export interface CreateTraceSpanParams extends RunStreamingReturn {
   model: PROVIDER_MODEL_TYPE | "";
   providerMessages: ProviderMessageType[];
-  configs: PlaygroundPromptConfigsType;
+  configs: LLMPromptConfigsType;
 }
 
 const useCreateOutputTraceAndSpan = () => {

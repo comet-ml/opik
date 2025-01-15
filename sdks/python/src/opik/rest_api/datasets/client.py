@@ -198,6 +198,7 @@ class DatasetsClient:
             items=[
                 DatasetItemWrite(
                     source="manual",
+                    data={"key": "value"},
                 )
             ],
         )
@@ -1095,6 +1096,7 @@ class AsyncDatasetsClient:
                 items=[
                     DatasetItemWrite(
                         source="manual",
+                        data={"key": "value"},
                     )
                 ],
             )

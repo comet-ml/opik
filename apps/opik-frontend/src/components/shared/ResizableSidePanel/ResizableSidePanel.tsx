@@ -27,6 +27,10 @@ type ResizableSidePanelProps = {
   closeOnClickOutside?: boolean;
 };
 
+const UP_HOTKEYS = ["↑"];
+const DOWN_HOTKEYS = ["↓"];
+const ESC_HOTKEYS = ["Esc"];
+
 const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   panelId,
   children,
@@ -120,7 +124,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     return (
       <>
         <Separator orientation="vertical" className="mx-4 h-8" />
-        <TooltipWrapper content={`Previous ${entity}`} hotkey="↑">
+        <TooltipWrapper content={`Previous ${entity}`} hotkeys={UP_HOTKEYS}>
           <Button
             variant="outline"
             size="icon-sm"
@@ -131,7 +135,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             <ArrowUp className="size-3.5" />
           </Button>
         </TooltipWrapper>
-        <TooltipWrapper content={`Next ${entity}`} hotkey="↓">
+        <TooltipWrapper content={`Next ${entity}`} hotkeys={DOWN_HOTKEYS}>
           <Button
             variant="outline"
             size="icon-sm"
@@ -164,7 +168,10 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
           <div className="relative flex size-full">
             <div className="absolute inset-x-0 top-0 flex h-[60px] items-center justify-between gap-6 pl-6 pr-5">
               <div className="flex gap-2">
-                <TooltipWrapper content={`Close ${entity}`} hotkey="Esc">
+                <TooltipWrapper
+                  content={`Close ${entity}`}
+                  hotkeys={ESC_HOTKEYS}
+                >
                   <Button
                     data-testid="side-panel-close"
                     variant="outline"

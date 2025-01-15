@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AutomationRule;
-import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -20,12 +19,13 @@ import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterRowMapper(AutomationRuleRowMapper.class)
-@RegisterConstructorMapper(AutomationRuleEvaluator.class)
+@RegisterConstructorMapper(LlmAsJudgeAutomationRuleEvaluatorModel.class)
+@RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 interface AutomationRuleDAO {
 
     @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate) " +
             "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate)")
-    <T> void saveBaseRule(@BindMethods("rule") AutomationRuleModel<T> rule, @Bind("workspaceId") String workspaceId);
+    void saveBaseRule(@BindMethods("rule") AutomationRuleModel rule, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE automation_rules
@@ -37,8 +37,7 @@ interface AutomationRuleDAO {
             @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId,
             @Bind("name") String name,
-            @Bind("samplingRate") float samplingRate,
-            @Bind("lastUpdatedBy") String lastUpdatedBy);
+            @Bind("samplingRate") float samplingRate);
 
     @SqlUpdate("""
             DELETE FROM automation_rules

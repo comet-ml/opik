@@ -24,7 +24,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="size-4 opacity-50" />
+      <ChevronDown className="size-4 text-foreground opacity-50" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -112,32 +112,44 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName;
 interface SelectItemProps
   extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
   withoutCheck?: boolean;
+  description?: string;
 }
 
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
   SelectItemProps
->(({ className, children, withoutCheck = false, ...props }, ref) => (
-  <SelectPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      withoutCheck ? "pl-2" : "pl-8",
-      className,
-    )}
-    {...props}
-  >
-    {!withoutCheck && (
-      <span className="absolute left-2 flex size-3.5 items-center justify-center">
-        <SelectPrimitive.ItemIndicator>
-          <Check className="size-4" />
-        </SelectPrimitive.ItemIndicator>
-      </span>
-    )}
-
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-  </SelectPrimitive.Item>
-));
+>(
+  (
+    { className, children, withoutCheck = false, description, ...props },
+    ref,
+  ) => (
+    <SelectPrimitive.Item
+      ref={ref}
+      className={cn(
+        "relative flex flex-col w-full cursor-default select-none justify-stretch rounded-sm py-1.5 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        withoutCheck ? "pl-2" : "pl-8",
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex items-center">
+        {!withoutCheck && (
+          <span className="absolute left-2 flex size-3.5 items-center justify-center">
+            <SelectPrimitive.ItemIndicator>
+              <Check className="size-4" />
+            </SelectPrimitive.ItemIndicator>
+          </span>
+        )}
+        <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      </div>
+      {description && (
+        <div className="comet-body-s mt-0.5 text-light-slate">
+          {description}
+        </div>
+      )}
+    </SelectPrimitive.Item>
+  ),
+);
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
 const SelectSeparator = React.forwardRef<

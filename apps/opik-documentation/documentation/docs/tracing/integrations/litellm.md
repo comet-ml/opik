@@ -18,7 +18,7 @@ First, ensure you have both `opik` and `litellm` packages installed:
 pip install opik litellm
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
 ```bash
 opik configure
@@ -49,7 +49,7 @@ response = litellm.completion(
 
 ### Logging LLM calls within a tracked function
 
-If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
+If you are using LiteLLM within a function tracked with the [`@track`](/tracing/log_traces.mdx#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 
 ```python
 from opik import track

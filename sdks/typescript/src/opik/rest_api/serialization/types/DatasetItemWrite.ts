@@ -5,7 +5,6 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNodeWrite } from "./JsonNodeWrite";
 import { DatasetItemWriteSource } from "./DatasetItemWriteSource";
 import { JsonNode } from "./JsonNode";
 
@@ -14,24 +13,18 @@ export const DatasetItemWrite: core.serialization.ObjectSchema<
     OpikApi.DatasetItemWrite
 > = core.serialization.object({
     id: core.serialization.string().optional(),
-    input: JsonNodeWrite.optional(),
-    expectedOutput: core.serialization.property("expected_output", JsonNodeWrite.optional()),
-    metadata: JsonNodeWrite.optional(),
     traceId: core.serialization.property("trace_id", core.serialization.string().optional()),
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemWriteSource,
-    data: JsonNode.optional(),
+    data: JsonNode,
 });
 
 export declare namespace DatasetItemWrite {
     interface Raw {
         id?: string | null;
-        input?: JsonNodeWrite.Raw | null;
-        expected_output?: JsonNodeWrite.Raw | null;
-        metadata?: JsonNodeWrite.Raw | null;
         trace_id?: string | null;
         span_id?: string | null;
         source: DatasetItemWriteSource.Raw;
-        data?: JsonNode.Raw | null;
+        data: JsonNode.Raw;
     }
 }

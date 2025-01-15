@@ -8,6 +8,8 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
   GUARDRAILS_API_KEY: ${{ secrets.GUARDRAILS_API_KEY }}
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
 on:
   workflow_call:
 

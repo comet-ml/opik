@@ -8,8 +8,7 @@ import lombok.Data;
 @Data
 public class DistributedLockConfig {
 
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     @NotNull private int lockTimeoutMS; // lease time in milliseconds
 
     /**
@@ -22,8 +21,7 @@ public class DistributedLockConfig {
      * This is needed as redisson by default doesn't delete the lock from redis after the lease time expires, it just releases the lock. The expiration time will be reset every time the lock is acquired.
      *
      * */
-    @Valid
-    @JsonProperty
+    @Valid @JsonProperty
     @NotNull private int ttlInSeconds; // time to live in seconds
 
 }

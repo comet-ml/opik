@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.google.common.eventbus.EventBus;
+import com.google.inject.AbstractModule;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.collections4.CollectionUtils;
@@ -16,6 +17,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 
@@ -31,7 +33,7 @@ public class TestDropwizardAppExtensionUtils {
             DatabaseAnalyticsFactory databaseAnalyticsFactory,
             WireMockRuntimeInfo runtimeInfo,
             String redisUrl,
-            Integer cacheTtlInSeconds,
+            Integer authCacheTtlInSeconds,
             boolean rateLimitEnabled,
             Long limit,
             Long limitDurationInSeconds,
@@ -45,7 +47,8 @@ public class TestDropwizardAppExtensionUtils {
             String metadataVersion,
             EventBus mockEventBus,
             boolean corsEnabled,
-            List<CustomConfig> customConfigs) {
+            List<CustomConfig> customConfigs,
+            List<AbstractModule> modules) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -76,14 +79,14 @@ public class TestDropwizardAppExtensionUtils {
             DatabaseAnalyticsFactory databaseAnalyticsFactory,
             WireMockRuntimeInfo runtimeInfo,
             String redisUrl,
-            Integer cacheTtlInSeconds) {
+            Integer authCacheTtlInSeconds) {
         return newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(jdbcUrl)
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(runtimeInfo)
                         .redisUrl(redisUrl)
-                        .cacheTtlInSeconds(cacheTtlInSeconds)
+                        .authCacheTtlInSeconds(authCacheTtlInSeconds)
                         .build());
     }
 
@@ -117,13 +120,18 @@ public class TestDropwizardAppExtensionUtils {
             configs.add("authentication.ui.url: "
                     + "%s/opik/auth-session".formatted(appContextConfig.runtimeInfo().getHttpsBaseUrl()));
 
-            if (appContextConfig.cacheTtlInSeconds() != null) {
-                configs.add("authentication.apiKeyResolutionCacheTTLInSec: " + appContextConfig.cacheTtlInSeconds());
+            if (appContextConfig.authCacheTtlInSeconds() != null) {
+                configs.add(
+                        "authentication.apiKeyResolutionCacheTTLInSec: " + appContextConfig.authCacheTtlInSeconds());
             }
         }
 
         GuiceyConfigurationHook hook = injector -> {
             injector.modulesOverride(TestHttpClientUtils.testAuthModule());
+
+            Optional.ofNullable(appContextConfig.modules)
+                    .orElse(List.of())
+                    .forEach(injector::modulesOverride);
 
             if (appContextConfig.mockEventBus() != null) {
                 injector.modulesOverride(new EventModule() {
