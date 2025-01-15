@@ -34,6 +34,7 @@ jobs:
           - apps/opik-documentation/documentation/docs/cookbook/crewai.ipynb
     env:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
+      OPIK_SENTRY_ENABLE: False
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
