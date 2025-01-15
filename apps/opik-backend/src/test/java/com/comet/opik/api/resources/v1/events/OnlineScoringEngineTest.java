@@ -43,6 +43,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("LlmAsJudge Message Render")
 class OnlineScoringEngineTest {
+  
     @Mock
     AutomationRuleEvaluatorService ruleEvaluatorService;
     @Mock

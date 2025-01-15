@@ -106,11 +106,8 @@ public class LlmProviderClientGenerator {
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
                 .map(LlmProviderClientConfig.OpenAiClientConfig::url)
-                .ifPresent(baseUrl -> {
-                    if (StringUtils.isNotBlank(baseUrl)) {
-                        builder.baseUrl(baseUrl);
-                    }
-                });
+                .filter(StringUtils::isNotBlank)
+                .ifPresent(builder::baseUrl);
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 

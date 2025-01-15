@@ -85,6 +85,18 @@ const config: Config = {
             to: "/self-host/overview",
             from: ["/self-host/self_hosting_opik"],
           },
+          {
+            to: "/prompt_engineering/playground",
+            from: ["/evaluation/playground"],
+          },
+          {
+            to: "/prompt_engineering/prompt_management",
+            from: ["/library/prompt_management"],
+          },
+          {
+            to: "/prompt_engineering/managing_prompts_in_code",
+            from: ["/library/managing_prompts_in_code"],
+          },
         ],
       },
     ],

@@ -106,6 +106,7 @@ public class OnlineScoringEngine {
         // render the message templates from evaluator rule
         return templateMessages.stream()
                 .map(templateMessage -> {
+                    // will convert all '{{key}}' into 'value'
                     var renderedMessage = MustacheUtils.render(templateMessage.content(), replacements);
 
                     return switch (templateMessage.role()) {
