@@ -61,4 +61,5 @@ export type LLMAsJudgeData = {
   messages: LLMMessage[];
   variables: Record<string, string>;
   schema: LLMJudgeSchema[];
+  parsingVariablesError?: boolean;
 };

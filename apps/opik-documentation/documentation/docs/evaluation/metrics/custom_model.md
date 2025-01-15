@@ -2,6 +2,7 @@
 sidebar_label: Customize models for LLM as a Judge metrics
 description: Describes how to use a custom model for Opik's built-in LLM as a Judge metrics
 toc_max_heading_level: 4
+pytest_codeblocks_execute_previous: true
 ---
 
 # Customize models for LLM as a Judge metrics
@@ -24,9 +25,9 @@ In order to use many models supported by LiteLLM, you also need to pass addition
 
 ```python
 from opik.evaluation.metrics import Hallucination
-from opik.evaluation.models import LiteLLMChatModel
+from opik.evaluation import models
 
-model = LiteLLMChatModel(
+model = models.LiteLLMChatModel(
     name="<model_name>",
     base_url="<base_url>"
 )
@@ -63,12 +64,20 @@ class CustomModel(OpikBaseModel):
         """
         pass
 
-    def generate_string(self, input: str, **kwargs: Any) -> str:
-        """Simplified interface to generate a string output from the model."""
+    def agenerate_provider_response(self, **kwargs: Any) -> str:
+        """
+        Generate a provider-specific response. Can be used to interface with
+        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+        Async version.
+        """
         pass
 
-    def agenerate_prompt(self, input: str, **kwargs: Any) -> str:
+    def agenerate_string(self, input: str, **kwargs: Any) -> str:
         """Simplified interface to generate a string output from the model. Async version."""
+        pass
+
+    def generate_string(self, input: str, **kwargs: Any) -> str:
+        """Simplified interface to generate a string output from the model."""
         return input
 ```
 
@@ -78,6 +87,6 @@ This model class can then be used in the same way as the built-in models:
 from opik.evaluation.metrics import Hallucination
 
 hallucination_metric = Hallucination(
-    model=CustomModel()
+    model=CustomModel(model_name="demo_model")
 )
 ```

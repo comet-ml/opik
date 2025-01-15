@@ -119,8 +119,14 @@ const SliderInputControl = ({
         onValueChange={(values) => {
           setLocalValue(values[0].toString());
         }}
-        onValueCommit={(values) => {
-          onChange(Number(values[0]));
+        onValueCommit={(values) => onChange(Number(values[0]))}
+        // used 'onLostPointerCapture' in addition to 'onValueCommit', because the last doesn't work properly for trackpads
+        // details https://github.com/radix-ui/primitives/issues/1760
+        onLostPointerCapture={() => {
+          const valueToCommit = Number(localValue);
+          if (value !== valueToCommit) {
+            onChange(valueToCommit);
+          }
         }}
         min={min}
         max={max}

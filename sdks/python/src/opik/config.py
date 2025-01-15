@@ -166,9 +166,22 @@ class OpikConfig(pydantic_settings.BaseSettings):
     it might lead to unexpected results for the features that rely on spans/traces created.
     """
 
-    disable_litellm_models_monitoring: bool = False
+    sentry_enable: bool = True
     """
-    If set to True - Opik will not create llm spans for LiteLLMChatModel calls.
+    If set to True, Opik will send the information about the errors to Sentry.
+    """
+
+    sentry_dsn: str = "https://18e4b84006b2ad4cb5df85f372b94dd0@o168229.ingest.us.sentry.io/4508620148441088"
+    """
+    Sentry project DSN which is used as a destination for sentry events.
+    In case there is a need to update reporting rules and stop receiving events from existing users,
+    current DSN should disabled in Sentry project settings, a new DSN should be created and placed here
+    instead of the old one.
+    """
+
+    enable_litellm_models_monitoring: bool = True
+    """
+    If set to True - Opik will create llm spans for LiteLLMChatModel calls.
     It is mainly to be used in tests since litellm uses external Opik callback
     which makes HTTP requests not via the opik package.
     """

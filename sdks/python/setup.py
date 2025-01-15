@@ -1,5 +1,6 @@
-from setuptools import find_packages, setup
 import os
+
+from setuptools import find_packages, setup
 
 project_urls = {"Source code": "https://github.com/comet-ml/opik"}
 
@@ -45,6 +46,7 @@ setup(
         "pydantic>=2.0.0,<3.0.0",
         "pytest",
         "rich",
+        "sentry_sdk>=2.0.0",
         "tenacity",
         "tokenizers<0.21.0 ; python_version<'3.9.0'",  # no 3.8 support starting from 0.21.0
         "tqdm",

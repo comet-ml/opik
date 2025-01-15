@@ -17,7 +17,11 @@ class RedisCacheManager implements CacheManager {
 
     private final @NonNull RedissonReactiveClient redisClient;
 
-    public Mono<Boolean> evict(@NonNull String key) {
+    public Mono<Boolean> evict(@NonNull String key, boolean usePatternMatching) {
+        if (usePatternMatching) {
+            return redisClient.getKeys().deleteByPattern(key)
+                    .map(count -> count > 0);
+        }
         return redisClient.getBucket(key).delete();
     }
 
