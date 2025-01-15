@@ -7,7 +7,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
-import AddDatasetDialog from "@/components/pages/DatasetsPage/AddDatasetDialog";
+import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import DatasetsActionsPanel from "@/components/pages/DatasetsPage/DatasetsActionsPanel";
 import { DatasetRowActionsCell } from "@/components/pages/DatasetsPage/DatasetRowActionsCell";
 import { Button } from "@/components/ui/button";
@@ -237,7 +237,7 @@ const DatasetsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddDatasetDialog
+      <AddEditDatasetDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
