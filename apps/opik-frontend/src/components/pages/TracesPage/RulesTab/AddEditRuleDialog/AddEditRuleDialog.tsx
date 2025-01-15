@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import uniq from "lodash/uniq";
 
 import { Button } from "@/components/ui/button";
@@ -100,7 +100,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const [showValidation, setShowValidation] = useBooleanTimeoutState({
     timeout: 10000,
   });
-  const validationMessage = useRef("");
+  const [validationMessage, setValidationMessage] = useState("");
   const validate = useCallback(() => {
     const messages: string[] = [];
     if (rule.name === "") {
@@ -146,7 +146,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       }
     }
 
-    validationMessage.current = messages.map((m) => `- ${m}`).join("\n");
+    setValidationMessage(messages.map((m) => `- ${m}`).join("\n"));
 
     if (messages.length) {
       setShowValidation(true);
@@ -189,8 +189,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
             >
               <Alert variant="destructive">
                 <AlertTitle>Validation errors:</AlertTitle>
-                <AlertDescription className="min-w-72 whitespace-pre-wrap">
-                  {validationMessage.current}
+                <AlertDescription className="min-w-72 max-w-[500px] whitespace-pre-wrap">
+                  {validationMessage}
                 </AlertDescription>
               </Alert>
             </div>

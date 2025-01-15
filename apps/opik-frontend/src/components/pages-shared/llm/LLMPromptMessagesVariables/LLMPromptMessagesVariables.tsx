@@ -31,8 +31,6 @@ const LLMPromptMessagesVariables = ({
       </div>
       <div className="comet-body-s mb-2 text-light-slate">
         {`Variables are added based on the prompt, all variables as {{variable 1}} will be added to this list.`}
-        <br />
-        {`Variable mapping should begin with "input," "output," or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`}
       </div>
       <div className="flex flex-col gap-2 overflow-hidden">
         {variablesList.map((variable) => (

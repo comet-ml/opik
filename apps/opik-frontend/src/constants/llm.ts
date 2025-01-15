@@ -116,9 +116,9 @@ export const LLM_PROMPT_CUSTOM_TEMPLATE: LLMPromptTemplate = {
   },
   schema: [
     {
-      name: "Hallucination",
+      name: "Correctness",
       description:
-        "Hallucination score identifies factual errors in the response",
+        "Correctness score identifies the LLM output addresses the input",
       type: LLM_SCHEMA_TYPE.INTEGER,
     },
   ],
