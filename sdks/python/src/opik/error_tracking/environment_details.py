@@ -1,6 +1,8 @@
+import importlib.metadata
 import logging
 import random
 import string
+import importlib
 from typing import Any, Dict
 
 import opik
@@ -62,8 +64,8 @@ def _get_installed_packages_details() -> Dict[str, str]:
 
     result = {
         "openai": openai.__version__,
-        # "litellm": litellm.,
         "pydantic": pydantic.__version__,
+        "litellm": importlib.metadata.version("litellm")
     }
 
     return result
