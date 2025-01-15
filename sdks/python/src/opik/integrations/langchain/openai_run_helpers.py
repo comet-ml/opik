@@ -1,8 +1,8 @@
-import dataclasses
 import logging
 from typing import Any, Dict, Optional, TYPE_CHECKING, Tuple, cast
 
 from opik import logging_messages
+from opik.integrations.helpers import LLMUsageInfo
 from opik.types import UsageDict
 from opik.validation import usage as usage_validator
 
@@ -11,13 +11,6 @@ if TYPE_CHECKING:
 
 
 LOGGER = logging.getLogger(__name__)
-
-
-@dataclasses.dataclass
-class LLMUsageInfo:
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    token_usage: Optional[UsageDict] = None
 
 
 def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInfo:
