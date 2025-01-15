@@ -8,7 +8,12 @@ from langchain_core.tracers import BaseTracer
 
 from opik import dict_utils, opik_context
 from opik.api_objects import opik_client, span, trace
-from . import base_llm_patcher, google_run_helpers, openai_run_helpers, opik_encoder_extension
+from . import (
+    base_llm_patcher,
+    google_run_helpers,
+    openai_run_helpers,
+    opik_encoder_extension,
+)
 from opik.integrations.helpers import LLMUsageInfo
 from ...api_objects import helpers
 

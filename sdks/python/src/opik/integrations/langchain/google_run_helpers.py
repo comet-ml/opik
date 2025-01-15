@@ -24,12 +24,14 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
     try:
-        usage_metadata = run_dict['outputs']['generations'][-1][-1]['generation_info']['usage_metadata']
+        usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
+            "usage_metadata"
+        ]
 
         token_usage = UsageDict(
-            completion_tokens=usage_metadata['candidates_token_count'],
-            prompt_tokens=usage_metadata['prompt_token_count'],
-            total_tokens=usage_metadata['total_token_count'],
+            completion_tokens=usage_metadata["candidates_token_count"],
+            prompt_tokens=usage_metadata["prompt_token_count"],
+            total_tokens=usage_metadata["total_token_count"],
         )
 
         if usage_validator.UsageValidator(token_usage).validate().ok():
@@ -49,7 +51,7 @@ def is_google_run(run: "Run") -> bool:
         if run.serialized is None:
             return False
 
-        provider = run.metadata.get('ls_provider', "")
+        provider = run.metadata.get("ls_provider", "")
         is_google = "google" in provider.lower()
 
         return is_google
