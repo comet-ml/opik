@@ -9,11 +9,8 @@ import isObject from "lodash/isObject";
 import cloneDeep from "lodash/cloneDeep";
 
 import { DatasetItem } from "@/types/datasets";
-import {
-  PlaygroundMessageType,
-  PlaygroundPromptType,
-  ProviderMessageType,
-} from "@/types/playground";
+import { LLMMessage, ProviderMessageType } from "@/types/llm";
+import { PlaygroundPromptType } from "@/types/playground";
 import {
   usePromptIds,
   usePromptMap,
@@ -41,7 +38,7 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
 };
 
 export const transformMessageIntoProviderMessage = (
-  message: PlaygroundMessageType,
+  message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {
   const messageTags = getPromptMustacheTags(message.content);

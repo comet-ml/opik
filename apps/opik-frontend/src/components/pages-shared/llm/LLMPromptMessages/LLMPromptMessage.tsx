@@ -15,16 +15,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import {
-  PLAYGROUND_MESSAGE_ROLE,
-  PlaygroundMessageType,
-} from "@/types/playground";
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 
-const MESSAGE_TYPE_OPTIONS = Object.values(PLAYGROUND_MESSAGE_ROLE);
+const MESSAGE_TYPE_OPTIONS = Object.values(LLM_MESSAGE_ROLE);
 
 const theme = EditorView.theme({
   "&": {
@@ -46,15 +43,15 @@ const theme = EditorView.theme({
   },
 });
 
-interface PlaygroundPromptMessageProps extends PlaygroundMessageType {
+interface LLMPromptMessageProps extends LLMMessage {
   hideRemoveButton: boolean;
   hideDragButton: boolean;
   onRemoveMessage: () => void;
   onDuplicateMessage: () => void;
-  onChangeMessage: (changes: Partial<PlaygroundMessageType>) => void;
+  onChangeMessage: (changes: Partial<LLMMessage>) => void;
 }
 
-const PlaygroundPromptMessage = ({
+const LLMPromptMessage = ({
   id,
   content,
   role,
@@ -63,7 +60,7 @@ const PlaygroundPromptMessage = ({
   onChangeMessage,
   onDuplicateMessage,
   onRemoveMessage,
-}: PlaygroundPromptMessageProps) => {
+}: LLMPromptMessageProps) => {
   const { active, attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
@@ -157,4 +154,4 @@ const PlaygroundPromptMessage = ({
   );
 };
 
-export default PlaygroundPromptMessage;
+export default LLMPromptMessage;

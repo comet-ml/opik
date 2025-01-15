@@ -5,6 +5,7 @@ import { EditorView } from "@codemirror/view";
 
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogClose,
   DialogContent,
   DialogFooter,
@@ -90,7 +91,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Edit prompt</DialogTitle>
         </DialogHeader>
-        <div className="size-full max-h-[80vh] overflow-y-auto">
+        <DialogAutoScrollBody>
           <p className="comet-body-s text-muted-slate ">
             By editing a prompt, a new commit will be created automatically. You
             can access older versions of the prompt from the <b>Commits</b> tab.
@@ -172,7 +173,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
               <AlertTitle>Metadata field is not valid</AlertTitle>
             </Alert>
           )}
-        </div>
+        </DialogAutoScrollBody>
 
         <DialogFooter>
           <DialogClose asChild>

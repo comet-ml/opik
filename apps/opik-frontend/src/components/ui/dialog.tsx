@@ -1,8 +1,9 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
 
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -56,6 +57,7 @@ const DialogHeader = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
+    data-dialog-header="true"
     className={cn(
       "flex flex-col space-y-1.5 text-center pb-2 sm:text-left max-w-full min-w-1",
       className,
@@ -65,11 +67,60 @@ const DialogHeader = ({
 );
 DialogHeader.displayName = "DialogHeader";
 
+type DialogBodyProps = {
+  className?: string;
+} & React.HTMLAttributes<HTMLDivElement>;
+
+const DialogAutoScrollBody: React.FC<DialogBodyProps> = ({
+  className,
+  children,
+}) => {
+  const [height, setHeight] = React.useState<number>(0);
+  const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
+    const vh = Math.max(
+      document.documentElement.clientHeight || 0,
+      window.innerHeight || 0,
+    );
+    const contentHeight = node.clientHeight;
+    const container = node.parentElement!.parentElement!;
+    const headerHeight =
+      container.querySelector('[data-dialog-header="true"]')?.clientHeight || 0;
+    const footerHeight =
+      container.querySelector('[data-dialog-footer="true"]')?.clientHeight || 0;
+    const TOP_BOTTOM_PADDING = 80 + 48 + 48; //48 px padding, 48 px spacing
+    const MIN_BODY_HEIGHT = 100;
+    const maxHeight = Math.max(
+      vh - TOP_BOTTOM_PADDING - headerHeight - footerHeight,
+      MIN_BODY_HEIGHT,
+    );
+
+    setHeight(contentHeight > maxHeight ? maxHeight : 0);
+  }, true);
+
+  const hasScroll = height > 0;
+  const style = hasScroll ? { height: `${height}px` } : {};
+
+  return (
+    <div
+      style={style}
+      className={cn(
+        "overflow-y-auto",
+        hasScroll && "border-b border-t py-4",
+        className,
+      )}
+    >
+      <div ref={ref}>{children}</div>
+    </div>
+  );
+};
+DialogAutoScrollBody.displayName = "DialogAutoScrollBody";
+
 const DialogFooter = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
+    data-dialog-footer="true"
     className={cn(
       "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
       className,
@@ -111,6 +162,7 @@ export {
   DialogTrigger,
   DialogContent,
   DialogHeader,
+  DialogAutoScrollBody,
   DialogFooter,
   DialogTitle,
   DialogDescription,

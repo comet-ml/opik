@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import isNull from "lodash/isNull";
 import pick from "lodash/pick";
 
-import { PROVIDER_MODELS } from "@/constants/playground";
+import { PROVIDER_MODELS } from "@/constants/llm";
 import { PROVIDERS } from "@/constants/providers";
 
 import {

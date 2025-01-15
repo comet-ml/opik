@@ -103,11 +103,16 @@ export const generateSelectColumDef = <TData,>() => {
 
 export const generateActionsColumDef = <TData,>({
   cell,
+  customMeta,
 }: {
   cell: ColumnDefTemplate<CellContext<TData, unknown>>;
+  customMeta?: unknown;
 }) => {
   return {
     accessorKey: COLUMN_ACTIONS_ID,
+    meta: {
+      custom: customMeta,
+    },
     header: "",
     cell,
     size: 56,

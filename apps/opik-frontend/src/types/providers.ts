@@ -32,7 +32,11 @@ export interface ProviderKey {
   provider: PROVIDER_TYPE;
 }
 
-export interface PlaygroundOpenAIConfigsType {
+export interface ProviderKeyWithAPIKey extends ProviderKey {
+  apiKey: string;
+}
+
+export interface LLMOpenAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
@@ -40,6 +44,4 @@ export interface PlaygroundOpenAIConfigsType {
   presencePenalty: number;
 }
 
-export interface ProviderKeyWithAPIKey extends ProviderKey {
-  apiKey: string;
-}
+export type LLMPromptConfigsType = Record<string, never> | LLMOpenAIConfigsType;
