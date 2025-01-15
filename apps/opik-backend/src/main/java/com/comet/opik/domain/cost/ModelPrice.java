@@ -13,6 +13,7 @@ import java.util.function.BiFunction;
 @Getter
 public enum ModelPrice {
     gpt_4o("gpt-4o", new BigDecimal("0.0000025"), new BigDecimal("0.000010"), SpanCostCalculator::textGenerationCost),
+    //     TODO: "gpt-4o-2024-11-20"
     gpt_4o_2024_08_06("gpt-4o-2024-08-06", new BigDecimal("0.0000025"), new BigDecimal("0.000010"),
             SpanCostCalculator::textGenerationCost),
     gpt_4o_audio_preview("gpt-4o-audio-preview", new BigDecimal("0.0000025"), new BigDecimal("0.000010"),
@@ -44,8 +45,11 @@ public enum ModelPrice {
     gpt_4_turbo_2024_04_09("gpt-4-turbo-2024-04-09", new BigDecimal("0.000010"), new BigDecimal("0.000030"),
             SpanCostCalculator::textGenerationCost),
     gpt_4("gpt-4", new BigDecimal("0.000030"), new BigDecimal("0.000060"), SpanCostCalculator::textGenerationCost),
+    //    TODO: "gpt-4-0613",
+    //    TODO: "gpt-4-0314",
     gpt_4_32k("gpt-4-32k", new BigDecimal("0.000060"), new BigDecimal("0.000120"),
             SpanCostCalculator::textGenerationCost),
+    //    TODO: "gpt-4-turbo-preview"
     gpt_4_0125_preview("gpt-4-0125-preview", new BigDecimal("0.000010"), new BigDecimal("0.000030"),
             SpanCostCalculator::textGenerationCost),
     gpt_4_1106_preview("gpt-4-1106-preview", new BigDecimal("0.000010"), new BigDecimal("0.000030"),
