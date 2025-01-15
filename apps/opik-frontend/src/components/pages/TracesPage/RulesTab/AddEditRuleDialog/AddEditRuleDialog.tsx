@@ -142,7 +142,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       });
 
       if (schemaNames.length !== uniq(schemaNames).length) {
-        messages.push("All score definition names should be uniq");
+        messages.push("All score definition names should be unique");
       }
     }
 
@@ -196,9 +196,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
             </div>
           )}
           <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="ruleName">Name</Label>
             <Input
-              id="name"
+              id="ruleName"
               placeholder="Rule name"
               value={name}
               onChange={(event) => setName(event.target.value)}

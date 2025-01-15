@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import isEqual from "fast-deep-equal";
 import TextareaAutosize from "react-textarea-autosize";
 
@@ -49,6 +49,12 @@ const LLMJudgeScore = ({
   const [type, setType] = useState<LLM_SCHEMA_TYPE>(
     score.type || LLM_SCHEMA_TYPE.INTEGER,
   );
+
+  useEffect(() => {
+    setName(score.name);
+    setDescription(score.description);
+    setType(score.type);
+  }, [score]);
 
   const handleDoneEditing = () => {
     const newScore = {
