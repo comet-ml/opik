@@ -8,4 +8,4 @@ from opik.types import UsageDict
 class LLMUsageInfo:
     provider: Optional[str] = None
     model: Optional[str] = None
-    token_usage: Optional[UsageDict] = None
+    usage: Optional[UsageDict] = None

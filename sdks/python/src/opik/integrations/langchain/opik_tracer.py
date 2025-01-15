@@ -248,7 +248,7 @@ class OpikTracer(BaseTracer):
 
             span_data.init_end_time().update(
                 output=run_dict["outputs"],
-                usage=usage_info.token_usage,
+                usage=usage_info.usage,
                 provider=usage_info.provider,
                 model=usage_info.model,
             )

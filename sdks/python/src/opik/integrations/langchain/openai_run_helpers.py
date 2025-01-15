@@ -20,7 +20,7 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
     usage_dict = _try_get_token_usage(run_dict)
     provider, model = _get_provider_and_model(run_dict)
 
-    return LLMUsageInfo(provider=provider, model=model, token_usage=usage_dict)
+    return LLMUsageInfo(provider=provider, model=model, usage=usage_dict)
 
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
