@@ -145,13 +145,13 @@ class TraceServiceImpl implements TraceService {
 
     private List<Trace> bindTraceToProjectAndId(TraceBatch batch, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
-                .collect(Collectors.toMap(Project::name, Function.identity()));
+                .collect(Collectors.toMap(project -> project.name().toLowerCase(), Function.identity()));
 
         return batch.traces()
                 .stream()
                 .map(trace -> {
                     String projectName = WorkspaceUtils.getProjectName(trace.projectName());
-                    Project project = projectPerName.get(projectName);
+                    Project project = projectPerName.get(projectName.toLowerCase());
 
                     UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
                     IdGenerator.validateVersion(id, TRACE_KEY);
