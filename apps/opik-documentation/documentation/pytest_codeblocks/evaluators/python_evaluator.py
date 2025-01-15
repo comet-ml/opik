@@ -4,10 +4,11 @@ import tempfile
 
 
 class PythonEvaluator:
-    def __init__(self, code, start_line=None, history=None):
+    def __init__(self, code, start_line=None, history=None, timeout=60):
         self.code = code
         self.start_line = start_line
         self.history = history or []
+        self.timeout = timeout
 
     def set_env(self, env_path: str, python_path: str, pip_path: str):
         self.env_path = env_path
@@ -30,10 +31,16 @@ class PythonEvaluator:
                 }
             )
 
-            subprocess.run(
-                [self.python_path, script_path],
-                capture_output=True,
-                text=True,
-                env=env,
-                check=True,
-            )
+            try:
+                subprocess.run(
+                    [self.python_path, script_path],
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    check=True,
+                    timeout=self.timeout,
+                )
+            except subprocess.TimeoutExpired:
+                raise TimeoutError(
+                    f"Code execution timed out after {self.timeout} seconds"
+                )

@@ -46,7 +46,7 @@ opik configure
     </TabItem>
     <TabItem value="Jupyter Notebook" title="Jupyter Notebook">
 
-```python
+```python pytest_codeblocks_skip=true
 %pip install --quiet --upgrade opik
 
 # Configure the SDK
@@ -72,6 +72,12 @@ Here is a short overview of our most popular integrations:
 
 <Tabs>
     <TabItem value="OpenAI" title="OpenAI">
+First let's install the required dependencies:
+
+```bash
+pip install opik openai
+```
+
 By wrapping the OpenAI client in the `track_openai` function, all calls to the OpenAI API will be logged to the Opik platform:
 
 ```python
@@ -93,10 +99,20 @@ response = client.chat.completions.create(
     </TabItem>
     <TabItem value="LangChain" title="LangChain">
 
+First let's install the required dependencies:
+
+```bash
+pip install opik langchain langchain_openai
+```
+
+We can then use the `OpikTracer` callback to log all the traces to the platform:
+
 ```python
+from langchain_openai import OpenAI
+from langchain.prompts import PromptTemplate
 from opik.integrations.langchain import OpikTracer
 
-# Initialize the Opik tracing callback
+# Initialize the tracer
 opik_tracer = OpikTracer()
 
 # Create the LLM Chain using LangChain
@@ -107,15 +123,21 @@ prompt_template = PromptTemplate(
     template="Translate the following text to French: {input}"
 )
 
-llm_chain = LLMChain(llm=llm, prompt=prompt_template)
+# Use pipe operator to create LLM chain
+llm_chain = prompt_template | llm
 
 # Generate the translations
-translation = llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
-print(translation)
+llm_chain.invoke({"input": "Hello, how are you?"}, callbacks=[opik_tracer])
 ```
 
     </TabItem>
     <TabItem value="LlamaIndex" title="LlamaIndex">
+
+First let's install the required dependencies:
+
+```bash
+pip install opik llama-index llama-index-callbacks-opik
+```
 
 ```python
 from llama_index.core import Document, VectorStoreIndex
@@ -161,12 +183,12 @@ inner function.
 You can add the `@track` decorator to any function in your application and track not just LLM calls but also any other steps in your application:
 
 ```python
-from opik import track
+import opik
 import openai
 
 client = openai.OpenAI()
 
-@track
+@opik.track
 def retrieve_context(input_text):
     # Your retrieval logic here, here we are just returning a hardcoded list of strings
     context =[
@@ -176,7 +198,7 @@ def retrieve_context(input_text):
     ]
     return context
 
-@track
+@opik.track
 def generate_response(input_text, context):
     full_prompt = (
         f" If the user asks a question that is not specific, use the context to provide a relevant response.\n"
@@ -191,7 +213,7 @@ def generate_response(input_text, context):
     )
     return response.choices[0].message.content
 
-@track(name="my_llm_application")
+@opik.track(name="my_llm_application")
 def llm_chain(input_text):
     context = retrieve_context(input_text)
     response = generate_response(input_text, context)
@@ -221,11 +243,13 @@ client = track_openai(client)
 
 You can configure the project you want the trace to be logged to using the `project_name` parameter of the `@track` decorator:
 
-```python
-@track(project_name="my_project")
-def my_function():
+```python pytest_codeblocks_skip=true
+import opik
+
+@opik.track(project_name="my_project")
+def my_function(input):
     # Function code
-    # ...
+    return input
 ```
 
 If you want to configure this globally for all traces, you can also use the environment variable:
@@ -241,10 +265,12 @@ os.environ["OPIK_PROJECT_NAME"] = "my_project"
 You can ensure all data is logged by setting the `flush` parameter of the `@track` decorator to `True`:
 
 ```python
-@track(flush=True)
-def my_function():
+import opik
+
+@opik.track(flush=True)
+def my_function(input):
     # Function code
-    # ...
+    return input
 ```
 
 This will block the processing until the data is finished being logged.
@@ -283,10 +309,12 @@ You can learn more about the `opik_context` module in the [opik_context referenc
 You can use the `capture_input` and `capture_output` parameters of the [`@track`](https://www.comet.com/docs/opik/python-sdk-reference/track.html) decorator to disable the automatic logging of the function input and output:
 
 ```python
-@track(capture_input=False, capture_output=False)
+import opik
+
+@opik.track(capture_input=False, capture_output=False)
 def llm_chain(input_text):
     # LLM chain code
-    # ...
+    return input_text
 ```
 
 You can then use the `opik_context` module to manually log the trace and span attributes.
