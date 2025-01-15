@@ -53,7 +53,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [name, setName] = useState(defaultRule?.name || "");
   const [samplingRate, setSamplingRate] = useState(
-    defaultRule?.sampling_rate || DEFAULT_SAMPLING_RATE,
+    defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
   );
   const [type] = useState(defaultRule?.type || EVALUATORS_RULE_TYPE.llm_judge);
   const isLLMJudge = type === EVALUATORS_RULE_TYPE.llm_judge;
@@ -121,10 +121,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       });
 
       Object.entries(code.variables).forEach(([k, v]) => {
-        if (
-          v === "" ||
-          !/^(input|\$\.input|output|\$\.output|metadata|\$\.metadata)/.test(v)
-        ) {
+        if (v === "" || !/^(input|output|metadata)/.test(v)) {
           messages.push(
             v === ""
               ? `Mapping for variable "${k}" is required`
