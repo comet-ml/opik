@@ -140,6 +140,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             onChange={setModel}
             provider={provider}
             workspaceName={workspaceName}
+            onlyWithStructuredOutput
           />
           <PromptModelConfigs
             size="icon"
