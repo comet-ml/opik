@@ -31,7 +31,7 @@ const putConfigInCode = ({
 
   return code.replace(
     OPIK_API_KEY_TEMPLATE,
-    `os.environ["OPKI_URL_OVERRIDE"] = "${window.location.origin}${BASE_API_URL}"`,
+    `os.environ["OPIK_URL_OVERRIDE"] = "${window.location.origin}${BASE_API_URL}"`,
   );
 };
 
