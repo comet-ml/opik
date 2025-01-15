@@ -5,7 +5,6 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.EncryptionUtils;
-import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
