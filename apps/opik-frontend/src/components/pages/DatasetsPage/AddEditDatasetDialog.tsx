@@ -1,5 +1,4 @@
 import React, { useCallback, useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -8,56 +7,79 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import useAppStore from "@/store/AppStore";
-import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
-import { Dataset } from "@/types/datasets";
 import { Textarea } from "@/components/ui/textarea";
+import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
+import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
+import { Dataset } from "@/types/datasets";
 
-type AddDatasetDialogProps = {
+type AddEditDatasetDialogProps = {
+  dataset?: Dataset;
   open: boolean;
   setOpen: (open: boolean) => void;
   onDatasetCreated?: (dataset: Dataset) => void;
 };
 
-const AddDatasetDialog: React.FunctionComponent<AddDatasetDialogProps> = ({
-  open,
-  setOpen,
-  onDatasetCreated,
-}) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const datasetCreateMutation = useDatasetCreateMutation();
-  const [name, setName] = useState<string>("");
-  const [description, setDescription] = useState<string>("");
+const AddEditDatasetDialog: React.FunctionComponent<
+  AddEditDatasetDialogProps
+> = ({ dataset, open, setOpen, onDatasetCreated }) => {
+  const { mutate: createMutate } = useDatasetCreateMutation();
+  const { mutate: updateMutate } = useDatasetUpdateMutation();
 
+  const [name, setName] = useState<string>(dataset ? dataset.name : "");
+  const [description, setDescription] = useState<string>(
+    dataset ? dataset.description || "" : "",
+  );
+
+  const isEdit = Boolean(dataset);
   const isValid = Boolean(name.length);
+  const title = isEdit ? "Edit dataset" : "Create a new dataset";
+  const buttonText = isEdit ? "Update dataset" : "Create dataset";
 
-  const createDataset = useCallback(() => {
-    datasetCreateMutation.mutate(
-      {
+  const submitHandler = useCallback(() => {
+    if (isEdit) {
+      updateMutate({
         dataset: {
+          id: dataset!.id,
           name,
-          ...(description ? { description } : {}),
+          ...(description && { description }),
         },
-        workspaceName,
-      },
-      { onSuccess: onDatasetCreated },
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, workspaceName, onDatasetCreated]);
+      });
+    } else {
+      createMutate(
+        {
+          dataset: {
+            name,
+            ...(description && { description }),
+          },
+        },
+        { onSuccess: onDatasetCreated },
+      );
+    }
+  }, [
+    createMutate,
+    updateMutate,
+    onDatasetCreated,
+    dataset,
+    name,
+    description,
+    isEdit,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Create a new dataset</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-2 pb-4">
           <Label htmlFor="datasetName">Name</Label>
           <Input
             id="datasetName"
             placeholder="Dataset name"
+            disabled={isEdit}
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
@@ -77,8 +99,8 @@ const AddDatasetDialog: React.FunctionComponent<AddDatasetDialogProps> = ({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" disabled={!isValid} onClick={createDataset}>
-              Create dataset
+            <Button type="submit" disabled={!isValid} onClick={submitHandler}>
+              {buttonText}
             </Button>
           </DialogClose>
         </DialogFooter>
@@ -87,4 +109,4 @@ const AddDatasetDialog: React.FunctionComponent<AddDatasetDialogProps> = ({
   );
 };
 
-export default AddDatasetDialog;
+export default AddEditDatasetDialog;
