@@ -331,7 +331,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 boolean isAuthorized) {
 
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null)
-                    .build();;
+                    .build();
 
             String workspaceName = "workspace-" + UUID.randomUUID();
             String workspaceId = UUID.randomUUID().toString();

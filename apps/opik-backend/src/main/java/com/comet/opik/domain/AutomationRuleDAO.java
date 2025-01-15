@@ -37,8 +37,7 @@ interface AutomationRuleDAO {
             @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId,
             @Bind("name") String name,
-            @Bind("samplingRate") float samplingRate,
-            @Bind("lastUpdatedBy") String lastUpdatedBy);
+            @Bind("samplingRate") float samplingRate);
 
     @SqlUpdate("""
             DELETE FROM automation_rules

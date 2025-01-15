@@ -172,7 +172,7 @@ class ExperimentsResourceTest {
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(REDIS.getRedisURI())
-                .cacheTtlInSeconds(null)
+                .authCacheTtlInSeconds(null)
                 .mockEventBus(Mockito.mock(EventBus.class))
                 .build();
 

@@ -33,7 +33,7 @@ public class TestDropwizardAppExtensionUtils {
             DatabaseAnalyticsFactory databaseAnalyticsFactory,
             WireMockRuntimeInfo runtimeInfo,
             String redisUrl,
-            Integer cacheTtlInSeconds,
+            Integer authCacheTtlInSeconds,
             boolean rateLimitEnabled,
             Long limit,
             Long limitDurationInSeconds,
@@ -79,14 +79,14 @@ public class TestDropwizardAppExtensionUtils {
             DatabaseAnalyticsFactory databaseAnalyticsFactory,
             WireMockRuntimeInfo runtimeInfo,
             String redisUrl,
-            Integer cacheTtlInSeconds) {
+            Integer authCacheTtlInSeconds) {
         return newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(jdbcUrl)
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(runtimeInfo)
                         .redisUrl(redisUrl)
-                        .cacheTtlInSeconds(cacheTtlInSeconds)
+                        .authCacheTtlInSeconds(authCacheTtlInSeconds)
                         .build());
     }
 
@@ -120,8 +120,9 @@ public class TestDropwizardAppExtensionUtils {
             configs.add("authentication.ui.url: "
                     + "%s/opik/auth-session".formatted(appContextConfig.runtimeInfo().getHttpsBaseUrl()));
 
-            if (appContextConfig.cacheTtlInSeconds() != null) {
-                configs.add("authentication.apiKeyResolutionCacheTTLInSec: " + appContextConfig.cacheTtlInSeconds());
+            if (appContextConfig.authCacheTtlInSeconds() != null) {
+                configs.add(
+                        "authentication.apiKeyResolutionCacheTTLInSec: " + appContextConfig.authCacheTtlInSeconds());
             }
         }
 
