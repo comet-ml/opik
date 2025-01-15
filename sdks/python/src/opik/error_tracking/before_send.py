@@ -35,7 +35,7 @@ def _add_extra_details(event: Event) -> None:
 
     if event["contexts"].get("opik_handled") is False:
         event["tags"]["opik_handled"] = False
-    elif event["level"] == "error":
+    else:
         event["tags"]["opik_handled"] = True
 
     # Put into event all the information that depends on
