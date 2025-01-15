@@ -1,10 +1,12 @@
 package com.comet.opik.domain.llmproviders;
 
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import dev.ai4j.openai4j.chat.ChatCompletionModel;
 import dev.langchain4j.model.anthropic.AnthropicChatModelName;
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -34,6 +36,16 @@ public class LlmProviderFactory {
         };
     }
 
+    public ChatLanguageModel getLanguageModel(@NonNull String workspaceId,
+            @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
+        var llmProvider = getLlmProvider(modelParameters.name());
+        var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
+
+        return switch (llmProvider) {
+            case LlmProvider.OPEN_AI -> llmProviderClientGenerator.newOpenAiChatLanguageModel(apiKey, modelParameters);
+            default -> throw new BadRequestException(String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name()));
+        };
+    }
     /**
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
