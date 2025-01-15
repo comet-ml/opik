@@ -282,13 +282,13 @@ public class SpanService {
 
     private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
-                .collect(Collectors.toMap(Project::name, Function.identity()));
+                .collect(Collectors.toMap(project -> project.name().toLowerCase(), Function.identity()));
 
         return batch.spans()
                 .stream()
                 .map(span -> {
                     String projectName = WorkspaceUtils.getProjectName(span.projectName());
-                    Project project = projectPerName.get(projectName);
+                    Project project = projectPerName.get(projectName.toLowerCase());
 
                     if (project == null) {
                         log.warn("Project not found for span project '{}' and default '{}'", span.projectName(),
