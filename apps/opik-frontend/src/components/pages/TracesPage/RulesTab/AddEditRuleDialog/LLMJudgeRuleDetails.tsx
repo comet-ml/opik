@@ -26,7 +26,7 @@ import {
 } from "@/lib/llm";
 import { OnChangeFn } from "@/types/shared";
 import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { getPromptMustacheTags } from "@/lib/prompt";
+import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 
 type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
@@ -39,7 +39,15 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   data,
   onChange,
 }) => {
-  const { model, config, template, messages, variables, schema } = data;
+  const {
+    model,
+    config,
+    template,
+    messages,
+    variables,
+    schema,
+    parsingVariablesError,
+  } = data;
   const provider = model ? getModelProvider(model) : "";
 
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
@@ -62,15 +70,21 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     (messages: LLMMessage[]) => {
       onChange((d) => {
         const variables: Record<string, string> = {};
+        let parsingVariablesError: boolean = false;
         messages
-          .reduce<string[]>(
-            (acc, m) => acc.concat(getPromptMustacheTags(m.content)),
-            [],
-          )
+          .reduce<string[]>((acc, m) => {
+            const tags = safelyGetPromptMustacheTags(m.content);
+            if (!tags) {
+              parsingVariablesError = true;
+              return acc;
+            } else {
+              return acc.concat(tags);
+            }
+          }, [])
           .filter((v) => v !== "")
           .forEach((v: string) => (variables[v] = d.variables[v] ?? ""));
 
-        return { ...d, messages, variables };
+        return { ...d, messages, variables, parsingVariablesError };
       });
     },
     [onChange],
@@ -163,6 +177,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           onAddMessage={handleAddMessage}
         />
         <LLMPromptMessagesVariables
+          hasError={parsingVariablesError}
           variables={variables}
           onChange={setVariables}
         />
