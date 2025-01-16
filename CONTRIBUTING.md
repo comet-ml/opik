@@ -200,6 +200,8 @@ The Opik server will be running on `http://localhost:5173`.
 
 **Submitting a PR:**
 
+First, please read the [coding guidelines](sdks/python/README.md) for our Python SDK
+
 The Python SDK is available under `sdks/python` and can be installed locally using `pip install -e sdks/python`.
 
 Before submitting a PR, please ensure that your code passes the test suite:
