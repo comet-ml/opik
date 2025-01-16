@@ -1,7 +1,6 @@
 ---
 sidebar_label: Versioning prompts stored in code
 description: Describes how to version prompts stored in code
-pytest_codeblocks_skip: true
 ---
 
 import Tabs from "@theme/Tabs";
@@ -14,6 +13,7 @@ This allows you to store the prompt text in your code while also having it versi
 
 <Tabs>
     <TabItem value="Prompts stored in code" title="Prompts stored in code">
+
         ```python
         import opik
 
@@ -32,9 +32,11 @@ This allows you to store the prompt text in your code while also having it versi
         # Build the prompt
         print(prompt.format(text="Hello, world!"))
         ```
+
     </TabItem>
     <TabItem value="Prompts stored in a file" title="Prompts stored in a file">
-        ```python
+
+        ```python pytest_codeblocks_skip=true
         import opik
 
         # Read the prompt from a file
@@ -49,6 +51,7 @@ This allows you to store the prompt text in your code while also having it versi
         # Build the prompt
         print(prompt.format(text="Hello, world!"))
         ```
+
     </TabItem>
 
 </Tabs>

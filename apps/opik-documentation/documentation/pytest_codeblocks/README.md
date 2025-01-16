@@ -37,7 +37,7 @@ The `pytest-codeblocks` extension supports the following features:
 
 - Skipping all code blocks in a file: By setting `pytest_codeblocks_skip: true` in the frontmatter of the markdown file, all code blocks in the file will be skipped.
 
-- Skipping specific code blocks: Setting `pytest_codeblocks_skip="true"` in the header of the code block will skip it:
+- Skipping specific code blocks: Setting `pytest_codeblocks_skip=true` in the header of the code block will skip it:
 
   ````
       ```python pytest_codeblocks_skip=true

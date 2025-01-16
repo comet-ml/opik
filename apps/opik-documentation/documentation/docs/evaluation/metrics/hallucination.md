@@ -1,6 +1,7 @@
 ---
 sidebar_label: Hallucination
 description: Describes the Hallucination metric
+pytest_codeblocks_skip: true
 ---
 
 # Hallucination

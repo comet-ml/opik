@@ -12,10 +12,18 @@ pytest_codeblocks_skip: true
 
 - Datasets are now supported in the playground allowing you to quickly evaluate prompts on multiple samples
 - Updated the models supported in the playground
+- Updated the quickstart guides to include all the supported integrations
+- Fix issue that means traces with text inputs can't be added to datasets
+- Add the ability to edit dataset descriptions in the UI
+- Released [online evaluation](/production/rules.md) rules - You can now define LLM as a Judge metrics that will automatically score all, or a subset, of your production traces.
+
+![Online evaluation](/img/changelog/2025-01-13/online_evaluation.gif)
 
 **SDK**:
 
-- New integration with [CrewAI](https://docs.crewai.com/introduction)
+- New integration with [CrewAI](/tracing/integrations/crewai.md)
+- Released a new `evaluate_prompt` method that simplifies the evaluation of simple prompts templates
+- Added Sentry to the Python SDK so we can more easily
 
 ## Week of 2025-01-06
 

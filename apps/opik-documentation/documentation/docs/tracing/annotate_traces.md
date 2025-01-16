@@ -27,6 +27,12 @@ You can annotate both traces and spans through the UI, make sure you have select
 In order to ensure a consistent set of feedback, you will need to define feedback definitions in the `Feedback Definitions` page which supports both numerical and categorical annotations.
 :::
 
+## Online evaluation
+
+You don't need to manually annotate each trace to measure the performance of your LLM applications! By using Opik's [online evaluation feature](/production/rules.md), you can define LLM as a Judge metrics that will automatically score all, or a subset, of your production traces.
+
+![Online evaluation](/img/production/online_evaluation.gif)
+
 ## Annotating traces and spans using the SDK
 
 You can use the SDK to annotate traces and spans which can be useful both as part of the evaluation process or if you receive user feedback scores in your application.

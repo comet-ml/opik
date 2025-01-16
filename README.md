@@ -61,9 +61,11 @@ You can use Opik for:
 
 * **Production Monitoring**:
     
-    * **Log all your production traces**: Opik has been designed to support high volumes of traces, making it easy to monitor your production applications.
+    * **Log all your production traces**: Opik has been designed to support high volumes of traces, making it easy to monitor your production applications. Even small deployments can ingest more than 40 million traces per day!
     
     * **Monitoring dashboards**: Review your feedback scores, trace count and tokens over time in the [Opik Dashboard](https://www.comet.com/docs/opik/self-host/opik_dashboard/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik).
+
+    * **Online evaluation metrics**: Easily score all your production traces using LLM as a Judge metrics and identify any issues with your production LLM application thanks to [Opik's online evaluation metrics](https://www.comet.com/docs/opik/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)
 
 > [!TIP]  
 > If you are looking for features that Opik doesn't have today, please raise a new [Feature request](https://github.com/comet-ml/opik/issues/new/choose) 🚀
