@@ -11,7 +11,7 @@ import java.util.function.BiFunction;
 
 @RequiredArgsConstructor
 @Getter
-public enum OpenaiModelPrice {
+public enum ModelPrice {
     gpt_4o("gpt-4o", new BigDecimal("0.0000025"), new BigDecimal("0.000010"), SpanCostCalculator::textGenerationCost),
     gpt_4o_2024_11_20("gpt-4o-2024-11-20", new BigDecimal("0.0000025"), new BigDecimal("0.000010"),
             SpanCostCalculator::textGenerationCost),
@@ -100,9 +100,9 @@ public enum OpenaiModelPrice {
     private final String name;
     private final BigDecimal inputPrice;
     private final BigDecimal outputPrice;
-    private final BiFunction<OpenaiModelPrice, Map<String, Integer>, BigDecimal> calculator;
+    private final BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator;
 
-    public static OpenaiModelPrice fromString(String modelName) {
+    public static ModelPrice fromString(String modelName) {
         return Arrays.stream(values())
                 .filter(modelPrice -> modelPrice.name.equals(modelName))
                 .findFirst()
