@@ -192,7 +192,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   if (noData && rows.length === 0 && page === 1) {
     return (
       <>
-        <NoRulesPage openModal={handleNewRuleClick} />;
+        <NoRulesPage openModal={handleNewRuleClick} />
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
           open={openDialog}
