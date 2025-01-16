@@ -3768,8 +3768,9 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BatchInsert {
 
-        @Test
-        void batch__whenCreateTraces__thenReturnNoContent() {
+        @ParameterizedTest
+        @MethodSource
+        void batch__whenCreateTraces__thenReturnNoContent(Function<String, String> projectNameModifier) {
 
             var projectName = UUID.randomUUID().toString();
 
@@ -3788,6 +3789,12 @@ class TracesResourceTest {
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedTraces.reversed(), List.of(),
                     API_KEY);
+        }
+
+        Stream<Arguments> batch__whenCreateTraces__thenReturnNoContent() {
+            return Stream.of(
+                    arguments(Function.identity()),
+                    arguments((Function<String, String>) String::toLowerCase));
         }
 
         @Test
