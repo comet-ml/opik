@@ -23,7 +23,7 @@ We care a lot about the code maintainability. Well-organized logic which is easy
     do this:
     ```python
     import threading  # good!
-    thread = threading.Thread 
+    thread = threading.Thread
     ```
 
 2. If the import statement is too big, you can do the following
@@ -37,7 +37,7 @@ We care a lot about the code maintainability. Well-organized logic which is easy
     from . import dataset_item  # ok!
     ```
 
-4. Of course, there might be exceptions from this rule, for example, some common types can be imported as is. 
+4. Of course, there might be exceptions from this rule, for example, some common types can be imported as is.
     ```python
     from typing import Dict, List  # ok!
     from opik.types import FeedbackScoreDict  # ok!
