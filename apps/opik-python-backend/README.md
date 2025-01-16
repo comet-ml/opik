@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Install Python: at least the minimum version compatible with the Opik Python SDK.
+- Install Python.
 - Create and enable a Python virtual environment.
 - Install all dependencies from `requirements.txt`.
 - For running tests, also install dependencies from `tests/test_requirements.txt`.
@@ -10,7 +10,7 @@
 ## Running the Flask service
 
 > [!TIP]
-> Run in debug mode for development purposes, it reloads the code automatically.
+> Run it in debug mode for development purposes, it reloads the code automatically.
 
 - From `apps/opik-python-backend` directory.
 - Run the `opik_backend` module.

@@ -1,7 +1,6 @@
 import pytest
-from opik.evaluation.metrics.score_result import ScoreResult
 
-EVALUATORS_URL = "/v1/private/evaluators"
+EVALUATORS_URL = "/v1/private/evaluators/python"
 
 USER_DEFINED_METRIC = """
 from typing import Any
@@ -35,7 +34,7 @@ from opik.evaluation.metrics import base_metric, score_result
 class UserDefinedEquals(base_metric.BaseMetric):
     def __init__(
         self,
-        name: str = "user_defined_equals_metric",
+        name: str = "user_defined_list_equals_metric",
     ):
         super().__init__(
             name=name,
@@ -139,6 +138,29 @@ class UserDefinedEquals(base_metric.BaseMetric):
         return None
 """
 
+FLASK_INJECTION_METRIC = """
+from typing import Any
+
+import flask
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class FlaskInjectionMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "flask_injection_metric", ):
+        super().__init__(name=name, track=False)
+
+    def score(self, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        # Replace all view functions with a function that returns an error
+        def error_response(*args, **kwargs):
+            return "Service Unavailable because it was hacked", 503
+
+        for endpoint in flask.current_app.view_functions:
+            flask.current_app.view_functions[endpoint] = error_response
+
+        return score_result.ScoreResult(value=0.0, name=self.name)
+
+"""
+
 DATA = {
     "output": "abc",
     "reference": "abc"
@@ -149,20 +171,49 @@ DATA = {
     (
             DATA,
             USER_DEFINED_METRIC,
-            [ScoreResult(name="user_defined_equals_metric", value=1.0).__dict__]),
+            [
+                {
+                    "metadata": None,
+                    "name": 'user_defined_equals_metric',
+                    "reason": None,
+                    "scoring_failed": False,
+                    "value": 1.0
+                }
+            ]
+    ),
     (
             {"output": "abc", "reference": "ab"},
             USER_DEFINED_METRIC,
-            [ScoreResult(name="user_defined_equals_metric", value=0.0).__dict__]),
+            [
+                {
+                    "metadata": None,
+                    "name": 'user_defined_equals_metric',
+                    "reason": None,
+                    "scoring_failed": False,
+                    "value": 0.0
+                }
+            ]
+    ),
     (
             DATA,
             LIST_RESPONSE_METRIC,
             [
-                ScoreResult(name="user_defined_equals_metric", value=1.0).__dict__,
-                ScoreResult(name="user_defined_equals_metric", value=0.5).__dict__,
+                {
+                    "metadata": None,
+                    "name": 'user_defined_list_equals_metric',
+                    "reason": None,
+                    "scoring_failed": False,
+                    "value": 1.0
+                },
+                {
+                    "metadata": None,
+                    "name": 'user_defined_list_equals_metric',
+                    "reason": None,
+                    "scoring_failed": False,
+                    "value": 0.5
+                },
             ]
     ),
-
 ])
 def test_success(client, data, code, expected):
     response = client.post(EVALUATORS_URL, json={
@@ -208,32 +259,14 @@ def test_missing_data_returns_bad_request(client):
     assert response.json["error"] == "400 Bad Request: Field 'data' is missing in the request"
 
 
-def test_invalid_code_returns_bad_request(client):
+@pytest.mark.parametrize("code", [INVALID_METRIC, MISSING_BASE_METRIC, SCORE_EXCEPTION_METRIC, FLASK_INJECTION_METRIC])
+def test_invalid_code_returns_bad_request(client, code):
     response = client.post(EVALUATORS_URL, json={
         "data": DATA,
-        "code": INVALID_METRIC
+        "code": code
     })
     assert response.status_code == 400
-    assert response.json["error"] == "400 Bad Request: Field 'code' contains invalid Python code"
-
-
-def test_missing_metric_returns_bad_request(client):
-    response = client.post(EVALUATORS_URL, json={
-        "data": DATA,
-        "code": MISSING_BASE_METRIC
-    })
-    assert response.status_code == 400
-    assert response.json[
-               "error"] == "400 Bad Request: Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"
-
-
-def test_evaluation_exception_returns_bad_request(client):
-    response = client.post(EVALUATORS_URL, json={
-        "data": DATA,
-        "code": SCORE_EXCEPTION_METRIC
-    })
-    assert response.status_code == 400
-    assert response.json["error"] == "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated"
+    assert response.json["error"] == "400 Bad Request: Execution failed: Python code contains an invalid metric"
 
 
 def test_no_scores_returns_bad_request(client):
@@ -244,3 +277,5 @@ def test_no_scores_returns_bad_request(client):
     assert response.status_code == 400
     assert response.json[
                "error"] == "400 Bad Request: The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'"
+
+# TODO: Add test cases: timeout, networking etc.
