@@ -1,4 +1,4 @@
-FROM docker:latest
+FROM docker:27.5.0
 
 ENV DOCKER_HOST=unix:///var/run/docker.sock
 
