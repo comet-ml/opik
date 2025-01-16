@@ -3778,7 +3778,7 @@ class TracesResourceTest {
 
             var expectedTraces = IntStream.range(0, 1000)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
+                            .projectName(projectNameModifier.apply(projectName))
                             .endTime(null)
                             .usage(null)
                             .feedbackScores(null)
@@ -3794,7 +3794,7 @@ class TracesResourceTest {
         Stream<Arguments> batch__whenCreateTraces__thenReturnNoContent() {
             return Stream.of(
                     arguments(Function.identity()),
-                    arguments((Function<String, String>) String::toLowerCase));
+                    arguments((Function<String, String>) String::toUpperCase));
         }
 
         @Test

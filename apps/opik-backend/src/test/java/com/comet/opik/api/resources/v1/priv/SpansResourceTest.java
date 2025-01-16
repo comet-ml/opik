@@ -3700,7 +3700,7 @@ class SpansResourceTest {
         Stream<Arguments> batch__whenCreateSpans__thenReturnNoContent() {
             return Stream.of(
                     arguments(Function.identity()),
-                    arguments((Function<String, String>) String::toLowerCase));
+                    arguments((Function<String, String>) String::toUpperCase));
         }
 
         @Test
