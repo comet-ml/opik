@@ -3,7 +3,7 @@ package com.comet.opik.domain.llmproviders;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.domain.LlmProviderApiKeyService;
-import com.comet.opik.domain.cost.OpenaiModelPrice;
+import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -78,8 +78,8 @@ class LlmProviderFactoryTest {
     }
 
     private static Stream<Arguments> testGetService() {
-        var openAiModels = EnumUtils.getEnumList(OpenaiModelPrice.class).stream()
-                .filter(value -> value != OpenaiModelPrice.DEFAULT)
+        var openAiModels = EnumUtils.getEnumList(ModelPrice.class).stream()
+                .filter(value -> value != ModelPrice.DEFAULT)
                 .map(model -> arguments(model.getName(), LlmProvider.OPEN_AI, LlmProviderOpenAi.class));
         var anthropicModels = EnumUtils.getEnumList(AnthropicModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, LlmProviderAnthropic.class));

@@ -35,7 +35,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.SpanMapper;
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.domain.cost.OpenaiModelPrice;
+import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -3463,7 +3463,7 @@ class SpansResourceTest {
 
         BigDecimal expectedCost = manualCost != null
                 ? manualCost
-                : OpenaiModelPrice.fromString(
+                : ModelPrice.fromString(
                         StringUtils.isNotBlank(model)
                                 ? model
                                 : Optional.ofNullable(metadata)
@@ -4056,7 +4056,7 @@ class SpansResourceTest {
             } else if (initialManualCost != null) {
                 expectedCost = initialManualCost;
             } else {
-                expectedCost = OpenaiModelPrice
+                expectedCost = ModelPrice
                         .fromString(
                                 expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model())
                         .calculateCost(

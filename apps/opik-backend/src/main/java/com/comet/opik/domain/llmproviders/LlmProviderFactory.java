@@ -3,7 +3,7 @@ package com.comet.opik.domain.llmproviders;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
-import com.comet.opik.domain.cost.OpenaiModelPrice;
+import com.comet.opik.domain.cost.ModelPrice;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
@@ -50,8 +50,7 @@ public class LlmProviderFactory {
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
     private LlmProvider getLlmProvider(String model) {
-        if (isModelBelongToProvider(model, OpenaiModelPrice.class, OpenaiModelPrice::getName,
-                Set.of(OpenaiModelPrice.DEFAULT))) {
+        if (isModelBelongToProvider(model, ModelPrice.class, ModelPrice::getName, Set.of(ModelPrice.DEFAULT))) {
             return LlmProvider.OPEN_AI;
         }
         if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString, Set.of())) {
