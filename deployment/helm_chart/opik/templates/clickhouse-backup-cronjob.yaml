@@ -1,4 +1,4 @@
-{{ if .Values.clickhouse.backup.enabled }}
+{{ if and .Values.clickhouse.enabled .Values.clickhouse.backup.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
