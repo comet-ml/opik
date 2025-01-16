@@ -1,6 +1,6 @@
 # Opik Python SDK
 
-If you would like to contribute to the Opik python SDK, please refer to the [Contribution guide](./CONTRIBUTING.md).
+For a more general contribution guide (backend + frontend + SDK) see our root [Contribution guide](../../CONTRIBUTING.md).
 
 # Coding guidelines
 This guide is still in progress, however, it already contains useful information that you should know before submitting your PR.
