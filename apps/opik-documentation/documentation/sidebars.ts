@@ -122,7 +122,7 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Production",
       collapsed: true,
-      items: ["production/production_monitoring", "production/online_evaluation", "production/gateway"],
+      items: ["production/production_monitoring", "production/rules", "production/gateway"],
     },
     {
       type: "category",

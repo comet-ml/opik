@@ -239,6 +239,59 @@ client = track_openai(client)
 
 :::
 
+#### Scoring traces
+
+You can log feedback scores for traces using the `opik_context.update_current_trace` function. This can be useful if
+there are some metrics that are already reported as part of your chain or agent:
+
+```python
+from opik import track, opik_context
+
+@track
+def llm_chain(input_text):
+    # LLM chain code
+    # ...
+
+    # Update the trace
+    opik_context.update_current_trace(
+        feedback_scores=[
+            {"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}
+        ]
+    )
+```
+
+:::tip
+You don't have to manually log feedback scores, you can also define LLM as a Judge metrics in Opik that will score traces automatically for you.
+
+You can learn more about this feature in the [Online evaluation](/production/rules.md) guide.
+:::
+
+#### Logging additional data
+
+As mentioned above, the `@track` decorator only logs the input and output of the decorated function. If you want to log additional data, you can use the
+`update_current_span` function and `update_current_trace` function to manually update the span and trace:
+
+```python
+from opik import track, opik_context
+
+@track
+def llm_chain(input_text):
+    # LLM chain code
+    # ...
+
+    # Update the trace
+    opik_context.update_current_trace(
+        tags=["llm_chatbot"],
+    )
+
+    # Update the span
+    opik_context.update_current_span(
+        name="llm_chain"
+    )
+```
+
+You can learn more about the `opik_context` module in the [opik_context reference docs](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html).
+
 #### Configuring the project name
 
 You can configure the project you want the trace to be logged to using the `project_name` parameter of the `@track` decorator:
@@ -260,6 +313,8 @@ import os
 os.environ["OPIK_PROJECT_NAME"] = "my_project"
 ```
 
+This will block the processing until the data is finished being logged.
+
 #### Flushing the trace
 
 You can ensure all data is logged by setting the `flush` parameter of the `@track` decorator to `True`:
@@ -272,37 +327,6 @@ def my_function(input):
     # Function code
     return input
 ```
-
-This will block the processing until the data is finished being logged.
-
-#### Logging additional data
-
-As mentioned above, the `@track` decorator only logs the input and output of the decorated function. If you want to log additional data, you can use the
-`update_current_span` function and `update_current_trace` function to manually update the span and trace:
-
-```python
-from opik import track, opik_context
-
-@track
-def llm_chain(input_text):
-    # LLM chain code
-    # ...
-
-    # Update the trace
-    opik_context.update_current_trace(
-        tags=["llm_chatbot"],
-        feedback_scores=[
-            {"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}
-        ]
-    )
-
-    # Update the span
-    opik_context.update_current_span(
-        name="llm_chain"
-    )
-```
-
-You can learn more about the `opik_context` module in the [opik_context reference docs](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html).
 
 #### Disabling automatic logging of function input and output
 
