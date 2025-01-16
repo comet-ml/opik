@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import get from "lodash/get";
-import isObject from "lodash/isObject";
+import isUndefined from "lodash/isUndefined";
 import { Database, MessageCircleWarning } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -63,7 +63,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const total = data?.total ?? 0;
 
   const validRows = useMemo(() => {
-    return rows.filter((r) => isObject(r.input));
+    return rows.filter((r) => !isUndefined(r.input));
   }, [rows]);
 
   const noValidRows = validRows.length === 0;
@@ -71,7 +71,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const addToDatasetHandler = useCallback(
     (dataset: Dataset) => {
-      console.log(123, dataset);
       setOpen(false);
       datasetItemBatchMutation.mutate(
         {
