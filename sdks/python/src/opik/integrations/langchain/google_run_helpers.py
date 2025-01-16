@@ -2,8 +2,7 @@ import logging
 from typing import Any, Dict, Optional, TYPE_CHECKING, Tuple, cast
 
 from opik import logging_messages
-from opik.integrations.helpers import LLMUsageInfo
-from opik.types import UsageDict
+from opik.types import LLMUsageInfo, UsageDict
 from opik.validation import usage as usage_validator
 
 if TYPE_CHECKING:

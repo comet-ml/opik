@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
 
-from opik.types import ErrorInfoDict
+from opik.types import ErrorInfoDict, LLMUsageInfo
 
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
@@ -14,7 +14,6 @@ from . import (
     openai_run_helpers,
     opik_encoder_extension,
 )
-from opik.integrations.helpers import LLMUsageInfo
 from ...api_objects import helpers
 
 if TYPE_CHECKING:

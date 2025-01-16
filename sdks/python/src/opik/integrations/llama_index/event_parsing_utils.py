@@ -4,7 +4,7 @@ from llama_index.core import Settings
 from llama_index.core.base.llms.types import ChatResponse
 from llama_index.core.callbacks import schema as llama_index_schema
 
-from opik.integrations.helpers import LLMUsageInfo
+from opik.types import LLMUsageInfo
 
 
 def get_span_input_from_events(
