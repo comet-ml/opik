@@ -95,6 +95,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.username | string | `"opik"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
 | clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
+| clickhouse.enabled | bool | `true` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
