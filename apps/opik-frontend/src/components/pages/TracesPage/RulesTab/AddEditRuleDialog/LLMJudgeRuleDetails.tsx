@@ -32,12 +32,14 @@ type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
   data: LLMAsJudgeData;
   onChange: OnChangeFn<LLMAsJudgeData>;
+  projectId: string;
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   workspaceName,
   data,
   onChange,
+  projectId,
 }) => {
   const {
     model,
@@ -178,6 +180,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         />
         <LLMPromptMessagesVariables
           hasError={parsingVariablesError}
+          projectId={projectId}
           variables={variables}
           onChange={setVariables}
         />
