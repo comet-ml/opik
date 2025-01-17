@@ -3,6 +3,7 @@ from .heuristics.equals import Equals
 from .heuristics.is_json import IsJson
 from .heuristics.levenshtein_ratio import LevenshteinRatio
 from .heuristics.regex_match import RegexMatch
+from .heuristics.bleu import SentenceBLEU, CorpusBLEU
 from .llm_judges.answer_relevance.metric import AnswerRelevance
 from .llm_judges.context_precision.metric import ContextPrecision
 from .llm_judges.context_recall.metric import ContextRecall
@@ -29,4 +30,6 @@ __all__ = [
     "RegexMatch",
     "MetricComputationError",
     "BaseMetric",
+    "SentenceBLEU",
+    "CorpusBLEU",
 ]
