@@ -45,6 +45,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     public static synchronized void init(@NonNull ConnectionFactory connectionFactory, int batchSize,
             @NonNull Duration flushIntervalDuration) {
+
         if (INSTANCE == null) {
             INSTANCE = new ClickHouseAppender(connectionFactory, batchSize, flushIntervalDuration);
             INSTANCE.start();
@@ -75,7 +76,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
             return;
         }
 
-        logQueue = new LinkedBlockingQueue<>(batchSize * 100);
+        logQueue = new LinkedBlockingQueue<>();
         scheduler = Executors.newSingleThreadScheduledExecutor();
 
         // Background flush thread
@@ -105,6 +106,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
                     for (int i = 0; i < batch.size(); i++) {
                         ILoggingEvent event = batch.get(i);
+
                         String logLevel = event.getLevel().toString();
                         String workspaceId = Optional.ofNullable(event.getMDCPropertyMap().get("workspace_id"))
                                 .orElseThrow(() -> failWithMessage("workspace_id is not set"));
@@ -112,6 +114,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                                 .orElseThrow(() -> failWithMessage("trace_id is not set"));
                         String ruleId = Optional.ofNullable(event.getMDCPropertyMap().get("rule_id"))
                                 .orElseThrow(() -> failWithMessage("rule_id is not set"));
+
                         statement
                                 .bind("timestamp" + i, event.getInstant().toString())
                                 .bind("level" + i, logLevel)
@@ -131,7 +134,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     }
 
     private IllegalStateException failWithMessage(String message) {
-        addError(message);
+        log.error(message);
         return new IllegalStateException(message);
     }
 
@@ -141,7 +144,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
         boolean added = logQueue.offer(event);
         if (!added) {
-            log.warn("Log queue is full, dropping log: " + event.getFormattedMessage());
+            log.warn("Log queue is full, dropping log: {}", event.getFormattedMessage());
         }
 
         if (logQueue.size() >= batchSize) {

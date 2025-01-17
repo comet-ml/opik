@@ -24,7 +24,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 
 @EagerSingleton
 @Slf4j
@@ -59,10 +63,10 @@ public class OnlineScoringEventListener {
         log.debug(tracesBatch.traces().toString());
 
         Map<UUID, List<Trace>> tracesByProject = tracesBatch.traces().stream()
-                .collect(Collectors.groupingBy(Trace::projectId));
+                .collect(groupingBy(Trace::projectId));
 
         Map<String, Integer> countMap = tracesByProject.entrySet().stream()
-                .collect(Collectors.toMap(entry -> "projectId: " + entry.getKey(),
+                .collect(toMap(entry -> "projectId: " + entry.getKey(),
                         entry -> entry.getValue().size()));
 
         log.debug("Received traces for workspace '{}': {}", tracesBatch.workspaceId(), countMap);
@@ -116,8 +120,8 @@ public class OnlineScoringEventListener {
             String userName) {
 
         //This is crucial for logging purposes to identify the rule and trace
-        try (MDC.MDCCloseable ruleScope = MDC.putCloseable("rule_id", evaluator.getId().toString());
-                MDC.MDCCloseable traceScope = MDC.putCloseable("trace_id", trace.id().toString())) {
+        try (var ruleScope = MDC.putCloseable("rule_id", evaluator.getId().toString());
+                var traceScope = MDC.putCloseable("trace_id", trace.id().toString())) {
 
             processScores(trace, evaluator, workspaceId, userName);
         }
@@ -137,7 +141,7 @@ public class OnlineScoringEventListener {
             chatResponse = aiProxyService.scoreTrace(scoreRequest, evaluator.getCode().model(), workspaceId);
             userFacingLogger.info("Received response for traceId '{}':\n\n{}", trace.id(), chatResponse);
         } catch (Exception e) {
-            userFacingLogger.error("Unexpected while scoring traceId '{}' with rule '{}'", trace.id(),
+            userFacingLogger.error("Unexpected error while scoring traceId '{}' with rule '{}'", trace.id(),
                     evaluator.getName());
             throw e;
         }
@@ -161,12 +165,12 @@ public class OnlineScoringEventListener {
 
             Map<String, List<BigDecimal>> loggedScores = scores
                     .stream()
-                    .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name,
-                            Collectors.mapping(FeedbackScoreBatchItem::value, Collectors.toList())));
+                    .collect(
+                            groupingBy(FeedbackScoreBatchItem::name, mapping(FeedbackScoreBatchItem::value, toList())));
 
             userFacingLogger.info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores);
         } catch (Exception e) {
-            userFacingLogger.error("Unexpected while storing scores for traceId '{}'", trace.id());
+            userFacingLogger.error("Unexpected error while storing scores for traceId '{}'", trace.id());
             throw e;
         }
     }
