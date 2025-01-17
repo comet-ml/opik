@@ -13,28 +13,33 @@ import java.time.Duration;
 @UtilityClass
 public class UserFacingRuleLoggingFactory {
 
-    static final LoggerContext CONTEXT = (LoggerContext) LoggerFactory.getILoggerFactory();
-    static final AsyncAppender ASYNC_APPENDER = new AsyncAppender();
+    private static final LoggerContext CONTEXT = (LoggerContext) LoggerFactory.getILoggerFactory();
+    private static AsyncAppender asyncAppender;
 
-    public static void init(@NonNull ConnectionFactory connectionFactory, int batchSize,
+    public static synchronized void init(@NonNull ConnectionFactory connectionFactory, int batchSize,
             @NonNull Duration flushIntervalSeconds) {
         ClickHouseAppender.init(connectionFactory, batchSize, flushIntervalSeconds);
 
         ClickHouseAppender clickHouseAppender = ClickHouseAppender.getInstance();
         clickHouseAppender.setContext(CONTEXT);
 
-        ASYNC_APPENDER.setContext(CONTEXT);
-        ASYNC_APPENDER.setNeverBlock(true);
-        ASYNC_APPENDER.setIncludeCallerData(true);
-        ASYNC_APPENDER.addAppender(clickHouseAppender);
-        ASYNC_APPENDER.start();
+        asyncAppender = new AsyncAppender();
+        asyncAppender.setContext(CONTEXT);
+        asyncAppender.setNeverBlock(true);
+        asyncAppender.setIncludeCallerData(true);
+        asyncAppender.addAppender(clickHouseAppender);
+        asyncAppender.start();
 
+        addShutdownHook();
+    }
+
+    private static void addShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(CONTEXT::stop));
     }
 
-    public static org.slf4j.Logger getLogger(Class<?> clazz) {
+    public static org.slf4j.Logger getLogger(@NonNull Class<?> clazz) {
         Logger logger = CONTEXT.getLogger("%s.UserFacingLog".formatted(clazz.getName()));
-        logger.addAppender(ASYNC_APPENDER);
+        logger.addAppender(asyncAppender);
         logger.setAdditive(false);
         return logger;
     }

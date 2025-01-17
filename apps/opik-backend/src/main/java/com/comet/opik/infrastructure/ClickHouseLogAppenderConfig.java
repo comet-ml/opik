@@ -11,7 +11,7 @@ import java.time.Duration;
 public class ClickHouseLogAppenderConfig {
 
     @Valid @JsonProperty
-    private int batchSize = 500;
+    private int batchSize = 1000;
 
     @Valid @JsonProperty
     @NotNull private Duration flushIntervalDuration;

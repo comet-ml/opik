@@ -43,23 +43,27 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
             ;
             """;
 
+    private static ClickHouseAppender instance;
+
     public static synchronized void init(@NonNull ConnectionFactory connectionFactory, int batchSize,
             @NonNull Duration flushIntervalDuration) {
 
-        if (INSTANCE == null) {
-            INSTANCE = new ClickHouseAppender(connectionFactory, batchSize, flushIntervalDuration);
-            INSTANCE.start();
+        if (instance == null) {
+            setInstance(new ClickHouseAppender(connectionFactory, batchSize, flushIntervalDuration));
+            instance.start();
         }
     }
 
     public static ClickHouseAppender getInstance() {
-        if (INSTANCE == null) {
+        if (instance == null) {
             throw new IllegalStateException("ClickHouseAppender is not initialized");
         }
-        return INSTANCE;
+        return instance;
     }
 
-    private static ClickHouseAppender INSTANCE;
+    private static synchronized void setInstance(ClickHouseAppender instance) {
+        ClickHouseAppender.instance = instance;
+    }
 
     private final ConnectionFactory connectionFactory;
     private final int batchSize;
@@ -157,6 +161,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         running = false;
         super.stop();
         flushLogs();
+        setInstance(null);
         scheduler.shutdown();
     }
 }
