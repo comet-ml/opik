@@ -1257,7 +1257,7 @@ def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__function_called_with_wrong_arguments__trace_is_still_created_with_attached_type_error__inputs_and_outputs_captured(
+def test_track__function_called_with_wrong_arguments__trace_is_still_created_with_attached_type_error__inputs_captured_in_another_format(
     fake_backend,
 ):
     @tracker.track
