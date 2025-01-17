@@ -57,15 +57,15 @@ class MessageSender(BaseMessageProcessor):
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
-                message,
                 str(exception),
+                message,
             )
         except Exception as exception:
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
-                message,
                 str(exception),
+                message,
                 exc_info=True,
             )
 
