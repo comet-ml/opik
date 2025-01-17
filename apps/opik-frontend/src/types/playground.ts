@@ -1,37 +1,14 @@
 import { UsageType } from "@/types/shared";
+import { LLMMessage } from "@/types/llm";
 import { HttpStatusCode } from "axios";
-import {
-  PlaygroundOpenAIConfigsType,
-  PROVIDER_MODEL_TYPE,
-} from "@/types/providers";
-
-export enum PLAYGROUND_MESSAGE_ROLE {
-  system = "system",
-  assistant = "assistant",
-  user = "user",
-}
-
-export interface PlaygroundMessageType {
-  content: string;
-  id: string;
-  role: PLAYGROUND_MESSAGE_ROLE;
-}
-
-export type PlaygroundPromptConfigsType =
-  | Record<string, never>
-  | PlaygroundOpenAIConfigsType;
+import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export interface PlaygroundPromptType {
   name: string;
   id: string;
-  messages: PlaygroundMessageType[];
+  messages: LLMMessage[];
   model: PROVIDER_MODEL_TYPE | "";
-  configs: PlaygroundPromptConfigsType;
-}
-
-export interface ProviderMessageType {
-  content: string;
-  role: PLAYGROUND_MESSAGE_ROLE;
+  configs: LLMPromptConfigsType;
 }
 
 export interface ChatCompletionMessageChoiceType {

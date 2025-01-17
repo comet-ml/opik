@@ -76,7 +76,7 @@ All OpenAI calls made using the `openai_client` will now be logged to Opik.
 </TabItem>
 <TabItem value="LiteLLM" title="LiteLLM">
 
-```python pytest_codeblocks_skip="true"
+```python pytest_codeblocks_skip=true
 from litellm.integrations.opik.opik import OpikLogger
 import litellm
 
@@ -93,7 +93,7 @@ All LiteLLM calls made using the `litellm` client will now be logged to Opik.
 
 If you are using an LLM provider that Opik does not have an integration for, you can still log the LLM calls by using the `@track` decorator:
 
-```python pytest_codeblocks_skip="true"
+```python pytest_codeblocks_skip=true
 from opik import track
 import anthropic
 
@@ -182,7 +182,7 @@ While this code sample assumes that you are using OpenAI, the same principle app
 If you are using LangChain to build your chains, you can use the `OpikTracer` to log your chains. The `OpikTracer` is a LangChain callback that will
 log every step of the chain to Opik:
 
-```python pytest_codeblocks_skip="true"
+```python pytest_codeblocks_skip=true
 from langchain_openai import OpenAI
 from langchain.prompts import PromptTemplate
 from opik.integrations.langchain import OpikTracer
@@ -211,7 +211,7 @@ llm_chain.invoke({"input": "Hello, how are you?"}, callbacks=[opik_tracer])
 
 If you are using LLamaIndex you can set `opik` as a global callback to log all LLM calls:
 
-```python pytest_codeblocks_skip="true"
+```python pytest_codeblocks_skip=true
 from llama_index.core import global_handler, set_global_handler
 
 set_global_handler("opik")

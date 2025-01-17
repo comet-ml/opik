@@ -50,4 +50,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private LlmProviderClientConfig llmProviderClient = new LlmProviderClientConfig();
+
+    @Valid @NotNull @JsonProperty
+    private CacheConfiguration cacheManager = new CacheConfiguration();
 }

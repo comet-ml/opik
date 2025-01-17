@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.domain.llmproviders.LlmProviderFactory;
 import com.comet.opik.domain.llmproviders.LlmProviderService;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
@@ -7,6 +8,8 @@ import com.comet.opik.utils.ChunkedOutputHandlers;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import dev.langchain4j.internal.RetryUtils;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -86,6 +89,26 @@ public class ChatCompletionService {
 
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
                 request.model());
+    }
+
+    public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
+            @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters,
+            @NonNull String workspaceId) {
+        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+
+        ChatResponse chatResponse;
+        try {
+            log.info("Initiating chat with model '{}' expecting structured response, workspaceId '{}'",
+                    modelParameters.name(), workspaceId);
+            chatResponse = retryPolicy
+                    .withRetry(() -> languageModelClient.chat(chatRequest));
+            log.info("Completed chat with model '{}' expecting structured response, workspaceId '{}'",
+                    modelParameters.name(), workspaceId);
+            return chatResponse;
+        } catch (RuntimeException runtimeException) {
+            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+        }
     }
 
     private RetryUtils.RetryPolicy newRetryPolicy() {

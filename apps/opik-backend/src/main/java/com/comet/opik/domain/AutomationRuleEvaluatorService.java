@@ -8,6 +8,8 @@ import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.cache.CacheEvict;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -50,7 +52,7 @@ public interface AutomationRuleEvaluatorService {
             AutomationRuleEvaluatorType automationRuleEvaluatorType);
 }
 
-@NonNull @Singleton
+@Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorService {
@@ -61,7 +63,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull TransactionTemplate template;
 
     @Override
-    public <E, T extends AutomationRuleEvaluator<E>> T save(T inputRuleEvaluator,
+    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-'+ $inputRuleEvaluator.type")
+    public <E, T extends AutomationRuleEvaluator<E>> T save(@NonNull T inputRuleEvaluator,
             @NonNull UUID projectId,
             @NonNull String workspaceId,
             @NonNull String userName) {
@@ -108,6 +111,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
+    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-*'", keyUsesPatternMatching = true)
     public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
             @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
 
@@ -118,7 +122,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
             try {
                 int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.name(),
-                        evaluatorUpdate.samplingRate(), userName);
+                        evaluatorUpdate.samplingRate());
 
                 var modelUpdate = LlmAsJudgeAutomationRuleEvaluatorModel.builder()
                         .code(AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.code()))
@@ -166,6 +170,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
+    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-*'", keyUsesPatternMatching = true)
     public void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");
@@ -223,6 +228,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
+    @Cacheable(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-'+  $type", returnType = AutomationRuleEvaluator.class, wrapperType = List.class)
     public List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
             @NonNull AutomationRuleEvaluatorType type) {
         log.debug("Finding AutomationRuleEvaluators with type '{}' in projectId '{}' and workspaceId '{}'", type,

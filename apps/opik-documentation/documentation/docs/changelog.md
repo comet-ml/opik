@@ -12,10 +12,18 @@ pytest_codeblocks_skip: true
 
 - Datasets are now supported in the playground allowing you to quickly evaluate prompts on multiple samples
 - Updated the models supported in the playground
+- Updated the quickstart guides to include all the supported integrations
+- Fix issue that means traces with text inputs can't be added to datasets
+- Add the ability to edit dataset descriptions in the UI
+- Released [online evaluation](/production/rules.md) rules - You can now define LLM as a Judge metrics that will automatically score all, or a subset, of your production traces.
+
+![Online evaluation](/img/changelog/2025-01-13/online_evaluation.gif)
 
 **SDK**:
 
-- New integration with [CrewAI](https://docs.crewai.com/introduction)
+- New integration with [CrewAI](/tracing/integrations/crewai.md)
+- Released a new `evaluate_prompt` method that simplifies the evaluation of simple prompts templates
+- Added Sentry to the Python SDK so we can more easily
 
 ## Week of 2025-01-06
 
@@ -183,7 +191,7 @@ pytest_codeblocks_skip: true
 
 **SDK**:
 
-- Introduced the `Prompt` object in the SDK to manage prompts stored in the library. See the [Prompt Management](/library/managing_prompts_in_code.mdx) guide for more details.
+- Introduced the `Prompt` object in the SDK to manage prompts stored in the library. See the [Prompt Management](/prompt_engineering/managing_prompts_in_code.mdx) guide for more details.
 - Introduced a `Opik.search_spans` method to search for spans in a project. See the [Search spans](/tracing/export_data.md#exporting-spans) guide for more details.
 - Released a new integration with [AWS Bedrock](/tracing/integrations/bedrock.md) for using Opik with Bedrock models.
 

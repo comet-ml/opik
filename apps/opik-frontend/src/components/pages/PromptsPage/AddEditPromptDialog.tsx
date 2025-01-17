@@ -6,6 +6,7 @@ import { jsonLanguage } from "@codemirror/lang-json";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogClose,
   DialogContent,
   DialogFooter,
@@ -103,7 +104,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="max-h-[80vh] overflow-y-auto">
+        <DialogAutoScrollBody>
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="promptName">Name</Label>
             <Input
@@ -173,7 +174,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
               </AccordionItem>
             </Accordion>
           </div>
-        </div>
+        </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>

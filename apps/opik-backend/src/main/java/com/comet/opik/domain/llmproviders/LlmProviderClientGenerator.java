@@ -1,11 +1,14 @@
 package com.comet.opik.domain.llmproviders;
 
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import dev.ai4j.openai4j.OpenAiClient;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -68,5 +71,26 @@ public class LlmProviderClientGenerator {
             @NonNull String apiKey, @NonNull ChatCompletionRequest request) {
         return LlmProviderGeminiMapper.INSTANCE.toGeminiStreamingChatModel(apiKey, request,
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
+    }
+
+    public ChatLanguageModel newOpenAiChatLanguageModel(String apiKey,
+            AutomationRuleEvaluatorLlmAsJudge.@NonNull LlmAsJudgeModelParameters modelParameters) {
+        var builder = OpenAiChatModel.builder()
+                .modelName(modelParameters.name())
+                .apiKey(apiKey)
+                .logRequests(true)
+                .logResponses(true);
+
+        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
+                .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
+
+        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
+                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .filter(StringUtils::isNotBlank)
+                .ifPresent(builder::baseUrl);
+
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+
+        return builder.build();
     }
 }

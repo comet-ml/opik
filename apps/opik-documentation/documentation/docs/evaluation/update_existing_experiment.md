@@ -1,15 +1,15 @@
 ---
-sidebar_label: Update an existing experiment
+sidebar_label: Update an Existing Experiment
 description: Guides you through the process of updating an existing experiment
 ---
 
-# Update an existing experiment
+# Update an Existing Experiment
 
 Sometimes you may want to update an existing experiment with new scores, or update existing scores for an experiment. You can do this using the [`evaluate_experiment` function](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/evaluate_existing.html).
 
 This function will re-run the scoring metrics on the existing experiment items and update the scores:
 
-```python
+```python pytest_codeblocks_skip=true
 from opik.evaluation import evaluate_experiment
 from opik.evaluation.metrics import Hallucination
 
@@ -53,27 +53,23 @@ def your_llm_application(input: str) -> str:
 # Define the evaluation task
 def evaluation_task(x):
     return {
-        "input": x['user_question'],
-        "output": your_llm_application(x['user_question'])
+        "output": your_llm_application(x['input'])
     }
 
 # Create a simple dataset
 client = Opik()
-try:
-    dataset = client.create_dataset(name="your-dataset-name")
-    dataset.insert([
-        {"input": {"user_question": "What is the capital of France?"}},
-        {"input": {"user_question": "What is the capital of Germany?"}},
-    ])
-except:
-    dataset = client.get_dataset(name="your-dataset-name")
+dataset = client.get_or_create_dataset(name="Existing experiment dataset")
+dataset.insert([
+    {"input": "What is the capital of France?"},
+    {"input": "What is the capital of Germany?"},
+])
 
 # Define the metrics
 hallucination_metric = Hallucination()
 
 
 evaluation = evaluate(
-    experiment_name="My experiment",
+    experiment_name="Existing experiment example",
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[hallucination_metric],
@@ -94,7 +90,7 @@ Learn more about the `evaluate` function in our [LLM evaluation guide](/evaluati
 
 Once the first experiment is created, you realise that you also want to compute a moderation score for each example. You could re-run the experiment with new scoring metrics but this means re-running the output. Instead, you can simply update the experiment with the new scoring metrics:
 
-```python
+```python pytest_codeblocks_skip=true
 from opik.evaluation import evaluate_experiment
 from opik.evaluation.metrics import Moderation
 

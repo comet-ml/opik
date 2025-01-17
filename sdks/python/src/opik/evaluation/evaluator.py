@@ -3,7 +3,9 @@ import time
 
 from .types import LLMTask
 from .metrics import base_metric
+from .models import base_model, models_factory
 from .. import Prompt
+from ..api_objects.prompt import prompt_template
 from ..api_objects.dataset import dataset
 from ..api_objects import opik_client
 from . import scorer, scores_logger, report, evaluation_result, utils
@@ -179,6 +181,130 @@ def evaluate_experiment(
         )
 
     report.display_experiment_link(experiment.dataset_name, experiment.id)
+
+    evaluation_result_ = evaluation_result.EvaluationResult(
+        experiment_id=experiment.id,
+        experiment_name=experiment.name,
+        test_results=test_results,
+    )
+
+    return evaluation_result_
+
+
+def _build_prompt_evaluation_task(
+    model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
+) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+    def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
+        processed_messages = []
+        for message in messages:
+            processed_messages.append(
+                {
+                    "role": message["role"],
+                    "content": prompt_template.PromptTemplate(
+                        message["content"], validate_placeholders=False
+                    ).format(**prompt_variables),
+                }
+            )
+
+        llm_output = model.generate_provider_response(messages=processed_messages)
+
+        return {
+            "input": processed_messages,
+            "output": llm_output.choices[0].message.content,
+        }
+
+    return _prompt_evaluation_task
+
+
+def evaluate_prompt(
+    dataset: dataset.Dataset,
+    messages: List[Dict[str, Any]],
+    model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    experiment_name: Optional[str] = None,
+    project_name: Optional[str] = None,
+    experiment_config: Optional[Dict[str, Any]] = None,
+    verbose: int = 1,
+    nb_samples: Optional[int] = None,
+    task_threads: int = 16,
+    prompt: Optional[Prompt] = None,
+) -> evaluation_result.EvaluationResult:
+    """
+    Performs prompt evaluation on a given dataset.
+
+    Args:
+        dataset: An Opik dataset instance
+
+        messages: A list of prompt messages to evaluate.
+
+        model: The name of the model to use for evaluation. Defaults to "gpt-3.5-turbo".
+
+        scoring_metrics: List of metrics to calculate during evaluation.
+            The LLM input and output will be passed as arguments to each metric `score(...)` method.
+
+        experiment_name: name of the experiment.
+
+        experiment_config: configuration of the experiment.
+
+        scoring_threads: amount of thread workers to run scoring metrics.
+
+        nb_samples: number of samples to evaluate.
+
+        verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
+    """
+    if isinstance(model, str):
+        model = models_factory.get(model_name=model)
+    elif not isinstance(model, base_model.OpikBaseModel):
+        raise ValueError("`model` must be either a string or an OpikBaseModel instance")
+
+    if experiment_config is None:
+        experiment_config = {"prompt_template": messages, "model": model.model_name}
+    else:
+        if "prompt_template" not in experiment_config:
+            experiment_config["prompt_template"] = messages
+
+        if "model" not in experiment_config:
+            experiment_config["model"] = model.model_name
+
+    if scoring_metrics is None:
+        scoring_metrics = []
+
+    client = opik_client.get_client_cached()
+
+    experiment = client.create_experiment(
+        name=experiment_name,
+        dataset_name=dataset.name,
+        experiment_config=experiment_config,
+        prompt=prompt,
+    )
+
+    start_time = time.time()
+
+    test_results = scorer.score_tasks(
+        client=client,
+        experiment_=experiment,
+        dataset_=dataset,
+        task=_build_prompt_evaluation_task(model=model, messages=messages),
+        scoring_metrics=scoring_metrics,
+        nb_samples=nb_samples,
+        workers=task_threads,
+        verbose=verbose,
+        project_name=project_name,
+        scoring_key_mapping=None,
+    )
+
+    total_time = time.time() - start_time
+
+    if verbose == 1:
+        report.display_experiment_results(dataset.name, total_time, test_results)
+
+    scores_logger.log_scores(
+        client=client, test_results=test_results, project_name=project_name
+    )
+
+    report.display_experiment_link(dataset.name, experiment.id)
+
+    client.flush()
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         experiment_id=experiment.id,

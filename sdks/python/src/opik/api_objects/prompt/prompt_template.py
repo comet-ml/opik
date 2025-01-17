@@ -5,9 +5,10 @@ from opik import exceptions
 
 
 class PromptTemplate:
-    def __init__(self, template: str) -> None:
+    def __init__(self, template: str, validate_placeholders: bool = True) -> None:
         self._template = template
         self._placeholders = _extract_placeholder_keys(template)
+        self._validate_placeholders = validate_placeholders
 
     def format(self, **kwargs: Any) -> str:
         template = self._template
@@ -15,7 +16,7 @@ class PromptTemplate:
 
         kwargs_keys: Set[str] = set(kwargs.keys())
 
-        if kwargs_keys != placeholders:
+        if kwargs_keys != placeholders and self._validate_placeholders:
             raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
                 prompt_placeholders=placeholders, format_arguments=kwargs_keys
             )

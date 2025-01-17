@@ -82,6 +82,7 @@
     "react-hotkeys-hook": "^4.5.1",
     "react-markdown": "^9.0.1",
     "react-resizable-panels": "^2.0.20",
+    "react-textarea-autosize": "^8.5.7",
     "react18-json-view": "^0.2.8",
     "recharts": "^2.13.3",
     "slugify": "^1.6.6",

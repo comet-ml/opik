@@ -4,11 +4,13 @@ furo
 sphinx-click
 
 # Dependency to document integrations
-llama_index
+anthropic
+botocore
+cloudpickle
+crewai
+crewai-tools
+dspy-ai
+haystack-ai
 langchain
 langchain_core
-botocore
-anthropic
-haystack-ai
-dspy-ai
-cloudpickle
+llama_index

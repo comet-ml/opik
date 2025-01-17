@@ -32,7 +32,7 @@ opik configure
 
 If you are self-hosting the platform, you can configure the SDK by running:
 
-```python pytest_codeblocks_skip="true"
+```python pytest_codeblocks_skip=true
 import opik
 
 opik.configure(use_local=True)
@@ -40,7 +40,7 @@ opik.configure(use_local=True)
 
 or from the Command line:
 
-```bash pytest_codeblocks_skip="true"
+```bash pytest_codeblocks_skip=true
 opik configure --use_local
 ```
 
@@ -86,7 +86,7 @@ workspace = default
 
 </Tabs>
 
-You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration#configuration-values) below.
+You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration.mdx#configuration-values) below.
 
 :::tip
 By default, the SDK will look for the configuration file in your home directory (`~/.opik.config`). If you would like to specify a different location, you can do so by setting the `OPIK_CONFIG_PATH` environment variable.
@@ -100,7 +100,7 @@ If you do not wish to use a configuration file, you can set environment variable
 - `OPIK_API_KEY`: The API key to use - Only required if you are using the Opik Cloud version of the platform
 - `OPIK_WORKSPACE`: The workspace to use - Only required if you are using the Opik Cloud version of the platform
 
-You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration#configuration-values) below.
+You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration.mdx#configuration-values) below.
 
 ### Configuration values
 

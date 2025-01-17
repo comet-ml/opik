@@ -17,7 +17,7 @@ import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 
 @RequiredArgsConstructor
 @Slf4j
-public class RedisRateLimitService implements RateLimitService {
+class RedisRateLimitService implements RateLimitService {
 
     private static final String KEY = "%s:%s";
 

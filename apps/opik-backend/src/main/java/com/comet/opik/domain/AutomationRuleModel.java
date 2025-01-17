@@ -4,7 +4,7 @@ import com.comet.opik.api.AutomationRule;
 
 import java.util.UUID;
 
-public sealed interface AutomationRuleModel<T>
+public sealed interface AutomationRuleModel
         permits AutomationRuleEvaluatorModel {
 
     UUID id();

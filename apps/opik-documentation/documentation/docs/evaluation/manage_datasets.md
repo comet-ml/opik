@@ -64,7 +64,7 @@ Once the items have been inserted, you can view them them in the Opik UI:
 
 You can also insert items from a JSONL file:
 
-```python
+```python pytest_codeblocks_skip=true
 dataset.read_jsonl_from_file("path/to/file.jsonl")
 ```
 
@@ -79,22 +79,21 @@ The format of the JSONL file should be a JSON object per line. For example:
 
 You can also insert items from a Pandas DataFrame:
 
-```python
-dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output"})
+```python pytest_codeblocks_skip=true
+dataset.insert_from_pandas(dataframe=df)
 ```
 
-The `keys_mapping` parameter maps the column names in the DataFrame to the keys in the dataset items, if you want to
-insert the columns `Expected output` as an expected and `user_question` to the input:
+The `keys_mapping` parameter maps the column names in the DataFrame to the keys in the dataset items, this can be useful if you want to rename columns before inserting them into the dataset:
 
-```python
-dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output", "user_question": "input"})
+```python pytest_codeblocks_skip=true
+dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output"})
 ```
 
 ### Deleting items
 
 You can delete items in a dataset by using the `delete` method:
 
-```python
+```python pytest_codeblocks_skip=true
 from opik import Opik
 
 # Get or create a dataset
@@ -107,7 +106,7 @@ dataset.delete(items_ids=["123", "456"])
 :::tip
 You can also remove all the items in a dataset by using the `clear` method:
 
-```python
+```python pytest_codeblocks_skip=true
 from opik import Opik
 
 # Get or create a dataset
@@ -123,7 +122,7 @@ dataset.clear()
 
 You can download a dataset from Opik using the `get_dataset` method:
 
-```python
+```python pytest_codeblocks_skip=true
 from opik import Opik
 
 client = Opik()
@@ -132,7 +131,7 @@ dataset = client.get_dataset(name="My dataset")
 
 Once the dataset has been retrieved, you can access it's items using the `to_pandas()` or `to_json` methods:
 
-```python
+```python pytest_codeblocks_skip=true
 from opik import Opik
 
 client = Opik()

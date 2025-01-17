@@ -6,6 +6,8 @@ name: SDK Lib Anthropic Tests
 run-name: "SDK Lib Anthropic Tests ${{ github.ref_name }} by @${{ github.actor }}"
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
 on:
   workflow_call:
 

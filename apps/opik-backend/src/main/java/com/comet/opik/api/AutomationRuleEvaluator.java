@@ -1,9 +1,12 @@
 package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -12,6 +15,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.experimental.SuperBuilder;
+import lombok.experimental.UtilityClass;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,38 +31,40 @@ import java.util.UUID;
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE, schema = AutomationRuleEvaluatorLlmAsJudge.class)
 })
 @AllArgsConstructor
-public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRule<T>
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRule
         permits AutomationRuleEvaluatorLlmAsJudge {
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private UUID id;
+    private final UUID id;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private UUID projectId;
+    private final UUID projectId;
 
     @JsonView({View.Public.class, View.Write.class})
-    @NotBlank private String name;
+    @NotBlank private final String name;
 
     @JsonView({View.Public.class, View.Write.class})
-    private Float samplingRate;
+    private final Float samplingRate;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private Instant createdAt;
+    private final Instant createdAt;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private String createdBy;
+    private final String createdBy;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private Instant lastUpdatedAt;
+    private final Instant lastUpdatedAt;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private String lastUpdatedBy;
+    private final String lastUpdatedBy;
 
     @NotNull @JsonView({View.Public.class, View.Write.class})
     public abstract AutomationRuleEvaluatorType getType();
@@ -71,6 +77,7 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
         return AutomationRuleAction.EVALUATOR;
     }
 
+    @UtilityClass
     public static class View {
         public static class Write {
         }
@@ -79,6 +86,8 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     }
 
     @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record AutomationRuleEvaluatorPage(
             @JsonView( {
                     View.Public.class}) int page,

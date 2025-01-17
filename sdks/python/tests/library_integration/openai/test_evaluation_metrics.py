@@ -21,6 +21,9 @@ def assert_score_result(result):
     ],
 )
 def test__answer_relevance(context):
+    import os
+
+    os.environ["OPIK_DISABLE_LITELLM_MODELS_MONITORING"] = "True"
     answer_relevance_metric = metrics.AnswerRelevance()
 
     result = answer_relevance_metric.score(

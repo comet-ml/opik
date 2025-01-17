@@ -205,3 +205,16 @@ llmProviderClient:
     # Default: 2023-06-01
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: '2023-06-01'
+
+# Configuration for cache manager
+cacheManager:
+  # Default: false
+  # Description: Whether or not cache manager is enabled
+  enabled: false
+  # Default: PT1S
+  # Description: Time to live for cache entries in using the formats accepted are based on the ISO-8601: https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-
+  defaultDuration: PT1S
+  caches:
+    # Default: {}
+    # Description: Dynamically created caches with their respective time to live in seconds
+    testCache: PT1S

@@ -5,9 +5,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
+import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dataset } from "@/types/datasets";
 import useDatasetDeleteMutation from "@/api/datasets/useDatasetDeleteMutation";
@@ -18,16 +19,15 @@ export const DatasetRowActionsCell: React.FunctionComponent<
 > = (context) => {
   const resetKeyRef = useRef(0);
   const dataset = context.row.original;
-  const [open, setOpen] = useState<boolean>(false);
+  const [open, setOpen] = useState<boolean | number>(false);
 
-  const datasetDeleteMutation = useDatasetDeleteMutation();
+  const { mutate } = useDatasetDeleteMutation();
 
   const deleteDatasetHandler = useCallback(() => {
-    datasetDeleteMutation.mutate({
+    mutate({
       datasetId: dataset.id,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataset.id]);
+  }, [dataset.id, mutate]);
 
   return (
     <CellWrapper
@@ -35,9 +35,15 @@ export const DatasetRowActionsCell: React.FunctionComponent<
       tableMetadata={context.table.options.meta}
       className="justify-end p-0"
     >
+      <AddEditDatasetDialog
+        key={`add-${resetKeyRef.current}`}
+        open={open === 2}
+        setOpen={setOpen}
+        dataset={dataset}
+      />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
-        open={open}
+        open={open === 1}
         setOpen={setOpen}
         onConfirm={deleteDatasetHandler}
         title={`Delete ${dataset.name}`}
@@ -54,7 +60,16 @@ export const DatasetRowActionsCell: React.FunctionComponent<
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
             onClick={() => {
-              setOpen(true);
+              setOpen(2);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+          >
+            <Pencil className="mr-2 size-4" />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
           >

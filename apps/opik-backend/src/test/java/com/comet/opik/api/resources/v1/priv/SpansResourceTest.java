@@ -3665,8 +3665,8 @@ class SpansResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
             assertThat(actualResponse.hasEntity()).isTrue();
-            var errorMessage = actualResponse.readEntity(ErrorMessage.class);
-            assertThat(errorMessage.errors().getFirst()).contains("Cannot deserialize value of type");
+            var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(errorMessage.getMessage()).contains("Cannot deserialize value of type");
         }
     }
 
@@ -3675,16 +3675,17 @@ class SpansResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BatchInsert {
 
-        @Test
-        void batch__whenCreateSpans__thenReturnNoContent() {
+        @ParameterizedTest
+        @MethodSource
+        void batch__whenCreateSpans__thenReturnNoContent(Function<String, String> projectNameModifier) {
 
             String projectName = UUID.randomUUID().toString();
-            UUID projectId = createProject(projectName, TEST_WORKSPACE, API_KEY);
+            createProject(projectName, TEST_WORKSPACE, API_KEY);
 
             var expectedSpans = IntStream.range(0, 1000)
                     .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
-                            .projectId(projectId)
-                            .projectName(projectName)
+                            .projectId(null)
+                            .projectName(projectNameModifier.apply(projectName))
                             .parentSpanId(null)
                             .feedbackScores(null)
                             .build())
@@ -3694,6 +3695,12 @@ class SpansResourceTest {
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
                     API_KEY);
+        }
+
+        Stream<Arguments> batch__whenCreateSpans__thenReturnNoContent() {
+            return Stream.of(
+                    arguments(Function.identity()),
+                    arguments((Function<String, String>) String::toUpperCase));
         }
 
         @Test

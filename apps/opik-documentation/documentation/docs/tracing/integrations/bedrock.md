@@ -1,7 +1,7 @@
 ---
 sidebar_label: Bedrock
 description: Describes how to track Bedrock LLM calls using Opik
-test_code_snippets: false
+pytest_codeblocks_skip: true
 ---
 
 # AWS Bedrock
@@ -27,7 +27,7 @@ To start tracking your Bedrock LLM calls, you'll need to have both the `opik` an
 pip install opik boto3
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platfrom your API key:
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
 ```bash
 opik configure

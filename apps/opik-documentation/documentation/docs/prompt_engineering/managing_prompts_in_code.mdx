@@ -1,0 +1,67 @@
+---
+sidebar_label: Versioning prompts stored in code
+description: Describes how to version prompts stored in code
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Managing prompts stored in code
+
+If you already have prompts stored in code, you can use the the [`Prompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/Prompt.html) object in the SDK to sync these prompts with the library.
+This allows you to store the prompt text in your code while also having it versioned and stored in the library:
+
+<Tabs>
+    <TabItem value="Prompts stored in code" title="Prompts stored in code">
+
+        ```python
+        import opik
+
+        # Prompt text stored in a variable
+        PROMPT_TEXT = "Write a summary of the following text: {{text}}"
+
+        # Create a prompt
+        prompt = opik.Prompt(
+            name="prompt-summary",
+            prompt=PROMPT_TEXT,
+        )
+
+        # Print the prompt text
+        print(prompt.prompt)
+
+        # Build the prompt
+        print(prompt.format(text="Hello, world!"))
+        ```
+
+    </TabItem>
+    <TabItem value="Prompts stored in a file" title="Prompts stored in a file">
+
+        ```python pytest_codeblocks_skip=true
+        import opik
+
+        # Read the prompt from a file
+        with open("prompt.txt", "r") as f:
+            prompt_text = f.read()
+
+        prompt = opik.Prompt(name="prompt-summary", prompt=prompt_text)
+
+        # Print the prompt text
+        print(prompt.prompt)
+
+        # Build the prompt
+        print(prompt.format(text="Hello, world!"))
+        ```
+
+    </TabItem>
+
+</Tabs>
+
+The prompt will now be stored in the library and versioned:
+
+![Prompt library versions](/img/prompt_engineering/prompt_library_versions.png)
+
+:::tip
+The [`Prompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/Prompt.html) object will create a new prompt in the library if this prompt doesn't already exist, otherwise it will return the existing prompt.
+
+This means you can safely run the above code multiple times without creating duplicate prompts.
+:::

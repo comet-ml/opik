@@ -10,7 +10,8 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public enum ScoreSource {
     UI("ui"),
-    SDK("sdk");
+    SDK("sdk"),
+    ONLINE_SCORING("online_scoring");
 
     @JsonValue
     private final String value;

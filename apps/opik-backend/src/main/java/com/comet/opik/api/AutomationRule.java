@@ -20,7 +20,7 @@ import java.util.UUID;
 @Schema(name = "AutomationRule", discriminatorProperty = "action", discriminatorMapping = {
         @DiscriminatorMapping(value = "evaluator", schema = AutomationRuleEvaluator.class)
 })
-public sealed interface AutomationRule<T> permits AutomationRuleEvaluator {
+public sealed interface AutomationRule permits AutomationRuleEvaluator {
 
     UUID getId();
     UUID getProjectId();
