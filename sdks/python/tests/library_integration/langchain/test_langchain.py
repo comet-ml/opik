@@ -231,7 +231,11 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
     PROJECT_ID = "vertexai-dev-447913"
     vertexai.init(project=PROJECT_ID, location="us-central1")
 
-    llm = llm_model(max_tokens=10, model_name="gemini-1.5-flash", name="custom-google-vertexai-llm-name")
+    llm = llm_model(
+        max_tokens=10,
+        model_name="gemini-1.5-flash",
+        name="custom-google-vertexai-llm-name",
+    )
 
     template = "Given the title of play, right a synopsys for that. Title: {title}."
 
