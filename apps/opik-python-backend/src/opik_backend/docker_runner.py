@@ -55,7 +55,12 @@ def run_scoring_in_docker_python_container(code, data):
                 return json.loads(last_line)
             else:
                 logging.warn(f"Execution failed (Code: {status_code}):\n{logs}")
-                return {"code": 400, "error": "Execution failed: Python code contains an invalid metric"}
+                try:
+                    last_line = logs.strip().splitlines()[-1]
+                    return {"code": 400, "error": json.loads(last_line).get("error")}
+                except Exception as e:
+                    logger.debug(f"Exception parsing container error logs: {e}")
+                    return {"code": 400, "error": "Execution failed: Python code contains an invalid metric"}
         finally:
             container.remove()
     except Exception as e:

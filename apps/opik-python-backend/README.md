@@ -2,6 +2,7 @@
 
 ## Requirements
 
+- Install Docker.
 - Install Python.
 - Create and enable a Python virtual environment.
 - Install all dependencies from `requirements.txt`.

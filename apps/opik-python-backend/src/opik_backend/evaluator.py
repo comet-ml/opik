@@ -13,6 +13,11 @@ def bad_request(exception: HTTPException):
     return jsonify(error=str(exception)), 400
 
 
+@evaluator.errorhandler(500)
+def internal_server_error(exception: HTTPException):
+    return jsonify(error=str(exception)), 500
+
+
 @evaluator.route("/python", methods=["POST"])
 def execute_evaluator_python():
     if request.method != "POST":
@@ -37,4 +42,4 @@ def execute_evaluator_python():
         current_app.logger.info("Missing ScoreResult in code '%s'", code)
         abort(400, "The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'")
 
-    return jsonify(response)
+    return jsonify({"scores": scores})
