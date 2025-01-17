@@ -8,10 +8,15 @@ def extract_inputs(
 ) -> Dict[str, Any]:
     sig = inspect.signature(func)
 
-    bound_args = sig.bind(*args, **kwargs)  # type: ignore
-    bound_args.apply_defaults()
-
-    arg_dict = dict(bound_args.arguments)
+    try:
+        bound_args = sig.bind(*args, **kwargs)  # type: ignore
+        bound_args.apply_defaults()
+        arg_dict = dict(bound_args.arguments)
+    except TypeError:
+        arg_dict = {
+            "args": args,
+            "kwargs": kwargs,
+        }
 
     if "self" in arg_dict:
         arg_dict.pop("self")
