@@ -140,7 +140,7 @@ const createLogPlaygroundProcessor = ({
   const experimentPromptMap: Record<string, string> = {};
   const experimentRegistry: LogExperiment[] = [];
 
-  const spanBatch = createBatchProcessor<LogSpan>(async (spans: LogSpan[]) => {
+  const spanBatch = createBatchProcessor<LogSpan>(async (spans) => {
     try {
       await createBatchSpans(spans);
     } catch {
