@@ -17,7 +17,6 @@ const HomePage = () => {
       </div>
       <GetStartedSection />
       <ObservabilitySection />
-      <div className="h-6"></div>
       <EvaluationSection />
     </div>
   );
