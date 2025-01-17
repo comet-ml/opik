@@ -1,9 +1,17 @@
 import importlib.metadata
 import logging
+import warnings
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Set
 
-import litellm
+with warnings.catch_warnings():
+    # This is the first time litellm is imported when opik is imported.
+    # It filters out pydantic warning.
+    # Litellm has already fixed that, but it is not released yet, so this filter
+    # should be removed from here soon.
+    warnings.simplefilter("ignore")
+    import litellm
+
 from litellm.types.utils import ModelResponse
 
 from opik import semantic_version
