@@ -28,18 +28,18 @@ import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     private static final String INSERT_STATEMENT = """
-            INSERT INTO automation_rule_evaluator_logs (timestamp, level, workspace_id, rule_id, message, extra)
+            INSERT INTO automation_rule_evaluator_logs (timestamp, level, workspace_id, rule_id, message, markers)
             VALUES <items:{item |
-                        (
-                            parseDateTime64BestEffort(:timestamp<item.index>, 9),
-                            :level<item.index>,
-                            :workspace_id<item.index>,
-                            :rule_id<item.index>,
-                            :message<item.index>,
-                            mapFromArrays(:extra_keys<item.index>, :extra_values<item.index>)
-                        )
-                        <if(item.hasNext)>,<endif>
-                    }>
+                (
+                    parseDateTime64BestEffort(:timestamp<item.index>, 9),
+                    :level<item.index>,
+                    :workspace_id<item.index>,
+                    :rule_id<item.index>,
+                    :message<item.index>,
+                    mapFromArrays(:marker_keys<item.index>, :marker_values<item.index>)
+                )
+                <if(item.hasNext)>,<endif>
+            }>
             ;
             """;
 
@@ -125,8 +125,8 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                                 .bind("workspace_id" + i, workspaceId)
                                 .bind("rule_id" + i, ruleId)
                                 .bind("message" + i, event.getFormattedMessage())
-                                .bind("extra_keys" + i, new String[]{"trace_id"})
-                                .bind("extra_values" + i, new String[]{traceId});
+                                .bind("marker_keys" + i, new String[]{"trace_id"})
+                                .bind("marker_values" + i, new String[]{traceId});
                     }
 
                     return statement.execute();
