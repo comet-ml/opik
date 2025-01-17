@@ -4,7 +4,6 @@ import contextvars
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 from haystack import logging
-from haystack.components.generators import openai_utils
 from haystack import dataclasses as haystack_dataclasses
 from haystack import tracing
 from haystack.tracing import utils as tracing_utils
@@ -12,6 +11,7 @@ from haystack.tracing import utils as tracing_utils
 import opik
 from opik.api_objects import span as opik_span
 from opik.api_objects import trace as opik_trace
+from . import converters
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +90,8 @@ class OpikSpanBridge(tracing.Span):
         if key.endswith(".input"):
             if "messages" in value:
                 messages = [
-                    openai_utils._convert_message_to_openai_format(m)
-                    for m in value["messages"]
+                    converters.convert_message_to_openai_format(message)
+                    for message in value["messages"]
                 ]
                 self._span.update(input={"input": messages})
             else:
@@ -99,12 +99,12 @@ class OpikSpanBridge(tracing.Span):
         elif key.endswith(".output"):
             if "replies" in value:
                 if all(
-                    isinstance(r, haystack_dataclasses.ChatMessage)
-                    for r in value["replies"]
+                    isinstance(reply, haystack_dataclasses.ChatMessage)
+                    for reply in value["replies"]
                 ):
                     replies = [
-                        openai_utils._convert_message_to_openai_format(m)
-                        for m in value["replies"]
+                        converters.convert_message_to_openai_format(message)
+                        for message in value["replies"]
                     ]
                 else:
                     replies = value["replies"]
