@@ -1,16 +1,18 @@
 import React from "react";
 import { DropdownOption } from "@/types/shared";
-import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
+import TracesPathsAutocomplete from "@/components/pages-shared/traces/TracesPathsAutocomplete/TracesPathsAutocomplete";
 import { Tag } from "@/components/ui/tag";
 
 interface LLMPromptMessagesVariableProps {
   variable: DropdownOption<string>;
   onChange: (changes: DropdownOption<string>) => void;
+  projectId: string;
 }
 
 const LLMPromptMessagesVariable = ({
   variable,
   onChange,
+  projectId,
 }: LLMPromptMessagesVariableProps) => {
   return (
     <div className="relative flex justify-between">
@@ -20,13 +22,16 @@ const LLMPromptMessagesVariable = ({
         </Tag>
       </div>
       <div className="flex basis-1/2">
-        <DebounceInput
-          placeholder="Set variable mapping"
-          value={variable.value}
-          onChangeValue={(value) =>
-            onChange({ ...variable, value: value as string })
-          }
-        />
+        <div className="w-full">
+          <TracesPathsAutocomplete
+            projectId={projectId}
+            rootKeys={["input", "output", "metadata"]}
+            value={variable.value}
+            onValueChange={(value: string) =>
+              onChange({ ...variable, value: value })
+            }
+          />
+        </div>
       </div>
     </div>
   );
