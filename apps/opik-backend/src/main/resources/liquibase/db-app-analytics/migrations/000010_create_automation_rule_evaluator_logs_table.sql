@@ -7,11 +7,10 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluat
     rule_id  FixedString(36),
     level Enum8('TRACE'=0, 'DEBUG'=1, 'INFO'=2, 'WARM'=3, 'ERROR'=4),
     message String,
-    markers Map(String, String),
-    INDEX idx_workspace_rule_id (workspace_id, rule_id) TYPE bloom_filter(0.01)
+    markers Map(String, String)
 )
 ENGINE = MergeTree()
-ORDER BY (timestamp, workspace_id, rule_id, level)
+ORDER BY (workspace_id, rule_id, timestamp)
 TTL toDateTime(timestamp + INTERVAL 6 MONTH);
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs;
