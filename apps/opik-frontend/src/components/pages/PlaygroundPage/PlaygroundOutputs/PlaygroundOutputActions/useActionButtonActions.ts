@@ -31,12 +31,12 @@ const useActionButtonActions = ({
   datasetName,
 }: UseActionButtonActionsArguments) => {
   const queryClient = useQueryClient();
+
   const { toast } = useToast();
 
   const [isRunning, setIsRunning] = useState(false);
-
+  const [isToStop, setIsToStop] = useState(false);
   const promptIds = usePromptIds();
-  const isToStopRef = useRef(false);
   const abortControllersRef = useRef(new Map<string, AbortController>());
 
   const resetOutputMap = useResetOutputMap();
@@ -53,7 +53,7 @@ const useActionButtonActions = ({
       return;
     }
 
-    isToStopRef.current = true;
+    setIsToStop(true);
     abortControllersRef.current.forEach((controller) => controller.abort());
 
     abortControllersRef.current.clear();
@@ -101,7 +101,7 @@ const useActionButtonActions = ({
         });
       },
     };
-  }, [queryClient.invalidateQueries]);
+  }, [queryClient, promptIds.length, showMessageExperimentsLogged, toast]);
 
   const addAbortController = useCallback(
     (key: string, value: AbortController) => {
@@ -118,7 +118,7 @@ const useActionButtonActions = ({
   const { createCombinations, processCombination } =
     usePromptDatasetItemCombination({
       workspaceName,
-      isStopped: isToStopRef.current,
+      isToStop,
       datasetItems,
       datasetName,
       addAbortController,
@@ -140,7 +140,7 @@ const useActionButtonActions = ({
         processCombination(combination, logProcessor),
       () => {
         setIsRunning(false);
-        isToStopRef.current = false;
+        setIsToStop(false);
         abortControllersRef.current.clear();
       },
     );

@@ -1,9 +1,8 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
 import {
-  PlaygroundStore,
   usePromptIds,
   usePromptMap,
   useUpdateOutput,
@@ -65,7 +64,7 @@ const transformMessageIntoProviderMessage = (
 
 interface UsePromptDatasetItemCombinationArgs {
   datasetItems: DatasetItem[];
-  isStopped: boolean;
+  isToStop: boolean;
   workspaceName: string;
   datasetName: string | null;
   addAbortController: (key: string, value: AbortController) => void;
@@ -74,7 +73,7 @@ interface UsePromptDatasetItemCombinationArgs {
 
 const usePromptDatasetItemCombination = ({
   datasetItems,
-  isStopped,
+  isToStop,
   workspaceName,
   datasetName,
   addAbortController,
@@ -82,9 +81,17 @@ const usePromptDatasetItemCombination = ({
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
 
+  // the reason why we need ref here is that the value is taken in a deep callback
+  // the prop is just taken as the value on the moment of creation
+  const isToStopRef = useRef(isToStop);
+
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
   });
+
+  useEffect(() => {
+    isToStopRef.current = isToStop;
+  }, [isToStop]);
 
   const promptIds = usePromptIds();
   const promptMap = usePromptMap();
@@ -109,7 +116,7 @@ const usePromptDatasetItemCombination = ({
       { datasetItem, prompt }: DatasetItemPromptCombination,
       logProcessor: LogProcessor,
     ) => {
-      if (isStopped) {
+      if (isToStopRef.current) {
         return;
       }
 
@@ -174,7 +181,13 @@ const usePromptDatasetItemCombination = ({
       }
     },
 
-    [datasetName, runStreaming, updateOutput],
+    [
+      datasetName,
+      runStreaming,
+      updateOutput,
+      addAbortController,
+      deleteAbortController,
+    ],
   );
 
   return {
