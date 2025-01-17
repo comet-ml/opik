@@ -1255,3 +1255,50 @@ def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__function_called_with_wrong_arguments__trace_is_still_created_with_attached_type_error__inputs_and_outputs_captured(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        return "the-output"
+
+    with pytest.raises(TypeError):
+        f(y=5)
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"args": tuple(), "kwargs": {"y": 5}},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "TypeError",
+            "traceback": ANY_STRING(),
+            "message": ANY_STRING(),
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"args": tuple(), "kwargs": {"y": 5}},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "TypeError",
+                    "traceback": ANY_STRING(),
+                    "message": ANY_STRING(),
+                },
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
