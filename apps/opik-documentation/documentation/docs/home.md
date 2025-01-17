@@ -38,6 +38,15 @@ Evaluating the output of your LLM calls is critical to ensure that your applicat
 2. [Store evaluation datasets](/evaluation/manage_datasets.md) in the platform and [run evaluations](/evaluation/evaluate_your_llm.md)
 3. Use our [pytest integration](/testing/pytest_integration.md) to track unit test results and compare results between runs
 
+### Production Monitoring
+
+Opik has been designed from the ground up to support high volumes of traces making it the ideal tool for monitoring your production LLM applications. We have stress tested the application and even a small deployment can ingest more than 40 million traces per day !
+
+Our goal is to make it easy for you to monitor your production LLM applications and easily identify any issues with your production LLM application, for this we have included:
+
+1. [Online evaluation metrics](/production/rules.md) that allow you to score all your production traces and easily identify any issues with your production LLM application.
+2. [Production monitoring dashboards](/production/production_monitoring.md) that allow you to review your feedback scores, trace count and tokens over time at both a daily and hourly granularity.
+
 ## Getting Started
 
 [Comet](https://www.comet.com/site) provides a managed Cloud offering for Opik, simply [create an account](https://www.comet.com/signup?from=llm) to get started.
