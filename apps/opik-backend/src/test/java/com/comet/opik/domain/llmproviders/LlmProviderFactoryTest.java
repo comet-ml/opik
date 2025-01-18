@@ -78,7 +78,6 @@ class LlmProviderFactoryTest {
 
     private static Stream<Arguments> testGetService() {
         var openAiModels = EnumUtils.getEnumList(OpenaiModelName.class).stream()
-                .filter(value -> value != ModelPrice.DEFAULT)
                 .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, LlmProviderOpenAi.class));
         var anthropicModels = EnumUtils.getEnumList(AnthropicModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, LlmProviderAnthropic.class));

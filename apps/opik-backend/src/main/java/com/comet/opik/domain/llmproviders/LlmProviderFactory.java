@@ -12,7 +12,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.EnumUtils;
 
-import java.util.Set;
 import java.util.function.Function;
 
 @Singleton
@@ -52,10 +51,10 @@ public class LlmProviderFactory {
         if (isModelBelongToProvider(model, OpenaiModelName.class, OpenaiModelName::toString)) {
             return LlmProvider.OPEN_AI;
         }
-        if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString, Set.of())) {
+        if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString)) {
             return LlmProvider.ANTHROPIC;
         }
-        if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString, Set.of())) {
+        if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
             return LlmProvider.GEMINI;
         }
 
@@ -76,9 +75,8 @@ public class LlmProviderFactory {
     }
 
     private static <E extends Enum<E>> boolean isModelBelongToProvider(
-            String model, Class<E> enumClass, Function<E, String> valueGetter, Set<Object> exclude) {
+            String model, Class<E> enumClass, Function<E, String> valueGetter) {
         return EnumUtils.getEnumList(enumClass).stream()
-                .filter(value -> !exclude.contains(value))
                 .map(valueGetter)
                 .anyMatch(model::equals);
     }
