@@ -22,7 +22,8 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.llmproviders.OpenaiModelName;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -713,7 +714,8 @@ class ProjectMetricsResourceTest {
                     .toList();
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-            return spans.stream().map(span -> ModelPrice.fromString(MODEL_NAME).calculateCost(span.usage()))
+            return spans.stream()
+                    .map(span -> CostService.calculateCost(OpenaiModelName.valueOf(MODEL_NAME), span.usage()))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
     }

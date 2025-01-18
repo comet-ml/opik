@@ -37,7 +37,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.llmproviders.OpenaiModelName;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -5634,7 +5634,7 @@ class TracesResourceTest {
                 List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
                         .map(span -> span.toBuilder()
                                 .usage(spanResourceClient.getTokenUsage())
-                                .model(spanResourceClient.randomModelPrice().getName())
+                                .model(spanResourceClient.randomModel().toString())
                                 .traceId(trace.id())
                                 .projectName(projectName)
                                 .feedbackScores(null)
@@ -5645,7 +5645,8 @@ class TracesResourceTest {
                 batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
                 BigDecimal totalCost = spans.stream()
-                        .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                        .map(span -> CostService.calculateCost(
+                                OpenaiModelName.valueOf(span.model()), span.usage()))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
 
                 Trace expectedTrace = trace.toBuilder()
@@ -8156,7 +8157,7 @@ class TracesResourceTest {
 
     private BigDecimal aggregateSpansCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                .map(span -> CostService.calculateCost(OpenaiModelName.valueOf(span.model()), span.usage()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

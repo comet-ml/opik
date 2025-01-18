@@ -6,7 +6,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.llmproviders.OpenaiModelName;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -122,8 +122,8 @@ public class SpanResourceClient {
         }
     }
 
-    public ModelPrice randomModelPrice() {
-        return ModelPrice.values()[randomNumber(0, ModelPrice.values().length - 2)];
+    public OpenaiModelName randomModel() {
+        return OpenaiModelName.values()[randomNumber(0, OpenaiModelName.values().length - 1)];
     }
 
     private int randomNumber(int min, int max) {

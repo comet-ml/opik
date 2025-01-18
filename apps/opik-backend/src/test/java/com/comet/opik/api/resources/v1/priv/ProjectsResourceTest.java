@@ -1310,7 +1310,7 @@ class ProjectsResourceTest {
                 List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
                         .map(span -> span.toBuilder()
                                 .usage(spanResourceClient.getTokenUsage())
-                                .model(spanResourceClient.randomModelPrice().getName())
+                                .model(spanResourceClient.randomModel().toString())
                                 .traceId(trace.id())
                                 .projectName(trace.projectName())
                                 .totalEstimatedCost(null)
