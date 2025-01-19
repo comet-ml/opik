@@ -1,8 +1,8 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.domain.llmproviders.OpenaiModelName;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.Nullable;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -86,7 +86,7 @@ public class CostService {
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
             new BigDecimal("0"), SpanCostCalculator::defaultCost);
 
-    public static BigDecimal calculateCost(@NonNull String rawModelName, @NonNull Map<String, Integer> usage) {
+    public static BigDecimal calculateCost(@Nullable String rawModelName, @Nullable Map<String, Integer> usage) {
         return OpenaiModelName.byValue(rawModelName)
                 .map(modelName -> calculateCost(modelName, usage))
                 .orElse(calculateDefaultCost(usage));
@@ -106,6 +106,6 @@ public class CostService {
     }
 
     private static BigDecimal calculateCost(ModelPrice modelPrice, Map<String, Integer> usage) {
-        return modelPrice.calculator().apply(modelPrice, usage);
+        return modelPrice.calculator().apply(modelPrice, Optional.ofNullable(usage).orElse(Map.of()));
     }
 }
