@@ -7,7 +7,6 @@ import com.comet.opik.api.ProjectStats.SingleValueStat;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.cost.CostService;
-import com.comet.opik.domain.llmproviders.OpenaiModelName;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -108,7 +107,7 @@ public class StatsUtils {
                                 .stream()
                                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().intValue()));
 
-                        return CostService.calculateCost(OpenaiModelName.valueOf(span.model()), usage);
+                        return CostService.calculateCost(span.model(), usage);
                     }
 
                     return BigDecimal.ZERO;
@@ -370,7 +369,7 @@ public class StatsUtils {
 
     public static BigDecimal aggregateSpansCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostService.calculateCost(OpenaiModelName.valueOf(span.model()), span.usage()))
+                .map(span -> CostService.calculateCost(span.model(), span.usage()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

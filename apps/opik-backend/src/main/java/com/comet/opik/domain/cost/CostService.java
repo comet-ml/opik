@@ -2,6 +2,7 @@ package com.comet.opik.domain.cost;
 
 import com.comet.opik.domain.llmproviders.OpenaiModelName;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -31,7 +32,9 @@ import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1_MINI_202
 import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1_PREVIEW;
 import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1_PREVIEW_2024_09_12;
 
+@Slf4j
 public class CostService {
+    private static final String WARNING_MISSING_PRICE = "missing price for model '{}'";
     private static final Map<OpenaiModelName, ModelPrice> modelPrices = Map.ofEntries(
             Map.entry(CHATGPT_4O_LATEST, new ModelPrice(new BigDecimal("0.000005"), new BigDecimal("0.000015"),
                     SpanCostCalculator::textGenerationCost)),
@@ -83,9 +86,26 @@ public class CostService {
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
             new BigDecimal("0"), SpanCostCalculator::defaultCost);
 
-    public static BigDecimal calculateCost(@NonNull OpenaiModelName modelName, @NonNull Map<String, Integer> usage) {
-        var modelPriceNew = Optional.ofNullable(modelPrices.get(modelName))
-                .orElse(DEFAULT_COST);
-        return modelPriceNew.calculator().apply(modelPriceNew, usage);
+    public static BigDecimal calculateCost(@NonNull String rawModelName, @NonNull Map<String, Integer> usage) {
+        return OpenaiModelName.byValue(rawModelName)
+                .map(modelName -> calculateCost(modelName, usage))
+                .orElse(calculateDefaultCost(usage));
+    }
+
+    private static BigDecimal calculateCost(OpenaiModelName modelName, Map<String, Integer> usage) {
+        var modelPrice = Optional.ofNullable(modelPrices.get(modelName))
+                .orElseGet(() -> {
+                    log.warn(WARNING_MISSING_PRICE, modelName);
+                    return DEFAULT_COST;
+                });
+        return calculateCost(modelPrice, usage);
+    }
+
+    private static BigDecimal calculateDefaultCost(Map<String, Integer> usage) {
+        return calculateCost(DEFAULT_COST, usage);
+    }
+
+    private static BigDecimal calculateCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return modelPrice.calculator().apply(modelPrice, usage);
     }
 }
