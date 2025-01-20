@@ -7,7 +7,6 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
-import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -19,12 +18,9 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
@@ -35,12 +31,6 @@ import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
 import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import io.dropwizard.configuration.ConfigurationException;
-import io.dropwizard.configuration.FileConfigurationSourceProvider;
-import io.dropwizard.configuration.YamlConfigurationFactory;
-import io.dropwizard.jackson.Jackson;
-import io.dropwizard.jersey.validation.Validators;
-import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
@@ -58,7 +48,6 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.redisson.Redisson;
 import org.redisson.config.Config;
-import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
@@ -75,9 +64,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.*;
-import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -102,11 +88,6 @@ public class OnlineScoringEngineTest {
     private static final String WORKSPACE_NAME = "workspace-" + UUID.randomUUID();
     private static final String WORKSPACE_ID = "wid-" + UUID.randomUUID();
     private static final String USER_NAME = "user-" + UUID.randomUUID();
-
-    private static final ObjectMapper objectMapper = Jackson.newObjectMapper();
-    private static final Validator validator = Validators.newValidator();
-    private static final YamlConfigurationFactory<OpikConfiguration> configFactory = new YamlConfigurationFactory<>(
-            OpikConfiguration.class, validator, objectMapper, "dw");
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
@@ -155,7 +136,6 @@ public class OnlineScoringEngineTest {
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
 
     @RegisterExtension
     private static final TestDropwizardAppExtension app;
@@ -163,19 +143,14 @@ public class OnlineScoringEngineTest {
     private static final WireMockUtils.WireMockRuntime wireMock;
 
     static {
-        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
+        Startables.deepStart(REDIS, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
 
-        DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
-                .newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
-
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                MYSQL.getJdbcUrl(), null, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
-    private String baseURI;
-    private ClientSupport client;
     private AutomationRuleEvaluatorResourceClient evaluatorsResourceClient;
     private ProjectResourceClient projectResourceClient;
 
@@ -184,18 +159,12 @@ public class OnlineScoringEngineTest {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.client = client;
+        var baseURI = "http://localhost:%d".formatted(client.getPort());
 
         ClientSupportUtils.config(client);
 
-        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
-        this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(this.client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
+        this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
     }
 
     @BeforeEach

@@ -98,7 +98,7 @@ public class OnlineScoringSampler {
         Flux.fromIterable(messages)
                 .flatMap(
                         message -> llmAsJudgeStream.add(StreamAddArgs.entry(OnlineScoringConfig.PAYLOAD_FIELD, message))
-                                .doOnNext(id -> log.info("Message sent with ID: {}", id))
+                                .doOnNext(id -> log.debug("Message sent with ID: {} into stream '{}'", id, config.getLlmAsJudgeStream()))
                                 .doOnError(err -> log.error("Error sending message: {}", err.getMessage())))
                 .subscribe();
     }
