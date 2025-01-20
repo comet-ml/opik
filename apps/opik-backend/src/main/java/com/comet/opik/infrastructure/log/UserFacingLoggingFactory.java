@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 
 @UtilityClass
-public class UserFacingRuleLoggingFactory {
+public class UserFacingLoggingFactory {
 
     private static final LoggerContext CONTEXT = (LoggerContext) LoggerFactory.getILoggerFactory();
     private static AsyncAppender asyncAppender;

@@ -65,9 +65,9 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         ClickHouseAppender.instance = instance;
     }
 
-    private final ConnectionFactory connectionFactory;
+    private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull Duration flushIntervalDuration;
     private final int batchSize;
-    private final Duration flushIntervalDuration;
     private volatile boolean running = true;
 
     private BlockingQueue<ILoggingEvent> logQueue;
@@ -75,10 +75,6 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     @Override
     public void start() {
-        if (connectionFactory == null) {
-            log.error("ClickHouse connection factory is not set");
-            return;
-        }
 
         logQueue = new LinkedBlockingQueue<>();
         scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -144,7 +140,10 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     @Override
     protected void append(ILoggingEvent event) {
-        if (!running) return;
+        if (!running) {
+            log.debug("ClickHouseAppender is stopped, dropping log: {}", event.getFormattedMessage());
+            return;
+        }
 
         boolean added = logQueue.offer(event);
         if (!added) {
@@ -163,5 +162,20 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         flushLogs();
         setInstance(null);
         scheduler.shutdown();
+        awaitTermination();
+    }
+
+    private void awaitTermination() {
+        try {
+            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) { // Final attempt
+                    log.error("ClickHouseAppender did not terminate");
+                }
+            }
+        } catch (InterruptedException ie) {
+            scheduler.shutdownNow();
+            log.warn("ClickHouseAppender interrupted while waiting for termination", ie);
+        }
     }
 }

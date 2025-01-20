@@ -9,11 +9,12 @@ import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.log.UserFacingRuleLoggingFactory;
+import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.MDC;
@@ -37,18 +38,18 @@ public class OnlineScoringEventListener {
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final ChatCompletionService aiProxyService;
     private final FeedbackScoreService feedbackScoreService;
-    private final Logger userFacingLogger;
+    private final @NonNull Logger userFacingLogger;
 
     @Inject
-    public OnlineScoringEventListener(EventBus eventBus,
-            AutomationRuleEvaluatorService ruleEvaluatorService,
-            ChatCompletionService aiProxyService,
-            FeedbackScoreService feedbackScoreService) {
+    public OnlineScoringEventListener(@NonNull EventBus eventBus,
+            @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
+            @NonNull ChatCompletionService aiProxyService,
+            @NonNull FeedbackScoreService feedbackScoreService) {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.aiProxyService = aiProxyService;
         this.feedbackScoreService = feedbackScoreService;
         eventBus.register(this);
-        userFacingLogger = UserFacingRuleLoggingFactory.getLogger(OnlineScoringEventListener.class);
+        userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringEventListener.class);
     }
 
     /**

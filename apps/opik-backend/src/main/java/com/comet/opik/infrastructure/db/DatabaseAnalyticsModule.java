@@ -3,7 +3,7 @@ package com.comet.opik.infrastructure.db;
 import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.log.UserFacingRuleLoggingFactory;
+import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.inject.Provides;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.instrumentation.r2dbc.v1_0.R2dbcTelemetry;
@@ -27,7 +27,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         ClickHouseLogAppenderConfig clickHouseLogAppenderConfig = configuration(ClickHouseLogAppenderConfig.class);
 
         // Initialize the UserFacingRuleLollingFactory
-        UserFacingRuleLoggingFactory.init(connectionFactory, clickHouseLogAppenderConfig.getBatchSize(),
+        UserFacingLoggingFactory.init(connectionFactory, clickHouseLogAppenderConfig.getBatchSize(),
                 clickHouseLogAppenderConfig.getFlushIntervalDuration());
     }
 
