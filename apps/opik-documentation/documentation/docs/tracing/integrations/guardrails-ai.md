@@ -23,9 +23,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 We will also need to install the guardrails check for politeness from the Guardrails Hub
 
-```python
-!guardrails hub install hub://guardrails/politeness_check
-```
+`guardrails hub install hub://guardrails/politeness_check`
 
 ## Logging validation traces
 
