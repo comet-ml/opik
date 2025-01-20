@@ -275,3 +275,13 @@ cacheManager:
       # Default: {}
       # Description: Dynamically created caches with their respective time to live in seconds
       automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
+
+# Configuration for clickhouse log appender
+clickHouseLogAppender:
+  # Default: 1000
+  # Description: Number of log messages to be batched before sending to ClickHouse
+  batchSize: ${CLICKHOUSE_LOG_APPENDER_BATCH_SIZE:-1000}
+
+  # Default: PT0.500S or 500ms
+  # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
+  flushIntervalDuration: ${CLICKHOUSE_LOG_APPENDER_FLUSH_INTERVAL_DURATION:-PT0.500S}

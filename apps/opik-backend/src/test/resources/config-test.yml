@@ -234,3 +234,13 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     testCache: PT1S
+
+# Configuration for clickhouse log appender
+clickHouseLogAppender:
+  # Default: 1000
+  # Description: Number of log messages to be batched before sending to ClickHouse
+  batchSize: 1000
+
+  # Default: PT0.500S or 500ms
+  # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
+  flushIntervalDuration: PT0.500S

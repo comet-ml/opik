@@ -8,23 +8,24 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
-import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
+import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -34,10 +35,8 @@ import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
 import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import io.dropwizard.util.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.Jdbi;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -48,11 +47,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.redisson.Redisson;
-import org.redisson.config.Config;
+import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
@@ -61,13 +58,17 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.*;
+import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -77,17 +78,9 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(MockitoExtension.class)
 class OnlineScoringEngineTest {
 
-    @Mock
-    AutomationRuleEvaluatorService ruleEvaluatorService;
-    @Mock
-    ChatCompletionService aiProxyService;
-    @Mock
-    FeedbackScoreService feedbackScoreService;
-    @Mock
-    EventBus eventBus;
-
-    OnlineScoringSampler onlineScoringSampler;
-    OnlineScoringLlmAsJudgeScorer onlineScorer;
+    static ChatCompletionService aiProxyService;
+    static FeedbackScoreService feedbackScoreService;
+    static EventBus eventBus;
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String PROJECT_NAME = "project-" + UUID.randomUUID();
@@ -167,26 +160,56 @@ class OnlineScoringEngineTest {
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
 
     @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    private static final TestDropwizardAppExtension APP;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
 
     static {
-        Startables.deepStart(REDIS, MYSQL).join();
+        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), null, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
+                .newDatabaseAnalyticsFactory(CLICKHOUSE, ClickHouseContainerUtils.DATABASE_NAME);
+
+        aiProxyService = Mockito.mock(ChatCompletionService.class);
+        feedbackScoreService = Mockito.mock(FeedbackScoreService.class);
+        eventBus = Mockito.mock(EventBus.class);
+
+        APP = newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .mockEventBus(eventBus)
+                        .modules(List.of(
+                                new AbstractModule() {
+                                    @Override
+                                    protected void configure() {
+                                        bind(ChatCompletionService.class).toInstance(aiProxyService);
+                                        bind(FeedbackScoreService.class).toInstance(feedbackScoreService);
+                                    }
+                                }))
+                        .customConfigs(List.of(
+                                new CustomConfig("onlineScoring.consumerGroupName", "test-group"),
+                                new CustomConfig("onlineScoring.consumerBatchSize", "1"),
+                                new CustomConfig("onlineScoring.poolingInterval", "100ms"),
+                                new CustomConfig("onlineScoring.streams[0].streamName", "test-stream"),
+                                new CustomConfig("onlineScoring.streams[0].scorer",
+                                        AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE),
+                                new CustomConfig("onlineScoring.streams[0].codec", "java")))
+                        .build());
     }
 
     private AutomationRuleEvaluatorResourceClient evaluatorsResourceClient;
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
+    void setUpAll(ClientSupport client, Jdbi jdbi) {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -194,20 +217,17 @@ class OnlineScoringEngineTest {
 
         ClientSupportUtils.config(client);
 
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER_NAME);
+
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
+
+        Mockito.reset(aiProxyService, feedbackScoreService, eventBus);
     }
 
     @Test
     @DisplayName("test Redis producer and consumer base flow")
-    void testRedisProducerAndConsumerBaseFlow() throws Exception {
-        var onlineScoringConfig = prepareOnlineScoringConfig();
-
-        Config redisConfig = new Config();
-        redisConfig.useSingleServer().setAddress(REDIS.getRedisURI()).setDatabase(0);
-        var redisson = Redisson.create(redisConfig).reactive();
-
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER_NAME);
+    void testRedisProducerAndConsumerBaseFlow(OnlineScoringSampler onlineScoringSampler) throws Exception {
 
         log.debug("Setting up project '{}'", PROJECT_NAME);
         UUID projectId = projectResourceClient.createProject(PROJECT_NAME, API_KEY, WORKSPACE_NAME);
@@ -220,7 +240,8 @@ class OnlineScoringEngineTest {
                 .name("evaluator-test-" + UUID.randomUUID())
                 .createdBy(USER_NAME)
                 .code(evaluatorCode)
-                .samplingRate(1.0f).build(); // lets make sure all traces are expected to be scored
+                .samplingRate(1.0f)
+                .build(); // lets make sure all traces are expected to be scored
 
         log.info("Creating evaluator {}", evaluator);
         evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
@@ -235,15 +256,7 @@ class OnlineScoringEngineTest {
                 .output(mapper.readTree(output)).build();
         var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
 
-        // return the evaluator we just created
-        Mockito.doReturn(List.of(evaluator)).when(ruleEvaluatorService).findAll(Mockito.any(), Mockito.any(),
-                Mockito.any());
         Mockito.doNothing().when(eventBus).register(Mockito.any());
-
-        onlineScoringSampler = new OnlineScoringSampler(onlineScoringConfig, redisson, eventBus, ruleEvaluatorService);
-        onlineScoringSampler.onTracesCreated(event);
-
-        Thread.sleep(onlineScoringConfig.getPoolingInterval().toJavaDuration());
 
         var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"The summary addresses the instruction by covering the main points and themes. However, it could have included a few more specific details to fully align with the instruction.\"},"
                 +
@@ -255,13 +268,15 @@ class OnlineScoringEngineTest {
         var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
 
         ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
-        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(captor.capture());
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
         Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
-        onlineScorer = new OnlineScoringLlmAsJudgeScorer(onlineScoringConfig, redisson, aiProxyService,
-                feedbackScoreService);
+        onlineScoringSampler.onTracesCreated(event);
 
-        Thread.sleep(onlineScoringConfig.getPoolingInterval().toJavaDuration().multipliedBy(2L));
+        Mono.delay(Duration.ofMillis(300)).block();
+
+        Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
+
         // check which feedback scores would be stored in Clickhouse by our process
         List<FeedbackScoreBatchItem> processed = captor.getValue();
         log.info(processed.toString());
@@ -273,19 +288,6 @@ class OnlineScoringEngineTest {
         assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
         assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
         assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);
-    }
-
-    @NotNull private static OnlineScoringConfig prepareOnlineScoringConfig() {
-        var onlineScoringConfig = new OnlineScoringConfig();
-        var llmStreamConfig = new OnlineScoringConfig.StreamConfiguration();
-        llmStreamConfig.setStreamName("test-stream");
-        llmStreamConfig.setScorer(AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE);
-        llmStreamConfig.setCodec("java");
-        onlineScoringConfig.setStreams(List.of(llmStreamConfig));
-        onlineScoringConfig.setConsumerGroupName("test-group");
-        onlineScoringConfig.setPoolingInterval(Duration.milliseconds(100));
-        onlineScoringConfig.setConsumerBatchSize(1);
-        return onlineScoringConfig;
     }
 
     @Test

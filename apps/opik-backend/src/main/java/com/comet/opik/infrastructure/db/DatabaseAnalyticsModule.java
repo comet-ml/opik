@@ -1,7 +1,9 @@
 package com.comet.opik.infrastructure.db;
 
+import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.inject.Provides;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.instrumentation.r2dbc.v1_0.R2dbcTelemetry;
@@ -19,14 +21,20 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Override
     protected void configure() {
         databaseAnalyticsFactory = configuration(DatabaseAnalyticsFactory.class);
-        connectionFactory = databaseAnalyticsFactory.build();
+        connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
+                .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
+
+        ClickHouseLogAppenderConfig clickHouseLogAppenderConfig = configuration(ClickHouseLogAppenderConfig.class);
+
+        // Initialize the UserFacingRuleLollingFactory
+        UserFacingLoggingFactory.init(connectionFactory, clickHouseLogAppenderConfig.getBatchSize(),
+                clickHouseLogAppenderConfig.getFlushIntervalDuration());
     }
 
     @Provides
     @Singleton
     public ConnectionFactory getConnectionFactory() {
-        return R2dbcTelemetry.create(GlobalOpenTelemetry.get())
-                .wrapConnectionFactory(connectionFactory, ConnectionFactoryOptions.builder().build());
+        return connectionFactory;
     }
 
     @Provides
