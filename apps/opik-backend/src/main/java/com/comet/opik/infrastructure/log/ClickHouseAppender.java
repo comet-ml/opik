@@ -49,7 +49,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
             @NonNull Duration flushIntervalDuration) {
 
         if (instance == null) {
-            setInstance(new ClickHouseAppender(connectionFactory, batchSize, flushIntervalDuration));
+            setInstance(new ClickHouseAppender(connectionFactory, flushIntervalDuration, batchSize));
             instance.start();
         }
     }
