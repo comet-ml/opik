@@ -44,12 +44,34 @@ docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
 ```
 
 This will expose the following services to the host machine:
-
 - Redis: Available on port 6379.
 - ClickHouse: Available on ports 8123 (HTTP) and 9000 (Native Protocol).
 - MySQL: Available on port 3306.
 - Backend: Available on ports 8080 (HTTP) and 3003 (OpenAPI specification).
 - Frontend: Available on port 5173.
+
+## Run Opik backend locally and the rest of the components with docker-compose
+1. In `nginx_default_local.conf` replace
+```bash
+http://backend:8080
+```
+with your localhost
+
+For Mac/Windows (Docker Desktop)
+```bash
+http://host.docker.internal:8080
+```
+For Linux
+```bash
+http://172.17.0.1:8080
+```
+
+2. Run docker-compose including exposing ports to localhost
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
+```
+Stop backend container, cause you don't need it..
+
 
 ## Stop opik
 
