@@ -7,8 +7,6 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.ai4j.openai4j.chat.ChatCompletionModel;
-import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import io.dropwizard.configuration.ConfigurationException;
 import io.dropwizard.configuration.FileConfigurationSourceProvider;
 import io.dropwizard.configuration.YamlConfigurationFactory;
@@ -79,9 +77,9 @@ class LlmProviderFactoryTest {
     }
 
     private static Stream<Arguments> testGetService() {
-        var openAiModels = EnumUtils.getEnumList(ChatCompletionModel.class).stream()
+        var openAiModels = EnumUtils.getEnumList(OpenaiModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, LlmProviderOpenAi.class));
-        var anthropicModels = EnumUtils.getEnumList(AnthropicChatModelName.class).stream()
+        var anthropicModels = EnumUtils.getEnumList(AnthropicModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, LlmProviderAnthropic.class));
         var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.GEMINI, LlmProviderGemini.class));

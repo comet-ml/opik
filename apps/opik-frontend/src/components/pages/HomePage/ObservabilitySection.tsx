@@ -3,7 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import { Link } from "@tanstack/react-router";
-import { Book } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -18,7 +18,6 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Project } from "@/types/projects";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn } from "@/lib/table";
-import { buildDocsUrl } from "@/lib/utils";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
@@ -111,29 +110,10 @@ const ObservabilitySection: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pb-4">
-      <div className="flex items-center justify-between gap-8 pb-4 pt-2">
-        <div className="flex items-center gap-2">
-          <h2 className="comet-body-accented truncate break-words">
-            Observability
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <a
-              href={buildDocsUrl("/tracing/log_traces")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Book className="mr-2 size-4 shrink-0" />
-              Learn more
-            </a>
-          </Button>
-          <Link to="/$workspaceName/projects" params={{ workspaceName }}>
-            <Button variant="outline">View all projects</Button>
-          </Link>
-        </div>
-      </div>
+    <div className="pt-12">
+      <h2 className="comet-body-accented truncate break-words pb-3">
+        Observability
+      </h2>
       <DataTable
         columns={COLUMNS}
         data={projects}
@@ -147,6 +127,13 @@ const ObservabilitySection: React.FunctionComponent = () => {
           </DataTableNoData>
         }
       />
+      <div className="flex justify-end pt-1">
+        <Link to="/$workspaceName/projects" params={{ workspaceName }}>
+          <Button variant="ghost" className="flex items-center gap-1 pr-0">
+            All projects <ArrowRight className="size-4" />
+          </Button>
+        </Link>
+      </div>
       <AddEditProjectDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
