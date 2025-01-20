@@ -132,9 +132,9 @@ class ExperimentsResourceTest {
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy"};
+            "lastUpdatedBy", "comments"};
     public static final String[] ITEM_IGNORED_FIELDS = {"input", "output", "feedbackScores", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
+            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
