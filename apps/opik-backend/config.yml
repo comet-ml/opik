@@ -209,9 +209,13 @@ onlineScoring:
   # Default: 3
   # Description: Maximum number of messages returned within a Redis Stream get
   consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-3}
-  # Default: stream_scoring_llm_as_judge
-  # Description: the name for a Redis Stream with traces to score using a LLM-as-Judge evaluator
-  llmAsJudgeStream: ${REDIS_STREAM_LLMASJUDGE:-'stream_scoring_llm_as_judge'}
+  ## scorer: options from AutomationRuleEvaluatorType
+  ## streamName: the name of the stream in redis
+  ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
+  streams:
+    - scorer: llm_as_judge
+      streamName: stream_scoring_llm_as_judge
+      codec: java
 
 # LLM providers client configuration
 llmProviderClient:

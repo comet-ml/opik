@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.ScoreSource;
@@ -36,6 +37,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.Jdbi;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -199,11 +201,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("test Redis producer and consumer base flow")
     void testRedisProducerAndConsumerBaseFlow() throws Exception {
-        var onlineScoringConfig = new OnlineScoringConfig();
-        onlineScoringConfig.setLlmAsJudgeStream("test-stream");
-        onlineScoringConfig.setConsumerGroupName("test-group");
-        onlineScoringConfig.setPoolingInterval(Duration.milliseconds(100));
-        onlineScoringConfig.setConsumerBatchSize(1);
+        var onlineScoringConfig = prepareOnlineScoringConfig();
 
         Config redisConfig = new Config();
         redisConfig.useSingleServer().setAddress(REDIS.getRedisURI()).setDatabase(0);
@@ -275,6 +273,19 @@ class OnlineScoringEngineTest {
         assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
         assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
         assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);
+    }
+
+    @NotNull private static OnlineScoringConfig prepareOnlineScoringConfig() {
+        var onlineScoringConfig = new OnlineScoringConfig();
+        var llmStreamConfig = new OnlineScoringConfig.StreamConfiguration();
+        llmStreamConfig.setStreamName("test-stream");
+        llmStreamConfig.setScorer(AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE);
+        llmStreamConfig.setCodec("java");
+        onlineScoringConfig.setStreams(List.of(llmStreamConfig));
+        onlineScoringConfig.setConsumerGroupName("test-group");
+        onlineScoringConfig.setPoolingInterval(Duration.milliseconds(100));
+        onlineScoringConfig.setConsumerBatchSize(1);
+        return onlineScoringConfig;
     }
 
     @Test

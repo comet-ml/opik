@@ -45,16 +45,25 @@ public class OnlineScoringLlmAsJudgeScorer {
         this.aiProxyService = aiProxyService;
         this.feedbackScoreService = feedbackScoreService;
 
-        var codec = LLM_AS_JUDGE.getMessageCodec();
-        RStreamReactive<String, TraceToScoreLlmAsJudge> stream = redisson.getStream(config.getLlmAsJudgeStream(),
-                codec);
-        log.info("OnlineScoring Scorer listening for events on stream {}", config.getLlmAsJudgeStream());
+        this.redisReadConfig = StreamReadGroupArgs.neverDelivered().count(config.getConsumerBatchSize());
+        this.consumerId = "consumer-" + config.getConsumerGroupName() + "-" + UUID.randomUUID();
 
-        redisReadConfig = StreamReadGroupArgs.neverDelivered().count(config.getConsumerBatchSize());
-        consumerId = "consumer-" + config.getConsumerGroupName() + "-" + UUID.randomUUID();
+        // as we are a LLM consumer, lets check only LLM stream
+        config.getStreams().stream()
+                .filter(streamConfiguration -> LLM_AS_JUDGE.name().equalsIgnoreCase(streamConfiguration.getScorer()))
+                .findFirst()
+                .ifPresentOrElse(llmConfig -> {
+                    var codec = OnlineScoringCodecs.fromString(llmConfig.getCodec());
+                    RStreamReactive<String, TraceToScoreLlmAsJudge> stream = redisson.getStream(
+                            llmConfig.getStreamName(),
+                            codec.getCodec());
 
-        enforceConsumerGroup(stream);
-        setupStreamListener(stream);
+                    log.info("OnlineScoring Scorer listening for events on stream {}", llmConfig.getStreamName());
+
+                    enforceConsumerGroup(stream);
+                    setupStreamListener(stream);
+                }, () -> log.warn("No '{}' redis stream config found. Online Scoring consumer won't start.",
+                        LLM_AS_JUDGE.name()));
     }
 
     /**

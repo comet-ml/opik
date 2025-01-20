@@ -7,10 +7,13 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Data
 public class OnlineScoringConfig {
+
+    public static final String PAYLOAD_FIELD = "message";
 
     @Valid @JsonProperty
     private String consumerGroupName;
@@ -22,8 +25,18 @@ public class OnlineScoringConfig {
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration poolingInterval;
 
-    @Valid @JsonProperty
-    private String llmAsJudgeStream;
+    @JsonProperty
+    private List<StreamConfiguration> streams;
 
-    public static final String PAYLOAD_FIELD = "message";
+    @Data
+    public static class StreamConfiguration {
+        @JsonProperty
+        private String scorer;
+
+        @JsonProperty
+        private String streamName;
+
+        @JsonProperty
+        private String codec;
+    }
 }
