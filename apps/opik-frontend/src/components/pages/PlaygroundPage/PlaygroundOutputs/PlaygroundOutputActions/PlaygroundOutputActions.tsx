@@ -59,9 +59,12 @@ const PlaygroundOutputActions = ({
     }));
   }, [datasets]);
 
+  const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
+
   const { stopAll, runAll, isRunning } = useActionButtonActions({
     workspaceName,
     datasetItems,
+    datasetName,
   });
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
