@@ -5,15 +5,13 @@ description: Cookbook that showcases Opik's integration with the Guardrails AI P
 
 # Guardrails AI
 
-[Guardrails AI](https://github.com/guardrails-ai/guardrails) is a framework for validating the inputs and outputs 
+[Guardrails AI](https://github.com/guardrails-ai/guardrails) is a framework for validating the inputs and outputs
 
 For this guide we will use the a simple example that logs guardrails validation steps as traces to Opik, providing them with the validation result tags.
-
 
 ## Preparing our environment
 
 In order to use Guardrails AI, we will configure the OpenAI API Key, if you are using any other providers you can replace this with the required API key:
-
 
 ```python
 import os
@@ -25,7 +23,6 @@ if "OPENAI_API_KEY" not in os.environ:
 
 We will also need to install the guardrails check for politeness from the Guardrails Hub
 
-
 ```python
 !guardrails hub install hub://guardrails/politeness_check
 ```
@@ -33,7 +30,6 @@ We will also need to install the guardrails check for politeness from the Guardr
 ## Logging validation traces
 
 In order to log traces to Opik, you will need to call the track the Guard object with `track_guardrails` function.
-
 
 ```python
 from guardrails import Guard, OnFailAction

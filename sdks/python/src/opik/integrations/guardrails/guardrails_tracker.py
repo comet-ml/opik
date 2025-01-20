@@ -32,8 +32,6 @@ def track_guardrails(
             project_name=project_name,
             type="llm" if hasattr(validator, "llm_callable") else "general",
         )
-        setattr(
-            validator, "validate", validate_decorator(validator.validate)
-        )
+        setattr(validator, "validate", validate_decorator(validator.validate))
 
     return guard
