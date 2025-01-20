@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
@@ -13,8 +14,10 @@ import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -71,6 +74,7 @@ public class TracesResource {
 
     private final @NonNull TraceService service;
     private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull Provider<RequestContext> requestContext;
 
@@ -242,13 +246,101 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Add span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+        log.info("Add trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
 
         feedbackScoreService.scoreTrace(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Added span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+        log.info("Added trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/{id}/comments")
+    @Operation(operationId = "addTraceComment", summary = "Add trace comment", description = "Add trace comment", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/{traceId}/comments/{commentId}", schema = @Schema(implementation = String.class))})})
+    public Response addTraceComment(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @JsonView(Comment.View.Write.class) @NotNull @Valid Comment comment,
+            @Context UriInfo uriInfo) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Add trace comment '{}' for id '{}' on workspaceId '{}'", comment.text(), id, workspaceId);
+
+        var commentId = commentService.create(id, comment)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(commentId)).build();
+        log.info("Added trace comment '{}' for id '{}' on workspaceId '{}'", comment.text(), id, workspaceId);
+
+        return Response.created(uri).build();
+    }
+
+    @GET
+    @Path("/{traceId}/comments/{commentId}")
+    @Operation(operationId = "getTraceComment", summary = "Get trace comment", description = "Get trace comment", responses = {
+            @ApiResponse(responseCode = "200", description = "Comment resource", content = @Content(schema = @Schema(implementation = Comment.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @JsonView(Comment.View.Public.class)
+    public Response getTraceComment(@PathParam("commentId") @NotNull UUID commentId,
+            @PathParam("traceId") @NotNull UUID traceId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting trace comment by id '{}' on workspace_id '{}'", commentId, workspaceId);
+
+        Comment comment = commentService.get(traceId, commentId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Got trace comment by id '{}', on workspace_id '{}'", comment.id(), workspaceId);
+
+        return Response.ok(comment).build();
+    }
+
+    @PUT
+    @Path("/{traceId}/comments/{commentId}")
+    @Operation(operationId = "updateTraceComment", summary = "Update trace comment by id", description = "Update trace comment by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found")})
+    public Response updateTraceComment(@PathParam("commentId") UUID commentId,
+            @PathParam("traceId") @NotNull UUID traceId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @JsonView(Comment.View.Write.class) @NotNull @Valid Comment comment) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Update trace comment with id '{}' on workspaceId '{}'", commentId, workspaceId);
+
+        commentService.update(traceId, commentId, comment)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Updated trace comment with id '{}' on workspaceId '{}'", commentId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/comments/delete")
+    @Operation(operationId = "deleteTraceComments", summary = "Delete trace comments", description = "Delete trace comments", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+    })
+    public Response deleteTraceComments(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Delete trace comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+
+        commentService.delete(batchDelete)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted trace comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
 
         return Response.noContent().build();
     }

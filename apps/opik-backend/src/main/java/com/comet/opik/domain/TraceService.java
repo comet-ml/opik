@@ -25,8 +25,6 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +42,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
+import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
 public interface TraceService {
@@ -290,16 +289,11 @@ class TraceServiceImpl implements TraceService {
         return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(error))));
     }
 
-    private NotFoundException failWithNotFound(String error) {
-        log.info(error);
-        return new NotFoundException(Response.status(404).entity(new ErrorMessage(List.of(error))).build());
-    }
-
     @Override
     @WithSpan
     public Mono<Trace> get(@NonNull UUID id) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
-                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace not found"))));
+                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))));
     }
 
     @Override

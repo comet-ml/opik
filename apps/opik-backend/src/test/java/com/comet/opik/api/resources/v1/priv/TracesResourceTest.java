@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -122,7 +123,8 @@ class TracesResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
+            "comments"};
     private static final String[] IGNORED_FIELDS_SPANS = SpansResourceTest.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
@@ -3606,7 +3608,7 @@ class TracesResourceTest {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         assertThat(actualResponse.hasEntity()).isTrue();
         assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                .allMatch(error -> Pattern.matches("Trace not found", error));
+                .allMatch(error -> error.equals("Trace id: %s not found".formatted(id)));
     }
 
     @Nested
@@ -4662,6 +4664,63 @@ class TracesResourceTest {
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
+    }
+
+    @Nested
+    @DisplayName("Comment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceComment {
+
+        @Test
+        void createGetUpdateAndDeleteTraceComment() {
+            // Create comment for not existing trace, should fail
+            traceResourceClient.createComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
+
+            // Create comment for existing trace
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+                    TEST_WORKSPACE);
+            Comment expectedComment = traceResourceClient.createComment(traceId, API_KEY, TEST_WORKSPACE, 201);
+
+            // Get created comment by id and assert
+            Comment actualComment = traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertTraceComment(expectedComment, actualComment);
+
+            // Update existing comment
+            String updatedText = traceResourceClient.updateComment(expectedComment.id(), traceId, API_KEY,
+                    TEST_WORKSPACE, 204);
+
+            // Get comment by id and assert it was updated
+            Comment updatedComment = traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertUpdatedComment(actualComment, updatedComment, updatedText);
+
+            // Delete comment
+            BatchDelete request = BatchDelete.builder().ids(Set.of(expectedComment.id())).build();
+            traceResourceClient.deleteComments(request, API_KEY, TEST_WORKSPACE);
+
+            // Verify comment was actually deleted via get and update endpoints
+            traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY, TEST_WORKSPACE, 404);
+            traceResourceClient.updateComment(expectedComment.id(), traceId, API_KEY, TEST_WORKSPACE, 404);
+        }
+    }
+
+    private void assertTraceComment(Comment expected, Comment actual) {
+        assertThat(actual.text()).isEqualTo(expected.text());
+        assertThat(actual.id()).isEqualTo(expected.id());
+        assertThat(actual.createdAt()).isNotNull();
+        assertThat(actual.lastUpdatedAt()).isNotNull();
+        assertThat(actual.createdBy()).isNotNull();
+        assertThat(actual.lastUpdatedBy()).isNotNull();
+    }
+
+    private void assertUpdatedComment(Comment initial, Comment updated, String expectedText) {
+        assertThat(updated.text()).isEqualTo(expectedText);
+        assertThat(updated.id()).isEqualTo(initial.id());
+        assertThat(updated.createdAt()).isEqualTo(initial.createdAt());
+        assertThat(updated.lastUpdatedAt()).isNotEqualTo(initial.lastUpdatedAt());
+        assertThat(updated.createdBy()).isEqualTo(initial.createdBy());
+        assertThat(updated.lastUpdatedBy()).isEqualTo(initial.lastUpdatedBy());
     }
 
     @Nested

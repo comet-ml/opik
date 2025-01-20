@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
@@ -175,5 +176,91 @@ public class TraceResourceClient {
 
                     return scores;
                 }).toList();
+    }
+
+    public Comment createComment(UUID traceId, String apiKey, String workspaceName, int expectedStatus) {
+        Comment comment = podamFactory.manufacturePojo(Comment.class);
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(traceId.toString())
+                .path("comments")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(comment))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == 201) {
+                return Comment
+                        .builder()
+                        .id(TestUtils.getIdFromLocation(response.getLocation()))
+                        .text(comment.text())
+                        .build();
+            }
+
+            return null;
+        }
+    }
+
+    public String updateComment(UUID commentId, UUID traceId, String apiKey, String workspaceName, int expectedStatus) {
+        Comment comment = podamFactory.manufacturePojo(Comment.class);
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(traceId.toString())
+                .path("comments")
+                .path(commentId.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(comment))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == 204) {
+                return comment.text();
+            }
+
+            return null;
+        }
+    }
+
+    public Comment getCommentById(UUID commentId, UUID traceId, String apiKey, String workspaceName,
+            int expectedStatus) {
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(traceId.toString())
+                .path("comments")
+                .path(commentId.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == 200) {
+                return response.readEntity(Comment.class);
+            }
+
+            return null;
+        }
+    }
+
+    public void deleteComments(BatchDelete request, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
     }
 }
