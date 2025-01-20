@@ -101,7 +101,7 @@ public class OnlineScoringSampler {
                                 .doOnNext(id -> log.debug("Message sent with ID: {} into stream '{}'", id,
                                         config.getLlmAsJudgeStream()))
                                 .doOnError(err -> log.error("Error sending message: {}", err.getMessage())))
-                .subscribe();
+                .subscribe(noop -> {}, error -> log.error("Unexpected error: ", error));
     }
 
 }
