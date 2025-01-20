@@ -171,7 +171,11 @@ public class OnlineScoringEngineTest {
     void setUp() throws IOException, InterruptedException {
         MockitoAnnotations.openMocks(this);
         Mockito.doNothing().when(eventBus).register(Mockito.any());
+    }
 
+    @Test
+    @DisplayName("test Redis producer and consumer base flow")
+    void testRedisProducerAndConsumerBaseFlow() throws Exception {
         var onlineScoringConfig = new OnlineScoringConfig();
         onlineScoringConfig.setLlmAsJudgeStream("test-stream");
         onlineScoringConfig.setConsumerGroupName("test-group");
@@ -245,7 +249,6 @@ public class OnlineScoringEngineTest {
         assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
         assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
         assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);
-
     }
 
     @Test
