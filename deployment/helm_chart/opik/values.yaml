@@ -96,7 +96,7 @@ component:
       enabled: false
 
     env:
-      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-executor-sandbox-python" 
+      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
 
     securityContext:
