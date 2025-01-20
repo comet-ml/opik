@@ -2,59 +2,41 @@ package com.comet.opik.infrastructure.log;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
-import com.comet.opik.utils.TemplateUtils;
-import io.r2dbc.spi.ConnectionFactory;
-import io.r2dbc.spi.Statement;
+import com.comet.opik.domain.UserLog;
+import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.stringtemplate.v4.ST;
-import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static java.util.stream.Collectors.groupingBy;
 
 @RequiredArgsConstructor(access = lombok.AccessLevel.PRIVATE)
 @Slf4j
 class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
-    private static final String INSERT_STATEMENT = """
-            INSERT INTO automation_rule_evaluator_logs (timestamp, level, workspace_id, rule_id, message, markers)
-            VALUES <items:{item |
-                (
-                    parseDateTime64BestEffort(:timestamp<item.index>, 9),
-                    :level<item.index>,
-                    :workspace_id<item.index>,
-                    :rule_id<item.index>,
-                    :message<item.index>,
-                    mapFromArrays(:marker_keys<item.index>, :marker_values<item.index>)
-                )
-                <if(item.hasNext)>,<endif>
-            }>
-            ;
-            """;
-
     private static ClickHouseAppender instance;
 
-    public static synchronized void init(@NonNull ConnectionFactory connectionFactory, int batchSize,
+    public static synchronized void init(@NonNull UserLogTableFactory userLogTableFactory, int batchSize,
             @NonNull Duration flushIntervalDuration) {
 
         if (instance == null) {
-            setInstance(new ClickHouseAppender(connectionFactory, flushIntervalDuration, batchSize));
+            setInstance(new ClickHouseAppender(userLogTableFactory, flushIntervalDuration, batchSize));
             instance.start();
         }
     }
 
-    public static ClickHouseAppender getInstance() {
+    public static synchronized ClickHouseAppender getInstance() {
         if (instance == null) {
             throw new IllegalStateException("ClickHouseAppender is not initialized");
         }
@@ -65,7 +47,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         ClickHouseAppender.instance = instance;
     }
 
-    private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull UserLogTableFactory userLogTableFactory;
     private final @NonNull Duration flushIntervalDuration;
     private final int batchSize;
     private volatile boolean running = true;
@@ -94,48 +76,28 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
         if (batch.isEmpty()) return;
 
-        Mono.from(connectionFactory.create())
-                .flatMapMany(conn -> {
+        Map<String, List<ILoggingEvent>> eventsPerTable = batch.stream()
+                .collect(groupingBy(event -> event.getMDCPropertyMap().getOrDefault(UserLog.MARKER, "")));
 
-                    var template = new ST(INSERT_STATEMENT);
-                    List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(batch.size());
+        eventsPerTable
+                .forEach((userLog, events) -> {
 
-                    template.add("items", queryItems);
+                    if (userLog.isBlank()) {
+                        log.error("UserLog marker is not set for events: {}", events.stream()
+                                .map(ILoggingEvent::getFormattedMessage)
+                                .collect(Collectors.joining(", ")));
+                    } else {
+                        UserLogTableFactory.UserLogTableDAO tableDAO = userLogTableFactory
+                                .getDAO(UserLog.valueOf(userLog));
 
-                    Statement statement = conn.createStatement(template.render());
-
-                    for (int i = 0; i < batch.size(); i++) {
-                        ILoggingEvent event = batch.get(i);
-
-                        String logLevel = event.getLevel().toString();
-                        String workspaceId = Optional.ofNullable(event.getMDCPropertyMap().get("workspace_id"))
-                                .orElseThrow(() -> failWithMessage("workspace_id is not set"));
-                        String traceId = Optional.ofNullable(event.getMDCPropertyMap().get("trace_id"))
-                                .orElseThrow(() -> failWithMessage("trace_id is not set"));
-                        String ruleId = Optional.ofNullable(event.getMDCPropertyMap().get("rule_id"))
-                                .orElseThrow(() -> failWithMessage("rule_id is not set"));
-
-                        statement
-                                .bind("timestamp" + i, event.getInstant().toString())
-                                .bind("level" + i, logLevel)
-                                .bind("workspace_id" + i, workspaceId)
-                                .bind("rule_id" + i, ruleId)
-                                .bind("message" + i, event.getFormattedMessage())
-                                .bind("marker_keys" + i, new String[]{"trace_id"})
-                                .bind("marker_values" + i, new String[]{traceId});
+                        tableDAO
+                                .saveAll(events)
+                                .subscribe(
+                                        noop -> {
+                                        },
+                                        e -> log.error("Failed to insert logs", e));
                     }
-
-                    return statement.execute();
-                })
-                .subscribe(
-                        noop -> {
-                        },
-                        e -> log.error("Failed to insert logs", e));
-    }
-
-    private IllegalStateException failWithMessage(String message) {
-        log.error(message);
-        return new IllegalStateException(message);
+                });
     }
 
     @Override
@@ -173,9 +135,9 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                     log.error("ClickHouseAppender did not terminate");
                 }
             }
-        } catch (InterruptedException ie) {
+        } catch (InterruptedException ex) {
             scheduler.shutdownNow();
-            log.warn("ClickHouseAppender interrupted while waiting for termination", ie);
+            log.warn("ClickHouseAppender interrupted while waiting for termination", ex);
         }
     }
 }

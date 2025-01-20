@@ -8,6 +8,7 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.UserLog;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.common.eventbus.EventBus;
@@ -84,7 +85,8 @@ public class OnlineScoringEventListener {
                     projectId, tracesBatch.workspaceId());
 
             // Important to set the workspaceId for logging purposes
-            try (MDC.MDCCloseable scope = MDC.putCloseable("workspace_id", tracesBatch.workspaceId())) {
+            try (MDC.MDCCloseable logScope = MDC.putCloseable(UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name());
+                    MDC.MDCCloseable scope = MDC.putCloseable("workspace_id", tracesBatch.workspaceId())) {
 
                 // for each rule, sample traces and score them
                 evaluators.forEach(evaluator -> traces.stream()
