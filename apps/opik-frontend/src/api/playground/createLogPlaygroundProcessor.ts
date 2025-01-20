@@ -184,10 +184,19 @@ const createLogPlaygroundProcessor = ({
 
   return {
     log: (run: LogQueueParams) => {
-      const { promptId } = run;
+      const { promptId, datasetName } = run;
+
+      const isWithExperiments = !!datasetName;
 
       const trace = getTraceFromRun(run);
       const span = getSpanFromRun(run, trace.id);
+
+      traceBatch.addItem(trace);
+      spanBatch.addItem(span);
+
+      if (!isWithExperiments) {
+        return;
+      }
 
       // create a missing experiment
       if (!experimentPromptMap[promptId]) {
@@ -203,8 +212,6 @@ const createLogPlaygroundProcessor = ({
         trace.id,
       );
 
-      traceBatch.addItem(trace);
-      spanBatch.addItem(span);
       experimentItemsBatch.addItem(experimentItem);
     },
   };

@@ -117,7 +117,7 @@ const PlaygroundPrompt = ({
       const noCurrentModel = !modelProvider;
 
       if (noCurrentModel) {
-        const newModel = PROVIDERS[provider].defaultModel;
+        const newModel = PROVIDERS[provider]?.defaultModel || "";
 
         const newDefaultConfigs = provider
           ? getDefaultConfigByProvider(provider)
@@ -153,7 +153,9 @@ const PlaygroundPrompt = ({
       }
 
       const newProvider = getDefaultProviderKey(providerKeys);
-      const newModel = newProvider ? PROVIDERS[newProvider].defaultModel : "";
+      const newModel = newProvider
+        ? PROVIDERS[newProvider]?.defaultModel || ""
+        : "";
 
       const newDefaultConfigs = newProvider
         ? getDefaultConfigByProvider(newProvider)
