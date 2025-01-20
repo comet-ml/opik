@@ -4,10 +4,10 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.domain.UserLog;
 import io.r2dbc.spi.ConnectionFactory;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 
 public interface UserLogTableFactory {
 
@@ -23,15 +23,17 @@ public interface UserLogTableFactory {
 
 }
 
-@RequiredArgsConstructor
 class UserLogTableFactoryImpl implements UserLogTableFactory {
 
-    private final ConnectionFactory factory;
+    private final Map<UserLog, UserLogTableDAO> daoMap;
+
+    UserLogTableFactoryImpl(@NonNull ConnectionFactory factory) {
+        daoMap = Map.of(
+                UserLog.AUTOMATION_RULE_EVALUATOR, new AutomationRuleEvaluatorLogDAO(factory));
+    }
 
     @Override
     public UserLogTableDAO getDAO(@NonNull UserLog userLog) {
-        return switch (userLog) {
-            case AUTOMATION_RULE_EVALUATOR -> new AutomationRuleEvaluatorLogDAO(factory);
-        };
+        return daoMap.get(userLog);
     }
 }

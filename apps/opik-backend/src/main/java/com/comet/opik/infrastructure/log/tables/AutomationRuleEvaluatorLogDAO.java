@@ -4,6 +4,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.utils.TemplateUtils;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Statement;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.stringtemplate.v4.ST;
@@ -38,7 +39,7 @@ class AutomationRuleEvaluatorLogDAO implements UserLogTableDAO {
             """;
 
     @Override
-    public Mono<Void> saveAll(List<ILoggingEvent> events) {
+    public Mono<Void> saveAll(@NonNull List<ILoggingEvent> events) {
         return Mono.from(factory.create())
                 .flatMapMany(connection -> {
                     var template = new ST(INSERT_STATEMENT);

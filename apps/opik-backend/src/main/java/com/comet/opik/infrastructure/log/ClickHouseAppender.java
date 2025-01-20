@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.log;
 
+import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
 import com.comet.opik.domain.UserLog;
@@ -27,19 +28,16 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     private static ClickHouseAppender instance;
 
-    public static synchronized void init(@NonNull UserLogTableFactory userLogTableFactory, int batchSize,
-            @NonNull Duration flushIntervalDuration) {
+    public static synchronized ClickHouseAppender init(@NonNull UserLogTableFactory userLogTableFactory, int batchSize,
+            @NonNull Duration flushIntervalDuration, @NonNull LoggerContext context) {
 
         if (instance == null) {
-            setInstance(new ClickHouseAppender(userLogTableFactory, flushIntervalDuration, batchSize));
+            ClickHouseAppender appender = new ClickHouseAppender(userLogTableFactory, flushIntervalDuration, batchSize);
+            setInstance(appender);
+            appender.setContext(context);
             instance.start();
         }
-    }
 
-    public static synchronized ClickHouseAppender getInstance() {
-        if (instance == null) {
-            throw new IllegalStateException("ClickHouseAppender is not initialized");
-        }
         return instance;
     }
 
@@ -52,14 +50,11 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     private final int batchSize;
     private volatile boolean running = true;
 
-    private BlockingQueue<ILoggingEvent> logQueue;
-    private ScheduledExecutorService scheduler;
+    private final BlockingQueue<ILoggingEvent> logQueue = new LinkedBlockingQueue<>();
+    private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     @Override
     public void start() {
-
-        logQueue = new LinkedBlockingQueue<>();
-        scheduler = Executors.newSingleThreadScheduledExecutor();
 
         // Background flush thread
         scheduler.scheduleAtFixedRate(this::flushLogs, flushIntervalDuration.toMillis(),
@@ -125,6 +120,8 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         setInstance(null);
         scheduler.shutdown();
         awaitTermination();
+        logQueue.clear();
+        scheduler = Executors.newSingleThreadScheduledExecutor();
     }
 
     private void awaitTermination() {
