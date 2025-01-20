@@ -140,6 +140,7 @@ const sidebars: SidebarsConfig = {
         "cookbook/dspy",
         "cookbook/gemini",
         "cookbook/groq",
+        "cookbook/guardrails-ai",
         "cookbook/haystack",
         "cookbook/langgraph",
         "cookbook/llama-index",
