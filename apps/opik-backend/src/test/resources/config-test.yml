@@ -182,6 +182,22 @@ encryption:
   # Description: Encryption key to use when storing sensitive information
   key: 'GiTHubiLoVeYouAA'
 
+# Configuration for Online Scoring
+onlineScoring:
+  # Default: 500 ms
+  # Description: How often Online Scoring will check Redis for new messages (in milliseconds)
+  poolingIntervalMs: 500
+  # Default: online_scoring
+  # Description: A consumer group name so multiple instances can share the stream load
+  consumerGroupName: 'online_scoring'
+  # Default: 3
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: 3
+  # Default: stream_scoring_llm_as_judge
+  # Description: the name for a Redis Stream with traces to score using a LLM-as-Judge evaluator
+  llmAsJudgeStream: 'stream_scoring_llm_as_judge'
+
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 60s

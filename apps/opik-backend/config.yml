@@ -198,6 +198,21 @@ encryption:
   # Description: Encryption key to use when storing sensitive information
   key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
 
+# Configuration for Online Scoring
+onlineScoring:
+  # Default: 500 ms
+  # Description: How often Online Scoring will check Redis for new messages (in milliseconds)
+  poolingIntervalMs: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-500}
+  # Default: online_scoring
+  # Description: A consumer group name so multiple instances can share the stream load
+  consumerGroupName: ${REDIS_SCORING_CONSUMER_GROUP_NAME:-'online_scoring'}
+  # Default: 3
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-3}
+  # Default: stream_scoring_llm_as_judge
+  # Description: the name for a Redis Stream with traces to score using a LLM-as-Judge evaluator
+  llmAsJudgeStream: ${REDIS_STREAM_LLMASJUDGE:-'stream_scoring_llm_as_judge'}
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 3

@@ -28,6 +28,7 @@ import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringSubstitutor;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -235,16 +236,20 @@ public class OnlineScoringEngine {
                         return null;
                     }
 
-                    log.debug("new FeedbackScore[{}, {}, {}]", scoreName,
-                            scoreNested.path(SCORE_FIELD_NAME).decimalValue(),
-                            scoreNested.path(REASON_FIELD_NAME).asText());
-
-                    return FeedbackScoreBatchItem.builder()
+                    var resultBuilder = FeedbackScoreBatchItem.builder()
                             .name(scoreName)
-                            .value(scoreNested.path(SCORE_FIELD_NAME).decimalValue())
                             .reason(scoreNested.path(REASON_FIELD_NAME).asText())
-                            .source(ScoreSource.ONLINE_SCORING)
-                            .build();
+                            .source(ScoreSource.ONLINE_SCORING);
+
+                    var actualScore = scoreNested.path(SCORE_FIELD_NAME);
+                    if (actualScore.isBoolean()) {
+                        resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
+                    }
+                    else {
+                        resultBuilder.value(actualScore.decimalValue());
+                    }
+
+                    return resultBuilder.build();
                 })
                 .filter(Objects::nonNull)
                 .toList();
