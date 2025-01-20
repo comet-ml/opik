@@ -1,9 +1,13 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
+
+import java.util.concurrent.TimeUnit;
 
 @Data
 public class OnlineScoringConfig {
@@ -15,7 +19,8 @@ public class OnlineScoringConfig {
     @Min(1) private int consumerBatchSize;
 
     @Valid @JsonProperty
-    @Min(100) private int poolingIntervalMs;
+    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    private Duration poolingInterval;
 
     @Valid @JsonProperty
     private String llmAsJudgeStream;

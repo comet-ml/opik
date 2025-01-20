@@ -186,7 +186,7 @@ encryption:
 onlineScoring:
   # Default: 500 ms
   # Description: How often Online Scoring will check Redis for new messages (in milliseconds)
-  poolingIntervalMs: 500
+  poolingInterval: 500ms
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: 'online_scoring'

@@ -17,7 +17,6 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Duration;
 import java.util.UUID;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorType.LLM_AS_JUDGE;
@@ -106,7 +105,7 @@ public class OnlineScoringLlmAsJudgeScorer {
 
     private void setupStreamListener(RStreamReactive<String, TraceToScoreLlmAsJudge> stream) {
         // Listen for messages
-        Flux.interval(Duration.ofMillis(config.getPoolingIntervalMs()))
+        Flux.interval(config.getPoolingInterval().toJavaDuration())
                 .flatMap(i -> stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig))
                 .flatMap(messages -> Flux.fromIterable(messages.entrySet()))
                 .publishOn(Schedulers.boundedElastic())

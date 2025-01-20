@@ -33,6 +33,7 @@ import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
 import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import io.dropwizard.util.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
@@ -201,7 +202,7 @@ class OnlineScoringEngineTest {
         var onlineScoringConfig = new OnlineScoringConfig();
         onlineScoringConfig.setLlmAsJudgeStream("test-stream");
         onlineScoringConfig.setConsumerGroupName("test-group");
-        onlineScoringConfig.setPoolingIntervalMs(100);
+        onlineScoringConfig.setPoolingInterval(Duration.milliseconds(100));
         onlineScoringConfig.setConsumerBatchSize(1);
 
         Config redisConfig = new Config();
@@ -221,7 +222,7 @@ class OnlineScoringEngineTest {
                 .name("evaluator-test-" + UUID.randomUUID())
                 .createdBy(USER_NAME)
                 .code(evaluatorCode)
-                .samplingRate(1.0f).build();
+                .samplingRate(1.0f).build(); // lets make sure all traces are expected to be scored
 
         log.info("Creating evaluator {}", evaluator);
         evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
@@ -244,7 +245,7 @@ class OnlineScoringEngineTest {
         onlineScoringSampler = new OnlineScoringSampler(onlineScoringConfig, redisson, eventBus, ruleEvaluatorService);
         onlineScoringSampler.onTracesCreated(event);
 
-        Thread.sleep(onlineScoringConfig.getPoolingIntervalMs());
+        Thread.sleep(onlineScoringConfig.getPoolingInterval().toJavaDuration());
 
         var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"The summary addresses the instruction by covering the main points and themes. However, it could have included a few more specific details to fully align with the instruction.\"},"
                 +
@@ -262,8 +263,7 @@ class OnlineScoringEngineTest {
         onlineScorer = new OnlineScoringLlmAsJudgeScorer(onlineScoringConfig, redisson, aiProxyService,
                 feedbackScoreService);
 
-        Thread.sleep(onlineScoringConfig.getPoolingIntervalMs() * 2L);
-
+        Thread.sleep(onlineScoringConfig.getPoolingInterval().toJavaDuration().multipliedBy(2L));
         // check which feedback scores would be stored in Clickhouse by our process
         List<FeedbackScoreBatchItem> processed = captor.getValue();
         log.info(processed.toString());
