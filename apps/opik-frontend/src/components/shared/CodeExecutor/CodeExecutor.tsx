@@ -156,12 +156,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
               );
             })}
             {isRunning && (
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  <span className="text-[#005cc5]">~/sandbox</span>
-                </div>
-                <div className="h-3.5 w-1 animate-pulse-cursor bg-primary-active"></div>
-              </div>
+              <div className="h-3.5 w-1 bg-foreground-secondary"></div>
             )}
             <div ref={consoleBottomRef} />
           </div>
