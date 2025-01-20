@@ -9,7 +9,7 @@ description: Cookbook that showcases Opik's integration with the Guardrails AI P
 
 For this guide we will use the a simple example that logs guardrails validation steps as traces to Opik, providing them with the validation result tags.
 
-## Preparing our environment
+## Preparing the environment
 
 In order to use Guardrails AI, we will configure the OpenAI API Key, if you are using any other providers you can replace this with the required API key:
 

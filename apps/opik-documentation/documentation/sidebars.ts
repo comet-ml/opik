@@ -61,6 +61,7 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/dspy",
             "tracing/integrations/gemini",
             "tracing/integrations/groq",
+            "tracing/integrations/guardrails-ai",
             "tracing/integrations/haystack",
             "tracing/integrations/langgraph",
             "tracing/integrations/llama_index",
