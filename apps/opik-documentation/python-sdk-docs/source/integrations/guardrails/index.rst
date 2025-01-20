@@ -9,7 +9,7 @@ First, install the politeness check from the guardrails hub:
 ``guardrails hub install hub://guardrails/politeness_check``
 
 
-Then you can run the example (you need to setup ):
+Then you can run the example:
 ::
 
     from guardrails import Guard, OnFailAction
