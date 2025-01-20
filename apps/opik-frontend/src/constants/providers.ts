@@ -1,4 +1,7 @@
 import OpenAIIcon from "@/icons/integrations/openai.svg?react";
+import AnthropicIcon from "@/icons/integrations/anthropic.svg?react";
+import GeminiIcon from "@/icons/integrations/gemini.svg?react";
+
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 
 type IconType = typeof OpenAIIcon;
@@ -24,6 +27,22 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyName: "OPENAI_API_KEY",
     apiKeyURL: "https://platform.openai.com/account/api-keys",
     defaultModel: PROVIDER_MODEL_TYPE.GPT_4O,
+  },
+  [PROVIDER_TYPE.ANTHROPIC]: {
+    label: "Anthropic",
+    value: PROVIDER_TYPE.ANTHROPIC,
+    icon: AnthropicIcon,
+    apiKeyName: "ANTHROPIC_API_KEY",
+    apiKeyURL: "https://console.anthropic.com/settings/keys",
+    defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
+  },
+  [PROVIDER_TYPE.GEMINI]: {
+    label: "Gemini",
+    value: PROVIDER_TYPE.GEMINI,
+    icon: GeminiIcon,
+    apiKeyName: "GEMINI_API_KEY",
+    apiKeyURL: "https://aistudio.google.com/apikey",
+    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
   },
 };
 

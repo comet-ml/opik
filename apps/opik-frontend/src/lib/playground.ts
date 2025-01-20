@@ -1,7 +1,12 @@
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
-import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
+  DEFAULT_ANTHROPIC_CONFIGS,
+  DEFAULT_OPEN_AI_CONFIGS,
+} from "@/constants/llm";
+import {
+  LLMAnthropicConfigsType,
+  LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
   LLMPromptConfigsType,
   PROVIDER_TYPE,
@@ -22,6 +27,23 @@ export const getDefaultConfigByProvider = (
       presencePenalty: DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY,
     } as LLMOpenAIConfigsType;
   }
+
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    return {
+      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
+      maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+      topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
+    } as LLMAnthropicConfigsType;
+  }
+
+  if (provider === PROVIDER_TYPE.GEMINI) {
+    return {
+      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
+      maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+      topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
+    } as LLMGeminiConfigsType;
+  }
+
   return {};
 };
 
