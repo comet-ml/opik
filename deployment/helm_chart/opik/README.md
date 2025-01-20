@@ -176,7 +176,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.volumes[0].name | string | `"opik-frontend-nginx"` |  |
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
 | component.python-backend.enabled | bool | `true` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-executor-sandbox-python"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG | string | `"latest"` |  |
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
