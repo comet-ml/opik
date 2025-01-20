@@ -4,21 +4,34 @@ import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.LogItem;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,19 +44,24 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -55,12 +73,62 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Automation Rule Evaluators Resource Test")
 class AutomationRuleEvaluatorsResourceTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/automations/projects/%s/evaluators/";
+
+    private static final String messageToTest = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
+    private static final String testEvaluator = """
+            {
+              "model": { "name": "gpt-4o", "temperature": 0.3 },
+              "messages": [
+                { "role": "USER", "content": "%s" },
+                { "role": "SYSTEM", "content": "You're a helpful AI, be cordial." }
+              ],
+              "variables": {
+                  "summary": "input.questions.question1",
+                  "instruction": "output.output",
+                  "nonUsed": "input.questions.question2",
+                  "toFail1": "metadata.nonexistent.path"
+              },
+              "schema": [
+                { "name": "Relevance",           "type": "INTEGER",   "description": "Relevance of the summary" },
+                { "name": "Conciseness",         "type": "DOUBLE",    "description": "Conciseness of the summary" },
+                { "name": "Technical Accuracy",  "type": "BOOLEAN",   "description": "Technical accuracy of the summary" }
+              ]
+            }
+            """
+            .formatted(messageToTest).trim();
+
+    private static final String summaryStr = "What was the approach to experimenting with different data mixtures?";
+    private static final String outputStr = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
+    private static final String input = """
+            {
+                "questions": {
+                    "question1": "%s",
+                    "question2": "Whatever, we wont use it anyway"
+                 },
+                "pdf_url": "https://arxiv.org/pdf/2406.04744",
+                "title": "CRAG -- Comprehensive RAG Benchmark"
+            }
+            """.formatted(summaryStr).trim();
+    private static final String output = """
+            {
+                "output": "%s"
+            }
+            """.formatted(outputStr).trim();
+
+    private static final String validAiMsgTxt = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"},"
+            +
+            "\"Conciseness\":{\"score\":4,\"reason\":\"The summary is mostly concise but could be slightly more streamlined by removing redundant phrases.\"},"
+            +
+            "\"Technical Accuracy\":{\"score\":0,\"reason\":\"The summary accurately describes the experimental approach involving data mixtures, proportions, and sources, reflecting the technical details of the study.\"}}";
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -71,18 +139,37 @@ class AutomationRuleEvaluatorsResourceTest {
 
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
+    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+
     @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    private static final TestDropwizardAppExtension APP;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
 
+    public static final ChatCompletionService COMPLETION_SERVICE = mock(ChatCompletionService.class);
+
     static {
-        Startables.deepStart(REDIS, MYSQL).join();
+        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(MYSQL.getJdbcUrl(), null,
-                wireMock.runtimeInfo(), REDIS.getRedisURI());
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
+
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .modules(List.of(new AbstractModule() {
+
+                            @Override
+                            protected void configure() {
+                                bind(ChatCompletionService.class).toInstance(COMPLETION_SERVICE);
+                            }
+
+                        }))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -90,6 +177,8 @@ class AutomationRuleEvaluatorsResourceTest {
     private String baseURI;
     private ClientSupport client;
     private AutomationRuleEvaluatorResourceClient evaluatorsResourceClient;
+    private TraceResourceClient traceResourceClient;
+    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) {
@@ -104,6 +193,8 @@ class AutomationRuleEvaluatorsResourceTest {
         mockTargetWorkspace(API_KEY, WORKSPACE_NAME, WORKSPACE_ID);
 
         this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(this.client, baseURI);
+        this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
     }
 
     private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -710,6 +801,96 @@ class AutomationRuleEvaluatorsResourceTest {
                 }
             }
         }
-    }
 
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("get logs per rule evaluators: when api key is present, then return proper response")
+        void getLogsPerRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(
+                String sessionToken,
+                boolean isAuthorized,
+                String workspaceName) throws JsonProcessingException {
+
+            String projectName = UUID.randomUUID().toString();
+
+            ObjectMapper mapper = new ObjectMapper();
+
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .id(null)
+                    .code(mapper.readValue(testEvaluator, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
+                    .samplingRate(1f)
+                    .build();
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .input(mapper.readTree(input))
+                    .output(mapper.readTree(output))
+                    .build();
+
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
+
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(validAiMsgTxt)).build();
+
+            doReturn(chatResponse)
+                    .when(COMPLETION_SERVICE)
+                    .scoreTrace(any(), any(), any());
+
+            Instant startTime = Instant.now();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+
+                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                        .path(id.toString())
+                        .path("logs")
+                        .request()
+                        .cookie(SESSION_COOKIE, sessionToken)
+                        .accept(MediaType.APPLICATION_JSON_TYPE)
+                        .header(WORKSPACE_HEADER, workspaceName)
+                        .get()) {
+
+                    if (isAuthorized) {
+                        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                        assertThat(actualResponse.hasEntity()).isTrue();
+
+                        var actualEntity = actualResponse.readEntity(LogItem.LogPage.class);
+
+                        assertThat(actualEntity.content()).hasSize(4);
+                        assertThat(actualEntity.total()).isEqualTo(4);
+                        assertThat(actualEntity.size()).isEqualTo(4);
+                        assertThat(actualEntity.page()).isEqualTo(1);
+
+                        assertThat(actualEntity.content())
+                                .allSatisfy(log -> {
+                                    assertThat(log.timestamp()).isBetween(startTime, Instant.now());
+                                    assertThat(log.ruleId()).isEqualTo(id);
+                                    assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                                    assertThat(log.level()).isEqualTo(LogItem.LogLevel.INFO);
+                                });
+
+                        assertThat(actualEntity.content())
+                                .anyMatch(log -> log.message()
+                                        .matches("Scores for traceId '.*' stored successfully:\\n\\n.*"));
+
+                        assertThat(actualEntity.content())
+                                .anyMatch(log -> log.message().matches("Received response for traceId '.*':\\n\\n.*"));
+
+                        assertThat(actualEntity.content())
+                                .anyMatch(log -> log.message().matches(
+                                        "(?s)Sending traceId '([^']*)' to LLM using the following input:\\n\\n.*"));
+
+                        assertThat(actualEntity.content())
+                                .anyMatch(log -> log.message().matches("Evaluating traceId '.*' sampled by rule '.*'"));
+
+                    } else {
+                        assertThat(actualResponse.getStatusInfo().getStatusCode())
+                                .isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                        assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                                .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    }
+                }
+            });
+        }
+    }
 }

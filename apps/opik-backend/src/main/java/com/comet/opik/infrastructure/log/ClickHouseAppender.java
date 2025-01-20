@@ -118,13 +118,14 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                                 .orElseThrow(() -> failWithMessage("trace_id is not set"));
                         String ruleId = Optional.ofNullable(event.getMDCPropertyMap().get("rule_id"))
                                 .orElseThrow(() -> failWithMessage("rule_id is not set"));
+                        String message = event.getFormattedMessage();
 
                         statement
                                 .bind("timestamp" + i, event.getInstant().toString())
                                 .bind("level" + i, logLevel)
                                 .bind("workspace_id" + i, workspaceId)
                                 .bind("rule_id" + i, ruleId)
-                                .bind("message" + i, event.getFormattedMessage())
+                                .bind("message" + i, message)
                                 .bind("marker_keys" + i, new String[]{"trace_id"})
                                 .bind("marker_values" + i, new String[]{traceId});
                     }

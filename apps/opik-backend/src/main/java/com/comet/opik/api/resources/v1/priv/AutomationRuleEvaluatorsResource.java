@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -43,6 +44,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
 import static com.comet.opik.api.AutomationRuleEvaluator.View;
+import static com.comet.opik.api.LogItem.LogPage;
 
 @Path("/v1/private/automations/projects/{projectId}/evaluators/")
 @Produces(MediaType.APPLICATION_JSON)
@@ -164,4 +166,22 @@ public class AutomationRuleEvaluatorsResource {
         return Response.noContent().build();
     }
 
+    @GET
+    @Path("/{id}/logs")
+    @Operation(operationId = "getEvaluatorLogsById", summary = "Get automation rule evaluator logs by id", description = "Get automation rule evaluator logs by id", responses = {
+            @ApiResponse(responseCode = "200", description = "Automation rule evaluator logs resource", content = @Content(schema = @Schema(implementation = LogPage.class)))
+    })
+    public Response getLogs(@PathParam("projectId") UUID projectId, @PathParam("id") UUID evaluatorId,
+            @QueryParam("size") @Min(1) @DefaultValue("1000") int size) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Looking for logs for automated evaluator: id '{}' on project_id '{}' and workspace_id '{}'",
+                evaluatorId, projectId, workspaceId);
+        var criteria = LogCriteria.builder().workspaceId(workspaceId).entityId(evaluatorId).size(size).build();
+        LogPage logs = service.getLogs(criteria).block();
+        log.info("Found {} logs for automated evaluator: id '{}' on project_id '{}'and workspace_id '{}'", logs.size(),
+                evaluatorId, projectId, workspaceId);
+
+        return Response.ok().entity(logs).build();
+    }
 }

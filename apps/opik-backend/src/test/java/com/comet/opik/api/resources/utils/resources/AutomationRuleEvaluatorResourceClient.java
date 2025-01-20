@@ -70,4 +70,20 @@ public class AutomationRuleEvaluatorResourceClient {
             }
         }
     }
+
+    public AutomationRuleEvaluator<?> getEvaluator(UUID evaluatorId, UUID projectId, String workspaceName,
+            String apiKey) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
+                .path(evaluatorId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            return actualResponse.readEntity(AutomationRuleEvaluator.class);
+        }
+    }
 }
