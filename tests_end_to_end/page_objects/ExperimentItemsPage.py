@@ -5,9 +5,7 @@ import re
 class ExperimentItemsPage:
     def __init__(self, page: Page):
         self.page = page
-        self.next_page_button_locator = self.page.locator(
-            "div:has(> button:nth-of-type(4))"
-        ).locator("button:nth-of-type(3)")
+        self.next_page_button_locator = self.page.locator("div").filter(has_text=re.compile(r"^Showing (\d+)-(\d+) of (\d+)")).nth(2).locator("button:nth-of-type(3)")
 
     def get_pagination_button(self) -> Locator:
         return self.page.get_by_role("button", name="Showing")
