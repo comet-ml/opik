@@ -4,4 +4,6 @@ export type FrameworkIntegration = {
   colab: string;
   documentation: string;
   code: string;
+  executionUrl?: string;
+  executionFakeLogs: string[];
 };

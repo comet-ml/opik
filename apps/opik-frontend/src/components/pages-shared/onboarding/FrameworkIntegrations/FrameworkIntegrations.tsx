@@ -54,7 +54,12 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
       </div>
       <div className="flex min-w-[650px] flex-1 gap-6">
         <div className="flex w-full flex-1 flex-col">
-          <IntegrationTemplate code={integration.code} apiKey={apiKey} />
+          <IntegrationTemplate
+            code={integration.code}
+            executionUrl={integration.executionUrl}
+            executionFakeLogs={integration.executionFakeLogs}
+            apiKey={apiKey}
+          />
         </div>
 
         <div className="sticky top-20 flex w-[250px] shrink-0 flex-col gap-6 self-start">

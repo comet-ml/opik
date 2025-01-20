@@ -27,6 +27,7 @@ import ragasCode from "./integration-scripts/Ragas.py?raw";
 import groqCode from "./integration-scripts/Groq.py?raw";
 import dspyCode from "./integration-scripts/DSPy.py?raw";
 import { FrameworkIntegration } from "./types";
+import { fakeLogsMap } from "./integration-scripts/fake-logs";
 
 export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
   {
@@ -39,6 +40,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "#using-function-decorators",
     ),
     code: functionDecoratorsCode,
+    executionFakeLogs: fakeLogsMap.FunctionDecorators,
   },
   {
     label: "OpenAI",
@@ -47,6 +49,8 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),
     code: openAiCode,
+    executionUrl: "openai/run_stream",
+    executionFakeLogs: fakeLogsMap.OpenAI,
   },
   {
     label: "Anthropic",
@@ -55,6 +59,8 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/anthropic.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),
     code: anthropicCode,
+    executionUrl: "anthropic/run_stream",
+    executionFakeLogs: fakeLogsMap.Anthropic,
   },
   {
     label: "Bedrock",
@@ -63,6 +69,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/bedrock.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),
     code: bedrockCode,
+    executionFakeLogs: fakeLogsMap.Bedrock,
   },
   {
     label: "Gemini",
@@ -71,6 +78,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/gemini.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/openai"),
     code: geminiCode,
+    executionFakeLogs: fakeLogsMap.Gemini,
   },
   {
     label: "LangChain",
@@ -79,6 +87,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/langchain"),
     code: langChainCode,
+    executionFakeLogs: fakeLogsMap.LangChain,
   },
   {
     label: "LangGraph",
@@ -87,6 +96,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langgraph.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/langchain"),
     code: langGraphCode,
+    executionFakeLogs: fakeLogsMap.LangGraph,
   },
   {
     label: "LlamaIndex",
@@ -95,6 +105,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/langchain"),
     code: llamaIndexCode,
+    executionFakeLogs: fakeLogsMap.LlamaIndex,
   },
   {
     label: "Haystack",
@@ -103,6 +114,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/haystack.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/langchain"),
     code: haystackCode,
+    executionFakeLogs: fakeLogsMap.Haystack,
   },
   {
     label: "LiteLLM",
@@ -111,6 +123,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/litellm"),
     code: liteLLMCode,
+    executionFakeLogs: fakeLogsMap.LiteLLM,
   },
   {
     label: "Ragas",
@@ -119,6 +132,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/ragas"),
     code: ragasCode,
+    executionFakeLogs: fakeLogsMap.Ragas,
   },
   {
     label: "Groq",
@@ -127,6 +141,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/groq.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/ragas"),
     code: groqCode,
+    executionFakeLogs: fakeLogsMap.Groq,
   },
   {
     label: "DSPy",
@@ -135,5 +150,6 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/dspy.ipynb",
     documentation: buildDocsUrl("/tracing/integrations/ragas"),
     code: dspyCode,
+    executionFakeLogs: fakeLogsMap.DSPy,
   },
 ];

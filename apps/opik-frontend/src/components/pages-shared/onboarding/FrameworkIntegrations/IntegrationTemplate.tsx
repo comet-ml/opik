@@ -3,6 +3,7 @@ import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter
 import useAppStore from "@/store/AppStore";
 import { BASE_API_URL } from "@/api/api";
 import { maskAPIKey } from "@/lib/utils";
+import CodeExecutor from "@/components/shared/CodeExecutor/CodeExecutor";
 
 const CODE_BLOCK_1 = "pip install opik";
 
@@ -38,11 +39,15 @@ const putConfigInCode = ({
 type IntegrationTemplateProps = {
   apiKey?: string;
   code: string;
+  executionUrl?: string;
+  executionFakeLogs: string[];
 };
 
 const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   apiKey,
   code,
+  executionUrl,
+  executionFakeLogs,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const codeWithConfig = putConfigInCode({
@@ -52,6 +57,8 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     maskApiKey: true,
   });
   const codeWithConfigToCopy = putConfigInCode({ code, workspaceName, apiKey });
+
+  const canExecuteCode = executionUrl && apiKey;
 
   return (
     <div className="flex flex-col gap-6 rounded-md border bg-white p-6">
@@ -67,10 +74,21 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
         <div className="comet-body-s mb-3">
           2. Run the following code to get started
         </div>
-        <CodeHighlighter
-          data={codeWithConfig}
-          copyData={codeWithConfigToCopy}
-        />
+        {canExecuteCode ? (
+          <CodeExecutor
+            executionUrl={executionUrl}
+            executionFakeLogs={executionFakeLogs}
+            data={codeWithConfig}
+            copyData={codeWithConfigToCopy}
+            apiKey={apiKey}
+            workspaceName={workspaceName}
+          />
+        ) : (
+          <CodeHighlighter
+            data={codeWithConfig}
+            copyData={codeWithConfigToCopy}
+          />
+        )}
       </div>
     </div>
   );
