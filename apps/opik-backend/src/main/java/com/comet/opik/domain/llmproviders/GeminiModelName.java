@@ -2,9 +2,9 @@ package com.comet.opik.domain.llmproviders;
 
 import lombok.RequiredArgsConstructor;
 
-/*
-Langchain4j doesn't provide gemini models enum.
-This information is taken from: https://ai.google.dev/gemini-api/docs/models/gemini
+/**
+ * Langchain4j doesn't provide gemini models enum.
+ * This information is taken from <a href="https://ai.google.dev/gemini-api/docs/models/gemini">gemini docs</a>
  */
 @RequiredArgsConstructor
 public enum GeminiModelName {

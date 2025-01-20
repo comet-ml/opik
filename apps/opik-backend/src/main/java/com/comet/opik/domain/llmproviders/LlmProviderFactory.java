@@ -4,8 +4,6 @@ import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.EncryptionUtils;
-import dev.ai4j.openai4j.chat.ChatCompletionModel;
-import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -50,10 +48,10 @@ public class LlmProviderFactory {
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
     private LlmProvider getLlmProvider(String model) {
-        if (isModelBelongToProvider(model, ChatCompletionModel.class, ChatCompletionModel::toString)) {
+        if (isModelBelongToProvider(model, OpenaiModelName.class, OpenaiModelName::toString)) {
             return LlmProvider.OPEN_AI;
         }
-        if (isModelBelongToProvider(model, AnthropicChatModelName.class, AnthropicChatModelName::toString)) {
+        if (isModelBelongToProvider(model, AnthropicModelName.class, AnthropicModelName::toString)) {
             return LlmProvider.ANTHROPIC;
         }
         if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
