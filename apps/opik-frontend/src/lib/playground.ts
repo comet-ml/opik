@@ -36,7 +36,7 @@ export const generateDefaultPrompt = ({
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
   const defaultProviderKey = getDefaultProviderKey(setupProviders);
   const defaultModel = defaultProviderKey
-    ? PROVIDERS[defaultProviderKey].defaultModel
+    ? PROVIDERS[defaultProviderKey]?.defaultModel || ""
     : "";
 
   return {
