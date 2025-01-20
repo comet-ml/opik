@@ -1,12 +1,6 @@
 FROM docker:27.5.0
 
-ENV DOCKER_HOST=unix:///var/run/docker.sock
-
-RUN apk update \
-    && apk add --no-cache \
-    python3 python3-dev py3-pip \
-    libffi-dev openssl-dev build-base git curl bash \
-    cargo gcc musl-dev
+RUN apk add --no-cache tini python3 py3-pip
 
 WORKDIR /opt/opik-python-backend
 
@@ -15,8 +9,18 @@ RUN pip install -r requirements.txt --break-system-packages
 
 COPY src ./src
 
+COPY entrypoint.sh .
+RUN chmod u+x entrypoint.sh
+
 EXPOSE 8000
 
-CMD dockerd-entrypoint.sh & \
-    sleep 5 \
-    && gunicorn --workers 4 --bind=0.0.0.0:8000 --chdir ./src 'opik_backend:create_app()'
+ENV DOCKER_HOST=unix:///var/run/docker.sock
+
+ENV TINI_SUBREAPER=""
+
+ENV PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY=ghcr.io/comet-ml/opik
+ENV PYTHON_CODE_EXECUTOR_IMAGE_NAME=opik-sandbox-executor-python
+ENV PYTHON_CODE_EXECUTOR_IMAGE_TAG=latest
+
+ENTRYPOINT ["tini", "--"]
+CMD ./entrypoint.sh
