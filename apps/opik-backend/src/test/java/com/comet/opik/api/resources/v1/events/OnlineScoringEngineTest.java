@@ -21,6 +21,8 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
@@ -38,8 +40,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -244,15 +246,18 @@ class OnlineScoringEngineTest {
         var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
 
         // return the evaluator we just created
-        Mockito.doReturn(List.of(evaluator)).when(ruleEvaluatorService).findAll(Mockito.any(), Mockito.any(), Mockito.any());
+        Mockito.doReturn(List.of(evaluator)).when(ruleEvaluatorService).findAll(Mockito.any(), Mockito.any(),
+                Mockito.any());
 
         onlineScoringSampler = new OnlineScoringSampler(onlineScoringConfig, redisson, eventBus, ruleEvaluatorService);
         onlineScoringSampler.onTracesCreated(event);
 
         Thread.sleep(onlineScoringConfig.getPoolingIntervalMs());
 
-        var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"The summary addresses the instruction by covering the main points and themes. However, it could have included a few more specific details to fully align with the instruction.\"}," +
-                "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"The summary accurately conveys the technical details, but there is a slight room for improvement in the precision of certain terms or concepts.\"}," +
+        var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"The summary addresses the instruction by covering the main points and themes. However, it could have included a few more specific details to fully align with the instruction.\"},"
+                +
+                "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"The summary accurately conveys the technical details, but there is a slight room for improvement in the precision of certain terms or concepts.\"},"
+                +
                 "\"Conciseness\":{\"score\":true,\"reason\":\"The summary is concise and effectively captures the essence of the content without unnecessary elaboration.\"}}";
 
         // mocked response from AI, reused from dev tests
@@ -271,7 +276,7 @@ class OnlineScoringEngineTest {
         List<FeedbackScoreBatchItem> processed = captor.getValue();
         log.info(processed.toString());
 
-        assertThat(processed).hasSize(event.traces().size()*3);
+        assertThat(processed).hasSize(event.traces().size() * 3);
 
         // test if all 3 feedbacks are generated with the expected value
         var resultMap = processed.stream().collect(Collectors.toMap(FeedbackScoreBatchItem::name, Function.identity()));

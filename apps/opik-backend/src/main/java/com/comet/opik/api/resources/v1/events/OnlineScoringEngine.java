@@ -241,8 +241,7 @@ public class OnlineScoringEngine {
                     var actualScore = scoreNested.path(SCORE_FIELD_NAME);
                     if (actualScore.isBoolean()) {
                         resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
-                    }
-                    else {
+                    } else {
                         resultBuilder.value(actualScore.decimalValue());
                     }
 
