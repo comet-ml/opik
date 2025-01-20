@@ -7,12 +7,14 @@ interface LLMPromptMessagesVariablesProps {
   hasError?: boolean;
   variables: Record<string, string>;
   onChange: (variables: Record<string, string>) => void;
+  projectId: string;
 }
 
 const LLMPromptMessagesVariables = ({
   hasError,
   variables,
   onChange,
+  projectId,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
     return Object.entries(variables)
@@ -48,6 +50,7 @@ const LLMPromptMessagesVariables = ({
             key={variable.label}
             onChange={(changes) => handleChangeVariables(changes)}
             variable={variable}
+            projectId={projectId}
           />
         ))}
       </div>

@@ -1,1 +1,1 @@
-haystack-ai<2.9.0  # 2.9.0 broke our imports, we need to fix it! https://github.com/comet-ml/opik/issues/1047
+haystack-ai

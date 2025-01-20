@@ -17,7 +17,19 @@ In addition to viewing scores over time, you can also view the average feedback 
 
 To monitor the performance of your LLM application, you can log feedback scores using the [Python SDK and through the UI](/tracing/annotate_traces.md).
 
-### Logging feedback scores alongside traces
+### Defining online evaluation metrics
+
+You can define LLM as a Judge metrics in the Opik platform that will automatically score all, or a subset, of your production traces. You can find more information about how to define LLM as a Judge metrics in the [Online evaluation](/production/online_evaluation.md) section.
+
+<!-- Add gif of the online evaluation feature -->
+
+Once a rule is defined, Opik will score all the traces in the project and allow you to track these feedback scores over time.
+
+:::tip
+In addition to allowing you to define LLM as a Judge metrics, Opik will soon allow you to define Python metrics to give you even more control over the feedback scores.
+:::
+
+### Manually logging feedback scores alongside traces
 
 Feedback scores can be logged while you are logging traces:
 
@@ -65,7 +77,7 @@ The `search_traces` method allows you to fetch traces based on any of trace attr
 
 Once you have fetched the traces you want to annotate, you can update the feedback scores using the [`Opik.log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores) method.
 
-```python pytest_codeblocks_skip=true
+```python pytest_codeblocks_skip="true"
 for trace in traces:
     opik_client.log_traces_feedback_scores(
         project_name="Default Project",

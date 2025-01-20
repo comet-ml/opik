@@ -120,7 +120,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
 You can then use this metric to score your LLM outputs:
 
-```python
+```python pytest_codeblocks_skip=true
 metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")
@@ -184,7 +184,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
 You can then use this metric to score your LLM outputs:
 
-```python
+```python pytest_codeblocks_skip=true
 metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")
