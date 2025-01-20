@@ -23,11 +23,13 @@ const PLUGINS_MAP: Record<SUPPORTED_LANGUAGE, Extension> = {
 
 type CodeHighlighterProps = {
   data: string;
+  copyData?: string;
   language?: SUPPORTED_LANGUAGE;
 };
 
 const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
   data,
+  copyData,
   language = SUPPORTED_LANGUAGE.python,
 }) => {
   const theme = useCodemirrorTheme();
@@ -37,7 +39,7 @@ const CodeHighlighter: React.FunctionComponent<CodeHighlighterProps> = ({
       <div className="absolute right-2 top-0.5 z-10">
         <CopyButton
           message="Successfully copied code"
-          text={data}
+          text={copyData || data}
           tooltipText="Copy code"
         />
       </div>

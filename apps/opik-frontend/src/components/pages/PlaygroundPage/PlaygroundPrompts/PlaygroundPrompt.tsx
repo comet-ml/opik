@@ -2,26 +2,29 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { CopyPlus, Trash } from "lucide-react";
 import last from "lodash/last";
 
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
-  PLAYGROUND_MESSAGE_ROLE,
-  PlaygroundMessageType,
-  PlaygroundPromptConfigsType,
-} from "@/types/playground";
+  LLMPromptConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 import {
-  generateDefaultPlaygroundPromptMessage,
   generateDefaultPrompt,
   getDefaultConfigByProvider,
-  getModelProvider,
 } from "@/lib/playground";
-import PlaygroundPromptMessages from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPromptMessages/PlaygroundPromptMessages";
-import PromptModelSelect from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSelect/PromptModelSelect";
+import {
+  generateDefaultLLMPromptMessage,
+  getModelProvider,
+  getNextMessageType,
+} from "@/lib/llm";
+import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
+import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import { getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import PromptModelConfigs from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PromptModelSettings/PromptModelConfigs";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import {
   useAddPrompt,
   useDeletePrompt,
@@ -31,16 +34,6 @@ import {
 } from "@/store/PlaygroundStore";
 import { getDefaultProviderKey } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
-
-const getNextMessageType = (
-  previousMessage: PlaygroundMessageType,
-): PLAYGROUND_MESSAGE_ROLE => {
-  if (previousMessage.role === PLAYGROUND_MESSAGE_ROLE.user) {
-    return PLAYGROUND_MESSAGE_ROLE.assistant;
-  }
-
-  return PLAYGROUND_MESSAGE_ROLE.user;
-};
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -71,12 +64,12 @@ const PlaygroundPrompt = ({
   const provider = model ? getModelProvider(model) : "";
 
   const handleAddMessage = useCallback(() => {
-    const newMessage = generateDefaultPlaygroundPromptMessage();
+    const newMessage = generateDefaultLLMPromptMessage();
     const lastMessage = last(messages);
 
     newMessage.role = lastMessage
       ? getNextMessageType(lastMessage!)
-      : PLAYGROUND_MESSAGE_ROLE.system;
+      : LLM_MESSAGE_ROLE.system;
 
     updatePrompt(promptId, {
       messages: [...messages, newMessage],
@@ -93,19 +86,19 @@ const PlaygroundPrompt = ({
   };
 
   const handleUpdateMessage = useCallback(
-    (messages: PlaygroundMessageType[]) => {
+    (messages: LLMMessage[]) => {
       updatePrompt(promptId, { messages });
     },
     [updatePrompt, promptId],
   );
 
   const handleUpdateConfig = useCallback(
-    (newConfigs: Partial<PlaygroundPromptConfigsType>) => {
+    (newConfigs: Partial<LLMPromptConfigsType>) => {
       updatePrompt(promptId, {
         configs: {
           ...configs,
           ...newConfigs,
-        } as PlaygroundPromptConfigsType,
+        } as LLMPromptConfigsType,
       });
     },
     [configs, promptId, updatePrompt],
@@ -124,7 +117,7 @@ const PlaygroundPrompt = ({
       const noCurrentModel = !modelProvider;
 
       if (noCurrentModel) {
-        const newModel = PROVIDERS[provider].defaultModel;
+        const newModel = PROVIDERS[provider]?.defaultModel || "";
 
         const newDefaultConfigs = provider
           ? getDefaultConfigByProvider(provider)
@@ -160,7 +153,9 @@ const PlaygroundPrompt = ({
       }
 
       const newProvider = getDefaultProviderKey(providerKeys);
-      const newModel = newProvider ? PROVIDERS[newProvider].defaultModel : "";
+      const newModel = newProvider
+        ? PROVIDERS[newProvider]?.defaultModel || ""
+        : "";
 
       const newDefaultConfigs = newProvider
         ? getDefaultConfigByProvider(newProvider)
@@ -227,7 +222,7 @@ const PlaygroundPrompt = ({
         </div>
       </div>
 
-      <PlaygroundPromptMessages
+      <LLMPromptMessages
         messages={messages}
         onChange={handleUpdateMessage}
         onAddMessage={handleAddMessage}

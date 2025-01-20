@@ -24,4 +24,13 @@ public @interface CacheEvict {
      * @return SpEL expression evaluated to generate the cache key.
      * */
     String key();
+
+    /**
+     * @return whether the key is a pattern or not. Default is false.
+     *
+     * @see <a href="https://redis.io/commands/KEYS">Redis KEYS command documentation</a>
+     *
+     * This is useful when you want to evict multiple keys that match a pattern.
+     * */
+    boolean keyUsesPatternMatching() default false;
 }

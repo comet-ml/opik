@@ -39,6 +39,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -46,6 +47,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.Redisson;
 import org.redisson.config.Config;
 import org.testcontainers.containers.MySQLContainer;
@@ -70,7 +72,9 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("LlmAsJudge Message Render")
-public class OnlineScoringEngineTest {
+@ExtendWith(MockitoExtension.class)
+class OnlineScoringEngineTest {
+
     @Mock
     AutomationRuleEvaluatorService ruleEvaluatorService;
     @Mock
@@ -133,6 +137,31 @@ public class OnlineScoringEngineTest {
                 "output": "%s"
             }
             """.formatted(outputStr).trim();
+
+    String edgeCaseTemplate = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\n";
+    String testEvaluatorEdgeCase = """
+            {
+              "model": { "name": "gpt-4o", "temperature": 0.3 },
+              "messages": [
+                { "role": "USER", "content": "%s" },
+                { "role": "SYSTEM", "content": "You're a helpful AI, be cordial." }
+              ],
+              "variables": {
+                  "summary": "input.questions.question1",
+                  "instruction": "output.output",
+                  "nonUsed": "input.questions.question2",
+                  "toFail1": "metadata.nonexistent.path"
+              },
+              "schema": [
+                { "name": "Relevance",           "type": "INTEGER",   "description": "Relevance of the summary" },
+                { "name": "Conciseness",         "type": "DOUBLE",    "description": "Conciseness of the summary" },
+                { "name": "Technical Accuracy",  "type": "BOOLEAN",   "description": "Technical accuracy of the summary" }
+              ]
+            }
+            """
+            .formatted(edgeCaseTemplate).trim();
+
+    private ObjectMapper mapper = new ObjectMapper();
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -378,5 +407,26 @@ public class OnlineScoringEngineTest {
             assertThat(techAccScore.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
 
         }
+    }
+
+    @Test
+    @DisplayName("render a message template with edge cases")
+    void testRenderEdgeCaseTemplate() throws JsonProcessingException {
+
+        var evaluatorEdgeCase = mapper.readValue(testEvaluatorEdgeCase,
+                AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class);
+
+        var renderedMessages = OnlineScoringEngine.renderMessages(evaluatorEdgeCase.messages(),
+                evaluatorEdgeCase.variables(), trace);
+
+        assertThat(renderedMessages).hasSize(2);
+
+        var userMessage = renderedMessages.get(0);
+        assertThat(userMessage.getClass()).isEqualTo(UserMessage.class);
+        assertThat(((UserMessage) userMessage).singleText()).contains(summaryStr);
+        assertThat(((UserMessage) userMessage).singleText()).contains(outputStr);
+
+        var systemMessage = renderedMessages.get(1);
+        assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
     }
 }

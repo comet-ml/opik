@@ -10,7 +10,7 @@ import pydantic_settings
 from pydantic_settings import BaseSettings, InitSettingsSource
 from pydantic_settings.sources import ConfigFileSourceMixin
 
-from . import dict_utils
+from . import dict_utils, url_helpers
 from .api_key import opik_api_key
 
 PathType = Union[
@@ -166,9 +166,22 @@ class OpikConfig(pydantic_settings.BaseSettings):
     it might lead to unexpected results for the features that rely on spans/traces created.
     """
 
-    disable_litellm_models_monitoring: bool = False
+    sentry_enable: bool = True
     """
-    If set to True - Opik will not create llm spans for LiteLLMChatModel calls.
+    If set to True, Opik will send the information about the errors to Sentry.
+    """
+
+    sentry_dsn: str = "https://18e4b84006b2ad4cb5df85f372b94dd0@o168229.ingest.us.sentry.io/4508620148441088"
+    """
+    Sentry project DSN which is used as a destination for sentry events.
+    In case there is a need to update reporting rules and stop receiving events from existing users,
+    current DSN should disabled in Sentry project settings, a new DSN should be created and placed here
+    instead of the old one.
+    """
+
+    enable_litellm_models_monitoring: bool = True
+    """
+    If set to True - Opik will create llm spans for LiteLLMChatModel calls.
     It is mainly to be used in tests since litellm uses external Opik callback
     which makes HTTP requests not via the opik package.
     """
@@ -237,3 +250,37 @@ def get_from_user_inputs(**user_inputs: Any) -> OpikConfig:
     cleaned_user_inputs = dict_utils.remove_none_from_dict(user_inputs)
 
     return OpikConfig(**cleaned_user_inputs)
+
+
+def check_for_misconfiguration(config: OpikConfig) -> None:
+    cloud_installation = url_helpers.get_base_url(
+        config.url_override
+    ) == url_helpers.get_base_url(OPIK_URL_CLOUD)
+    localhost_installation = (
+        "localhost" in config.url_override
+    )  # does not detect all OSS installations
+    workspace_is_default = config.workspace == OPIK_WORKSPACE_DEFAULT_NAME
+    api_key_configured = config.api_key is not None
+
+    if cloud_installation and (not api_key_configured or workspace_is_default):
+        print()
+        LOGGER.error(
+            "========================\n"
+            "The workspace and API key must be specified to log data to https://www.comet.com/opik.\n"
+            "You can use `opik configure` CLI command to configure your environment for logging.\n"
+            "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration.\n"
+            "==============================\n"
+        )
+        return
+
+    if localhost_installation and not workspace_is_default:
+        print()
+        LOGGER.error(
+            "========================\n"
+            "Open source installations do not support workspace specification. Only `default` is available.\n"
+            "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration\n"
+            "If you need advanced workspace management - you may consider using our cloud offer (https://www.comet.com/site/pricing/)\n"
+            "or contact our team for purchasing and setting up a self-hosted installation.\n"
+            "==============================\n"
+        )
+        return

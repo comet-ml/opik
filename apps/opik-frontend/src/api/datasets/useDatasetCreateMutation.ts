@@ -8,7 +8,6 @@ import { extractIdFromLocation } from "@/lib/utils";
 
 type UseDatasetCreateMutationParams = {
   dataset: Partial<Dataset>;
-  workspaceName: string;
 };
 
 const useDatasetCreateMutation = () => {
@@ -16,13 +15,9 @@ const useDatasetCreateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({
-      dataset,
-      workspaceName,
-    }: UseDatasetCreateMutationParams) => {
+    mutationFn: async ({ dataset }: UseDatasetCreateMutationParams) => {
       const { data, headers } = await api.post(DATASETS_REST_ENDPOINT, {
         ...dataset,
-        workspace_name: workspaceName,
       });
 
       // TODO workaround to return just created resource while implementation on BE is not done
@@ -32,11 +27,6 @@ const useDatasetCreateMutation = () => {
             ...dataset,
             id: extractIdFromLocation(headers?.location),
           };
-    },
-    onMutate: async (params: UseDatasetCreateMutationParams) => {
-      return {
-        queryKey: ["datasets", { workspaceName: params.workspaceName }],
-      };
     },
     onError: (error: AxiosError) => {
       const message = get(
@@ -51,10 +41,10 @@ const useDatasetCreateMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: (data, error, variables, context) => {
-      if (context) {
-        return queryClient.invalidateQueries({ queryKey: context.queryKey });
-      }
+    onSettled: () => {
+      return queryClient.invalidateQueries({
+        queryKey: ["datasets"],
+      });
     },
   });
 };

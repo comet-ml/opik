@@ -8,7 +8,7 @@ from opik.message_processing.batching import sequence_splitter
 
 from . import experiment_item
 from .. import helpers, constants
-from ... import Prompt
+from ...api_objects.prompt import Prompt
 
 LOGGER = logging.getLogger(__name__)
 

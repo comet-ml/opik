@@ -1,3 +1,4 @@
+{{- if .Values.clickhouse.enabled }}
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
@@ -110,3 +111,4 @@ spec:
           resources:
             requests:
               storage: {{ .Values.clickhouse.storage }}    
+{{- end }}

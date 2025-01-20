@@ -50,50 +50,54 @@ public class CacheInterceptor implements MethodInterceptor {
         var cacheable = method.getAnnotation(Cacheable.class);
         if (cacheable != null) {
             return runCacheAwareAction(invocation, isReactive, cacheable.name(), cacheable.key(),
-                    (key, name) -> processCacheableMethod(invocation, isReactive, key, name, cacheable));
+                    (key, group) -> processCacheableMethod(invocation, isReactive, key, group, cacheable));
         }
 
         var cachePut = method.getAnnotation(CachePut.class);
         if (cachePut != null) {
             return runCacheAwareAction(invocation, isReactive, cachePut.name(), cachePut.key(),
-                    (key, name) -> processCachePutMethod(invocation, isReactive, key, name));
+                    (key, group) -> processCachePutMethod(invocation, isReactive, key, group));
         }
 
         var cacheEvict = method.getAnnotation(CacheEvict.class);
         if (cacheEvict != null) {
             return runCacheAwareAction(invocation, isReactive, cacheEvict.name(), cacheEvict.key(),
-                    (key, name) -> processCacheEvictMethod(invocation, isReactive, key));
+                    (key, group) -> processCacheEvictMethod(invocation, isReactive, key, cacheEvict));
         }
 
         return invocation.proceed();
     }
 
-    private Object runCacheAwareAction(MethodInvocation invocation, boolean isReactive, String name, String keyAgs,
+    private Object runCacheAwareAction(MethodInvocation invocation, boolean isReactive, String group, String keyAgs,
             BiFunction<String, String, Object> action) throws Throwable {
 
         String key;
 
         try {
-            key = getKeyName(name, keyAgs, invocation);
+            key = getKeyName(group, keyAgs, invocation);
         } catch (Exception e) {
             // If there is an error evaluating the key, proceed without caching
+            log.error("Error evaluating key expression: {}", keyAgs, e);
             log.warn("Cache will be skipped due to error evaluating key expression");
             return invocation.proceed();
         }
 
         if (isReactive) {
-            return action.apply(key, name);
+            return action.apply(key, group);
         }
 
-        return ((Mono<?>) action.apply(key, name)).block();
+        return ((Mono<?>) action.apply(key, group)).block();
     }
 
-    private Mono<Object> processCacheEvictMethod(MethodInvocation invocation, boolean isReactive, String key) {
+    private Mono<Object> processCacheEvictMethod(MethodInvocation invocation, boolean isReactive, String key,
+            CacheEvict cacheEvict) {
         if (isReactive) {
             try {
                 return ((Mono<?>) invocation.proceed())
-                        .flatMap(value -> cacheManager.get().evict(key).thenReturn(value))
-                        .switchIfEmpty(cacheManager.get().evict(key).then(Mono.empty()))
+                        .flatMap(value -> cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching())
+                                .thenReturn(value))
+                        .switchIfEmpty(
+                                cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching()).then(Mono.empty()))
                         .map(Function.identity());
             } catch (Throwable e) {
                 return Mono.error(e);
@@ -102,9 +106,9 @@ public class CacheInterceptor implements MethodInterceptor {
             try {
                 var value = invocation.proceed();
                 if (value == null) {
-                    return cacheManager.get().evict(key).then(Mono.empty());
+                    return cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching()).then(Mono.empty());
                 }
-                return cacheManager.get().evict(key).thenReturn(value);
+                return cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching()).thenReturn(value);
             } catch (Throwable e) {
                 return Mono.error(e);
             }
@@ -112,17 +116,17 @@ public class CacheInterceptor implements MethodInterceptor {
     }
 
     private Mono<Object> processCachePutMethod(MethodInvocation invocation, boolean isReactive, String key,
-            String name) {
+            String group) {
         if (isReactive) {
             try {
-                return ((Mono<?>) invocation.proceed()).flatMap(value -> cachePut(value, key, name));
+                return ((Mono<?>) invocation.proceed()).flatMap(value -> cachePut(value, key, group));
             } catch (Throwable e) {
                 return Mono.error(e);
             }
         } else {
             try {
                 var value = invocation.proceed();
-                return cachePut(value, key, name).thenReturn(value);
+                return cachePut(value, key, group).thenReturn(value);
             } catch (Throwable e) {
                 return Mono.error(e);
             }
@@ -130,14 +134,14 @@ public class CacheInterceptor implements MethodInterceptor {
     }
 
     private Object processCacheableMethod(MethodInvocation invocation, boolean isReactive, String key,
-            String name, Cacheable cacheable) {
+            String group, Cacheable cacheable) {
 
         if (isReactive) {
 
             if (invocation.getMethod().getReturnType().isAssignableFrom(Mono.class)) {
-                return handleMono(invocation, key, name, cacheable);
+                return handleMono(invocation, key, group, cacheable);
             } else {
-                return handleFlux(invocation, key, name, cacheable);
+                return handleFlux(invocation, key, group, cacheable);
             }
         } else {
 
@@ -146,16 +150,16 @@ public class CacheInterceptor implements MethodInterceptor {
                         cacheable.returnType());
 
                 return cacheManager.get().get(key, typeReference)
-                        .switchIfEmpty(processSyncCacheMiss(invocation, key, name));
+                        .switchIfEmpty(processSyncCacheMiss(invocation, key, group));
             }
 
             return cacheManager.get().get(key, invocation.getMethod().getReturnType())
                     .map(Object.class::cast)
-                    .switchIfEmpty(processSyncCacheMiss(invocation, key, name));
+                    .switchIfEmpty(processSyncCacheMiss(invocation, key, group));
         }
     }
 
-    private Flux<Object> handleFlux(MethodInvocation invocation, String key, String name, Cacheable cacheable) {
+    private Flux<Object> handleFlux(MethodInvocation invocation, String key, String group, Cacheable cacheable) {
         if (cacheable.wrapperType() != Object.class) {
             TypeReference typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(),
                     cacheable.returnType());
@@ -168,7 +172,7 @@ public class CacheInterceptor implements MethodInterceptor {
                 }
             };
 
-            return getFromCacheOrCallMethod(invocation, key, name, collectionType);
+            return getFromCacheOrCallMethod(invocation, key, group, collectionType);
         }
 
         TypeReference<List<?>> collectionType = new TypeReference<>() {
@@ -178,61 +182,61 @@ public class CacheInterceptor implements MethodInterceptor {
             }
         };
 
-        return getFromCacheOrCallMethod(invocation, key, name, collectionType);
+        return getFromCacheOrCallMethod(invocation, key, group, collectionType);
     }
 
-    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String name,
+    private Flux<Object> getFromCacheOrCallMethod(MethodInvocation invocation, String key, String group,
             TypeReference<List<?>> collectionType) {
         return cacheManager.get()
                 .get(key, collectionType)
                 .map(Collection.class::cast)
                 .flatMapMany(Flux::fromIterable)
-                .switchIfEmpty(processFluxCacheMiss(invocation, key, name));
+                .switchIfEmpty(processFluxCacheMiss(invocation, key, group));
     }
 
-    private Mono<Object> handleMono(MethodInvocation invocation, String key, String name, Cacheable cacheable) {
+    private Mono<Object> handleMono(MethodInvocation invocation, String key, String group, Cacheable cacheable) {
         if (cacheable.wrapperType() != Object.class) {
             TypeReference typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(),
                     cacheable.returnType());
 
             return cacheManager.get().get(key, typeReference)
-                    .switchIfEmpty(processCacheMiss(invocation, key, name));
+                    .switchIfEmpty(processCacheMiss(invocation, key, group));
         }
 
         return cacheManager.get().get(key, cacheable.returnType())
                 .map(Object.class::cast)
-                .switchIfEmpty(processCacheMiss(invocation, key, name));
+                .switchIfEmpty(processCacheMiss(invocation, key, group));
     }
 
-    private Mono<Object> processSyncCacheMiss(MethodInvocation invocation, String key, String name) {
+    private Mono<Object> processSyncCacheMiss(MethodInvocation invocation, String key, String group) {
         return Mono.defer(() -> {
             try {
                 return Mono.just(invocation.proceed());
             } catch (Throwable e) {
                 return Mono.error(e);
             }
-        }).flatMap(value -> cachePut(value, key, name));
+        }).flatMap(value -> cachePut(value, key, group));
     }
 
-    private Mono<Object> processCacheMiss(MethodInvocation invocation, String key, String name) {
+    private Mono<Object> processCacheMiss(MethodInvocation invocation, String key, String group) {
         return Mono.defer(() -> {
             try {
                 return ((Mono<?>) invocation.proceed())
-                        .flatMap(value -> cachePut(value, key, name));
+                        .flatMap(value -> cachePut(value, key, group));
             } catch (Throwable e) {
                 return Mono.error(e);
             }
         });
     }
 
-    private Flux<Object> processFluxCacheMiss(MethodInvocation invocation, String key, String name) {
+    private Flux<Object> processFluxCacheMiss(MethodInvocation invocation, String key, String group) {
         return Flux.defer(() -> {
             try {
                 Flux<Object> flux = (Flux<Object>) invocation.proceed();
 
                 var cacheable = flux.cache()
                         .collectList()
-                        .flatMap(value -> cachePut(value, key, name));
+                        .flatMap(value -> cachePut(value, key, group));
 
                 return flux
                         .doOnSubscribe(subscription -> Schedulers.boundedElastic().schedule(() -> {
@@ -246,8 +250,8 @@ public class CacheInterceptor implements MethodInterceptor {
         });
     }
 
-    private Mono<Object> cachePut(Object value, String key, String name) {
-        Duration ttlDuration = cacheConfiguration.getCaches().getOrDefault(name,
+    private Mono<Object> cachePut(Object value, String key, String group) {
+        Duration ttlDuration = cacheConfiguration.getCaches().getOrDefault(group,
                 cacheConfiguration.getDefaultDuration());
         return cacheManager.get().put(key, value, ttlDuration)
                 .thenReturn(value)
@@ -270,17 +274,12 @@ public class CacheInterceptor implements MethodInterceptor {
             params.put("$" + parameters[i].getName(), value != null ? value : ""); // Null safety
         }
 
-        try {
-            String evaluatedKey = Objects.requireNonNull(MVEL.evalToString(key, params),
-                    "Key expression cannot return be null");
-            if (evaluatedKey.isEmpty() || evaluatedKey.equals("null")) {
-                throw new IllegalArgumentException("Key expression cannot return an empty string");
-            }
-            return "%s:-%s".formatted(name, evaluatedKey);
-        } catch (Exception e) {
-            log.error("Error evaluating key expression: {}", key, e);
-            throw new IllegalArgumentException("Error evaluating key expression: " + key);
+        String evaluatedKey = Objects.requireNonNull(MVEL.evalToString(key, params),
+                "Key expression cannot return be null");
+        if (evaluatedKey.isEmpty() || evaluatedKey.equals("null")) {
+            throw new IllegalArgumentException("Key expression cannot return an empty string");
         }
+        return "%s:-%s".formatted(name, evaluatedKey);
     }
 
 }

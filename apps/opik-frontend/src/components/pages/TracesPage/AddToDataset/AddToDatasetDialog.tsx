@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import get from "lodash/get";
-import isObject from "lodash/isObject";
+import isUndefined from "lodash/isUndefined";
 import { Database, MessageCircleWarning } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/components/ui/use-toast";
-import AddDatasetDialog from "@/components/pages/DatasetsPage/AddDatasetDialog";
+import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 
 const DEFAULT_SIZE = 5;
 
@@ -63,7 +63,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const total = data?.total ?? 0;
 
   const validRows = useMemo(() => {
-    return rows.filter((r) => isObject(r.input));
+    return rows.filter((r) => !isUndefined(r.input));
   }, [rows]);
 
   const noValidRows = validRows.length === 0;
@@ -221,7 +221,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
           </div>
         </DialogContent>
       </Dialog>
-      <AddDatasetDialog
+      <AddEditDatasetDialog
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={addToDatasetHandler}

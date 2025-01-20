@@ -48,6 +48,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
       OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
+      OPIK_SENTRY_ENABLE: False
     strategy:
       matrix:
         path: ${{ fromJson(needs.collect_test_paths.outputs.test_paths) }}

@@ -1,37 +1,16 @@
-import { UsageType } from "@/types/shared";
 import { HttpStatusCode } from "axios";
-import {
-  PlaygroundOpenAIConfigsType,
-  PROVIDER_MODEL_TYPE,
-} from "@/types/providers";
 
-export enum PLAYGROUND_MESSAGE_ROLE {
-  system = "system",
-  assistant = "assistant",
-  user = "user",
-}
-
-export interface PlaygroundMessageType {
-  content: string;
-  id: string;
-  role: PLAYGROUND_MESSAGE_ROLE;
-}
-
-export type PlaygroundPromptConfigsType =
-  | Record<string, never>
-  | PlaygroundOpenAIConfigsType;
+import { JsonNode, UsageType } from "@/types/shared";
+import { LLMMessage, ProviderMessageType } from "@/types/llm";
+import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { SPAN_TYPE } from "@/types/traces";
 
 export interface PlaygroundPromptType {
   name: string;
   id: string;
-  messages: PlaygroundMessageType[];
+  messages: LLMMessage[];
   model: PROVIDER_MODEL_TYPE | "";
-  configs: PlaygroundPromptConfigsType;
-}
-
-export interface ProviderMessageType {
-  content: string;
-  role: PLAYGROUND_MESSAGE_ROLE;
+  configs: LLMPromptConfigsType;
 }
 
 export interface ChatCompletionMessageChoiceType {
@@ -63,3 +42,48 @@ export type ChatCompletionResponse =
   | ChatCompletionOpikErrorMessageType
   | ChatCompletionSuccessMessageType
   | ChatCompletionProviderErrorMessageType;
+
+export interface LogTrace {
+  id: string;
+  projectName: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  input: { messages: ProviderMessageType[] };
+  output: { output: string | null };
+}
+
+export interface LogSpan {
+  id: string;
+  traceId: string;
+  projectName: string;
+  type: SPAN_TYPE.llm;
+  name: string;
+  startTime: string;
+  endTime: string;
+  input: { messages: ProviderMessageType[] };
+  output: { choices: ChatCompletionMessageChoiceType[] };
+  usage?: UsageType | null;
+  metadata: {
+    created_from: string;
+    usage: UsageType | null;
+    model: string;
+    parameters: LLMPromptConfigsType;
+  };
+}
+
+export interface LogExperiment {
+  id: string;
+  datasetName: string;
+  name?: string;
+  metadata?: object;
+}
+
+export type LogExperimentItem = {
+  id: string;
+  experimentId: string;
+  datasetItemId: string;
+  traceId: string;
+} & {
+  [inputOutputField: string]: JsonNode;
+};

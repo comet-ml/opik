@@ -11,13 +11,13 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
+import com.comet.opik.domain.llmproviders.AnthropicModelName;
 import com.comet.opik.domain.llmproviders.GeminiModelName;
+import com.comet.opik.domain.llmproviders.OpenaiModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
-import dev.ai4j.openai4j.chat.ChatCompletionModel;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.Role;
-import dev.langchain4j.model.anthropic.AnthropicChatModelName;
 import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
@@ -55,7 +55,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /// - **Openai**: runs against a demo server and doesn't require an API key
 /// - **Anthropic**: set `ANTHROPIC_API_KEY` to your anthropic api key
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Disabled
 // Disabled because the tests require an API key to run and this seems to be failing in the CI pipeline
 class ChatCompletionsResourceTest {
 
@@ -223,9 +222,9 @@ class ChatCompletionsResourceTest {
 
         private static Stream<Arguments> testModelsProvider() {
             return Stream.of(
-                    arguments(ChatCompletionModel.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
+                    arguments(OpenaiModelName.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
                             UUID.randomUUID().toString()),
-                    arguments(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
+                    arguments(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
                             System.getenv("ANTHROPIC_API_KEY")),
                     arguments(GeminiModelName.GEMINI_1_0_PRO.toString(), LlmProvider.GEMINI,
                             System.getenv("GEMINI_AI_KEY")));
@@ -275,12 +274,12 @@ class ChatCompletionsResourceTest {
         return Stream.of(
                 arguments(named("no messages", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                         .stream(false)
-                        .model(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString())
+                        .model(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString())
                         .maxCompletionTokens(100).build()),
                         ERROR_EMPTY_MESSAGES),
                 arguments(named("no max tokens", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                         .stream(false)
-                        .model(AnthropicChatModelName.CLAUDE_3_5_SONNET_20240620.toString())
+                        .model(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString())
                         .addUserMessage("Say 'Hello World'").build()),
                         ERROR_NO_COMPLETION_TOKENS));
     }
