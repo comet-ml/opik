@@ -36,12 +36,7 @@ export const createBatchProcessor = <T>(
     currentBatch.push(item);
 
     if (currentBatch.length >= maxBatchSize) {
-      processCurrentBatch();
-
-      if (flushTimer) {
-        clearTimeout(flushTimer);
-        flushTimer = null;
-      }
+      flushBatch();
     } else {
       startFlushTimer();
     }

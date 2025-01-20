@@ -97,7 +97,7 @@ const useActionButtonActions = ({
       },
       onCreateTraces: () => {
         queryClient.invalidateQueries({
-          queryKey: [["projects"]],
+          queryKey: ["projects"],
         });
       },
     };
