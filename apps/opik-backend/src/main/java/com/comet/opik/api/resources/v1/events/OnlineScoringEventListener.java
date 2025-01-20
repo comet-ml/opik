@@ -39,6 +39,7 @@ public class OnlineScoringEventListener {
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final ChatCompletionService aiProxyService;
     private final FeedbackScoreService feedbackScoreService;
+
     private final Logger userFacingLogger;
 
     @Inject
