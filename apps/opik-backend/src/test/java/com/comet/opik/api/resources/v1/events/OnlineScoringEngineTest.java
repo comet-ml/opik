@@ -163,7 +163,7 @@ class OnlineScoringEngineTest {
             """
             .formatted(edgeCaseTemplate).trim();
 
-    private ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -196,12 +196,6 @@ class OnlineScoringEngineTest {
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
-    }
-
-    @BeforeEach
-    void setUp() throws IOException, InterruptedException {
-        MockitoAnnotations.openMocks(this);
-        Mockito.doNothing().when(eventBus).register(Mockito.any());
     }
 
     @Test
@@ -248,6 +242,7 @@ class OnlineScoringEngineTest {
         // return the evaluator we just created
         Mockito.doReturn(List.of(evaluator)).when(ruleEvaluatorService).findAll(Mockito.any(), Mockito.any(),
                 Mockito.any());
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
 
         onlineScoringSampler = new OnlineScoringSampler(onlineScoringConfig, redisson, eventBus, ruleEvaluatorService);
         onlineScoringSampler.onTracesCreated(event);
