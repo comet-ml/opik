@@ -8,7 +8,7 @@ fullnameOverride: ""
 standalone: true
 basicAuth: false
   
-registry: ghcr.io/comet-ml/opik
+registry: &registry ghcr.io/comet-ml/opik
 
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
@@ -94,8 +94,8 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
-
     env:
+      PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
 
@@ -106,12 +106,12 @@ component:
       engineEgress:
         ipBlock: 0.0.0.0/0
         except:
-          - 10.4.0.0/18
-          - 10.4.64.0/18
-          - 10.4.128.0/18
-          - 10.100.0.0/16
-          - 10.126.0.0/15
-          - 10.10.0.0/16
+          - 10.0.0.0/8
+          - 100.64.0.0/10
+          - 172.16.0.0/12
+          - 192.0.0.0/24
+          - 198.18.0.0/15
+          - 192.168.0.0/16
 
     service:
       type: ClusterIP

@@ -105,6 +105,13 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- if $value.env }}
+          env:
+            {{- range $envkey, $envvalue := $value.env }}
+            - name: {{ $envkey }}
+              value: {{ $envvalue | quote }}
+            {{- end }}
+          {{- end }}
           {{- with $value.envFrom }}
           envFrom:
             {{- toYaml . | nindent 10 }}
