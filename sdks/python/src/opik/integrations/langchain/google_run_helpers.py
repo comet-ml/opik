@@ -32,6 +32,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
             prompt_tokens=usage_metadata["prompt_token_count"],
             total_tokens=usage_metadata["total_token_count"],
         )
+        token_usage.update(usage_metadata)
 
         if usage_validator.UsageValidator(token_usage).validate().ok():
             return cast(UsageDict, token_usage)

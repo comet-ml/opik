@@ -1,7 +1,6 @@
 import langchain_google_vertexai
 import langchain_openai
 import pytest
-import vertexai
 from langchain.llms import fake
 from langchain.prompts import PromptTemplate
 
@@ -212,26 +211,48 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-@pytest.mark.skip()
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt",
+    "llm_model, expected_input_prompt, usage",
     [
         (
             langchain_google_vertexai.VertexAI,
             "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            {
+                # openai format
+                "completion_tokens": ANY_BUT_NONE,
+                "prompt_tokens": ANY_BUT_NONE,
+                "total_tokens": ANY_BUT_NONE,
+                # VertexAI format
+                "cached_content_token_count": ANY_BUT_NONE,
+                "candidates_token_count": ANY_BUT_NONE,
+                "prompt_token_count": ANY_BUT_NONE,
+                "total_token_count": ANY_BUT_NONE,
+            },
         ),
         (
             langchain_google_vertexai.ChatVertexAI,
             "Human: Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            {
+                # openai format
+                "completion_tokens": ANY_BUT_NONE,
+                "prompt_tokens": ANY_BUT_NONE,
+                "total_tokens": ANY_BUT_NONE,
+                # ChatVertexAI format
+                "cached_content_token_count": ANY_BUT_NONE,
+                "candidates_token_count": ANY_BUT_NONE,
+                "prompt_token_count": ANY_BUT_NONE,
+                "total_token_count": ANY_BUT_NONE,
+            },
         ),
     ],
 )
 def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_backend, ensure_openai_configured, llm_model, expected_input_prompt
+    fake_backend,
+    gcp_e2e_test_credentials,
+    llm_model,
+    expected_input_prompt,
+    usage,
 ):
-    PROJECT_ID = "vertexai-dev-447913"
-    vertexai.init(project=PROJECT_ID, location="us-central1")
-
     llm = llm_model(
         max_tokens=10,
         model_name="gemini-1.5-flash",
