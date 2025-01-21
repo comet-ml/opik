@@ -1,5 +1,5 @@
 {{- range $key, $value := .Values.component }}
-{{- if $value.ingress.enabled }}
+{{- if and $value.enabled $value.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

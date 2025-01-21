@@ -15,6 +15,7 @@ localFE: false
 
 component:
   backend:
+    enabled: true
     serviceAccount: 
       create: true
     image:
@@ -81,8 +82,51 @@ component:
 
     ingress:
       enabled: false
+
+  python-backend:
+    enabled: true
+    serviceAccount: 
+      create: true
+    image:
+      repository: opik-python-backend
+      pullPolicy: IfNotPresent
+      tag: latest
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+
+    env:
+      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
+      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+
+    securityContext:
+      privileged: true
+    networkPolicy:
+      enabled: true
+      engineEgress:
+        ipBlock: 0.0.0.0/0
+        except:
+          - 10.4.0.0/18
+          - 10.4.64.0/18
+          - 10.4.128.0/18
+          - 10.100.0.0/16
+          - 10.126.0.0/15
+          - 10.10.0.0/16
+
+    service:
+      type: ClusterIP
+      ports:
+      - name: http
+        port:  8000
+        protocol: TCP
+        targetPort:  8000
+
+    ingress:
+      enabled: false
+
     
   frontend:
+    enabled: true
     serviceAccount: 
       create: true
     image:

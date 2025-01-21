@@ -1,5 +1,5 @@
 {{- range $key, $value := .Values.component }}
-  {{- if $value.autoscaling.enabled }}
+  {{- if and $value.enabled $value.autoscaling.enabled }}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

@@ -1,0 +1,43 @@
+{{- if and ".Values.component.python-backend.enabled" ".Values.component.python-backend.networkPolicy.enabled" }}
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: default-deny
+spec:
+  podSelector:
+    matchLabels:
+      component: {{ include "opik.name" $ }}-python-backend
+
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ include "opik.name" $ }}-python-backend-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "opik.name" $ }}-python-backend
+  policyTypes:
+  - Egress
+  egress:
+  - action: Allow
+    protocol: UDP
+    destination:
+      selector: 'k8s-app == "kube-dns"'
+      ports:
+      - 53
+  - action: Allow
+    protocol: TCP
+    destination:
+      selector: 'k8s-app == "kube-dns"'
+      ports:
+      - 53
+  - to:
+    - ipBlock:
+        cidr: {{ index .Values "component" "python-backend" "networkPolicy" "engineEgress" "ipBlock" }}
+        except:
+          {{- range index .Values "component" "python-backend" "networkPolicy" "engineEgress" "except" }}
+          - {{ . }}
+          {{- end }}
+{{- end }}
