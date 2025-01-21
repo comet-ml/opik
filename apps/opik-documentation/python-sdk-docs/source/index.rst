@@ -169,6 +169,7 @@ You can learn more about the `opik` python SDK in the following sections:
    integrations/bedrock/index
    integrations/crewai/index
    integrations/dspy/index
+   integrations/guardrails/index
    integrations/haystack/index
    integrations/langchain/index
    integrations/llama_index/index
