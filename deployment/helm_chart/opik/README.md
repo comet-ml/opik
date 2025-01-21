@@ -177,6 +177,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
 | component.python-backend.enabled | bool | `true` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG | string | `"latest"` |  |
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
@@ -191,7 +192,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.networkPolicy.engineEgress.except[5] | string | `"192.168.0.0/16"` |  |
 | component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
 | component.python-backend.replicaCount | int | `1` |  |
-| component.python-backend.securityContext.privileged | bool | `false` |  |
+| component.python-backend.securityContext.privileged | bool | `true` |  |
 | component.python-backend.service.ports[0].name | string | `"http"` |  |
 | component.python-backend.service.ports[0].port | int | `8000` |  |
 | component.python-backend.service.ports[0].protocol | string | `"TCP"` |  |
