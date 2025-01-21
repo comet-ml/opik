@@ -65,6 +65,7 @@ class CreateSpanMessage(BaseMessage):
     model: Optional[str]
     provider: Optional[str]
     error_info: Optional[ErrorInfoDict]
+    total_cost: Optional[float]
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
@@ -89,6 +90,7 @@ class UpdateSpanMessage(BaseMessage):
     model: Optional[str]
     provider: Optional[str]
     error_info: Optional[ErrorInfoDict]
+    total_cost: Optional[float]
 
 
 @dataclasses.dataclass
