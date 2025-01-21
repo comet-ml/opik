@@ -37,22 +37,19 @@ const TracesPathsAutocomplete: React.FC<TracesPathsAutocompleteProps> = ({
 
   const items = useMemo(() => {
     return uniq(
-      (data?.content || []).reduce<string[]>(
-        (acc, d) => {
-          return acc.concat(
-            rootKeys.reduce<string[]>(
-              (internalAcc, key) =>
-                internalAcc.concat(
-                  isObject(d[key]) || isArray(d[key])
-                    ? getJSONPaths(d[key], key)
-                    : [],
-                ),
-              [],
-            ),
-          );
-        },
-        [...rootKeys],
-      ),
+      (data?.content || []).reduce<string[]>((acc, d) => {
+        return acc.concat(
+          rootKeys.reduce<string[]>(
+            (internalAcc, key) =>
+              internalAcc.concat(
+                isObject(d[key]) || isArray(d[key])
+                  ? getJSONPaths(d[key], key)
+                  : [],
+              ),
+            [],
+          ),
+        );
+      }, []),
     )
       .filter((p) =>
         value ? p.toLowerCase().includes(value.toLowerCase()) : true,
