@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
@@ -51,13 +52,14 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     private volatile boolean running = true;
 
     private final BlockingQueue<ILoggingEvent> logQueue = new LinkedBlockingQueue<>();
-    private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>(
+            Executors.newSingleThreadScheduledExecutor());
 
     @Override
     public void start() {
 
         // Background flush thread
-        scheduler.scheduleAtFixedRate(this::flushLogs, flushIntervalDuration.toMillis(),
+        scheduler.get().scheduleAtFixedRate(this::flushLogs, flushIntervalDuration.toMillis(),
                 flushIntervalDuration.toMillis(), TimeUnit.MILLISECONDS);
 
         super.start();
@@ -108,7 +110,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         }
 
         if (logQueue.size() >= batchSize) {
-            scheduler.execute(this::flushLogs);
+            scheduler.get().execute(this::flushLogs);
         }
     }
 
@@ -118,22 +120,23 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         super.stop();
         flushLogs();
         setInstance(null);
-        scheduler.shutdown();
+        scheduler.get().shutdown();
         awaitTermination();
         logQueue.clear();
-        scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.set(Executors.newSingleThreadScheduledExecutor());
     }
 
     private void awaitTermination() {
         try {
-            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                scheduler.shutdownNow();
-                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) { // Final attempt
+            if (!scheduler.get().awaitTermination(5, TimeUnit.SECONDS)) {
+                scheduler.get().shutdownNow();
+                if (!scheduler.get().awaitTermination(5, TimeUnit.SECONDS)) { // Final attempt
                     log.error("ClickHouseAppender did not terminate");
                 }
             }
         } catch (InterruptedException ex) {
-            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+            scheduler.get().shutdownNow();
             log.warn("ClickHouseAppender interrupted while waiting for termination", ex);
         }
     }
