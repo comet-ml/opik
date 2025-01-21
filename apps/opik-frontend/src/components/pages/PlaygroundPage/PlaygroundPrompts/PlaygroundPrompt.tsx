@@ -54,7 +54,7 @@ const PlaygroundPrompt = ({
   const checkedIfModelIsValidRef = useRef(false);
 
   const prompt = usePromptById(promptId);
-  const [_, setLastPickedModel] = useLastPickedModel();
+  const [, setLastPickedModel] = useLastPickedModel();
 
   const { model, messages, configs, name } = prompt;
 
