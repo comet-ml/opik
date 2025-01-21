@@ -58,7 +58,8 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   });
   const codeWithConfigToCopy = putConfigInCode({ code, workspaceName, apiKey });
 
-  const canExecuteCode = executionUrl && apiKey;
+  const canExecuteCode =
+    executionUrl && apiKey && Boolean(import.meta.env.VITE_GET_STARTED_API_URL);
 
   return (
     <div className="flex flex-col gap-6 rounded-md border bg-white p-6">

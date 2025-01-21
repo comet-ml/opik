@@ -109,7 +109,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
         </div>
       </div>
       {consoleIsOpened && (
-        <div className="h-[250px] w-full overflow-auto bg-white">
+        <div className="h-[250px] w-full overflow-auto border border-transparent border-b-[#E2E8F0] bg-white">
           <div className="comet-body-s gap-4 text-balance px-4 py-3 font-code">
             <div className="text-foreground-secondary">
               Welcome to Opik! Click <span className="text-green-700">Run</span>{" "}
@@ -162,18 +162,16 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
           </div>
         </div>
       )}
-      <div className="border border-transparent border-t-[#E2E8F0]">
-        <CodeMirror
-          theme={theme}
-          value={data}
-          extensions={[
-            PLUGINS_MAP[language],
-            EditorView.lineWrapping,
-            EditorState.readOnly.of(true),
-            EditorView.editable.of(false),
-          ]}
-        />
-      </div>
+      <CodeMirror
+        theme={theme}
+        value={data}
+        extensions={[
+          PLUGINS_MAP[language],
+          EditorView.lineWrapping,
+          EditorState.readOnly.of(true),
+          EditorView.editable.of(false),
+        ]}
+      />
     </div>
   );
 };
