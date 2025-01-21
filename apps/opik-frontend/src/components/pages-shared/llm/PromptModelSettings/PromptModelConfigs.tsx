@@ -3,7 +3,6 @@ import { Settings2 } from "lucide-react";
 
 import {
   LLMAnthropicConfigsType,
-  LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
   LLMPromptConfigsType,
   PROVIDER_TYPE,
@@ -18,7 +17,6 @@ import { Button } from "@/components/ui/button";
 
 import OpenAIModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 import AnthropicModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
-import GeminiModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
@@ -47,15 +45,6 @@ const PromptModelConfigs = ({
       return (
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}
-          onChange={onChange}
-        />
-      );
-    }
-
-    if (provider === PROVIDER_TYPE.GEMINI) {
-      return (
-        <GeminiModelConfigs
-          configs={configs as LLMGeminiConfigsType}
           onChange={onChange}
         />
       );

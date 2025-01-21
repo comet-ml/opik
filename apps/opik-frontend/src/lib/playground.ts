@@ -6,7 +6,6 @@ import {
 } from "@/constants/llm";
 import {
   LLMAnthropicConfigsType,
-  LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
@@ -35,14 +34,6 @@ export const getDefaultConfigByProvider = (
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
     } as LLMAnthropicConfigsType;
-  }
-
-  if (provider === PROVIDER_TYPE.GEMINI) {
-    return {
-      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
-      maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
-      topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
-    } as LLMGeminiConfigsType;
   }
 
   return {};
