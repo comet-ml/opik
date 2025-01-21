@@ -46,6 +46,11 @@ class UpdateTraceMessage(BaseMessage):
     tags: Optional[List[str]]
     error_info: Optional[ErrorInfoDict]
 
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data["id"] = data.pop("trace_id")
+        return data
+
 
 @dataclasses.dataclass
 class CreateSpanMessage(BaseMessage):
@@ -70,6 +75,7 @@ class CreateSpanMessage(BaseMessage):
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("span_id")
+        data["estimated_total_cost"] = data.pop("total_cost")
         return data
 
 
@@ -91,6 +97,12 @@ class UpdateSpanMessage(BaseMessage):
     provider: Optional[str]
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data["id"] = data.pop("span_id")
+        data["estimated_total_cost"] = data.pop("total_cost")
+        return data
 
 
 @dataclasses.dataclass
