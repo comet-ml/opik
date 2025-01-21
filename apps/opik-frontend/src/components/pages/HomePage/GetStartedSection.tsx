@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { FlaskConical, InspectionPanel, MousePointer, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FlaskConical, InspectionPanel, MousePointer } from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import { buildDocsUrl } from "@/lib/utils";
 import AddExperimentDialog from "../ExperimentsShared/AddExperimentDialog";
