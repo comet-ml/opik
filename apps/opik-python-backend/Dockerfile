@@ -2,11 +2,11 @@ FROM docker:27.5.0
 
 ENV DOCKER_HOST=unix:///var/run/docker.sock
 
-RUN apk update && apk upgrade \
-  && apk add --no-cache \
-       python3 python3-dev py3-pip \
-       libffi-dev openssl-dev build-base git curl bash \
-       cargo gcc musl-dev
+RUN apk update \
+    && apk add --no-cache \
+    python3 python3-dev py3-pip \
+    libffi-dev openssl-dev build-base git curl bash \
+    cargo gcc musl-dev
 
 WORKDIR /opt/opik-python-backend
 
