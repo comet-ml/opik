@@ -25,7 +25,7 @@ guardrails hub install hub://guardrails/politeness_check
 
 In order to log traces to Opik, you will need to call the track the Guard object with `track_guardrails` function.
 
-```python
+```python pytest_codeblocks_skip=true
 from guardrails import Guard, OnFailAction
 from guardrails.hub import PolitenessCheck
 
