@@ -55,5 +55,8 @@ public class OpikConfiguration extends JobConfiguration {
     private CacheConfiguration cacheManager = new CacheConfiguration();
 
     @Valid @NotNull @JsonProperty
+    private OnlineScoringConfig onlineScoring = new OnlineScoringConfig();
+
+    @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
 }
