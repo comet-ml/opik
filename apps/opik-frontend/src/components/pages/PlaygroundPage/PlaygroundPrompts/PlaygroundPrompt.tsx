@@ -34,6 +34,7 @@ import {
 } from "@/store/PlaygroundStore";
 import { getDefaultProviderKey } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
+import useLastPickedModel from "@/components/pages/PlaygroundPage/PlaygroundPrompts/useLastPickedModel";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -53,6 +54,7 @@ const PlaygroundPrompt = ({
   const checkedIfModelIsValidRef = useRef(false);
 
   const prompt = usePromptById(promptId);
+  const [_, setLastPickedModel] = useLastPickedModel();
 
   const { model, messages, configs, name } = prompt;
 
@@ -107,8 +109,9 @@ const PlaygroundPrompt = ({
   const handleUpdateModel = useCallback(
     (model: PROVIDER_MODEL_TYPE) => {
       updatePrompt(promptId, { model });
+      setLastPickedModel(model);
     },
-    [updatePrompt, promptId],
+    [updatePrompt, promptId, setLastPickedModel],
   );
 
   const handleAddProvider = useCallback(
