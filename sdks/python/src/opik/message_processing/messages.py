@@ -75,7 +75,7 @@ class CreateSpanMessage(BaseMessage):
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("span_id")
-        data["estimated_total_cost"] = data.pop("total_cost")
+        data["total_estimated_cost"] = data.pop("total_cost")
         return data
 
 
@@ -101,7 +101,7 @@ class UpdateSpanMessage(BaseMessage):
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("span_id")
-        data["estimated_total_cost"] = data.pop("total_cost")
+        data["total_estimated_cost"] = data.pop("total_cost")
         return data
 
 
