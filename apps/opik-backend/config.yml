@@ -206,9 +206,9 @@ onlineScoring:
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: ${REDIS_SCORING_CONSUMER_GROUP_NAME:-'online_scoring'}
-  # Default: 3
+  # Default: 5
   # Description: Maximum number of messages returned within a Redis Stream get
-  consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-3}
+  consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-5}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
