@@ -7,7 +7,7 @@ description: Cookbook that showcases Opik's integration with the Guardrails AI P
 
 [Guardrails AI](https://github.com/guardrails-ai/guardrails) is a framework for validating the inputs and outputs
 
-For this guide we will use the a simple example that logs guardrails validation steps as traces to Opik, providing them with the validation result tags.
+For this guide we will use a simple example that logs guardrails validation steps as traces to Opik, providing them with the validation result tags.
 
 First, ensure you have both `opik` and `guardrails-ai` installed:
 
