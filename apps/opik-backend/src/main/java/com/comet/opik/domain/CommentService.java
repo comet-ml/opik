@@ -12,6 +12,8 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
+import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
+
 @ImplementedBy(CommentServiceImpl.class)
 public interface CommentService {
 
@@ -37,7 +39,8 @@ class CommentServiceImpl implements CommentService {
     public Mono<UUID> create(@NonNull UUID traceId, @NonNull Comment comment) {
         UUID id = idGenerator.generateId();
         return traceDAO.getProjectIdFromTrace(traceId)
-                .flatMap(traceProjectIdMap -> commentDAO.addComment(id, traceId, traceProjectIdMap.get(traceId),
+                .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
+                .flatMap(projectId -> commentDAO.addComment(id, traceId, projectId,
                         comment))
                 .map(__ -> id);
     }

@@ -52,7 +52,6 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(TraceDAOImpl.class)
@@ -80,7 +79,7 @@ interface TraceDAO {
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
 
-    Mono<Map<UUID, UUID>> getProjectIdFromTrace(@NonNull UUID traceId);
+    Mono<UUID> getProjectIdFromTrace(@NonNull UUID traceId);
 
     Flux<BiInformation> getTraceBIInformation(Connection connection);
 
@@ -589,7 +588,6 @@ class TraceDAOImpl implements TraceDAO {
             """;
     private static final String SELECT_PROJECT_ID_FROM_TRACE = """
             SELECT
-                id,
                 project_id
             FROM traces
             WHERE id = :id
@@ -1247,18 +1245,15 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Map<UUID, UUID>> getProjectIdFromTrace(@NonNull UUID traceId) {
+    public Mono<UUID> getProjectIdFromTrace(@NonNull UUID traceId) {
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_TRACE)
                     .bind("id", traceId);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(
-                            row.get("id", UUID.class),
-                            row.get("project_id", UUID.class))))
-                    .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
+                    .singleOrEmpty();
         });
     }
 }

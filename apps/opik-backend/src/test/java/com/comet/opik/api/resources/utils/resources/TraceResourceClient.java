@@ -178,8 +178,14 @@ public class TraceResourceClient {
                 }).toList();
     }
 
-    public Comment createComment(UUID traceId, String apiKey, String workspaceName, int expectedStatus) {
-        Comment comment = podamFactory.manufacturePojo(Comment.class);
+    public Comment generateAndCreateComment(UUID traceId, String apiKey, String workspaceName, int expectedStatus) {
+        Comment comment = Comment.builder().text(podamFactory.manufacturePojo(String.class)).build();
+        var commentId = createComment(comment, traceId, apiKey, workspaceName, expectedStatus);
+
+        return comment.toBuilder().id(commentId).build();
+    }
+
+    public UUID createComment(Comment comment, UUID traceId, String apiKey, String workspaceName, int expectedStatus) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(traceId.toString())
@@ -193,19 +199,15 @@ public class TraceResourceClient {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
             if (expectedStatus == 201) {
-                return Comment
-                        .builder()
-                        .id(TestUtils.getIdFromLocation(response.getLocation()))
-                        .text(comment.text())
-                        .build();
+                return TestUtils.getIdFromLocation(response.getLocation());
             }
 
             return null;
         }
     }
 
-    public String updateComment(UUID commentId, UUID traceId, String apiKey, String workspaceName, int expectedStatus) {
-        Comment comment = podamFactory.manufacturePojo(Comment.class);
+    public void updateComment(String updatedText, UUID commentId, UUID traceId, String apiKey, String workspaceName,
+            int expectedStatus) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(traceId.toString())
@@ -215,15 +217,9 @@ public class TraceResourceClient {
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(comment))) {
+                .method(HttpMethod.PATCH, Entity.json(Comment.builder().text(updatedText).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
-
-            if (expectedStatus == 204) {
-                return comment.text();
-            }
-
-            return null;
         }
     }
 

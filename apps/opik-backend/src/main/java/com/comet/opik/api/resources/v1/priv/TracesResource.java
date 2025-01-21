@@ -268,14 +268,15 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Add trace comment '{}' for id '{}' on workspaceId '{}'", comment.text(), id, workspaceId);
+        log.info("Add comment for trace with id '{}' on workspaceId '{}'", id, workspaceId);
 
         var commentId = commentService.create(id, comment)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(commentId)).build();
-        log.info("Added trace comment '{}' for id '{}' on workspaceId '{}'", comment.text(), id, workspaceId);
+        log.info("Added comment with id '{}' for trace with id '{}' on workspaceId '{}'", comment.id(), id,
+                workspaceId);
 
         return Response.created(uri).build();
     }
@@ -302,7 +303,7 @@ public class TracesResource {
         return Response.ok(comment).build();
     }
 
-    @PUT
+    @PATCH
     @Path("/{traceId}/comments/{commentId}")
     @Operation(operationId = "updateTraceComment", summary = "Update trace comment by id", description = "Update trace comment by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),

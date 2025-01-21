@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset BorisTkachenko:000010_add_comments_table
+--changeset BorisTkachenko:000011_add_comments_table
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.comments
 (
