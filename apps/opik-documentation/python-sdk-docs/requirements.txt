@@ -10,6 +10,7 @@ cloudpickle
 crewai
 crewai-tools
 dspy-ai
+guardrails-ai
 haystack-ai
 langchain
 langchain_core

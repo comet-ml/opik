@@ -10,7 +10,7 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 You can use the following heuristic metrics:
 
 | Metric       | Description                                                                                       |
-|--------------|---------------------------------------------------------------------------------------------------|
+| ------------ | ------------------------------------------------------------------------------------------------- |
 | Equals       | Checks if the output exactly matches an expected string                                           |
 | Contains     | Check if the output contains a specific substring, can be both case sensitive or case insensitive |
 | RegexMatch   | Checks if the output matches a specified regular expression pattern                               |
@@ -18,6 +18,7 @@ You can use the following heuristic metrics:
 | Levenshtein  | Calculates the Levenshtein distance between the output and an expected string                     |
 | SentenceBLEU | Calculates a single-sentence BLEU score for a candidate vs. one or more references                |
 | CorpusBLEU   | Calculates a corpus-level BLEU score for multiple candidates vs. their references                 |
+
 ## Score an LLM response
 
 You can score an LLM response by first initializing the metrics and then calling the `score` method:
@@ -102,9 +103,16 @@ print(score)
 ### BLEU
 
 The BLEU (Bilingual Evaluation Understudy) metrics estimate how close the LLM outputs are to one or more reference translations. Opik provides two separate classes:
+
 - `SentenceBLEU` – Single-sentence BLEU
 - `CorpusBLEU` – Corpus-level BLEU
-Both rely on the underlying NLTK BLEU implementation with optional smoothing methods, weights, and variable n-gram orders.
+  Both rely on the underlying NLTK BLEU implementation with optional smoothing methods, weights, and variable n-gram orders.
+
+You will need nltk library:
+
+```bash
+pip install nltk
+```
 
 Use `SentenceBLEU` to compute single-sentence BLEU between a single candidate and one (or more) references:
 
@@ -165,4 +173,5 @@ score = metric.score(
 )
 print(score.value, score.reason)
 ```
+
 **Note:** If any candidate or reference is empty, SentenceBLEU or CorpusBLEU will raise a MetricComputationError. Handle or validate inputs accordingly.
