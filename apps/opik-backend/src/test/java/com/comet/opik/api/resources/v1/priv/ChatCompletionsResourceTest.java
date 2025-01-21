@@ -11,9 +11,10 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
-import com.comet.opik.domain.llmproviders.AnthropicModelName;
-import com.comet.opik.domain.llmproviders.GeminiModelName;
-import com.comet.opik.domain.llmproviders.OpenaiModelName;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -41,9 +42,9 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static com.comet.opik.domain.ChatCompletionService.ERROR_EMPTY_MESSAGES;
-import static com.comet.opik.domain.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
-import static com.comet.opik.domain.llmproviders.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
+import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
+import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
+import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
 import static org.junit.jupiter.api.Named.named;
@@ -182,7 +183,7 @@ class ChatCompletionsResourceTest {
 
             assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(errorMessage.getMessage())
-                    .containsIgnoringCase(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
+                    .containsIgnoringCase(LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED.formatted(model));
         }
 
         @ParameterizedTest

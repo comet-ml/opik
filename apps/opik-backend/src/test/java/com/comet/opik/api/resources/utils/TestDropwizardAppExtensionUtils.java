@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.events.EventModule;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.AbstractModule;
+import com.google.inject.Module;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.collections4.CollectionUtils;
@@ -48,6 +49,7 @@ public class TestDropwizardAppExtensionUtils {
             EventBus mockEventBus,
             boolean corsEnabled,
             List<CustomConfig> customConfigs,
+            List<Class<? extends Module>> disableModules,
             List<AbstractModule> modules) {
     }
 
@@ -129,9 +131,9 @@ public class TestDropwizardAppExtensionUtils {
         GuiceyConfigurationHook hook = injector -> {
             injector.modulesOverride(TestHttpClientUtils.testAuthModule());
 
-            Optional.ofNullable(appContextConfig.modules)
+            Optional.ofNullable(appContextConfig.disableModules)
                     .orElse(List.of())
-                    .forEach(injector::modulesOverride);
+                    .forEach(injector::disableModules);
 
             if (appContextConfig.mockEventBus() != null) {
                 injector.modulesOverride(new EventModule() {
@@ -154,6 +156,9 @@ public class TestDropwizardAppExtensionUtils {
                 }
             });
 
+            Optional.ofNullable(appContextConfig.modules)
+                    .orElse(List.of())
+                    .forEach(injector::modulesOverride);
         };
 
         if (appContextConfig.redisUrl() != null) {

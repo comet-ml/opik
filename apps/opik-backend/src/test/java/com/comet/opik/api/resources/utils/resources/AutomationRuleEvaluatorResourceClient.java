@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.LogItem.LogPage;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
@@ -71,10 +72,11 @@ public class AutomationRuleEvaluatorResourceClient {
         }
     }
 
-    public AutomationRuleEvaluator<?> getEvaluator(UUID evaluatorId, UUID projectId, String workspaceName,
+    public LogPage getEvaluatorLogs(UUID evaluatorId, UUID projectId, String workspaceName,
             String apiKey) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
                 .path(evaluatorId.toString())
+                .path("logs")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -83,7 +85,7 @@ public class AutomationRuleEvaluatorResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            return actualResponse.readEntity(AutomationRuleEvaluator.class);
+            return actualResponse.readEntity(LogPage.class);
         }
     }
 }

@@ -1,11 +1,21 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.gemini.GeminiClientGenerator;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
+import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
+import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.dropwizard.configuration.ConfigurationException;
 import io.dropwizard.configuration.FileConfigurationSourceProvider;
@@ -50,7 +60,7 @@ class LlmProviderFactoryTest {
 
     @ParameterizedTest
     @MethodSource
-    void testGetService(String model, LlmProvider llmProvider, Class<? extends LlmProviderService> providerClass) {
+    void testGetService(String model, LlmProvider llmProvider, String providerClass) {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         String workspaceId = UUID.randomUUID().toString();
@@ -67,22 +77,34 @@ class LlmProviderFactoryTest {
                 .build());
 
         // SUT
-        var llmProviderFactory = new LlmProviderFactory(llmProviderApiKeyService,
-                new LlmProviderClientGenerator(llmProviderClientConfig));
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService);
+
+        AnthropicModule anthropicModule = new AnthropicModule();
+        GeminiModule geminiModule = new GeminiModule();
+        OpenAIModule openAIModule = new OpenAIModule();
+
+        AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig);
+        anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator);
+
+        GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig);
+        geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
+
+        OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig);
+        openAIModule.llmServiceProvider(llmProviderFactory, openAIClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
 
         // assertions
-        assertThat(actual).isInstanceOf(providerClass);
+        assertThat(actual.getClass().getSimpleName()).isEqualTo(providerClass);
     }
 
     private static Stream<Arguments> testGetService() {
         var openAiModels = EnumUtils.getEnumList(OpenaiModelName.class).stream()
-                .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, LlmProviderOpenAi.class));
+                .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, "LlmProviderOpenAi"));
         var anthropicModels = EnumUtils.getEnumList(AnthropicModelName.class).stream()
-                .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, LlmProviderAnthropic.class));
+                .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, "LlmProviderAnthropic"));
         var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
-                .map(model -> arguments(model.toString(), LlmProvider.GEMINI, LlmProviderGemini.class));
+                .map(model -> arguments(model.toString(), LlmProvider.GEMINI, "LlmProviderGemini"));
 
         return Stream.of(openAiModels, anthropicModels, geminiModels).flatMap(Function.identity());
     }

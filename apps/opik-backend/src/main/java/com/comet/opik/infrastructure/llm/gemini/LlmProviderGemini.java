@@ -1,5 +1,7 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.api.ChunkedResponseHandler;
+import com.comet.opik.domain.llm.LlmProviderService;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -11,7 +13,7 @@ import java.util.function.Consumer;
 
 @RequiredArgsConstructor
 public class LlmProviderGemini implements LlmProviderService {
-    private final @NonNull LlmProviderClientGenerator llmProviderClientGenerator;
+    private final @NonNull GeminiClientGenerator llmProviderClientGenerator;
     private final @NonNull String apiKey;
 
     @Override
