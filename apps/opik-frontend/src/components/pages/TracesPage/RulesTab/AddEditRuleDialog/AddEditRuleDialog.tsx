@@ -1,6 +1,12 @@
-import React, { useCallback, useMemo, useState } from "react";
-import uniq from "lodash/uniq";
+import React, { useCallback } from "react";
 
+import cloneDeep from "lodash/cloneDeep";
+import get from "lodash/get";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, UseFormReturn } from "react-hook-form";
+
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,9 +17,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   EVALUATORS_RULE_TYPE,
   EvaluatorsRule,
@@ -26,16 +38,28 @@ import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PythonCodeRuleDetails from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/LLMJudgeRuleDetails";
-import cloneDeep from "lodash/cloneDeep";
-import {
-  DEFAULT_LLM_AS_JUDGE_DATA,
-  DEFAULT_SAMPLING_RATE,
-} from "@/constants/automations";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
-} from "@/lib/automations";
-import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
+  EvaluationRuleFormSchema,
+  EvaluationRuleFormType,
+  LLMJudgeDetailsFormType,
+} from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/schema";
+import { LLM_JUDGE } from "@/types/llm";
+import { LLM_PROMPT_CUSTOM_TEMPLATE } from "@/constants/llm";
+
+export const DEFAULT_SAMPLING_RATE = 1;
+
+export const DEFAULT_LLM_AS_JUDGE_DATA: LLMJudgeDetailsFormType = {
+  model: "",
+  config: {
+    temperature: 0.0,
+  },
+  template: LLM_JUDGE.custom,
+  messages: LLM_PROMPT_CUSTOM_TEMPLATE.messages,
+  variables: LLM_PROMPT_CUSTOM_TEMPLATE.variables,
+  schema: LLM_PROMPT_CUSTOM_TEMPLATE.schema,
+};
 
 type AddEditRuleDialogProps = {
   open: boolean;
@@ -51,24 +75,27 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   rule: defaultRule,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const [name, setName] = useState(defaultRule?.name || "");
-  const [samplingRate, setSamplingRate] = useState(
-    defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
-  );
-  const [type] = useState(defaultRule?.type || EVALUATORS_RULE_TYPE.llm_judge);
-  const isLLMJudge = type === EVALUATORS_RULE_TYPE.llm_judge;
-
-  const [llmJudgeDetails, setLLMJudgeDetails] = useState(
-    isLLMJudge && defaultRule
-      ? convertLLMJudgeObjectToLLMJudgeData(defaultRule.code as LLMJudgeObject)
-      : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA),
-  );
-
-  const [pythonCodeDetails] = useState(
-    !isLLMJudge && defaultRule
-      ? (defaultRule.code as PythonCodeObject)
-      : undefined,
-  );
+  const form: UseFormReturn<EvaluationRuleFormType> = useForm<
+    z.infer<typeof EvaluationRuleFormSchema>
+  >({
+    resolver: zodResolver(EvaluationRuleFormSchema),
+    defaultValues: {
+      ruleName: defaultRule?.name || "",
+      samplingRate: defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
+      type: defaultRule?.type || EVALUATORS_RULE_TYPE.llm_judge,
+      pythonCodeDetails:
+        defaultRule && defaultRule.type === EVALUATORS_RULE_TYPE.python_code
+          ? (defaultRule.code as PythonCodeObject)
+          : { code: "" },
+      llmJudgeDetails:
+        defaultRule && defaultRule.type === EVALUATORS_RULE_TYPE.llm_judge
+          ? convertLLMJudgeObjectToLLMJudgeData(
+              defaultRule.code as LLMJudgeObject,
+            )
+          : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA),
+    },
+  });
+  const isLLMJudge = form.getValues("type") === EVALUATORS_RULE_TYPE.llm_judge;
 
   const { mutate: createMutate } = useRuleCreateMutation();
   const { mutate: updateMutate } = useRuleUpdateMutation();
@@ -77,100 +104,40 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const title = isEdit ? "Edit rule" : "Create a new rule";
   const submitText = isEdit ? "Update rule" : "Create rule";
 
-  const rule = useMemo(() => {
+  const getRule = useCallback(() => {
+    const formData = form.getValues();
     return {
-      name,
+      name: formData.ruleName,
       project_id: projectId,
-      sampling_rate: samplingRate,
-      type,
+      sampling_rate: formData.samplingRate,
+      type: formData.type,
       code: isLLMJudge
-        ? convertLLMJudgeDataToLLMJudgeObject(llmJudgeDetails)
-        : pythonCodeDetails,
+        ? convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails)
+        : formData.pythonCodeDetails,
     } as EvaluatorsRule;
-  }, [
-    name,
-    pythonCodeDetails,
-    projectId,
-    samplingRate,
-    type,
-    isLLMJudge,
-    llmJudgeDetails,
-  ]);
-
-  const [showValidation, setShowValidation] = useBooleanTimeoutState({
-    timeout: 10000,
-  });
-  const [validationMessage, setValidationMessage] = useState("");
-  const validate = useCallback(() => {
-    const messages: string[] = [];
-    if (rule.name === "") {
-      messages.push("Rule name is required");
-    }
-
-    if (isLLMJudge) {
-      const code = rule.code as LLMJudgeObject;
-
-      if ((code.model.name as never) === "") {
-        messages.push("Model is required");
-      }
-
-      code.messages.forEach((m, index) => {
-        if (m.content === "") {
-          messages.push(`Prompt message #${index} can not be empty.`);
-        }
-      });
-
-      Object.entries(code.variables).forEach(([k, v]) => {
-        if (v === "" || !/^(input|output|metadata)/.test(v)) {
-          messages.push(
-            v === ""
-              ? `Mapping for variable "${k}" is required`
-              : `Mapping for variable "${k}" is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
-          );
-        }
-      });
-
-      const schemaNames = code.schema.map((s) => s.name);
-
-      schemaNames.forEach((s, index) => {
-        if (s === "") {
-          messages.push(`Score definition #${index} name can not be empty.`);
-        }
-      });
-
-      if (schemaNames.length !== uniq(schemaNames).length) {
-        messages.push("All score definition names should be unique");
-      }
-    }
-
-    setValidationMessage(messages.map((m) => `- ${m}`).join("\n"));
-
-    if (messages.length) {
-      setShowValidation(true);
-    }
-
-    return messages.length === 0;
-  }, [rule.name, rule.code, isLLMJudge, setShowValidation]);
+  }, [form, projectId, isLLMJudge]);
 
   const createPrompt = useCallback(() => {
-    if (!validate()) return;
-
     createMutate({
       projectId,
-      rule,
+      rule: getRule(),
     });
     setOpen(false);
-  }, [createMutate, rule, validate, projectId, setOpen]);
+  }, [createMutate, getRule, projectId, setOpen]);
 
   const editPrompt = useCallback(() => {
-    if (!validate()) return;
     updateMutate({
       ruleId: defaultRule!.id,
       projectId,
-      rule,
+      rule: getRule(),
     });
     setOpen(false);
-  }, [updateMutate, rule, validate, defaultRule, projectId, setOpen]);
+  }, [updateMutate, getRule, defaultRule, projectId, setOpen]);
+
+  const onSubmit = useCallback(
+    () => (isEdit ? editPrompt() : createPrompt()),
+    [isEdit, editPrompt, createPrompt],
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -179,55 +146,72 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
-          {showValidation && (
-            <div
-              className="absolute bottom-24 right-7 z-10 cursor-pointer rounded bg-white shadow-xl"
-              onClick={() => setShowValidation(false)}
+          <Form {...form}>
+            <form
+              className="flex flex-col gap-4 pb-4"
+              onSubmit={form.handleSubmit(onSubmit)}
             >
-              <Alert variant="destructive">
-                <AlertTitle>Validation errors:</AlertTitle>
-                <AlertDescription className="min-w-72 max-w-[500px] whitespace-pre-wrap">
-                  {validationMessage}
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
-          <div className="flex flex-col gap-2 pb-4">
-            <Label htmlFor="ruleName">Name</Label>
-            <Input
-              id="ruleName"
-              placeholder="Rule name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <SliderInputControl
-            min={0}
-            max={1}
-            step={0.01}
-            defaultValue={DEFAULT_SAMPLING_RATE}
-            value={samplingRate}
-            onChange={setSamplingRate}
-            id="sampling_rate"
-            label="Samping rate"
-            tooltip="Percentage of traces to evaluate"
-          />
-          {isLLMJudge ? (
-            <LLMJudgeRuleDetails
-              data={llmJudgeDetails}
-              workspaceName={workspaceName}
-              onChange={setLLMJudgeDetails}
-              projectId={projectId}
-            />
-          ) : (
-            <PythonCodeRuleDetails data={pythonCodeDetails} />
-          )}
+              <FormField
+                control={form.control}
+                name="ruleName"
+                render={({ field, formState }) => {
+                  const validationErrors = get(formState.errors, [
+                    "llmJudgeDetails",
+                    "model",
+                  ]);
+                  return (
+                    <FormItem>
+                      <Label>Name</Label>
+                      <FormControl>
+                        <Input
+                          className={cn({
+                            "border-destructive": Boolean(
+                              validationErrors?.message,
+                            ),
+                          })}
+                          placeholder="Rule name"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+              <FormField
+                control={form.control}
+                name="samplingRate"
+                render={({ field }) => (
+                  <SliderInputControl
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    defaultValue={DEFAULT_SAMPLING_RATE}
+                    value={field.value}
+                    onChange={field.onChange}
+                    id="sampling_rate"
+                    label="Samping rate"
+                    tooltip="Percentage of traces to evaluate"
+                  />
+                )}
+              />
+              {isLLMJudge ? (
+                <LLMJudgeRuleDetails
+                  workspaceName={workspaceName}
+                  projectId={projectId}
+                  form={form}
+                />
+              ) : (
+                <PythonCodeRuleDetails form={form} />
+              )}
+            </form>
+          </Form>
         </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" onClick={isEdit ? editPrompt : createPrompt}>
+          <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
             {submitText}
           </Button>
         </DialogFooter>
