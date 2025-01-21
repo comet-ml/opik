@@ -112,8 +112,8 @@ public class AutomationRuleEvaluatorsResource {
         log.info("Creating {} evaluator for project_id '{}' on workspace_id '{}'", evaluator.getType(),
                 evaluator.getProjectId(), workspaceId);
         AutomationRuleEvaluator<?> savedEvaluator = service.save(evaluator, projectId, workspaceId, userName);
-        log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", evaluator.getType(),
-                savedEvaluator.getId(), evaluator.getProjectId(), workspaceId);
+        log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", savedEvaluator.getType(),
+                savedEvaluator.getId(), savedEvaluator.getProjectId(), workspaceId);
 
         URI uri = uriInfo.getBaseUriBuilder()
                 .path("v1/private/automations/projects/{projectId}/evaluators/{id}")

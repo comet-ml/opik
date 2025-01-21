@@ -5,12 +5,14 @@ OPIK_BACKEND="opik-backend"
 OPIK_FRONTEND="opik-frontend"
 OPIK_CLICKHOUSE="clickhouse-opik-clickhouse"
 OPIK_MYSQL="opik-mysql"
+OPIK_REDIS="opik-redis"
 OPIK_FRONTEND_PORT=5173
 OPIK_BACKEND_PORT=8080
 OPIK_OPENAPI_PORT=3003
 OPIK_CLICKHOUSE_PORT=8123
 OPIK_MYSQL_PORT=3306
-DOCKER_REGISTRY_LOCAL="local" 
+OPIK_REDIS_PORT=6379
+DOCKER_REGISTRY_LOCAL="local"
 BUILD=true
 FE_BUILD=true
 HELM_UPDATE=true
@@ -186,5 +188,10 @@ echo "### Port-forward MySQL to local host"
 # remove the previous port-forward
 ps -ef | grep "svc/${OPIK_MYSQL} ${OPIK_MYSQL_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
 kubectl port-forward svc/${OPIK_MYSQL} ${OPIK_MYSQL_PORT} > /dev/null 2>&1 &
+
+echo "### Port-forward REDIS to local host"
+# remove the previous port-forward
+ps -ef | grep "svc/${OPIK_REDIS} ${OPIK_REDIS_PORT}" | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null|| true
+kubectl port-forward svc/${OPIK_REDIS} ${OPIK_REDIS_PORT} > /dev/null 2>&1 &
 
 echo "Now you can open your browser and connect http://localhost:${OPIK_FRONTEND_PORT}"
