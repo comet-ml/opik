@@ -51,6 +51,7 @@ def update_current_span(
     tags: Optional[List[str]] = None,
     usage: Optional[UsageDict] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+    total_cost: Optional[float] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -63,6 +64,7 @@ def update_current_span(
         tags: The tags of the span.
         usage: The usage data of the span.
         feedback_scores: The feedback scores of the span.
+        total_cost: total cost of the span in USD
     """
     new_params = {
         "name": name,
@@ -72,6 +74,7 @@ def update_current_span(
         "tags": tags,
         "usage": usage,
         "feedback_scores": feedback_scores,
+        "total_cost": total_cost,
     }
     current_span_data = context_storage.top_span_data()
     if current_span_data is None:
