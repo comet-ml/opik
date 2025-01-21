@@ -79,5 +79,3 @@ It is crucial that you provide your answer in the following JSON format:
 }}
 Reasons amount is not restricted. Output must be JSON format only.
 ```
-
-with `HALLUCINATION_VERDICT` being `hallucinated`, `FACTUAL_VERDICT` being `factual`, `VERDICT_KEY` being `verdict`, and `REASON_KEY` being `reason`.
