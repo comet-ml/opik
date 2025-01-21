@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { FlaskConical, InspectionPanel, MousePointer, X } from "lucide-react";
-import useLocalStorageState from "use-local-storage-state";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import { buildDocsUrl } from "@/lib/utils";
@@ -9,18 +8,10 @@ import { Link } from "@tanstack/react-router";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const [hide, setHide] = useLocalStorageState<boolean>(
-    "home-get-started-section",
-    {
-      defaultValue: false,
-    },
-  );
   const [isNewExperimentDialogOpened, setIsNewExperimentDialogOpened] =
     useState<boolean>(false);
 
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
-
-  if (hide) return null;
 
   return (
     <div>
@@ -29,15 +20,6 @@ const GetStartedSection = () => {
           <h2 className="comet-body-accented truncate break-words">
             Get started
           </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="minimal"
-            size="icon-xs"
-            onClick={() => setHide(true)}
-          >
-            <X className="size-4" />
-          </Button>
         </div>
       </div>
       <div className="flex gap-x-4">
