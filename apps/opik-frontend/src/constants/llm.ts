@@ -86,6 +86,45 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 3.5 Turbo 0125",
     },
   ],
+
+  [PROVIDER_TYPE.ANTHROPIC]: [
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
+      label: "Claude 3.5 Sonnet 2024-10-22",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_20241022,
+      label: "Claude 3.5 Haiku 2024-10-22",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20240620,
+      label: "Claude 3.5 Sonnet 2024-06-20",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
+      label: "Claude 3 Opus 2024-02-29",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_SONNET_20240229,
+      label: "Claude 3 Sonnet 2024-02-29",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_HAIKU_20240307,
+      label: "Claude 3 Haiku 2024-03-07",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
+      label: "Claude 3.5 Sonnet Latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_LATEST,
+      label: "Claude 3.5 Haiku Latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_LATEST,
+      label: "Claude 3 Opus Latest",
+    },
+  ],
 };
 
 export const DEFAULT_OPEN_AI_CONFIGS = {
@@ -94,6 +133,12 @@ export const DEFAULT_OPEN_AI_CONFIGS = {
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
+};
+
+export const DEFAULT_ANTHROPIC_CONFIGS = {
+  TEMPERATURE: 0,
+  MAX_COMPLETION_TOKENS: 1024,
+  TOP_P: 1,
 };
 
 export const LLM_PROMPT_CUSTOM_TEMPLATE: LLMPromptTemplate = {

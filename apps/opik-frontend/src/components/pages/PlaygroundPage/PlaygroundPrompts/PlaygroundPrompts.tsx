@@ -10,6 +10,7 @@ import {
   usePromptIds,
   useSetPromptMap,
 } from "@/store/PlaygroundStore";
+import useLastPickedModel from "@/components/pages/PlaygroundPage/PlaygroundPrompts/useLastPickedModel";
 
 interface PlaygroundPromptsState {
   workspaceName: string;
@@ -28,15 +29,23 @@ const PlaygroundPrompts = ({
 
   const promptIds = usePromptIds();
 
+  const [lastPickedModel] = useLastPickedModel();
+
   const handleAddPrompt = () => {
-    const newPrompt = generateDefaultPrompt({ setupProviders: providerKeys });
+    const newPrompt = generateDefaultPrompt({
+      setupProviders: providerKeys,
+      lastPickedModel,
+    });
     addPrompt(newPrompt);
   };
 
   const resetPlayground = useCallback(() => {
-    const newPrompt = generateDefaultPrompt({ setupProviders: providerKeys });
+    const newPrompt = generateDefaultPrompt({
+      setupProviders: providerKeys,
+      lastPickedModel,
+    });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
-  }, [setPromptMap, providerKeys]);
+  }, [setPromptMap, providerKeys, lastPickedModel]);
 
   useEffect(() => {
     // hasn't been initialized yet or the last prompt is removed

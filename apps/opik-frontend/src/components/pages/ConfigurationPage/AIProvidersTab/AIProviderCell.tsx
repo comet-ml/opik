@@ -7,9 +7,9 @@ import { PROVIDER_TYPE } from "@/types/providers";
 
 const AIProviderCell = (context: CellContext<unknown, PROVIDER_TYPE>) => {
   const provider = context.getValue();
-  const Icon = PROVIDERS[provider].icon;
+  const Icon = PROVIDERS[provider]?.icon || null;
 
-  const providerKeyLabel = PROVIDERS[provider].label;
+  const providerKeyLabel = PROVIDERS[provider]?.label || "";
 
   return (
     <CellWrapper
@@ -17,7 +17,7 @@ const AIProviderCell = (context: CellContext<unknown, PROVIDER_TYPE>) => {
       tableMetadata={context.table.options.meta}
       className="flex gap-1"
     >
-      <Icon />
+      {Icon && <Icon />}
       <span>{providerKeyLabel}</span>
     </CellWrapper>
   );
