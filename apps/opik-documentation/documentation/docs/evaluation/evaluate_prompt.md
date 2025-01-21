@@ -121,4 +121,4 @@ evaluate_prompt(
 
 ## Next steps
 
-To evaluate comples LLM applications like RAG applications or agents, you can use the [`evaluate`](/evaluation/evaluate_your_llm.md) function.
+To evaluate complex LLM applications like RAG applications or agents, you can use the [`evaluate`](/evaluation/evaluate_your_llm.md) function.
