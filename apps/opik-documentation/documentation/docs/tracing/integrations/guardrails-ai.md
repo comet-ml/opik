@@ -9,21 +9,17 @@ description: Cookbook that showcases Opik's integration with the Guardrails AI P
 
 For this guide we will use the a simple example that logs guardrails validation steps as traces to Opik, providing them with the validation result tags.
 
-## Preparing the environment
+First, ensure you have both `opik` and `guardrails-ai` installed:
 
-In order to use Guardrails AI, we will configure the OpenAI API Key, if you are using any other providers you can replace this with the required API key:
-
-```python
-import os
-import getpass
-
-if "OPENAI_API_KEY" not in os.environ:
-    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+```bash
+pip install opik guardrails-ai
 ```
 
 We will also need to install the guardrails check for politeness from the Guardrails Hub
 
-`guardrails hub install hub://guardrails/politeness_check`
+```bash
+guardrails hub install hub://guardrails/politeness_check`
+```
 
 ## Logging validation traces
 
