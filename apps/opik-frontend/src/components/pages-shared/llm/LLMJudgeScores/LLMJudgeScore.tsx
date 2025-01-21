@@ -12,15 +12,9 @@ import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { DropdownOption } from "@/types/shared";
 import { Button } from "@/components/ui/button";
+import { FormErrorSkeleton } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { TEXT_AREA_CLASSES } from "@/components/ui/textarea";
-
-interface LLMJudgeScoreProps {
-  hideRemoveButton: boolean;
-  score: LLMJudgeSchema;
-  onRemoveScore: () => void;
-  onChangeScore: (changes: Partial<LLMJudgeSchema>) => void;
-}
 
 const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = [
   {
@@ -37,8 +31,17 @@ const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = [
   },
 ];
 
+interface LLMJudgeScoreProps {
+  hideRemoveButton: boolean;
+  errorText?: string;
+  score: LLMJudgeSchema;
+  onRemoveScore: () => void;
+  onChangeScore: (changes: Partial<LLMJudgeSchema>) => void;
+}
+
 const LLMJudgeScore = ({
   hideRemoveButton,
+  errorText,
   score,
   onChangeScore,
   onRemoveScore,
@@ -78,6 +81,11 @@ const LLMJudgeScore = ({
               <div className="comet-body-s truncate break-words">
                 {score.name}
               </div>
+              {errorText && (
+                <FormErrorSkeleton className="my-1">
+                  {errorText}
+                </FormErrorSkeleton>
+              )}
               <div className="comet-body-s line-clamp-3 break-words text-muted-slate">
                 {score.description}
               </div>
@@ -87,9 +95,17 @@ const LLMJudgeScore = ({
               <Input
                 dimension="sm"
                 placeholder="Score name"
+                className={cn({
+                  "border-destructive": errorText,
+                })}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
+              {errorText && (
+                <FormErrorSkeleton className="my-1">
+                  {errorText}
+                </FormErrorSkeleton>
+              )}
               <TextareaAutosize
                 placeholder="Score description"
                 value={description}
