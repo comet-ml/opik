@@ -135,7 +135,9 @@ def verify_span(
     ), testlib.prepare_difference_report(span.error_info, error_info)
     assert span.model == model, f"{span.model} != {model}"
     assert span.provider == provider, f"{span.provider} != {provider}"
-    assert span.total_estimated_cost == total_cost, f"{span.total_estimated_cost} != {total_cost}"
+    assert (
+        span.total_estimated_cost == total_cost
+    ), f"{span.total_estimated_cost} != {total_cost}"
 
     if project_name is not mock.ANY:
         span_project = opik_client.get_project(span.project_id)
