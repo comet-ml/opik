@@ -90,70 +90,70 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
+      label: "Claude 3.5 Sonnet 2024-10-22",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_20241022,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_20241022,
+      label: "Claude 3.5 Haiku 2024-10-22",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20240620,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20240620,
+      label: "Claude 3.5 Sonnet 2024-06-20",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
+      label: "Claude 3 Opus 2024-02-29",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_SONNET_20240229,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_SONNET_20240229,
+      label: "Claude 3 Sonnet 2024-02-29",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_HAIKU_20240307,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_HAIKU_20240307,
+      label: "Claude 3 Haiku 2024-03-07",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
+      label: "Claude 3.5 Sonnet Latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_LATEST,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_LATEST,
+      label: "Claude 3.5 Haiku Latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_LATEST,
-      label: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_LATEST,
+      label: "Claude 3 Opus Latest",
     },
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
-      label: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      label: "Gemini 2.0 Flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
-      label: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
+      label: "Gemini 1.5 Flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH_8B,
-      label: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH_8B,
+      label: "Gemini 1.5 Flash-8B",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_PRO,
-      label: PROVIDER_MODEL_TYPE.GEMINI_1_5_PRO,
+      label: "Gemini 1.5 Pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_0_PRO,
-      label: PROVIDER_MODEL_TYPE.GEMINI_1_0_PRO,
+      label: "Gemini 1.0 Pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.TEXT_EMBEDDING,
-      label: PROVIDER_MODEL_TYPE.TEXT_EMBEDDING,
+      label: "Text Embedding",
     },
     {
       value: PROVIDER_MODEL_TYPE.AQA,
-      label: PROVIDER_MODEL_TYPE.AQA,
+      label: "AQA",
     },
   ],
 };
