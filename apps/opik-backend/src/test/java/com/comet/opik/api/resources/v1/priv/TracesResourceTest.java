@@ -3609,8 +3609,8 @@ class TracesResourceTest {
 
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         assertThat(actualResponse.hasEntity()).isTrue();
-        assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                .allMatch(error -> error.equals("Trace id: %s not found".formatted(id)));
+        assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                .isEqualTo("Trace id: %s not found".formatted(id));
     }
 
     @Nested
@@ -4800,8 +4800,8 @@ class TracesResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
                 assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .allMatch(error -> Pattern.matches("Trace id: .+ not found", error));
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo("Trace id: %s not found".formatted(id));
             }
         }
 
