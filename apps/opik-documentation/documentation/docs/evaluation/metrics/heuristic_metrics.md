@@ -109,12 +109,12 @@ The BLEU (Bilingual Evaluation Understudy) metrics estimate how close the LLM ou
   Both rely on the underlying NLTK BLEU implementation with optional smoothing methods, weights, and variable n-gram orders.
 
 You will need nltk library:
+
 ```bash
 pip install nltk
 ```
 
 Use `SentenceBLEU` to compute single-sentence BLEU between a single candidate and one (or more) references:
-
 
 ```python
 from opik.evaluation.metrics import SentenceBLEU
