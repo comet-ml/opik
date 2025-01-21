@@ -94,6 +94,18 @@ jobs:
       comet_build_args: ""
       push_latest: ${{needs.set-version.outputs.push_latest}}
 
+  build-sandbox-executor-python:
+    needs:
+      - set-version
+    uses: ./.github/workflows/build_and_push_docker.yaml
+    with:
+      image: "opik-sandbox-executor-python"
+      version: ${{needs.set-version.outputs.version}}
+      build_from: ${{needs.set-version.outputs.build_from}}
+      build_comet_image: false
+      comet_build_args: ""
+      push_latest: ${{needs.set-version.outputs.push_latest}}
+
   build-frontend:
     needs:
       - set-version
