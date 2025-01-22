@@ -42,7 +42,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         return instance;
     }
 
-    private static synchronized void setInstance(ClickHouseAppender instance) {
+    private static void setInstance(ClickHouseAppender instance) {
         ClickHouseAppender.instance = instance;
     }
 
@@ -52,12 +52,12 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     private volatile boolean running = true;
 
     private final BlockingQueue<ILoggingEvent> logQueue = new LinkedBlockingQueue<>();
-    private AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>(
+
+    private final AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>(
             Executors.newSingleThreadScheduledExecutor());
 
     @Override
     public void start() {
-
         // Background flush thread
         scheduler.get().scheduleAtFixedRate(this::flushLogs, flushIntervalDuration.toMillis(),
                 flushIntervalDuration.toMillis(), TimeUnit.MILLISECONDS);

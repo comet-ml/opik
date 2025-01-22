@@ -1,9 +1,11 @@
 package com.comet.opik.domain;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import com.comet.opik.utils.TemplateUtils;
+import com.comet.opik.api.LogCriteria;
+import com.comet.opik.api.LogItem;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -13,11 +15,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
+import static com.comet.opik.api.LogItem.LogLevel;
+import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.TemplateUtils.*;
 
 @ImplementedBy(AutomationRuleEvaluatorLogsDAOImpl.class)
 public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
@@ -25,6 +32,8 @@ public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
     static AutomationRuleEvaluatorLogsDAO create(ConnectionFactory factory) {
         return new AutomationRuleEvaluatorLogsDAOImpl(factory);
     }
+
+    Mono<LogPage> findLogs(LogCriteria criteria);
 
 }
 
@@ -51,29 +60,84 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
     public static final String FIND_ALL = """
             SELECT * FROM automation_rule_evaluator_logs
-            WHERE workspace_id = :workspaceId
+            WHERE workspace_id = :workspace_id
             <if(level)> AND level = :level <endif>
-            <if(ruleId)> AND rule_id = :ruleId <endif>
+            <if(ruleId)> AND rule_id = :rule_id <endif>
             ORDER BY timestamp DESC
             <if(limit)> LIMIT :limit <endif><if(offset)> OFFSET :offset <endif>
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
 
-    @Override
-    public Mono<Void> saveAll(@NonNull List<ILoggingEvent> events) {
+    public Mono<LogPage> findLogs(@NonNull LogCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(INSERT_STATEMENT);
-                    List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
 
-                    template.add("items", queryItems);
+                    log.info("Finding logs with criteria: {}", criteria);
+
+                    var template = new ST(FIND_ALL);
+
+                    bindTemplateParameters(criteria, template);
 
                     Statement statement = connection.createStatement(template.render());
 
-                    for (int i = 0; i < events.size(); i++) {
-                        ILoggingEvent event = events.get(i);
+                    bindParameters(criteria, statement);
 
+                    return statement.execute();
+
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)))
+                .collectList()
+                .map(this::mapPage);
+    }
+
+    private LogPage mapPage(List<LogItem> logs) {
+        return LogPage.builder()
+                .content(logs)
+                .page(1)
+                .total(logs.size())
+                .size(logs.size())
+                .build();
+    }
+
+    private LogItem mapRow(Row row) {
+        return LogItem.builder()
+                .timestamp(row.get("timestamp", Instant.class))
+                .level(LogLevel.valueOf(row.get("level", String.class)))
+                .workspaceId(row.get("workspace_id", String.class))
+                .ruleId(row.get("rule_id", UUID.class))
+                .message(row.get("message", String.class))
+                .markers(row.get("markers", Map.class))
+                .build();
+    }
+
+    private void bindTemplateParameters(LogCriteria criteria, ST template) {
+        Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
+        Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> template.add("ruleId", ruleId));
+        Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
+    }
+
+    private void bindParameters(LogCriteria criteria, Statement statement) {
+        statement.bind("workspace_id", criteria.workspaceId());
+        Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
+        Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> statement.bind("rule_id", ruleId));
+        Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
+    }
+
+    @Override
+    public Mono<Void> saveAll(@NonNull List<ILoggingEvent> events) {
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var template = new ST(INSERT_STATEMENT);
+
+                    List<QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
+                    template.add("items", queryItems);
+                    Statement statement = connection.createStatement(template.render());
+
+                    for (int i = 0; i < events.size(); i++) {
+
+                        ILoggingEvent event = events.get(i);
                         String logLevel = event.getLevel().toString();
                         String workspaceId = Optional.ofNullable(event.getMDCPropertyMap().get("workspace_id"))
                                 .orElseThrow(() -> failWithMessage("workspace_id is not set"));
@@ -93,14 +157,15 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                     }
 
                     return statement.execute();
+
                 })
                 .collectList()
                 .then();
+
     }
 
     private IllegalStateException failWithMessage(String message) {
         log.error(message);
         return new IllegalStateException(message);
     }
-
 }
