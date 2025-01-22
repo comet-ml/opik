@@ -1,6 +1,6 @@
-import io
 import json
 import logging
+import os
 
 import docker
 
@@ -8,36 +8,18 @@ from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
 
 logger = logging.getLogger(__name__)
 
-PYTHON_CODE_EXECUTOR_IMAGE_NAME_AND_TAG = "opik-executor-sandbox-python:latest"
-
-# TODO: Optimise Dockerfile definition e.g: use physical file
-PYTHON_CODE_EXECUTOR_DOCKERFILE = """
-FROM python:3.12.3-slim
-RUN pip install opik
-"""
-
-
-def create_docker_image(dockerfile_string, image_name):
-    client = docker.from_env()
-    try:
-        _, logs = client.images.build(
-            fileobj=io.BytesIO(dockerfile_string.encode('utf-8')),
-            tag=image_name
-        )
-        for log in logs:
-            logger.info(log.get('stream', '').strip())
-        logger.info(f"Image '{image_name}' created successfully.")
-    except Exception as e:
-        logger.error(f"Error building image '{image_name}': {e}")
-        raise e
+PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY", "ghcr.io/comet-ml/opik")
+PYTHON_CODE_EXECUTOR_IMAGE_NAME = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
+PYTHON_CODE_EXECUTOR_IMAGE_TAG = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
 
 
 def run_scoring_in_docker_python_container(code, data):
     client = docker.from_env()
     try:
         # TODO: Optimise run latency e.g: pre-allocating containers
+        # Containers runs pulls the image if not available locally
         container = client.containers.run(
-            image=PYTHON_CODE_EXECUTOR_IMAGE_NAME_AND_TAG,
+            image=f"{PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY}/{PYTHON_CODE_EXECUTOR_IMAGE_NAME}:{PYTHON_CODE_EXECUTOR_IMAGE_TAG}",
             command=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data)],
             mem_limit="128mb",
             cpu_shares=2,
