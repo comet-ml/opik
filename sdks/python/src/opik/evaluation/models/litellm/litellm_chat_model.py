@@ -157,7 +157,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             kwargs: arguments required by the provider to generate a response.
 
         Returns:
-            Any: The response from the model provider, which can be of any type depending on the use case and LLM model.
+            Any: The response from the model provider, which can be of any type depending on the use case and LLM.
         """
 
         # we need to pop messages first, and after we will check the rest params
@@ -212,7 +212,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             kwargs: arguments required by the provider to generate a response.
 
         Returns:
-            Any: The response from the model provider, which can be of any type depending on the use case and LLM model.
+            Any: The response from the model provider, which can be of any type depending on the use case and LLM.
         """
 
         # we need to pop messages first, and after we will check the rest params
