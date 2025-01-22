@@ -257,6 +257,9 @@ onlineScoring:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
       codec: java
+    - scorer: user_defined_metric_python
+      streamName: stream_scoring_user_defined_metric_python
+      codec: json
 
 # LLM providers client configuration
 llmProviderClient:
