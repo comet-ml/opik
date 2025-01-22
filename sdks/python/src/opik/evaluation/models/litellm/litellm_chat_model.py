@@ -37,7 +37,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input.
 
         Args:
-            model_name: The name of the LLM model to be used.
+            model_name: The name of the LLM to be used.
                 This parameter will be passed to `litellm.completion(model=model_name)` so you don't need to pass
                 the `model` argument separately inside **completion_kwargs.
             must_support_arguments: A list of openai-like arguments that the given model + provider pair must support.
