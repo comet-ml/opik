@@ -35,7 +35,7 @@ def test_langchain__happyflow(
         responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"]
     )
 
-    template = "Given the title of play, right a synopsys for that. Title: {title}."
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
 
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -91,7 +91,7 @@ def test_langchain__happyflow(
                         name="FakeListLLM",
                         input={
                             "prompts": [
-                                "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                                "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
                             ]
                         },
                         output=ANY_DICT,
@@ -127,11 +127,11 @@ def test_langchain__happyflow(
     [
         (
             langchain_openai.OpenAI,
-            "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
         ),
         (
             langchain_openai.ChatOpenAI,
-            "Human: Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
         ),
     ],
 )
@@ -140,7 +140,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
 ):
     llm = llm_model(max_tokens=10, name="custom-openai-llm-name")
 
-    template = "Given the title of play, right a synopsys for that. Title: {title}."
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
 
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -217,7 +217,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     [
         (
             langchain_google_vertexai.VertexAI,
-            "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
             {
                 # openai format
                 "completion_tokens": ANY_BUT_NONE,
@@ -232,7 +232,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         ),
         (
             langchain_google_vertexai.ChatVertexAI,
-            "Human: Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
             {
                 # openai format
                 "completion_tokens": ANY_BUT_NONE,
@@ -260,7 +260,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         name="custom-google-vertexai-llm-name",
     )
 
-    template = "Given the title of play, wright a synopsys for that. Title: {title}."
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
 
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -345,7 +345,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
         max_tokens=10, name="custom-openai-llm-name", api_key="incorrect-api-key"
     )
 
-    template = "Given the title of play, right a synopsys for that. Title: {title}."
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
 
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -403,7 +403,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                         name="custom-openai-llm-name",
                         input={
                             "prompts": [
-                                "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                                "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
                             ]
                         },
                         output=None,
@@ -447,7 +447,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
             ]
         )
 
-        template = "Given the title of play, right a synopsys for that. Title: {title}."
+        template = "Given the title of play, write a synopsys for that. Title: {title}."
 
         prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -510,7 +510,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                 name="FakeListLLM",
                                 input={
                                     "prompts": [
-                                        "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                                        "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
                                     ]
                                 },
                                 output=ANY_DICT,
@@ -555,7 +555,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
             ]
         )
 
-        template = "Given the title of play, right a synopsys for that. Title: {title}."
+        template = "Given the title of play, write a synopsys for that. Title: {title}."
 
         prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -621,7 +621,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                         name="FakeListLLM",
                         input={
                             "prompts": [
-                                "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                                "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
                             ]
                         },
                         output=ANY_DICT,
@@ -664,7 +664,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
             ]
         )
 
-        template = "Given the title of play, right a synopsys for that. Title: {title}."
+        template = "Given the title of play, write a synopsys for that. Title: {title}."
 
         prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
@@ -727,7 +727,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                         name="FakeListLLM",
                         input={
                             "prompts": [
-                                "Given the title of play, right a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                                "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
                             ]
                         },
                         output=ANY_DICT,
