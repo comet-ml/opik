@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { ArrowRight, MessageCircle, MousePointer, X } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -10,6 +10,8 @@ import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 import useDemoProject from "@/api/projects/useDemoProject";
 import { buildDocsUrl } from "@/lib/utils";
+import SideDialog from "@/components/shared/SideDialog/SideDialog";
+import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -19,6 +21,8 @@ const GetStartedSection = () => {
       defaultValue: false,
     },
   );
+
+  const [openLogTraceDialog, setOpenLogTraceDialog] = useState(false);
 
   const { data: project, isPending } = useDemoProject(
     { workspaceName },
@@ -34,10 +38,14 @@ const GetStartedSection = () => {
     <div>
       <div className="flex items-center justify-between gap-8 pb-4 pt-2">
         <div className="flex items-center gap-2">
-          <h2 className="comet-body-accented truncate break-words">
+          <h2
+            onClick={() => setOpenLogTraceDialog(true)}
+            className="comet-body-accented truncate break-words"
+          >
             Get started with Opik
           </h2>
         </div>
+
         <div className="flex items-center gap-2">
           <Button
             variant="minimal"
@@ -105,6 +113,19 @@ const GetStartedSection = () => {
         </Alert>
       </div>
       <Separator className="my-6" />
+
+      <SideDialog open={openLogTraceDialog} setOpen={setOpenLogTraceDialog}>
+        <div className="flex w-full min-w-fit flex-col pb-12">
+          <div className="pb-8">
+            <h1 className="comet-title-l text-center">Log a trace</h1>
+            <div className="comet-body-s text-muted-slate m-auto mt-4 w-[468px] self-center text-center">
+              Select a framework and follow the instructions to integrate Comet
+              with your code, or explore our ready-to-run examples on the right
+            </div>
+          </div>
+          <FrameworkIntegrations />
+        </div>
+      </SideDialog>
     </div>
   );
 };

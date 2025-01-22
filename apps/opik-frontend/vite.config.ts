@@ -40,6 +40,16 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "0.0.0.0",
       port: 5174,
+      proxy: {
+        "/opik/api": {
+          target: "https://www.comet.com/",
+          changeOrigin: true,
+        },
+        "/api": {
+          target: "https://www.comet.com/",
+          changeOrigin: true,
+        },
+      },
     },
   } satisfies UserConfig;
 });

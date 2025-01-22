@@ -5,15 +5,7 @@ import useAppStore from "@/store/AppStore";
 import { QUICKSTART_INTEGRATIONS } from "@/components/pages-shared/onboarding/FrameworkIntegrations/quickstart-integrations";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 
-type GetStartedProps = {
-  apiKey?: string;
-  showColabLinks?: boolean;
-};
-
-const GetStarted: React.FunctionComponent<GetStartedProps> = ({
-  apiKey,
-  showColabLinks = true,
-}) => {
+const GetStarted = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   return (
@@ -28,11 +20,7 @@ const GetStarted: React.FunctionComponent<GetStartedProps> = ({
           your code, or explore our ready-to-run examples on the right
         </div>
       </div>
-      <FrameworkIntegrations
-        integrationList={QUICKSTART_INTEGRATIONS}
-        apiKey={apiKey}
-        showColabLinks={showColabLinks}
-      />
+      <FrameworkIntegrations integrationList={QUICKSTART_INTEGRATIONS} />
       <Button variant="link" className="mt-2" size="sm" asChild>
         <Link to="/$workspaceName/home" params={{ workspaceName }}>
           Skip, explore the platform on my own
