@@ -318,12 +318,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                         },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        usage={
-                            # only openai format
-                            "completion_tokens": ANY_BUT_NONE,
-                            "prompt_tokens": ANY_BUT_NONE,
-                            "total_tokens": ANY_BUT_NONE,
-                        },
+                        usage=metadata_usage,
                         spans=[],
                         provider="google_vertexai",
                         model=ANY_STRING(startswith="gemini-1.5-flash"),
