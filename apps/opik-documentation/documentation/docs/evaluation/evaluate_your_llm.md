@@ -9,7 +9,7 @@ pytest_codeblocks_execute_previous: true
 Evaluating your LLM application allows you to have confidence in the performance of your LLM application. In this guide, we will walk through the process of evaluating complex applications like LLM chains or agents.
 
 :::tip
-In this guide, we will focus on evaluating complex LLM applications, if you are looking at evaluating single prompts you can referto the [Evaluate a prompt](/evaluation/evaluate_prompt.md) guide.
+In this guide, we will focus on evaluating complex LLM applications. If you are looking at evaluating single prompts you can refer to the [Evaluate A Prompt](/evaluation/evaluate_prompt.md) guide.
 :::
 
 The evaluation is done in five steps:
