@@ -229,6 +229,10 @@
       border: 4px solid #fff;
     }
 
+    ::-webkit-scrollbar-thumb:hover {
+      background: #7d7d7d;
+    }
+
     ::-webkit-scrollbar-button {
       display: none;
     }
