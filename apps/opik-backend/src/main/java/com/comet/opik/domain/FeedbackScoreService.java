@@ -4,14 +4,11 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +28,7 @@ import java.util.function.Function;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
 
@@ -71,33 +69,19 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<Void> scoreTrace(@NonNull UUID traceId, @NonNull FeedbackScore score) {
-        return traceDAO.getProjectIdFromTraces(Set.of(traceId))
-                .flatMap(traceProjectIdMap -> {
-
-                    if (traceProjectIdMap.get(traceId) == null) {
-                        return Mono.error(failWithTraceNotFound(traceId));
-                    }
-
-                    return dao.scoreEntity(EntityType.TRACE, traceId, score, traceProjectIdMap)
-                            .flatMap(this::extractResult)
-                            .then();
-                });
+        return traceDAO.getProjectIdFromTrace(traceId)
+                .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
+                .flatMap(projectId -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId))
+                .then();
     }
 
     @Override
     public Mono<Void> scoreSpan(@NonNull UUID spanId, @NonNull FeedbackScore score) {
 
-        return spanDAO.getProjectIdFromSpans(Set.of(spanId))
-                .flatMap(spanProjectIdMap -> {
-
-                    if (spanProjectIdMap.get(spanId) == null) {
-                        return Mono.error(failWithSpanNotFound(spanId));
-                    }
-
-                    return dao.scoreEntity(EntityType.SPAN, spanId, score, spanProjectIdMap)
-                            .flatMap(this::extractResult)
-                            .then();
-                });
+        return spanDAO.getProjectIdFromSpan(spanId)
+                .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
+                .flatMap(projectId -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId))
+                .then();
     }
 
     @Override
@@ -160,7 +144,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores()))
                 .reduce(0L, Long::sum)
                 .flatMap(rowsUpdated -> rowsUpdated == actualBatchSize ? Mono.just(rowsUpdated) : Mono.empty())
-                .switchIfEmpty(Mono.defer(() -> failWithNotFound("Error while processing scores batch")));
+                .switchIfEmpty(Mono.error(failWithNotFound("Error while processing scores batch")));
     }
 
     private List<ProjectDto> mergeProjectsAndScores(Map<String, Project> projectMap,
@@ -264,28 +248,4 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
                 .map(FeedbackScoreNames::new);
     }
-
-    private Mono<Long> failWithNotFound(String errorMessage) {
-        log.info(errorMessage);
-        return Mono.error(new NotFoundException(Response.status(404)
-                .entity(new ErrorMessage(List.of(errorMessage))).build()));
-    }
-
-    private Mono<Long> extractResult(Long rowsUpdated) {
-        return rowsUpdated.equals(0L) ? Mono.empty() : Mono.just(rowsUpdated);
-    }
-
-    private Throwable failWithTraceNotFound(UUID id) {
-        String message = "Trace id: %s not found".formatted(id);
-        log.info(message);
-        return new NotFoundException(Response.status(404)
-                .entity(new ErrorMessage(List.of(message))).build());
-    }
-
-    private NotFoundException failWithSpanNotFound(UUID id) {
-        String message = "Not found span with id '%s'".formatted(id);
-        log.info(message);
-        return new NotFoundException(message);
-    }
-
 }

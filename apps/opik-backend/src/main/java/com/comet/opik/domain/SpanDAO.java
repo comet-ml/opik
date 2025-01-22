@@ -603,10 +603,9 @@ class SpanDAO {
 
     public static final String SELECT_PROJECT_ID_FROM_SPANS = """
             SELECT
-                  id,
                   project_id
             FROM spans
-            WHERE id IN :ids
+            WHERE id = :id
             AND workspace_id = :workspace_id
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
@@ -1245,24 +1244,18 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Map<UUID, UUID>> getProjectIdFromSpans(@NonNull Set<UUID> spanIds) {
-
-        if (spanIds.isEmpty()) {
-            return Mono.just(Map.of());
-        }
+    public Mono<UUID> getProjectIdFromSpan(@NonNull UUID spanId) {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
                     var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_SPANS)
-                            .bind("ids", spanIds.toArray(UUID[]::new));
+                            .bind("id", spanId);
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
-                        row.get("id", UUID.class),
-                        row.get("project_id", UUID.class))))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
+                .singleOrEmpty();
     }
 
     @WithSpan
