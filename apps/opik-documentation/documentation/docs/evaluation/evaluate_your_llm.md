@@ -44,7 +44,7 @@ def your_llm_application(input: str) -> str:
 ```
 
 :::tip
-We have added here the `track` decorator so that this traces and all it's nested steps are logged to the platform for further analysis.
+We have added here the `track` decorator so that this trace and all its nested steps are logged to the platform for further analysis.
 :::
 
 ## 2. Define the evaluation task
