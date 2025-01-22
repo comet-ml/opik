@@ -48,7 +48,7 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
         open={open === 1}
         setOpen={setOpen}
         onConfirm={deleteProviderKeyHandler}
-        title={`Delete ${PROVIDERS[providerKey.provider]?.label} configuration`}
+        title={`Delete ${PROVIDERS[providerKey.provider].label} configuration`}
         description="Are you sure you want to delete this provider configuration?"
         confirmText="Delete configuration"
       />

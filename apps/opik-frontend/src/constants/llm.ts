@@ -125,6 +125,37 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude 3 Opus Latest",
     },
   ],
+
+  [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      label: "Gemini 2.0 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
+      label: "Gemini 1.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH_8B,
+      label: "Gemini 1.5 Flash-8B",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_1_5_PRO,
+      label: "Gemini 1.5 Pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_1_0_PRO,
+      label: "Gemini 1.0 Pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TEXT_EMBEDDING,
+      label: "Text Embedding",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.AQA,
+      label: "AQA",
+    },
+  ],
 };
 
 export const DEFAULT_OPEN_AI_CONFIGS = {
@@ -136,6 +167,12 @@ export const DEFAULT_OPEN_AI_CONFIGS = {
 };
 
 export const DEFAULT_ANTHROPIC_CONFIGS = {
+  TEMPERATURE: 0,
+  MAX_COMPLETION_TOKENS: 1024,
+  TOP_P: 1,
+};
+
+export const DEFAULT_GEMINI_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 1024,
   TOP_P: 1,

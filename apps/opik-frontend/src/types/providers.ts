@@ -1,6 +1,7 @@
 export enum PROVIDER_TYPE {
   OPEN_AI = "openai",
   ANTHROPIC = "anthropic",
+  GEMINI = "gemini",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -31,6 +32,15 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_3_OPUS_20240229 = "claude-3-opus-20240229",
   CLAUDE_3_SONNET_20240229 = "claude-3-sonnet-20240229",
   CLAUDE_3_HAIKU_20240307 = "claude-3-haiku-20240307",
+
+  //  <----- gemini
+  GEMINI_2_0_FLASH = "gemini-2.0-flash-exp",
+  GEMINI_1_5_FLASH = "gemini-1.5-flash",
+  GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
+  GEMINI_1_5_PRO = "gemini-1.5-pro",
+  GEMINI_1_0_PRO = "gemini-1.0-pro",
+  TEXT_EMBEDDING = "text-embedding-004",
+  AQA = "aqa",
 }
 
 export interface ProviderKey {
@@ -58,7 +68,14 @@ export interface LLMAnthropicConfigsType {
   topP: number;
 }
 
+export interface LLMGeminiConfigsType {
+  temperature: number;
+  maxCompletionTokens: number;
+  topP: number;
+}
+
 export type LLMPromptConfigsType =
   | Record<string, never>
   | LLMOpenAIConfigsType
-  | LLMAnthropicConfigsType;
+  | LLMAnthropicConfigsType
+  | LLMGeminiConfigsType;
