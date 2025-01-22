@@ -1,4 +1,5 @@
 {{- range $key, $value := .Values.component }}
+{{- if $value.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -24,4 +25,5 @@ spec:
       protocol: {{ .protocol }}
       name: {{ .name }}
     {{- end }}
+{{- end }}
 {{- end }}

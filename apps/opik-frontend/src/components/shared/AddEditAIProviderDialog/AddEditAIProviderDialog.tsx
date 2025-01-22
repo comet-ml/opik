@@ -42,7 +42,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
   const isEdit = Boolean(providerKey);
   const isValid = Boolean(apiKey.length);
 
-  const providerName = (provider && PROVIDERS[provider].label) || "";
+  const providerName = (provider && PROVIDERS[provider]?.label) || "";
 
   const title = isEdit
     ? "Edit AI provider configuration"
@@ -83,7 +83,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
   ]);
 
   const renderOption = (option: DropdownOption<string>) => {
-    const Icon = PROVIDERS[option.value as PROVIDER_TYPE].icon;
+    const Icon = PROVIDERS[option.value as PROVIDER_TYPE]?.icon;
 
     return (
       <SelectItem key={option.value} value={option.value} withoutCheck>
@@ -125,7 +125,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
               Get your {providerName} API key{" "}
               <Button variant="link" size="sm" asChild className="px-0">
                 <a
-                  href={PROVIDERS[provider].apiKeyURL}
+                  href={PROVIDERS[provider]?.apiKeyURL}
                   target="_blank"
                   rel="noreferrer"
                 >

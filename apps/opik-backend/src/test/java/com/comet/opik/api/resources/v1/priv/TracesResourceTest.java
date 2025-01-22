@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -91,7 +92,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -122,9 +122,12 @@ class TracesResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration"};
+            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
+            "comments"};
     private static final String[] IGNORED_FIELDS_SPANS = SpansResourceTest.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
+    private static final String[] IGNORED_FIELDS_COMMENTS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -3605,8 +3608,8 @@ class TracesResourceTest {
 
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         assertThat(actualResponse.hasEntity()).isTrue();
-        assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                .allMatch(error -> Pattern.matches("Trace not found", error));
+        assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                .isEqualTo("Trace id: %s not found".formatted(id));
     }
 
     @Nested
@@ -4665,6 +4668,101 @@ class TracesResourceTest {
     }
 
     @Nested
+    @DisplayName("Comment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceComment {
+
+        @Test
+        void createAndGetComment() {
+            // Create comment for not existing trace, should fail
+            traceResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
+
+            // Create comment for existing trace
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+                    TEST_WORKSPACE);
+            Comment expectedComment = traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Get created comment by id and assert
+            Comment actualComment = traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertTraceComment(expectedComment, actualComment);
+        }
+
+        @Test
+        void createAndUpdateComment() {
+            // Create comment for existing trace
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+                    TEST_WORKSPACE);
+            Comment expectedComment = traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Get created comment by id and assert
+            Comment actualComment = traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
+                    TEST_WORKSPACE, 200);
+
+            // Update existing comment
+            String updatedText = factory.manufacturePojo(String.class);
+            traceResourceClient.updateComment(updatedText, expectedComment.id(), traceId, API_KEY,
+                    TEST_WORKSPACE, 204);
+
+            // Get comment by id and assert it was updated
+            Comment updatedComment = traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertUpdatedComment(actualComment, updatedComment, updatedText);
+        }
+
+        @Test
+        void deleteComment() {
+            // Create comment for existing trace
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+                    TEST_WORKSPACE);
+            Comment expectedComment = traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Check it was created
+            traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
+                    TEST_WORKSPACE, 200);
+
+            // Delete comment
+            BatchDelete request = BatchDelete.builder().ids(Set.of(expectedComment.id())).build();
+            traceResourceClient.deleteComments(request, API_KEY, TEST_WORKSPACE);
+
+            // Verify comment was actually deleted via get and update endpoints
+            traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY, TEST_WORKSPACE, 404);
+            traceResourceClient.updateComment(factory.manufacturePojo(String.class), expectedComment.id(), traceId,
+                    API_KEY, TEST_WORKSPACE, 404);
+        }
+    }
+
+    private void assertTraceComment(Comment expected, Comment actual) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS_COMMENTS)
+                .isEqualTo(expected);
+
+        assertThat(actual.createdAt()).isNotNull();
+        assertThat(actual.lastUpdatedAt()).isNotNull();
+        assertThat(actual.createdBy()).isNotNull();
+        assertThat(actual.lastUpdatedBy()).isNotNull();
+    }
+
+    private void assertUpdatedComment(Comment initial, Comment updated, String expectedText) {
+        assertThat(initial.text()).isNotEqualTo(expectedText);
+        initial = initial.toBuilder().text(expectedText).build();
+
+        assertThat(updated)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS_COMMENTS)
+                .isEqualTo(initial);
+
+        assertThat(updated.createdAt()).isEqualTo(initial.createdAt());
+        assertThat(updated.lastUpdatedAt()).isNotEqualTo(initial.lastUpdatedAt());
+        assertThat(updated.createdBy()).isEqualTo(initial.createdBy());
+        assertThat(updated.lastUpdatedBy()).isEqualTo(initial.lastUpdatedBy());
+    }
+
+    @Nested
     @DisplayName("Feedback:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TraceFeedback {
@@ -4701,8 +4799,8 @@ class TracesResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
                 assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .allMatch(error -> Pattern.matches("Trace id: .+ not found", error));
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo("Trace id: %s not found".formatted(id));
             }
         }
 
