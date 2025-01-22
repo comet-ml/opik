@@ -10,7 +10,7 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCod
 
 @Builder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
-public record TraceToScoreLlmAsJudge(
+public record TraceToScoreUserDefinedMetricPython(
         Trace trace,
         UUID ruleId,
         String ruleName,
