@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.google.common.base.Preconditions;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
@@ -33,8 +34,9 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
     }
 
     @Override
-    public GoogleAiGeminiChatModel generate(String apiKey, Object... args) {
-        ChatCompletionRequest request = (ChatCompletionRequest) Objects.requireNonNull(args[0],
+    public GoogleAiGeminiChatModel generate(String apiKey, Object... params) {
+        Preconditions.checkArgument(params.length >= 1, "Expected at least 1 parameter, got " + params.length);
+        ChatCompletionRequest request = (ChatCompletionRequest) Objects.requireNonNull(params[0],
                 "ChatCompletionRequest is required");
         return newGeminiClient(apiKey, request);
     }

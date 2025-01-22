@@ -59,7 +59,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     }
 
     @Override
-    public AnthropicClient generate(@NonNull String apiKey, Object... args) {
+    public AnthropicClient generate(@NonNull String apiKey, Object... params) {
         return newAnthropicClient(apiKey);
     }
 

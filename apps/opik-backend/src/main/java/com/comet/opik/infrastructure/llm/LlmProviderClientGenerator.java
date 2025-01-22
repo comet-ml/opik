@@ -6,7 +6,7 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeMod
 
 public interface LlmProviderClientGenerator<T> {
 
-    T generate(String apiKey, Object... args);
+    T generate(String apiKey, Object... params);
 
     ChatLanguageModel generateChat(String apiKey, LlmAsJudgeModelParameters modelParameters);
 }

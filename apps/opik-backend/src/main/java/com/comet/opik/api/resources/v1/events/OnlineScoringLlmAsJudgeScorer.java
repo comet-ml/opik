@@ -81,9 +81,14 @@ public class OnlineScoringLlmAsJudgeScorer implements Managed {
 
     @Override
     public void start() {
-        log.info("OnlineScoringLlmAsJudgeScorer started.");
+        if (stream != null) {
+            log.warn("OnlineScoringLlmAsJudgeScorer already started. Ignoring start request.");
+            return;
+        }
+
         // as we are a LLM consumer, lets check only LLM stream
         stream = initStream(config, redisson);
+        log.info("OnlineScoringLlmAsJudgeScorer started.");
     }
 
     @Override
@@ -208,7 +213,7 @@ public class OnlineScoringLlmAsJudgeScorer implements Managed {
      * Use AI Proxy to score the trace and store it as a FeedbackScore.
      * If the evaluator has multiple score definitions, it calls the LLM once per score definition.
      *
-     * @param message       a Redis message with Trace to score with an Evaluator code, workspace and username
+     * @param message a Redis message with Trace to score with an Evaluator code, workspace and username
      */
     private void score(TraceToScoreLlmAsJudge message) {
         var trace = message.trace();

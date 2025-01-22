@@ -58,7 +58,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     @Override
-    public OpenAiClient generate(@NonNull String apiKey, Object... args) {
+    public OpenAiClient generate(@NonNull String apiKey, Object... params) {
         return newOpenAiClient(apiKey);
     }
 

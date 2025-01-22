@@ -19,7 +19,7 @@ public class LlmProviderGemini implements LlmProviderService {
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         var mapper = LlmProviderGeminiMapper.INSTANCE;
-        var response = llmProviderClientGenerator.newGeminiClient(apiKey, request)
+        var response = llmProviderClientGenerator.generate(apiKey, request)
                 .generate(request.messages().stream().map(mapper::toChatMessage).toList());
 
         return mapper.toChatCompletionResponse(request, response);
