@@ -1,7 +1,6 @@
 import pytest
 from playwright.sync_api import Page
 from sdk_helpers import (
-    create_project_sdk,
     find_project_by_name_sdk,
     delete_project_by_name_sdk,
     wait_for_project_to_be_visible,
@@ -11,65 +10,10 @@ from page_objects.ProjectsPage import ProjectsPage
 
 
 class TestProjectsCrud:
-    def test_project_creation_via_sdk(self):
-        """
-        Basic test to check project creation via SDK. Uses the SDK to fetch the created project to check it exists
-        1. Create project via SDK OpikAPI client
-        2. Get the project via SDK OpikAPI client
-        3. If no errors raised and name of fetched project matches, test passes
-        """
-
-        project_name = "test_project_creation_via_sdk"
-
-        try:
-            create_project_sdk(name=project_name)
-            wait_for_project_to_be_visible(project_name, timeout=10)
-
-            check_project = find_project_by_name_sdk(project_name)
-            assert check_project[0]["name"] == project_name
-
-        except Exception as e:
-            print(f"error occured during creation test: {e}")
-            raise
-
-        finally:
-            delete_project_by_name_sdk(project_name)
-
-    def test_project_creation_via_ui(self, page: Page):
-        """
-        Basic test to check project creation via UI. Uses the UI after creation to check the project exists
-        1. Create project via UI
-        2. Check the project exists in the projects table
-        3. If no errors raised, test passes
-        """
-        project_name = "test_project_creation_via_ui"
-        projects_page = ProjectsPage(page)
-        project_created = False
-
-        try:
-            projects_page.go_to_page()
-            projects_page.create_new_project(project_name=project_name)
-            projects_page.go_to_page()
-            projects_page.check_project_exists_on_current_page(
-                project_name=project_name
-            )
-            project_created = True
-            assert project_created
-
-        except Exception as e:
-            print(f"error during project creation or verification: {e}")
-            raise
-
-        finally:
-            if project_created:
-                try:
-                    projects_page.delete_project_by_name(project_name=project_name)
-                except Exception as e:
-                    print(f"error during cleanup: {e}")
-
     @pytest.mark.parametrize(
         "project_fixture", ["create_delete_project_ui", "create_delete_project_sdk"]
     )
+    @pytest.mark.sanity
     def test_project_visibility(self, request, page: Page, project_fixture):
         """
         Checks a created project is visible via both the UI and SDK. Checks on projects created on both UI and SDK
