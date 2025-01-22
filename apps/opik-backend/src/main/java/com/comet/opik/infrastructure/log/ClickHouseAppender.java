@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.log;
 
+import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
 import com.comet.opik.domain.UserLog;
@@ -17,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
@@ -27,23 +29,20 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     private static ClickHouseAppender instance;
 
-    public static synchronized void init(@NonNull UserLogTableFactory userLogTableFactory, int batchSize,
-            @NonNull Duration flushIntervalDuration) {
+    public static synchronized ClickHouseAppender init(@NonNull UserLogTableFactory userLogTableFactory, int batchSize,
+            @NonNull Duration flushIntervalDuration, @NonNull LoggerContext context) {
 
         if (instance == null) {
-            setInstance(new ClickHouseAppender(userLogTableFactory, flushIntervalDuration, batchSize));
+            ClickHouseAppender appender = new ClickHouseAppender(userLogTableFactory, flushIntervalDuration, batchSize);
+            setInstance(appender);
+            appender.setContext(context);
             instance.start();
         }
-    }
 
-    public static synchronized ClickHouseAppender getInstance() {
-        if (instance == null) {
-            throw new IllegalStateException("ClickHouseAppender is not initialized");
-        }
         return instance;
     }
 
-    private static synchronized void setInstance(ClickHouseAppender instance) {
+    private static void setInstance(ClickHouseAppender instance) {
         ClickHouseAppender.instance = instance;
     }
 
@@ -52,17 +51,14 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     private final int batchSize;
     private volatile boolean running = true;
 
-    private BlockingQueue<ILoggingEvent> logQueue;
-    private ScheduledExecutorService scheduler;
+    private final BlockingQueue<ILoggingEvent> logQueue = new LinkedBlockingQueue<>();
+    private final AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>(
+            Executors.newSingleThreadScheduledExecutor());
 
     @Override
     public void start() {
-
-        logQueue = new LinkedBlockingQueue<>();
-        scheduler = Executors.newSingleThreadScheduledExecutor();
-
         // Background flush thread
-        scheduler.scheduleAtFixedRate(this::flushLogs, flushIntervalDuration.toMillis(),
+        scheduler.get().scheduleAtFixedRate(this::flushLogs, flushIntervalDuration.toMillis(),
                 flushIntervalDuration.toMillis(), TimeUnit.MILLISECONDS);
 
         super.start();
@@ -113,7 +109,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         }
 
         if (logQueue.size() >= batchSize) {
-            scheduler.execute(this::flushLogs);
+            scheduler.get().execute(this::flushLogs);
         }
     }
 
@@ -123,20 +119,23 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         super.stop();
         flushLogs();
         setInstance(null);
-        scheduler.shutdown();
+        scheduler.get().shutdown();
         awaitTermination();
+        logQueue.clear();
+        scheduler.set(Executors.newSingleThreadScheduledExecutor());
     }
 
     private void awaitTermination() {
         try {
-            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                scheduler.shutdownNow();
-                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) { // Final attempt
+            if (!scheduler.get().awaitTermination(5, TimeUnit.SECONDS)) {
+                scheduler.get().shutdownNow();
+                if (!scheduler.get().awaitTermination(5, TimeUnit.SECONDS)) { // Final attempt
                     log.error("ClickHouseAppender did not terminate");
                 }
             }
         } catch (InterruptedException ex) {
-            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+            scheduler.get().shutdownNow();
             log.warn("ClickHouseAppender interrupted while waiting for termination", ex);
         }
     }

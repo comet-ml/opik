@@ -21,10 +21,8 @@ public class UserFacingLoggingFactory {
             @NonNull Duration flushIntervalSeconds) {
 
         UserLogTableFactory tableFactory = UserLogTableFactory.getInstance(connectionFactory);
-        ClickHouseAppender.init(tableFactory, batchSize, flushIntervalSeconds);
-
-        ClickHouseAppender clickHouseAppender = ClickHouseAppender.getInstance();
-        clickHouseAppender.setContext(CONTEXT);
+        ClickHouseAppender clickHouseAppender = ClickHouseAppender.init(tableFactory, batchSize, flushIntervalSeconds,
+                CONTEXT);
 
         asyncAppender = new AsyncAppender();
         asyncAppender.setContext(CONTEXT);
