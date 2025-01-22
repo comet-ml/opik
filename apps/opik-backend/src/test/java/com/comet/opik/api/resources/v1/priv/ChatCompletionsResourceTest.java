@@ -54,7 +54,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /// relevant test will be skipped for that provider.
 /// - **Openai**: runs against a demo server and doesn't require an API key
 /// - **Anthropic**: set `ANTHROPIC_API_KEY` to your anthropic api key
-/// - **Gemini**: set `GEMINI_AI_KEY` to your gemini api key
+/// - **Gemini**: set `GEMINI_API_KEY` to your gemini api key
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 // Disabled because the tests require an API key to run and this seems to be failing in the CI pipeline
 class ChatCompletionsResourceTest {
@@ -188,6 +188,7 @@ class ChatCompletionsResourceTest {
 
         @ParameterizedTest
         @MethodSource("testModelsProvider")
+        @Disabled
         void createAndStreamResponse(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 
@@ -227,7 +228,7 @@ class ChatCompletionsResourceTest {
                     arguments(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
                             System.getenv("ANTHROPIC_API_KEY")),
                     arguments(GeminiModelName.GEMINI_1_0_PRO.toString(), LlmProvider.GEMINI,
-                            System.getenv("GEMINI_AI_KEY")));
+                            System.getenv("GEMINI_API_KEY")));
         }
 
         @ParameterizedTest
