@@ -1,120 +1,65 @@
 import React, { useState } from "react";
-import { ArrowRight, MessageCircle, MousePointer, X } from "lucide-react";
-import useLocalStorageState from "use-local-storage-state";
-import { keepPreviousData } from "@tanstack/react-query";
-
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Link } from "@tanstack/react-router";
+import { FlaskConical, InspectionPanel, MousePointer } from "lucide-react";
 import useAppStore from "@/store/AppStore";
-import useDemoProject from "@/api/projects/useDemoProject";
 import { buildDocsUrl } from "@/lib/utils";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
+import AddExperimentDialog from "../ExperimentsShared/AddExperimentDialog";
+import { Link } from "@tanstack/react-router";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const [hide, setHide] = useLocalStorageState<boolean>(
-    "home-get-started-section",
-    {
-      defaultValue: false,
-    },
-  );
+  const [isNewExperimentDialogOpened, setIsNewExperimentDialogOpened] =
+    useState<boolean>(false);
+  const [isLogTraceDialogOpened, setIsLogTraceDialogOpened] = useState(false);
 
-  const [openLogTraceDialog, setOpenLogTraceDialog] = useState(false);
-
-  const { data: project, isPending } = useDemoProject(
-    { workspaceName },
-    {
-      enabled: !hide,
-      placeholderData: keepPreviousData,
-    },
-  );
-
-  if (hide || isPending) return null;
+  const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
+  const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);
 
   return (
     <div>
       <div className="flex items-center justify-between gap-8 pb-4 pt-2">
         <div className="flex items-center gap-2">
-          <h2
-            onClick={() => setOpenLogTraceDialog(true)}
-            className="comet-body-accented truncate break-words"
-          >
-            Get started with Opik
+          <h2 className="comet-body-accented truncate break-words">
+            Get started
           </h2>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="minimal"
-            size="icon-xs"
-            onClick={() => setHide(true)}
-          >
-            <X className="size-4" />
-          </Button>
         </div>
       </div>
       <div className="flex gap-x-4">
-        {project && (
-          <Alert>
-            <MousePointer className="size-4" />
-            <AlertTitle>Explore our demo project</AlertTitle>
-            <AlertDescription>
-              Browse our curated examples to draw inspiration for your own LLM
-              projects.
-            </AlertDescription>
-            <Link
-              to="/$workspaceName/projects/$projectId"
-              params={{ workspaceName, projectId: project.id }}
-            >
-              <Button variant="ghost" size="sm" className="-ml-2">
-                Go to demo project
-                <ArrowRight className="ml-1 size-4 shrink-0" />
-              </Button>
-            </Link>
-          </Alert>
-        )}
-        <Alert>
-          <MessageCircle className="size-4" />
-          <AlertTitle>Log a trace</AlertTitle>
-          <AlertDescription>
-            The first step in integrating Opik with your codebase is to track
-            your LLM calls.
-          </AlertDescription>
-          <Button variant="ghost" size="sm" asChild>
-            <a
-              href={buildDocsUrl("/tracing/log_traces")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Start logging traces
-              <ArrowRight className="ml-1 size-4 shrink-0" />
-            </a>
-          </Button>
-        </Alert>
-        <Alert>
-          <MessageCircle className="size-4" />
-          <AlertTitle>Run an experiment</AlertTitle>
-          <AlertDescription>
-            An experiment is a single evaluation of your LLM application.
-          </AlertDescription>
-          <Button variant="ghost" size="sm" asChild>
-            <a
-              href={buildDocsUrl("/evaluation/evaluate_your_llm")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Start running experiments
-              <ArrowRight className="ml-1 size-4 shrink-0" />
-            </a>
-          </Button>
-        </Alert>
+        <div
+          onClick={openLogTraceDialog}
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
+        >
+          <div className="flex size-[24px] items-center justify-center rounded bg-[#DAFBF0] ">
+            <InspectionPanel className="size-3.5 text-[#295747]" />
+          </div>
+          <div className="comet-body-s">Log a trace</div>
+        </div>
+        <div
+          onClick={openNewExperimentDialog}
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
+        >
+          <div className="flex size-[24px] items-center justify-center rounded bg-[#FDE2F6] ">
+            <MousePointer className="size-3.5 text-[#72275F]" />
+          </div>
+          <div className="comet-body-s">Run an experiment</div>
+        </div>
+        <Link
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
+          to={"/$workspaceName/playground"}
+          params={{ workspaceName }}
+        >
+          <div className="flex size-[24px] items-center justify-center rounded bg-[#EFE2FD] ">
+            <FlaskConical className="size-3.5 text-[#491B7E]" />
+          </div>
+          <div className="comet-body-s">Try out playground</div>
+        </Link>
       </div>
-      <Separator className="my-6" />
 
-      <SideDialog open={openLogTraceDialog} setOpen={setOpenLogTraceDialog}>
+      <SideDialog
+        open={isLogTraceDialogOpened}
+        setOpen={setIsLogTraceDialogOpened}
+      >
         <div className="flex w-full min-w-fit flex-col pb-12">
           <div className="pb-8">
             <h1 className="comet-title-l text-center">Log a trace</h1>
@@ -126,6 +71,11 @@ const GetStartedSection = () => {
           <FrameworkIntegrations />
         </div>
       </SideDialog>
+
+      <AddExperimentDialog
+        open={isNewExperimentDialogOpened}
+        setOpen={setIsNewExperimentDialogOpened}
+      />
     </div>
   );
 };

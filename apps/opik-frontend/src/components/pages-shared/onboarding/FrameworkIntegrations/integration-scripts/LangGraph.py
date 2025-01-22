@@ -1,21 +1,18 @@
 import os
-
 from typing import Optional, TypedDict
-
 from langgraph.graph import END, StateGraph
 from opik.integrations.langchain import OpikTracer
 
 # INJECT_OPIK_CONFIGURATION
 
-# We will start by creating simple functions to classify the input question
-# and handle the greeting and search questions.
+
 def classify(question: str) -> str:
     return "greeting" if question.startswith("Hello") else "search"
 
 
 def classify_input_node(state):
     question = state.get("question", "").strip()
-    classification = classify(question)  # Assume a function that classifies the input
+    classification = classify(question)
     return {"classification": classification}
 
 
@@ -54,14 +51,10 @@ workflow.add_conditional_edges(
     decide_next_node,
     {"handle_greeting": "handle_greeting", "handle_search": "handle_search"},
 )
-
 workflow.set_entry_point("classify_input")
 workflow.add_edge("handle_greeting", END)
 workflow.add_edge("handle_search", END)
-
 app = workflow.compile()
-
-
 tracer = OpikTracer(graph=app.get_graph(xray=True))
 inputs = {"question": "Hello, how are you?"}
 result = app.invoke(inputs, config={"callbacks": [tracer]})

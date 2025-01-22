@@ -61,6 +61,7 @@
     "class-variance-authority": "^0.7.0",
     "clipboard-copy": "^4.0.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.0.0",
     "codemirror": "^6.0.1",
     "date-fns": "^3.6.0",
     "dayjs": "^1.11.11",

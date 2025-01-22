@@ -198,6 +198,25 @@ encryption:
   # Description: Encryption key to use when storing sensitive information
   key: ${OPIK_ENCRYPTION_KEY:-'GiTHubiLoVeYouAA'}
 
+# Configuration for Online Scoring
+onlineScoring:
+  # Default: 500 ms
+  # Description: How often Online Scoring will check Redis for new messages (in milliseconds)
+  poolingInterval: ${REDIS_SCORING_CONSUMER_POOL_INTERVAL:-500ms}
+  # Default: online_scoring
+  # Description: A consumer group name so multiple instances can share the stream load
+  consumerGroupName: ${REDIS_SCORING_CONSUMER_GROUP_NAME:-'online_scoring'}
+  # Default: 5
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-5}
+  ## scorer: options from AutomationRuleEvaluatorType
+  ## streamName: the name of the stream in redis
+  ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
+  streams:
+    - scorer: llm_as_judge
+      streamName: stream_scoring_llm_as_judge
+      codec: java
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 3
@@ -256,3 +275,13 @@ cacheManager:
       # Default: {}
       # Description: Dynamically created caches with their respective time to live in seconds
       automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
+
+# Configuration for clickhouse log appender
+clickHouseLogAppender:
+  # Default: 1000
+  # Description: Number of log messages to be batched before sending to ClickHouse
+  batchSize: ${CLICKHOUSE_LOG_APPENDER_BATCH_SIZE:-1000}
+
+  # Default: PT0.500S or 500ms
+  # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
+  flushIntervalDuration: ${CLICKHOUSE_LOG_APPENDER_FLUSH_INTERVAL_DURATION:-PT0.500S}

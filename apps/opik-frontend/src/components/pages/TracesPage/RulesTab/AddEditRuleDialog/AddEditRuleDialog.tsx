@@ -217,6 +217,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
               data={llmJudgeDetails}
               workspaceName={workspaceName}
               onChange={setLLMJudgeDetails}
+              projectId={projectId}
             />
           ) : (
             <PythonCodeRuleDetails data={pythonCodeDetails} />

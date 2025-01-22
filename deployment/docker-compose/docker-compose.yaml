@@ -75,7 +75,7 @@ services:
       REDIS_URL: redis://:opik@redis:6379/
       ANALYTICS_DB_PASS: opik
       OPIK_OTEL_SDK_ENABLED: false
-      OTEL_VERSION: 2.9.0
+      OTEL_VERSION: 2.12.0
       OTEL_PROPAGATORS: "tracecontext,baggage,b3"
       OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
@@ -89,6 +89,16 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+
+  python-backend:
+    image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
+    build:
+      context: ../../apps/opik-python-backend
+      dockerfile: Dockerfile
+    hostname: python-backend
+    privileged: true # Required for Docker-in-Docker, so it can launch containers
+    environment:
+      PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
