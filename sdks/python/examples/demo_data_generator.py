@@ -31,7 +31,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
         workspace=workspace_name,
         host=base_url,
         api_key=comet_api_key,
-        _use_batching=True
+        _use_batching=True,
     )
 
     for trace in sorted(evaluation_traces, key=lambda x: x["start_time"]):
@@ -60,7 +60,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
         workspace=workspace_name,
         host=base_url,
         api_key=comet_api_key,
-        _use_batching=True
+        _use_batching=True,
     )
 
     for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
