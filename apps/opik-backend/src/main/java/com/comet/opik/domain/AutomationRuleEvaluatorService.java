@@ -6,6 +6,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorCriteria;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.cache.CacheEvict;
@@ -19,6 +20,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
+import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -28,6 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
+import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -50,6 +53,8 @@ public interface AutomationRuleEvaluatorService {
 
     List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
             AutomationRuleEvaluatorType automationRuleEvaluatorType);
+
+    Mono<LogPage> getLogs(LogCriteria criteria);
 }
 
 @Singleton
@@ -61,6 +66,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
+    private final @NonNull AutomationRuleEvaluatorLogsDAO logsDAO;
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-'+ $inputRuleEvaluator.type")
@@ -248,6 +254,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     .toList();
 
         });
+    }
+
+    @Override
+    public Mono<LogPage> getLogs(@NonNull LogCriteria criteria) {
+        return logsDAO.findLogs(criteria);
     }
 
 }
