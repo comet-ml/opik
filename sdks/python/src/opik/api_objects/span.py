@@ -107,7 +107,7 @@ class Span:
             model: The name of LLM.
             provider: The provider of LLM.
             error_info: The dictionary with error information (typically used when the span function has failed).
-            total_cost: The cost of the span. This value takes priority over the cost calculated by Opik from the usage.
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             None
@@ -172,7 +172,7 @@ class Span:
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM.
             error_info: The dictionary with error information (typically used when the span function has failed).
-            total_cost: The cost of the span. This value takes priority over the cost calculated by Opik from the usage.
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             Span: The created child span object.

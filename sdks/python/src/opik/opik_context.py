@@ -64,7 +64,7 @@ def update_current_span(
         tags: The tags of the span.
         usage: The usage data of the span.
         feedback_scores: The feedback scores of the span.
-        total_cost: total cost of the span in USD
+        total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
     """
     new_params = {
         "name": name,
