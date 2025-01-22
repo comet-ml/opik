@@ -260,7 +260,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         name="custom-google-vertexai-llm-name",
     )
 
-    template = "Given the title of play, right a synopsys for that. Title: {title}."
+    template = "Given the title of play, wright a synopsys for that. Title: {title}."
 
     prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
