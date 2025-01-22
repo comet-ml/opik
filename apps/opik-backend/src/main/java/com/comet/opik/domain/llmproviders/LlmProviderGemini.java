@@ -7,6 +7,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 @RequiredArgsConstructor
@@ -27,9 +28,9 @@ public class LlmProviderGemini implements LlmProviderService {
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        llmProviderClientGenerator.newGeminiStreamingClient(apiKey, request)
+        CompletableFuture.runAsync(() -> llmProviderClientGenerator.newGeminiStreamingClient(apiKey, request)
                 .generate(request.messages().stream().map(LlmProviderGeminiMapper.INSTANCE::toChatMessage).toList(),
-                        new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
+                        new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
     }
 
     @Override
