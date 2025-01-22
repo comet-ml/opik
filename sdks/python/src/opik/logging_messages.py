@@ -26,9 +26,7 @@ FAILED_TO_AGGREGATE_GENERATORS_YIELDED_VALUES_WITH_PROVIDED_AGGREGATOR_IN_TRACKE
 
 FAILED_TO_PARSE_OPENAI_STREAM_CONTENT = "Failed to parse openai Stream content. %s"
 
-FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER = (
-    "Failed to process %s.\nContent: %s,\nError: %s"
-)
+FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER = "Failed to process %s. Error: %s"
 
 HALLUCINATION_DETECTION_FAILED = "Failed hallucination detection"
 

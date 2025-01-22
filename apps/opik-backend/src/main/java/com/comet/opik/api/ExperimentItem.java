@@ -28,6 +28,8 @@ public record ExperimentItem(
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScore> feedbackScores,
         @JsonView({
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<Comment> comments,
+        @JsonView({
                 ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({
                 ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,

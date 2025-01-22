@@ -79,7 +79,7 @@ class YourCrewName:
             verbose=True
         )
 
-    
+
 from opik.integrations.crewai import track_crewai
 
 track_crewai(project_name="crewai-integration-demo")

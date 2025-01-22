@@ -57,10 +57,8 @@ export const getJSONPaths = (
         : key;
 
       if (isArray(value)) {
-        results.push(path);
         getJSONPaths(value, path, results);
       } else if (isObject(value)) {
-        results.push(path);
         getJSONPaths(value, path, results);
       } else {
         results.push(path);

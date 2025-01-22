@@ -76,24 +76,28 @@ const PromptModelSelect = ({
       configuredProviderKeys,
     );
 
-    return Object.entries(filteredByConfiguredProviders).map(
-      ([pn, providerModels]) => {
+    return Object.entries(filteredByConfiguredProviders)
+      .map(([pn, providerModels]) => {
         const providerName = pn as PROVIDER_TYPE;
+
+        const options = providerModels
+          .filter((m) => (onlyWithStructuredOutput ? m.structuredOutput : true))
+          .map((providerModel) => ({
+            label: providerModel.label,
+            value: providerModel.value,
+          }));
+
+        if (!options.length) {
+          return null;
+        }
 
         return {
           label: PROVIDERS[providerName].label,
-          options: providerModels
-            .filter((m) =>
-              onlyWithStructuredOutput ? m.structuredOutput : true,
-            )
-            .map((providerModel) => ({
-              label: providerModel.label,
-              value: providerModel.value,
-            })),
+          options,
           icon: PROVIDERS[providerName].icon,
         };
-      },
-    );
+      })
+      .filter((g): g is NonNullable<typeof g> => !isNull(g));
   }, [configuredProviderKeys, onlyWithStructuredOutput]);
 
   const filteredOptions = useMemo(() => {
@@ -241,7 +245,7 @@ const PromptModelSelect = ({
       return null;
     }
 
-    return <Icon />;
+    return <Icon className="min-w-3.5" />;
   };
 
   return (
@@ -258,7 +262,9 @@ const PromptModelSelect = ({
           >
             <div className="flex items-center gap-2">
               {renderProviderValueIcon()}
-              {provider && PROVIDERS[provider].label} {value}
+              <span className="truncate">
+                {provider && PROVIDERS[provider].label} {value}
+              </span>
             </div>
           </SelectValue>
         </SelectTrigger>

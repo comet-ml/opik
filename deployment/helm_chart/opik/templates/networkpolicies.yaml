@@ -1,0 +1,34 @@
+{{- if and ".Values.component.python-backend.enabled" ".Values.component.python-backend.networkPolicy.enabled" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opik.name" $ }}-python-backend-egress
+spec:
+  podSelector:
+    matchLabels:
+      component: {{ include "opik.name" $ }}-python-backend
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS traffic to kube-dns/coredns
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow traffic to external destinations (outside the cluster)
+    - to:
+      - ipBlock:
+          cidr: {{ index .Values "component" "python-backend" "networkPolicy" "engineEgress" "ipBlock" }}
+          except:
+            {{- range index .Values "component" "python-backend" "networkPolicy" "engineEgress" "except" }}
+          - {{ . }}
+          {{- end }}
+{{- end }}

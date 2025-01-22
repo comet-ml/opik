@@ -25,7 +25,7 @@ class FeedbackDefinitionsPage:
             category1_name.click()
             category1_name.fill("a")
             category1_val.click()
-            category1_val.fill("1")
+            category1_val.fill("2")
 
             category2_name.click()
             category2_name.fill("b")
