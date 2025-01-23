@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { FlaskConical, InspectionPanel, MousePointer } from "lucide-react";
 import useAppStore from "@/store/AppStore";
-import { buildDocsUrl } from "@/lib/utils";
+import SideDialog from "@/components/shared/SideDialog/SideDialog";
+import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import AddExperimentDialog from "../ExperimentsShared/AddExperimentDialog";
 import { Link } from "@tanstack/react-router";
 
@@ -9,8 +10,10 @@ const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isNewExperimentDialogOpened, setIsNewExperimentDialogOpened] =
     useState<boolean>(false);
+  const [isLogTraceDialogOpened, setIsLogTraceDialogOpened] = useState(false);
 
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
+  const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);
 
   return (
     <div>
@@ -22,17 +25,15 @@ const GetStartedSection = () => {
         </div>
       </div>
       <div className="flex gap-x-4">
-        <a
-          href={buildDocsUrl("/tracing/log_traces")}
-          target="_blank"
-          rel="noreferrer"
+        <div
+          onClick={openLogTraceDialog}
           className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
         >
           <div className="flex size-[24px] items-center justify-center rounded bg-[#DAFBF0] ">
             <InspectionPanel className="size-3.5 text-[#295747]" />
           </div>
           <div className="comet-body-s">Log a trace</div>
-        </a>
+        </div>
         <div
           onClick={openNewExperimentDialog}
           className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
@@ -52,12 +53,28 @@ const GetStartedSection = () => {
           </div>
           <div className="comet-body-s">Try out playground</div>
         </Link>
-
-        <AddExperimentDialog
-          open={isNewExperimentDialogOpened}
-          setOpen={setIsNewExperimentDialogOpened}
-        />
       </div>
+
+      <SideDialog
+        open={isLogTraceDialogOpened}
+        setOpen={setIsLogTraceDialogOpened}
+      >
+        <div className="flex w-full min-w-fit flex-col pb-12">
+          <div className="pb-8">
+            <h1 className="comet-title-l text-center">Log a trace</h1>
+            <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
+              Select a framework and follow the instructions to integrate Comet
+              with your code, or explore our ready-to-run examples on the right
+            </div>
+          </div>
+          <FrameworkIntegrations />
+        </div>
+      </SideDialog>
+
+      <AddExperimentDialog
+        open={isNewExperimentDialogOpened}
+        setOpen={setIsNewExperimentDialogOpened}
+      />
     </div>
   );
 };

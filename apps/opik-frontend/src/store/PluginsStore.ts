@@ -2,6 +2,7 @@ import React from "react";
 import { create } from "zustand";
 
 import WorkspacePreloader from "@/components/shared/WorkspacePreloader/WorkspacePreloader";
+import { FrameworkIntegration } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -9,6 +10,9 @@ type PluginStore = {
   QuickstartPage: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
+  FrameworkIntegrations: React.ComponentType<{
+    integrationList?: FrameworkIntegration[];
+  }> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -19,6 +23,7 @@ const PLUGIN_NAMES = [
   "UserMenu",
   "QuickstartPage",
   "GetStartedPage",
+  "FrameworkIntegrations",
   "WorkspacePreloader",
   "init",
 ];
@@ -28,6 +33,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   UserMenu: null,
   QuickstartPage: null,
   GetStartedPage: null,
+  FrameworkIntegrations: null,
   WorkspacePreloader: null,
   init: null,
   setupPlugins: async (folderName: string) => {
