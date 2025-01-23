@@ -616,6 +616,7 @@ class Opik:
         project_name: Optional[str] = None,
         filter_string: Optional[str] = None,
         max_results: int = 1000,
+        truncate: bool = True,
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project.
@@ -624,6 +625,7 @@ class Opik:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
             filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
+            truncate: Whether to truncate image data stored in input, output or metadata
         """
 
         page_size = 200
@@ -638,6 +640,7 @@ class Opik:
                 filters=filters,
                 page=page,
                 size=page_size,
+                truncate=truncate,
             )
 
             if len(page_traces.content) == 0:
@@ -654,6 +657,7 @@ class Opik:
         trace_id: Optional[str] = None,
         filter_string: Optional[str] = None,
         max_results: int = 1000,
+        truncate: bool = True,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
@@ -664,6 +668,7 @@ class Opik:
             trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
             filter_string: A filter string to narrow down the search.
             max_results: The maximum number of spans to return.
+            truncate: Whether to truncate image data stored in input, output or metadata
         """
         page_size = 200
         spans: List[span_public.SpanPublic] = []
@@ -678,6 +683,7 @@ class Opik:
                 filters=filters,
                 page=page,
                 size=page_size,
+                truncate=truncate,
             )
 
             if len(page_spans.content) == 0:
