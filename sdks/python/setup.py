@@ -40,7 +40,7 @@ setup(
         "click",
         "httpx<0.28.0",
         "levenshtein<1.0.0",
-        "litellm>=1.49.1",
+        "litellm",
         "openai<2.0.0",
         "pydantic-settings>=2.0.0,<3.0.0",
         "pydantic>=2.0.0,<3.0.0",

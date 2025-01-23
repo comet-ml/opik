@@ -167,7 +167,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
         if opik_monitor.enabled_in_config():
-            all_kwargs = opik_monitor.add_opik_monitoring_to_params(all_kwargs)
+            all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
         response = self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs
@@ -222,7 +222,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
         if opik_monitor.enabled_in_config():
-            all_kwargs = opik_monitor.add_opik_monitoring_to_params(all_kwargs)
+            all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
         response = await self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs
