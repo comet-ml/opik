@@ -521,30 +521,44 @@ class SpanDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration_millis
              FROM spans
-             WHERE project_id = :project_id
-             AND workspace_id = :workspace_id
-             <if(trace_id)> AND trace_id = :trace_id <endif>
-             <if(type)> AND type = :type <endif>
-             <if(filters)> AND <filters> <endif>
-             <if(feedback_scores_filters)>
-             AND id in (
+             WHERE id IN (
                 SELECT
-                    entity_id
+                    id
                 FROM (
-                    SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                    AND project_id = :project_id
-                    ORDER BY entity_id DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
+                    SELECT
+                        id,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                             NULL) AS duration_millis
+                    FROM spans
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    <if(trace_id)> AND trace_id = :trace_id <endif>
+                    <if(type)> AND type = :type <endif>
+                    <if(filters)> AND <filters> <endif>
+                    <if(feedback_scores_filters)>
+                    AND id in (
+                        SELECT
+                            entity_id
+                        FROM (
+                            SELECT *
+                            FROM feedback_scores
+                            WHERE entity_type = 'span'
+                            AND project_id = :project_id
+                            ORDER BY entity_id DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
+                    )
+                    <endif>
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    LIMIT :limit OFFSET :offset
                 )
-                GROUP BY entity_id
-                HAVING <feedback_scores_filters>
              )
-             <endif>
-             ORDER BY id DESC, last_updated_at DESC
-             LIMIT 1 BY id
-             LIMIT :limit OFFSET :offset
+             ORDER BY id DESC
             ;
             """;
 
