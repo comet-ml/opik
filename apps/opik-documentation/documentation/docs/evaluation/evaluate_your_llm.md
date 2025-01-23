@@ -9,7 +9,7 @@ pytest_codeblocks_execute_previous: true
 Evaluating your LLM application allows you to have confidence in the performance of your LLM application. In this guide, we will walk through the process of evaluating complex applications like LLM chains or agents.
 
 :::tip
-In this guide, we will focus on evaluating complex LLM applications, if you are looking at evaluating single prompts you can referto the [Evaluate a prompt](/evaluation/evaluate_prompt.md) guide.
+In this guide, we will focus on evaluating complex LLM applications. If you are looking at evaluating single prompts you can refer to the [Evaluate A Prompt](/evaluation/evaluate_prompt.md) guide.
 :::
 
 The evaluation is done in five steps:
@@ -18,7 +18,7 @@ The evaluation is done in five steps:
 2. Define the evaluation task
 3. Choose the `Dataset` that you would like to evaluate your application on
 4. Choose the metrics that you would like to evaluate your application with
-5. Create and run the evaluation experiment.
+5. Create and run the evaluation experiment
 
 ## 1. Add tracking to your LLM application
 
@@ -44,7 +44,7 @@ def your_llm_application(input: str) -> str:
 ```
 
 :::tip
-We have added here the `track` decorator so that this traces and all it's nested steps are logged to the platform for further analysis.
+Here we have added the `track` decorator so that this trace and all its nested steps are logged to the platform for further analysis.
 :::
 
 ## 2. Define the evaluation task
@@ -75,7 +75,7 @@ client = Opik()
 dataset = client.get_or_create_dataset(name="Example dataset")
 ```
 
-If you don't have a Dataset yet, you can insert dataset items using the [`Dataset.insert`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/Dataset.html#opik.Dataset.insert) method. You can call this method multiple times as Opik performs data deplication before ingestion:
+If you don't have a Dataset yet, you can insert dataset items using the [`Dataset.insert`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/Dataset.html#opik.Dataset.insert) method. You can call this method multiple times as Opik performs data deduplication before ingestion:
 
 ```python
 from opik import Opik
@@ -94,7 +94,7 @@ dataset.insert([
 Opik provides a set of built-in evaluation metrics that you can choose from. These are broken down into two main categories:
 
 1. Heuristic metrics: These metrics that are deterministic in nature, for example `equals` or `contains`
-2. LLM as a judge: These metrics use an LLM to judge the quality of the output, typically these are used for detecting `hallucinations` or `context relevance`
+2. LLM-as-a-judge: These metrics use an LLM to judge the quality of the output; typically these are used for detecting `hallucinations` or `context relevance`
 
 In the same evaluation experiment, you can use multiple metrics to evaluate your application:
 
@@ -105,12 +105,12 @@ hallucination_metric = Hallucination()
 ```
 
 :::tip
-Each metric expects the data in a certain format, you will need to ensure that the task you have defined in step 1. returns the data in the correct format.
+Each metric expects the data in a certain format. You will need to ensure that the task you have defined in step 1 returns the data in the correct format.
 :::
 
 ## 5. Run the evaluation
 
-Now that we have the task we want to evaluate, the dataset to evaluate on, the metrics we want to evalation with, we can run the evaluation:
+Now that we have the task we want to evaluate, the dataset to evaluate on, and the metrics we want to evaluate with, we can run the evaluation:
 
 ```python
 from opik import Opik, track
