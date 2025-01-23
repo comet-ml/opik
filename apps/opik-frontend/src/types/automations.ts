@@ -63,3 +63,17 @@ export type LLMAsJudgeData = {
   schema: LLMJudgeSchema[];
   parsingVariablesError?: boolean;
 };
+
+export enum EVALUATOR_LOG_LEVEL {
+  INFO = "INFO",
+  ERROR = "ERROR",
+  WARN = "WARN",
+  TRACE = "TRACE",
+  DEBUG = "DEBUG",
+}
+
+export interface EvaluatorRuleLogItem {
+  timestamp: string;
+  level: EVALUATOR_LOG_LEVEL;
+  message: string;
+}

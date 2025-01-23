@@ -17,6 +17,7 @@ import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/Co
 import QuickstartPage from "@/components/pages/QuickstartPage/QuickstartPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
+import EmptyPageLayout from "@/components/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
@@ -29,6 +30,7 @@ import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
+import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -60,6 +62,12 @@ const workspaceGuardPartialLayoutRoute = createRoute({
   id: "workspaceGuardPartialLayout",
   getParentRoute: () => rootRoute,
   component: () => <WorkspaceGuard Layout={PartialPageLayout} />,
+});
+
+const workspaceGuardEmptyLayoutRoute = createRoute({
+  id: "workspaceGuardEmptyLayout",
+  getParentRoute: () => rootRoute,
+  component: () => <WorkspaceGuard Layout={EmptyPageLayout} />,
 });
 
 const baseRoute = createRoute({
@@ -261,7 +269,15 @@ const configurationRoute = createRoute({
   component: ConfigurationPage,
 });
 
+// ----------- Automation logs
+const automationLogsRoute = createRoute({
+  path: "/$workspaceName/automation-logs",
+  getParentRoute: () => workspaceGuardEmptyLayoutRoute,
+  component: AutomationLogsPage,
+});
+
 const routeTree = rootRoute.addChildren([
+  workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
     getStartedRoute,
