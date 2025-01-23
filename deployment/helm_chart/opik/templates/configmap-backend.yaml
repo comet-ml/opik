@@ -1,10 +1,16 @@
+{{- range $key, $value := .Values.component }}
+{{- if and $value.enabled  $value.backendConfigMap.enabled }}
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "opik.name" . }}-backend
+  name: {{ include "opik.name" $ }}-{{ $key | lower }}
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
 data:
-  {{- range $key, $value := .Values.component.backend.env }}
-  {{ $key }}: {{ $value | quote }}
+  {{- range $envkey, $envvalue := $value.env }}
+  {{ $envkey }}: {{ $envvalue | quote }}
   {{- end }}
+
+{{- end }}
+{{- end }}

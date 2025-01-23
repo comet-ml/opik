@@ -25,6 +25,8 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
+    backendConfigMap:
+      enabled: true
     initContainers:
     - name: wait-for-clickhouse-service
       image: stefanevinance/wait-for-200
@@ -94,6 +96,8 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
+    backendConfigMap:
+      enabled: true
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
@@ -135,6 +139,8 @@ component:
       tag: latest
     replicaCount: 1
     autoscaling:
+      enabled: false
+    backendConfigMap:
       enabled: false
     volumeMounts:
     - mountPath: /etc/nginx/conf.d/
