@@ -110,7 +110,7 @@ Each metric expects the data in a certain format. You will need to ensure that t
 
 ## 5. Run the evaluation
 
-Now that we have the task we want to evaluate, the dataset to evaluate on, and the metrics we want to evaluation with, we can run the evaluation:
+Now that we have the task we want to evaluate, the dataset to evaluate on, and the metrics we want to evaluate with, we can run the evaluation:
 
 ```python
 from opik import Opik, track
