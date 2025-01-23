@@ -226,6 +226,7 @@ class Opik:
         model: Optional[str] = None,
         provider: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -249,6 +250,7 @@ class Opik:
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM.
             error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             span.Span: The created span object.
@@ -304,6 +306,7 @@ class Opik:
             model=model,
             provider=provider,
             error_info=error_info,
+            total_cost=total_cost,
         )
         self._streamer.put(create_span_message)
 
