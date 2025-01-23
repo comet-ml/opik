@@ -56,6 +56,11 @@ export const COMMITS_DEFAULT_COLUMNS = [
         cell: CodeCell as never,
       },
       {
+        id: "change_description",
+        label: "Commit message",
+        type: COLUMN_TYPE.string,
+      },
+      {
         id: "created_at",
         label: "Created at",
         type: COLUMN_TYPE.time,
