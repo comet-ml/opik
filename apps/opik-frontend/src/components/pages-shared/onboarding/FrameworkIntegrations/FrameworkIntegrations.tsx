@@ -57,7 +57,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
           <IntegrationTemplate
             code={integration.code}
             executionUrl={integration.executionUrl}
-            executionFakeLogs={integration.executionFakeLogs}
+            executionLogs={integration.executionLogs}
             apiKey={apiKey}
           />
         </div>

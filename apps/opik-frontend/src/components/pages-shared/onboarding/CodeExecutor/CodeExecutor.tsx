@@ -33,7 +33,7 @@ type CodeExecutorProps = {
   executionUrl: string;
   apiKey: string;
   workspaceName: string;
-  executionFakeLogs: string[];
+  executionLogs: string[];
 };
 
 const CodeExecutor: React.FC<CodeExecutorProps> = ({
@@ -43,21 +43,25 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
   executionUrl,
   apiKey,
   workspaceName,
-  executionFakeLogs,
+  executionLogs,
 }) => {
   const theme = useCodemirrorTheme();
   const { consoleOutput, isRunning, executeCode } = useRunCodeSnippet({
     executionUrl,
-    executionFakeLogs,
+    executionLogs,
     apiKey,
     workspaceName,
   });
   const [consoleIsOpened, setConsoleIsOpened] = useState(false);
-  const consoleBottomRef = useRef<HTMLDivElement>(null);
+  const consoleRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to the bottom whenever messages change
   useEffect(() => {
-    consoleBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!consoleRef.current) return;
+
+    consoleRef.current.scrollTo({
+      top: consoleRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [consoleOutput]);
 
   const onRunCode = () => {
@@ -69,11 +73,11 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-md border  bg-primary-foreground ${
-        consoleIsOpened ? "border-[#E2E8F0]" : "border-transparent"
+      className={`bg-primary-foreground relative overflow-hidden rounded-md  border ${
+        consoleIsOpened ? "border-slate-200" : "border-transparent"
       }`}
     >
-      <div className="relative flex items-center justify-between border-b border-b-[#E2E8F0] py-2 pl-4 pr-2">
+      <div className="relative flex items-center justify-between border-b border-b-slate-200 py-2 pl-4 pr-2">
         <div className="flex items-center">
           <Button
             onClick={toggleConsoleIsOpened}
@@ -109,8 +113,11 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
         </div>
       </div>
       {consoleIsOpened && (
-        <div className="h-[250px] w-full overflow-auto border border-transparent border-b-[#E2E8F0] bg-white">
-          <div className="comet-body-s gap-4 text-balance px-4 py-3 font-code">
+        <div
+          className="h-[150px] w-full overflow-auto border border-transparent border-b-slate-200 bg-white"
+          ref={consoleRef}
+        >
+          <div className="comet-body-s font-code gap-4 text-balance px-4 py-3">
             <div className="text-foreground-secondary">
               Welcome to Opik! Click <span className="text-green-700">Run</span>{" "}
               to execute the code sample
@@ -120,7 +127,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
                 return (
                   <div
                     key={FINAL_LOG_TEMPLATE}
-                    className="gap-2 py-4 text-foreground-secondary"
+                    className="text-foreground-secondary gap-2 py-4"
                   >
                     OPIK: Your LLM calls have been logged to your Opik
                     dashboard,
@@ -144,7 +151,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
                 );
               }
               return (
-                <div key={log} className="flex gap-2 text-foreground-secondary">
+                <div key={log} className="text-foreground-secondary flex gap-2">
                   {log.includes("%cmd%") && (
                     <div className="flex gap-1">
                       <span className="text-[#005cc5]">~/sandbox</span>
@@ -156,9 +163,8 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
               );
             })}
             {isRunning && (
-              <div className="h-3.5 w-1 bg-foreground-secondary"></div>
+              <div className="bg-foreground-secondary h-3.5 w-1"></div>
             )}
-            <div ref={consoleBottomRef} />
           </div>
         </div>
       )}

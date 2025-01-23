@@ -3,7 +3,8 @@ import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter
 import useAppStore from "@/store/AppStore";
 import { BASE_API_URL } from "@/api/api";
 import { maskAPIKey } from "@/lib/utils";
-import CodeExecutor from "@/components/shared/CodeExecutor/CodeExecutor";
+import { CODE_EXECUTOR_SERVICE_URL } from "./quickstart-integrations";
+import CodeExecutor from "../CodeExecutor/CodeExecutor";
 
 const CODE_BLOCK_1 = "pip install opik";
 
@@ -40,14 +41,14 @@ type IntegrationTemplateProps = {
   apiKey?: string;
   code: string;
   executionUrl?: string;
-  executionFakeLogs: string[];
+  executionLogs: string[];
 };
 
 const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   apiKey,
   code,
   executionUrl,
-  executionFakeLogs,
+  executionLogs,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const codeWithConfig = putConfigInCode({
@@ -59,7 +60,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   const codeWithConfigToCopy = putConfigInCode({ code, workspaceName, apiKey });
 
   const canExecuteCode =
-    executionUrl && apiKey && Boolean(import.meta.env.VITE_GET_STARTED_API_URL);
+    executionUrl && apiKey && Boolean(CODE_EXECUTOR_SERVICE_URL);
 
   return (
     <div className="flex flex-col gap-6 rounded-md border bg-white p-6">
@@ -78,7 +79,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
         {canExecuteCode ? (
           <CodeExecutor
             executionUrl={executionUrl}
-            executionFakeLogs={executionFakeLogs}
+            executionLogs={executionLogs}
             data={codeWithConfig}
             copyData={codeWithConfigToCopy}
             apiKey={apiKey}

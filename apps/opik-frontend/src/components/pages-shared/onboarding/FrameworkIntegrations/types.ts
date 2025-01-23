@@ -5,5 +5,5 @@ export type FrameworkIntegration = {
   documentation: string;
   code: string;
   executionUrl?: string;
-  executionFakeLogs: string[];
+  executionLogs: string[];
 };
