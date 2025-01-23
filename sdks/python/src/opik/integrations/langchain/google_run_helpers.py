@@ -8,7 +8,6 @@ from opik.validation import usage as usage_validator
 if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -24,32 +23,42 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
     try:
-        token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
+        usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
+            "usage_metadata"
+        ]
+
+        token_usage = UsageDict(
+            completion_tokens=usage_metadata["candidates_token_count"],
+            prompt_tokens=usage_metadata["prompt_token_count"],
+            total_tokens=usage_metadata["total_token_count"],
+        )
+        token_usage.update(usage_metadata)
+
         if usage_validator.UsageValidator(token_usage).validate().ok():
             return cast(UsageDict, token_usage)
 
         return None
     except Exception:
         LOGGER.warning(
-            logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN,
+            logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN,
             exc_info=True,
         )
         return None
 
 
-def is_openai_run(run: "Run") -> bool:
+def is_google_run(run: "Run") -> bool:
     try:
         if run.serialized is None:
             return False
 
-        serialized_kwargs = run.serialized.get("kwargs", {})
-        has_openai_key = "openai_api_key" in serialized_kwargs
+        provider = run.metadata.get("ls_provider", "")
+        is_google = "google" in provider.lower()
 
-        return has_openai_key
+        return is_google
 
     except Exception:
         LOGGER.debug(
-            "Failed to check if Run instance is from OpenAI LLM, returning False.",
+            "Failed to check if Run instance is from Google LLM, returning False.",
             exc_info=True,
         )
         return False
@@ -60,10 +69,6 @@ def _get_provider_and_model(
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Fetches the provider and model information from a given run dictionary.
-
-    By default, the provider is assumed to be OpenAI (will be available in extra/metadata field).
-    If LLM output is available, the model version is included.
-    If the Client is available, the BaseURL is also checked.
     """
     provider = None
     model = None
@@ -71,12 +76,5 @@ def _get_provider_and_model(
     if metadata := run_dict["extra"].get("metadata"):
         provider = metadata.get("ls_provider")
         model = metadata.get("ls_model_name")
-
-    if llm_output := run_dict["outputs"].get("llm_output"):
-        model = llm_output.get("model_name", model)
-
-    if base_url := run_dict["extra"].get("invocation_params", {}).get("base_url"):
-        if base_url.host != "api.openai.com":
-            provider = base_url.host
 
     return provider, model

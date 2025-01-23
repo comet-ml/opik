@@ -1,2 +1,3 @@
 langchain_community
+langchain_google_vertexai
 langchain_openai

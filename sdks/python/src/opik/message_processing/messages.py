@@ -1,6 +1,6 @@
 import dataclasses
 import datetime
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Union
 from ..types import UsageDict, SpanType, ErrorInfoDict
 
 
@@ -66,7 +66,7 @@ class CreateSpanMessage(BaseMessage):
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
     type: SpanType
-    usage: Optional[UsageDict]
+    usage: Optional[Union[UsageDict, Dict[str, int]]]
     model: Optional[str]
     provider: Optional[str]
     error_info: Optional[ErrorInfoDict]
@@ -81,7 +81,7 @@ class CreateSpanMessage(BaseMessage):
 
 @dataclasses.dataclass
 class UpdateSpanMessage(BaseMessage):
-    "Not recommended to use. Kept only for low level update operations in public API"
+    """Not recommended to use. Kept only for low level update operations in public API"""
 
     span_id: str
     parent_span_id: Optional[str]
@@ -92,7 +92,7 @@ class UpdateSpanMessage(BaseMessage):
     output: Optional[Dict[str, Any]]
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
-    usage: Optional[UsageDict]
+    usage: Optional[Union[UsageDict, Dict[str, int]]]
     model: Optional[str]
     provider: Optional[str]
     error_info: Optional[ErrorInfoDict]
