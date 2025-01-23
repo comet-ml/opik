@@ -302,7 +302,9 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=parsed_usage.supported_usage,
+            usage=parsed_usage.full_usage
+            if provider == "google_vertexai"
+            else parsed_usage.supported_usage,
             model=model,
             provider=provider,
             error_info=error_info,

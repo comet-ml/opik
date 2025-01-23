@@ -1,3 +1,4 @@
+import dataclasses
 import sys
 
 from typing import Literal, Optional
@@ -77,3 +78,10 @@ class ErrorInfoDict(TypedDict):
 
     traceback: str
     """Exception traceback"""
+
+
+@dataclasses.dataclass
+class LLMUsageInfo:
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    usage: Optional[UsageDict] = None
