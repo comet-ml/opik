@@ -65,6 +65,25 @@ export const LLMJudgeDetailsFormSchema = z.object({
     ),
 });
 
+// TODO lala check. as well partial validation
+export const PythonCodeDetailsFormSchema = z.object({
+  metric: z
+    .string({
+      required_error: "Code is required",
+    })
+    .min(1, { message: "Code is required" }),
+  arguments: z.record(
+    z.string(),
+    z
+      .string()
+      .min(1, { message: "Key is required" })
+      .regex(/^(input|output|metadata)/, {
+        message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
+      }),
+  ),
+  parsingArgumentsError: z.boolean().optional(),
+});
+
 export const EvaluationRuleFormSchema = z.object({
   ruleName: z
     .string({
@@ -78,15 +97,15 @@ export const EvaluationRuleFormSchema = z.object({
     .min(1, { message: "Project is required" }),
   samplingRate: z.number(),
   type: z.nativeEnum(EVALUATORS_RULE_TYPE),
+  pythonCodeDetails: PythonCodeDetailsFormSchema,
   llmJudgeDetails: LLMJudgeDetailsFormSchema,
-  pythonCodeDetails: z.object({
-    code: z.string({
-      required_error: "Code is required",
-    }),
-  }),
 });
 
 export type LLMJudgeDetailsFormType = z.infer<typeof LLMJudgeDetailsFormSchema>;
+
+export type PythonCodeDetailsFormType = z.infer<
+  typeof PythonCodeDetailsFormSchema
+>;
 
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
