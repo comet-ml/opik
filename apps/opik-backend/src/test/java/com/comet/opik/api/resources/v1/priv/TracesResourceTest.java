@@ -126,7 +126,7 @@ class TracesResourceTest {
             "comments"};
     private static final String[] IGNORED_FIELDS_SPANS = SpansResourceTest.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
-    private static final String[] IGNORED_FIELDS_COMMENTS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
+    public static final String[] IGNORED_FIELDS_COMMENTS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -3386,6 +3386,47 @@ class TracesResourceTest {
                 assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
             });
         }
+
+        if (actualTrace.comments() != null) {
+            assertComments(expectedTrace.comments(), actualTrace.comments());
+
+            actualTrace.comments().forEach(comment -> {
+                assertThat(comment.createdAt()).isAfter(actualTrace.createdAt());
+                assertThat(comment.lastUpdatedAt()).isAfter(actualTrace.lastUpdatedAt());
+                assertThat(comment.createdBy()).isEqualTo(USER);
+                assertThat(comment.lastUpdatedBy()).isEqualTo(USER);
+            });
+        }
+    }
+
+    private void assertTraceComment(Comment expected, Comment actual) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS_COMMENTS)
+                .isEqualTo(expected);
+
+        assertThat(actual.createdAt()).isNotNull();
+        assertThat(actual.lastUpdatedAt()).isNotNull();
+        assertThat(actual.createdBy()).isNotNull();
+        assertThat(actual.lastUpdatedBy()).isNotNull();
+    }
+
+    private void assertUpdatedComment(Comment initial, Comment updated, String expectedText) {
+        assertThat(initial.text()).isNotEqualTo(expectedText);
+
+        assertTraceComment(initial.toBuilder().text(expectedText).build(), updated);
+
+        assertThat(updated.createdAt()).isEqualTo(initial.createdAt());
+        assertThat(updated.lastUpdatedAt()).isNotEqualTo(initial.lastUpdatedAt());
+        assertThat(updated.createdBy()).isEqualTo(initial.createdBy());
+        assertThat(updated.lastUpdatedBy()).isEqualTo(initial.lastUpdatedBy());
+    }
+
+    private static void assertComments(List<Comment> expected, List<Comment> actual) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS_COMMENTS)
+                .isEqualTo(expected);
     }
 
     private void assertIgnoredFieldsSpans(List<Span> actualSpans, List<Span> expectedSpans) {
@@ -4673,9 +4714,12 @@ class TracesResourceTest {
     class TraceComment {
 
         @Test
-        void createAndGetComment() {
-            // Create comment for not existing trace, should fail
+        void createCommentForNonExistingTraceFail() {
             traceResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
+        }
+
+        @Test
+        void createAndGetComment() {
 
             // Create comment for existing trace
             UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
@@ -4713,53 +4757,123 @@ class TracesResourceTest {
         }
 
         @Test
-        void deleteComment() {
+        void deleteComments() {
             // Create comment for existing trace
             UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
                     TEST_WORKSPACE);
-            Comment expectedComment = traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE,
-                    201);
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList().reversed();
 
             // Check it was created
-            traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
-                    TEST_WORKSPACE, 200);
+            expectedComments.forEach(
+                    comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE, 200));
 
             // Delete comment
-            BatchDelete request = BatchDelete.builder().ids(Set.of(expectedComment.id())).build();
+            BatchDelete request = BatchDelete.builder()
+                    .ids(expectedComments.stream().map(Comment::id).collect(Collectors.toSet())).build();
             traceResourceClient.deleteComments(request, API_KEY, TEST_WORKSPACE);
 
-            // Verify comment was actually deleted via get and update endpoints
-            traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY, TEST_WORKSPACE, 404);
-            traceResourceClient.updateComment(factory.manufacturePojo(String.class), expectedComment.id(), traceId,
-                    API_KEY, TEST_WORKSPACE, 404);
+            // Verify comments were actually deleted via get and update endpoints
+            expectedComments.forEach(
+                    comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE, 404));
+            expectedComments.forEach(comment -> traceResourceClient.updateComment(factory.manufacturePojo(String.class),
+                    comment.id(), traceId,
+                    API_KEY, TEST_WORKSPACE, 404));
         }
-    }
 
-    private void assertTraceComment(Comment expected, Comment actual) {
-        assertThat(actual)
-                .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_COMMENTS)
-                .isEqualTo(expected);
+        @Test
+        void getTraceWithComments() {
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+                    TEST_WORKSPACE);
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
 
-        assertThat(actual.createdAt()).isNotNull();
-        assertThat(actual.lastUpdatedAt()).isNotNull();
-        assertThat(actual.createdBy()).isNotNull();
-        assertThat(actual.lastUpdatedBy()).isNotNull();
-    }
+            Trace expectedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertComments(expectedComments, expectedTrace.comments());
+        }
 
-    private void assertUpdatedComment(Comment initial, Comment updated, String expectedText) {
-        assertThat(initial.text()).isNotEqualTo(expectedText);
-        initial = initial.toBuilder().text(expectedText).build();
+        @Test
+        void getTracePageWithComments() {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            var traceId = traces.getFirst().id();
 
-        assertThat(updated)
-                .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_COMMENTS)
-                .isEqualTo(initial);
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
-        assertThat(updated.createdAt()).isEqualTo(initial.createdAt());
-        assertThat(updated.lastUpdatedAt()).isNotEqualTo(initial.lastUpdatedAt());
-        assertThat(updated.createdBy()).isEqualTo(initial.createdBy());
-        assertThat(updated.lastUpdatedBy()).isEqualTo(initial.lastUpdatedBy());
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            traces = traces.stream()
+                    .map(trace -> trace.id() != traceId ? trace : trace.toBuilder().comments(expectedComments).build())
+                    .toList();
+
+            getAndAssertPage(1, traces.size(), projectName, List.of(), traces.reversed(), List.of(), TEST_WORKSPACE,
+                    API_KEY);
+        }
+
+        @Test
+        void deleteTraceDeletesComments() {
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+                    TEST_WORKSPACE);
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            // Check that comments were created
+            Trace expectedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertComments(expectedComments, expectedTrace.comments());
+
+            traceResourceClient.deleteTrace(traceId, TEST_WORKSPACE, API_KEY);
+
+            // Verify comments were actually deleted via get endpoint
+            expectedComments.forEach(
+                    comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE, 404));
+        }
+
+        @Test
+        void batchDeleteTracesDeletesComments() {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), traces, traces.reversed(), List.of(), API_KEY);
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traces.getFirst().id(), API_KEY,
+                            TEST_WORKSPACE, 201))
+                    .toList();
+
+            // Check that comments were created
+            Trace expectedTrace = traceResourceClient.getById(traces.getFirst().id(), TEST_WORKSPACE, API_KEY);
+            assertComments(expectedComments, expectedTrace.comments());
+
+            var request = BatchDelete.builder()
+                    .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
+                    .build();
+
+            traceResourceClient.deleteTraces(request, TEST_WORKSPACE, API_KEY);
+
+            // Verify comments were actually deleted via get endpoint
+            expectedComments.forEach(comment -> traceResourceClient.getCommentById(comment.id(), traces.getFirst().id(),
+                    API_KEY, TEST_WORKSPACE, 404));
+        }
     }
 
     @Nested

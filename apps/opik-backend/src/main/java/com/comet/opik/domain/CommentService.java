@@ -47,12 +47,14 @@ class CommentServiceImpl implements CommentService {
 
     @Override
     public Mono<Comment> get(@NonNull UUID traceId, @NonNull UUID commentId) {
-        return commentDAO.findById(traceId, commentId);
+        return commentDAO.findById(traceId, commentId)
+                .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId)));
     }
 
     @Override
     public Mono<Void> update(@NonNull UUID traceId, @NonNull UUID commentId, @NonNull Comment comment) {
         return commentDAO.findById(traceId, commentId)
+                .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId)))
                 .then(Mono.defer(() -> commentDAO.updateComment(commentId, comment)));
     }
 

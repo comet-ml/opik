@@ -119,6 +119,20 @@ class ExperimentItemDAO {
                 AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
                 ORDER BY entity_id DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
+            ), comments_final AS (
+                SELECT
+                    id AS comment_id,
+                    text,
+                    created_at AS comment_created_at,
+                    last_updated_at AS comment_last_updated_at,
+                    created_by AS comment_created_by,
+                    last_updated_by AS comment_last_updated_by,
+                    entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
             )
             SELECT
                 ei.id,
@@ -128,6 +142,7 @@ class ExperimentItemDAO {
                 tfs.input,
                 tfs.output,
                 tfs.feedback_scores_array,
+                tfs.comments_array_agg,
                 ei.created_at,
                 ei.last_updated_at,
                 ei.created_by,
@@ -138,7 +153,8 @@ class ExperimentItemDAO {
                     t.id,
                     t.input,
                     t.output,
-                    groupArray(tuple(fs.*)) AS feedback_scores_array
+                    groupUniqArray(tuple(fs.*)) AS feedback_scores_array,
+                    groupUniqArray(tuple(c.*)) AS comments_array_agg
                 FROM (
                     SELECT
                         id,
@@ -151,6 +167,7 @@ class ExperimentItemDAO {
                     LIMIT 1 BY id
                 ) AS t
                 LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
+                LEFT JOIN comments_final AS c ON t.id = c.entity_id
                 GROUP BY
                     t.id,
                     t.input,

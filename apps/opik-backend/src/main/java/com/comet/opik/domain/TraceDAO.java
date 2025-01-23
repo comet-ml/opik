@@ -46,6 +46,7 @@ import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -271,7 +272,8 @@ class TraceDAOImpl implements TraceDAO {
                 t.*,
                 t.duration_millis,
                 sumMap(s.usage) as usage,
-                sum(s.total_estimated_cost) as total_estimated_cost
+                sum(s.total_estimated_cost) as total_estimated_cost,
+                groupArray(tuple(c.*)) AS comments
             FROM (
                 SELECT
                     *,
@@ -296,6 +298,21 @@ class TraceDAOImpl implements TraceDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
+            LEFT JOIN (
+                SELECT
+                    id AS comment_id,
+                    text,
+                    created_at AS comment_created_at,
+                    last_updated_at AS comment_last_updated_at,
+                    created_by AS comment_created_by,
+                    last_updated_by AS comment_last_updated_by,
+                    entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND entity_id = :id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS c ON t.id = c.entity_id
             GROUP BY
                 t.*,
                 duration_millis
@@ -308,7 +325,8 @@ class TraceDAOImpl implements TraceDAO {
                 t.*,
                 t.duration_millis,
                 sumMap(s.usage) as usage,
-                sum(s.total_estimated_cost) as total_estimated_cost
+                sum(s.total_estimated_cost) as total_estimated_cost,
+                groupArray(tuple(c.*)) AS comments
             FROM (
                 SELECT
                      id,
@@ -366,6 +384,21 @@ class TraceDAOImpl implements TraceDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
+            LEFT JOIN (
+                SELECT
+                    id AS comment_id,
+                    text,
+                    created_at AS comment_created_at,
+                    last_updated_at AS comment_last_updated_at,
+                    created_by AS comment_created_by,
+                    last_updated_by AS comment_last_updated_by,
+                    entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS c ON t.id = c.entity_id
             GROUP BY
                 t.*,
                 t.duration_millis
@@ -942,6 +975,7 @@ class TraceDAOImpl implements TraceDAO {
                         .collect(Collectors.toSet()))
                         .filter(it -> !it.isEmpty())
                         .orElse(null))
+                .comments(getComments(row.get("comments", List[].class)))
                 .usage(row.get("usage", Map.class))
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                         ? null

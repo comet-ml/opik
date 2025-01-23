@@ -14,7 +14,6 @@ import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.CommentService;
@@ -24,6 +23,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -263,7 +263,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/{traceId}/comments/{commentId}", schema = @Schema(implementation = String.class))})})
     public Response addTraceComment(@PathParam("id") UUID id,
-            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @JsonView(Comment.View.Write.class) @NotNull @Valid Comment comment,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment,
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -286,7 +286,6 @@ public class TracesResource {
     @Operation(operationId = "getTraceComment", summary = "Get trace comment", description = "Get trace comment", responses = {
             @ApiResponse(responseCode = "200", description = "Comment resource", content = @Content(schema = @Schema(implementation = Comment.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    @JsonView(Comment.View.Public.class)
     public Response getTraceComment(@PathParam("commentId") @NotNull UUID commentId,
             @PathParam("traceId") @NotNull UUID traceId) {
 
@@ -310,7 +309,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "404", description = "Not found")})
     public Response updateTraceComment(@PathParam("commentId") UUID commentId,
             @PathParam("traceId") @NotNull UUID traceId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @JsonView(Comment.View.Write.class) @NotNull @Valid Comment comment) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
