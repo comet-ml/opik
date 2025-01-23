@@ -6,12 +6,7 @@ const GetStartedPage = () => {
 
   if (!user) return;
 
-  return (
-    <GetStarted
-      apiKey={user.apiKeys[0]}
-      showColabLinks={!user?.sagemakerRestrictions}
-    />
-  );
+  return <GetStarted />;
 };
 
 export default GetStartedPage;
