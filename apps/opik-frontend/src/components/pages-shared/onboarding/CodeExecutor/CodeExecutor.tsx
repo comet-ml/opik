@@ -73,7 +73,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
 
   return (
     <div
-      className={`bg-primary-foreground relative overflow-hidden rounded-md  border ${
+      className={`relative overflow-hidden rounded-md border  bg-primary-foreground ${
         consoleIsOpened ? "border-slate-200" : "border-transparent"
       }`}
     >
@@ -117,7 +117,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
           className="h-[150px] w-full overflow-auto border border-transparent border-b-slate-200 bg-white"
           ref={consoleRef}
         >
-          <div className="comet-body-s font-code gap-4 text-balance px-4 py-3">
+          <div className="comet-body-s gap-4 text-balance px-4 py-3 font-code">
             <div className="text-foreground-secondary">
               Welcome to Opik! Click <span className="text-green-700">Run</span>{" "}
               to execute the code sample
@@ -127,7 +127,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
                 return (
                   <div
                     key={FINAL_LOG_TEMPLATE}
-                    className="text-foreground-secondary gap-2 py-4"
+                    className="gap-2 py-4 text-foreground-secondary"
                   >
                     OPIK: Your LLM calls have been logged to your Opik
                     dashboard,
@@ -151,7 +151,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
                 );
               }
               return (
-                <div key={log} className="text-foreground-secondary flex gap-2">
+                <div key={log} className="flex gap-2 text-foreground-secondary">
                   {log.includes("%cmd%") && (
                     <div className="flex gap-1">
                       <span className="text-[#005cc5]">~/sandbox</span>
@@ -163,7 +163,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
               );
             })}
             {isRunning && (
-              <div className="bg-foreground-secondary h-3.5 w-1"></div>
+              <div className="h-3.5 w-1 bg-foreground-secondary"></div>
             )}
           </div>
         </div>
