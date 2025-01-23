@@ -10,6 +10,7 @@ type UseCreatePromptVersionMutationParams = {
   name: string;
   template: string;
   metadata?: object;
+  changeDescription?: string;
   onSetActiveVersionId: (versionId: string) => void;
 };
 
@@ -22,12 +23,14 @@ const useCreatePromptVersionMutation = () => {
       name,
       template,
       metadata,
+      changeDescription,
     }: UseCreatePromptVersionMutationParams) => {
       const { data } = await api.post(`${PROMPTS_REST_ENDPOINT}versions`, {
         name,
         version: {
           template,
           ...(metadata && { metadata }),
+          ...(changeDescription && { change_description: changeDescription }),
         },
       });
 

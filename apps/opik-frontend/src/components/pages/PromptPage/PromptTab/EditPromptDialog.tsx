@@ -55,6 +55,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
     : "";
   const [template, setTemplate] = useState(promptTemplate);
   const [metadata, setMetadata] = useState(metadataString);
+  const [changeDescription, setChangeDescription] = useState("");
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -73,6 +74,7 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
     mutate({
       name: promptName,
       template,
+      changeDescription,
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
       onSetActiveVersionId,
     });
@@ -109,6 +111,9 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
               </TabsTrigger>
               <TabsTrigger variant="underline" value="metadata">
                 Metadata
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="message">
+                Commit message
               </TabsTrigger>
             </TabsList>
             <TabsContent value="template" className="h-[422px]">
@@ -166,6 +171,14 @@ const EditPromptDialog: React.FunctionComponent<EditPromptDialogProps> = ({
               <p className="comet-body-xs mt-2 text-light-slate">
                 You can specify only valid JSON object.
               </p>
+            </TabsContent>
+            <TabsContent value="message" className="h-[422px]">
+              <Textarea
+                className="comet-code h-[422px] resize-none"
+                id="promptMessage"
+                value={changeDescription}
+                onChange={(e) => setChangeDescription(e.target.value)}
+              />
             </TabsContent>
           </Tabs>
           {showInvalidJSON && (
