@@ -62,6 +62,7 @@ class Span:
             tags: A list of tags to be associated with the span.
             usage: Usage information for the span.
             error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             None
