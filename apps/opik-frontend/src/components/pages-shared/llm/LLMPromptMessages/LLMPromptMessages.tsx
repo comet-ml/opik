@@ -15,16 +15,27 @@ import { SortableContext } from "@dnd-kit/sortable";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import LLMPromptMessage from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessage";
 import { Button } from "@/components/ui/button";
-import { LLMMessage } from "@/types/llm";
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import { DropdownOption } from "@/types/shared";
+
+interface MessageValidationError {
+  content?: {
+    message: string;
+  };
+}
 
 interface LLMPromptMessagesProps {
   messages: LLMMessage[];
+  validationErrors?: MessageValidationError[];
+  possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChange: (messages: LLMMessage[]) => void;
   onAddMessage: () => void;
 }
 
 const LLMPromptMessages = ({
   messages,
+  validationErrors,
+  possibleTypes,
   onChange,
   onAddMessage,
 }: LLMPromptMessagesProps) => {
@@ -101,6 +112,8 @@ const LLMPromptMessages = ({
             {messages.map((message, messageIdx) => (
               <LLMPromptMessage
                 key={message.id}
+                possibleTypes={possibleTypes}
+                errorText={validationErrors?.[messageIdx]?.content?.message}
                 hideRemoveButton={messages?.length === 1}
                 hideDragButton={messages?.length === 1}
                 onRemoveMessage={() => handleRemoveMessage(message.id)}
@@ -121,6 +134,7 @@ const LLMPromptMessages = ({
           size="sm"
           className="mt-2"
           onClick={onAddMessage}
+          type="button"
         >
           <Plus className="mr-2 size-4" />
           Message

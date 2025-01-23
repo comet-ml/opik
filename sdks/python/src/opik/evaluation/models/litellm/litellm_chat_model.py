@@ -37,10 +37,14 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input.
 
         Args:
-            model_name: The name of the LLM model to be used.
-            must_support_arguments: A list of arguments that the provider must support.
+            model_name: The name of the LLM to be used.
+                This parameter will be passed to `litellm.completion(model=model_name)` so you don't need to pass
+                the `model` argument separately inside **completion_kwargs.
+            must_support_arguments: A list of openai-like arguments that the given model + provider pair must support.
                 `litellm.get_supported_openai_params(model_name)` call is used to get
                 supported arguments. If any is missing, ValueError is raised.
+                You can pass the arguments from the table: https://docs.litellm.ai/docs/completion/input#translated-openai-params
+
             **completion_kwargs: key-value arguments to always pass additionally into `litellm.completion` function.
         """
 
@@ -49,8 +53,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         self._check_model_name()
         self._check_must_support_arguments(must_support_arguments)
 
-        self._completion_kwargs: Dict[str, Any] = self._filter_supported_params(
-            completion_kwargs
+        self._completion_kwargs: Dict[str, Any] = (
+            self._remove_unnecessary_not_supported_params(completion_kwargs)
         )
 
         self._engine = litellm
@@ -61,10 +65,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             litellm.get_supported_openai_params(model=self.model_name)
         )
         self._ensure_supported_params(supported_params)
-
-        # Add metadata and success_callback as a parameter that is always supported
-        supported_params.add("metadata")
-        supported_params.add("success_callback")
 
         return supported_params
 
@@ -101,18 +101,21 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             if key not in self.supported_params:
                 raise ValueError(f"Unsupported parameter: '{key}'!")
 
-    def _filter_supported_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        valid_params = {}
+    def _remove_unnecessary_not_supported_params(
+        self, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        filtered_params = {**params}
 
-        for key, value in params.items():
-            if key not in self.supported_params:
-                LOGGER.debug(
-                    f"This model does not support the '{key}' parameter and it has been ignored."
-                )
-            else:
-                valid_params[key] = value
+        if (
+            "response_format" in params
+            and "response_format" not in self.supported_params
+        ):
+            filtered_params.pop("response_format")
+            LOGGER.debug(
+                "This model does not support the response_format parameter and it will be ignored."
+            )
 
-        return valid_params
+        return filtered_params
 
     def generate_string(self, input: str, **kwargs: Any) -> str:
         """
@@ -127,7 +130,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             str: The generated string output.
         """
 
-        valid_litellm_params = self._filter_supported_params(kwargs)
+        valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
 
         request = [
             {
@@ -154,17 +157,17 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             kwargs: arguments required by the provider to generate a response.
 
         Returns:
-            Any: The response from the model provider, which can be of any type depending on the use case and LLM model.
+            Any: The response from the model provider, which can be of any type depending on the use case and LLM.
         """
 
         # we need to pop messages first, and after we will check the rest params
         messages = kwargs.pop("messages")
 
-        valid_litellm_params = self._filter_supported_params(kwargs)
+        valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
         if opik_monitor.enabled_in_config():
-            all_kwargs = opik_monitor.add_opik_monitoring_to_params(all_kwargs)
+            all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
         response = self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs
@@ -185,7 +188,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             str: The generated string output.
         """
 
-        valid_litellm_params = self._filter_supported_params(kwargs)
+        valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
 
         request = [
             {
@@ -209,17 +212,17 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             kwargs: arguments required by the provider to generate a response.
 
         Returns:
-            Any: The response from the model provider, which can be of any type depending on the use case and LLM model.
+            Any: The response from the model provider, which can be of any type depending on the use case and LLM.
         """
 
         # we need to pop messages first, and after we will check the rest params
         messages = kwargs.pop("messages")
 
-        valid_litellm_params = self._filter_supported_params(kwargs)
+        valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
         if opik_monitor.enabled_in_config():
-            all_kwargs = opik_monitor.add_opik_monitoring_to_params(all_kwargs)
+            all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
         response = await self._engine.completion(
             model=self.model_name, messages=messages, **all_kwargs

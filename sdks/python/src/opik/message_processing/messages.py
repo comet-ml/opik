@@ -1,6 +1,6 @@
 import dataclasses
 import datetime
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Union
 from ..types import UsageDict, SpanType, ErrorInfoDict
 
 
@@ -46,6 +46,11 @@ class UpdateTraceMessage(BaseMessage):
     tags: Optional[List[str]]
     error_info: Optional[ErrorInfoDict]
 
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data["id"] = data.pop("trace_id")
+        return data
+
 
 @dataclasses.dataclass
 class CreateSpanMessage(BaseMessage):
@@ -61,20 +66,22 @@ class CreateSpanMessage(BaseMessage):
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
     type: SpanType
-    usage: Optional[UsageDict]
+    usage: Optional[Union[UsageDict, Dict[str, int]]]
     model: Optional[str]
     provider: Optional[str]
     error_info: Optional[ErrorInfoDict]
+    total_cost: Optional[float]
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("span_id")
+        data["total_estimated_cost"] = data.pop("total_cost")
         return data
 
 
 @dataclasses.dataclass
 class UpdateSpanMessage(BaseMessage):
-    "Not recommended to use. Kept only for low level update operations in public API"
+    """Not recommended to use. Kept only for low level update operations in public API"""
 
     span_id: str
     parent_span_id: Optional[str]
@@ -85,10 +92,17 @@ class UpdateSpanMessage(BaseMessage):
     output: Optional[Dict[str, Any]]
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
-    usage: Optional[UsageDict]
+    usage: Optional[Union[UsageDict, Dict[str, int]]]
     model: Optional[str]
     provider: Optional[str]
     error_info: Optional[ErrorInfoDict]
+    total_cost: Optional[float]
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data["id"] = data.pop("span_id")
+        data["total_estimated_cost"] = data.pop("total_cost")
+        return data
 
 
 @dataclasses.dataclass
