@@ -11,6 +11,20 @@ import {
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { generateRandomString } from "@/lib/utils";
 
+const RuleNameSchema = z
+  .string({
+    required_error: "Rule name is required",
+  })
+  .min(1, { message: "Rule name is required" });
+
+const ProjectIdSchema = z
+  .string({
+    required_error: "Project is required",
+  })
+  .min(1, { message: "Project is required" });
+
+const SamplingRateSchema = z.number();
+
 export const LLMJudgeDetailsFormSchema = z.object({
   model: z
     .union([z.nativeEnum(PROVIDER_MODEL_TYPE), z.string().length(0)], {
@@ -65,28 +79,51 @@ export const LLMJudgeDetailsFormSchema = z.object({
     ),
 });
 
-export const EvaluationRuleFormSchema = z.object({
-  ruleName: z
+// TODO lala check. as well partial validation
+export const PythonCodeDetailsFormSchema = z.object({
+  metric: z
     .string({
-      required_error: "Rule name is required",
-    })
-    .min(1, { message: "Rule name is required" }),
-  projectId: z
-    .string({
-      required_error: "Project is required",
-    })
-    .min(1, { message: "Project is required" }),
-  samplingRate: z.number(),
-  type: z.nativeEnum(EVALUATORS_RULE_TYPE),
-  llmJudgeDetails: LLMJudgeDetailsFormSchema,
-  pythonCodeDetails: z.object({
-    code: z.string({
       required_error: "Code is required",
-    }),
-  }),
+    })
+    .min(1, { message: "Code is required" }),
+  arguments: z.record(
+    z.string(),
+    z
+      .string()
+      .min(1, { message: "Key is required" })
+      .regex(/^(input|output|metadata)/, {
+        message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
+      }),
+  ),
+  parsingArgumentsError: z.boolean().optional(),
 });
 
+export const LLMEvaluationRuleFormSchema = z.object({
+  ruleName: RuleNameSchema,
+  projectId: ProjectIdSchema,
+  samplingRate: SamplingRateSchema,
+  type: z.literal(EVALUATORS_RULE_TYPE.llm_judge),
+  llmJudgeDetails: LLMJudgeDetailsFormSchema,
+});
+
+export const PythonEvaluationRuleFormSchema = z.object({
+  ruleName: RuleNameSchema,
+  projectId: ProjectIdSchema,
+  samplingRate: SamplingRateSchema,
+  type: z.literal(EVALUATORS_RULE_TYPE.python_code),
+  pythonCodeDetails: PythonCodeDetailsFormSchema,
+});
+
+export const EvaluationRuleFormSchema = z.discriminatedUnion("type", [
+  LLMEvaluationRuleFormSchema,
+  PythonEvaluationRuleFormSchema,
+]);
+
 export type LLMJudgeDetailsFormType = z.infer<typeof LLMJudgeDetailsFormSchema>;
+
+export type PythonCodeDetailsFormType = z.infer<
+  typeof PythonCodeDetailsFormSchema
+>;
 
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
