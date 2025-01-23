@@ -22,6 +22,7 @@ type Props<T extends string> = {
   value: T;
   onValueChange: (value: T) => void;
   items: T[];
+  hasError?: boolean;
   isLoading?: boolean;
   emptyMessage?: string;
   placeholder?: string;
@@ -31,6 +32,7 @@ const AutoComplete = <T extends string>({
   value,
   onValueChange,
   items,
+  hasError,
   isLoading,
   emptyMessage = "No items found",
   placeholder = "Search...",
@@ -63,7 +65,10 @@ const AutoComplete = <T extends string>({
               onMouseDown={() => setOpen((open) => !!value || !open)}
               onFocus={() => setOpen(true)}
             >
-              <Input placeholder={placeholder} />
+              <Input
+                className={cn({ "border-destructive": hasError })}
+                placeholder={placeholder}
+              />
             </CommandPrimitive.Input>
           </PopoverAnchor>
           {!open && <CommandList aria-hidden="true" className="hidden" />}

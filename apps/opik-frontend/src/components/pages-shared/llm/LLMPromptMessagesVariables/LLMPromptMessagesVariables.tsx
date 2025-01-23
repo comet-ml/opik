@@ -3,15 +3,23 @@ import { DropdownOption } from "@/types/shared";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import LLMPromptMessagesVariable from "@/components/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariable";
 
+interface MessageVariablesValidationError {
+  [key: string]: {
+    message: string;
+  };
+}
+
 interface LLMPromptMessagesVariablesProps {
-  hasError?: boolean;
+  parsingError?: boolean;
+  validationErrors?: MessageVariablesValidationError;
   variables: Record<string, string>;
   onChange: (variables: Record<string, string>) => void;
   projectId: string;
 }
 
 const LLMPromptMessagesVariables = ({
-  hasError,
+  parsingError,
+  validationErrors,
   variables,
   onChange,
   projectId,
@@ -37,7 +45,7 @@ const LLMPromptMessagesVariables = ({
       <div className="comet-body-s mb-2 text-light-slate">
         {`Variables are added based on the prompt, all variables as {{variable 1}} will be added to this list.`}
       </div>
-      {hasError && (
+      {parsingError && (
         <Alert variant="destructive">
           <AlertTitle>
             Template parsing error. The variables cannot be extracted.
@@ -48,8 +56,9 @@ const LLMPromptMessagesVariables = ({
         {variablesList.map((variable) => (
           <LLMPromptMessagesVariable
             key={variable.label}
-            onChange={(changes) => handleChangeVariables(changes)}
             variable={variable}
+            errorText={validationErrors?.[variable.label]?.message}
+            onChange={(changes) => handleChangeVariables(changes)}
             projectId={projectId}
           />
         ))}

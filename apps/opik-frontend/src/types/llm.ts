@@ -5,6 +5,8 @@ export enum LLM_MESSAGE_ROLE {
   system = "system",
   assistant = "assistant",
   user = "user",
+  ai = "ai",
+  tool_execution_result = "tool_execution_result",
 }
 
 export enum LLM_SCHEMA_TYPE {
