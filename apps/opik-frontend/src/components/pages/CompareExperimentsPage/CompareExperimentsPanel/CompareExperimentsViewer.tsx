@@ -69,7 +69,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
 
   return (
     <div className="relative flex h-full flex-col px-3 pt-6">
-      <div className="flex items-center justify-between pb-4">
+      <div className="flex items-center justify-between gap-1 pb-4">
         <TooltipWrapper content={name}>
           <div className="flex items-center gap-2 overflow-hidden">
             <FlaskConical className="size-4 shrink-0 text-muted-slate" />
@@ -79,12 +79,13 @@ const CompareExperimentsViewer: React.FunctionComponent<
         {isTraceExist && (
           <TooltipWrapper content="Click to open original trace">
             <Button
-              size="icon-sm"
+              size="sm"
               variant="outline"
               onClick={onExpandClick}
               className="shrink-0"
             >
-              <ListTree className="size-4" />
+              <ListTree className="mr-2 size-4 shrink-0" />
+              Trace
             </Button>
           </TooltipWrapper>
         )}
