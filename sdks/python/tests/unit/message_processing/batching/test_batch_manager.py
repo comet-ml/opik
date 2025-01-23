@@ -100,6 +100,7 @@ def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed(
         model=NOT_USED,
         provider=NOT_USED,
         error_info=NOT_USED,
+        total_cost=NOT_USED,
     )
 
     example_span_batcher = batchers.CreateSpanMessageBatcher(
