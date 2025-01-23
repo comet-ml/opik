@@ -514,3 +514,31 @@ def test_search_spans__happyflow(opik_client):
     # Verify that the matching trace is returned
     assert len(spans) == 1, "Expected to find 1 matching span"
     assert spans[0].id == matching_span.id, "Expected to find the matching span"
+
+
+def test_tracked_function__update_current_span_used_to_update_cost__happyflow(
+    opik_client,
+):
+    # Setup
+    ID_STORAGE = {}
+
+    @opik.track
+    def f():
+        opik_context.update_current_span(total_cost=0.42)
+        ID_STORAGE["f_span-id"] = opik_context.get_current_span_data().id
+        ID_STORAGE["f_trace-id"] = opik_context.get_current_trace_data().id
+
+    # Call
+    f()
+    opik.flush_tracker()
+
+    # Verify top level span
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=ID_STORAGE["f_span-id"],
+        parent_span_id=None,
+        trace_id=ID_STORAGE["f_trace-id"],
+        name="f",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        total_cost=0.42,
+    )

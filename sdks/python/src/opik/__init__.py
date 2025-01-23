@@ -1,4 +1,4 @@
-from . import _logging, error_tracking, package_version
+from . import _logging, error_tracking, package_version, environment
 from .api_objects.dataset import Dataset
 from .api_objects.experiment.experiment_item import (
     ExperimentItemContent,
@@ -40,6 +40,7 @@ sagemaker_auth.setup_aws_sagemaker_session_hook()
 
 if (
     error_tracking.enabled_in_config()
+    and not environment.in_pytest()
     and error_tracking.randomized_should_enable_reporting()
 ):
     error_tracking.setup_sentry_error_tracker()

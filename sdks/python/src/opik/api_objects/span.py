@@ -46,6 +46,7 @@ class Span:
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
     ) -> None:
         """
         End the span and update its attributes.
@@ -61,6 +62,7 @@ class Span:
             tags: A list of tags to be associated with the span.
             usage: Usage information for the span.
             error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             None
@@ -77,6 +79,7 @@ class Span:
             tags=tags,
             usage=usage,
             error_info=error_info,
+            total_cost=total_cost,
         )
 
     def update(
@@ -90,6 +93,7 @@ class Span:
         model: Optional[str] = None,
         provider: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
     ) -> None:
         """
         Update the span attributes.
@@ -104,6 +108,7 @@ class Span:
             model: The name of LLM.
             provider: The provider of LLM.
             error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             None
@@ -130,6 +135,7 @@ class Span:
             model=model,
             provider=provider,
             error_info=error_info,
+            total_cost=total_cost,
         )
         self._streamer.put(end_span_message)
 
@@ -148,6 +154,7 @@ class Span:
         model: Optional[str] = None,
         provider: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -165,6 +172,8 @@ class Span:
             usage: Usage information for the span.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM.
+            error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             Span: The created child span object.
@@ -198,6 +207,7 @@ class Span:
             model=model,
             provider=provider,
             error_info=error_info,
+            total_cost=total_cost,
         )
         self._streamer.put(create_span_message)
 
@@ -284,6 +294,7 @@ class SpanData:
     model: Optional[str] = None
     provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
+    total_cost: Optional[float] = None
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():

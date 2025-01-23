@@ -102,6 +102,7 @@ def verify_span(
     model: Optional[str] = mock.ANY,  # type: ignore
     provider: Optional[str] = mock.ANY,  # type: ignore
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
+    total_cost: Optional[float] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: (opik_client.get_span_content(id=span_id) is not None),
@@ -132,8 +133,11 @@ def verify_span(
     assert (
         _try_get__dict__(span.error_info) == error_info
     ), testlib.prepare_difference_report(span.error_info, error_info)
-    assert span.model == model
-    assert span.provider == provider
+    assert span.model == model, f"{span.model} != {model}"
+    assert span.provider == provider, f"{span.provider} != {provider}"
+    assert (
+        span.total_estimated_cost == total_cost
+    ), f"{span.total_estimated_cost} != {total_cost}"
 
     if project_name is not mock.ANY:
         span_project = opik_client.get_project(span.project_id)

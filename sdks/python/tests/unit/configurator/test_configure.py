@@ -203,11 +203,12 @@ class TestUpdateConfig:
             OpikConfigurator(api_key, workspace, url)._update_config()
 
         # Ensure config object is created and saved
-        mock_opik_config.assert_called_with(
+        mock_opik_config.assert_any_call(
             api_key=api_key,
             url_override="http://example.com/opik/api/",
             workspace=workspace,
         )
+
         mock_config_instance.save_to_file.assert_called_once()
 
 

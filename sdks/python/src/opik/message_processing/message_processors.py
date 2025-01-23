@@ -88,20 +88,7 @@ class MessageSender(BaseMessageProcessor):
         self._rest_client.traces.create_trace(**cleaned_create_trace_kwargs)
 
     def _process_update_span_message(self, message: messages.UpdateSpanMessage) -> None:
-        update_span_kwargs = {
-            "id": message.span_id,
-            "parent_span_id": message.parent_span_id,
-            "project_name": message.project_name,
-            "trace_id": message.trace_id,
-            "end_time": message.end_time,
-            "input": message.input,
-            "output": message.output,
-            "metadata": message.metadata,
-            "tags": message.tags,
-            "usage": message.usage,
-            "model": message.model,
-            "provider": message.provider,
-        }
+        update_span_kwargs = message.as_payload_dict()
 
         cleaned_update_span_kwargs = dict_utils.remove_none_from_dict(
             update_span_kwargs
@@ -113,15 +100,7 @@ class MessageSender(BaseMessageProcessor):
     def _process_update_trace_message(
         self, message: messages.UpdateTraceMessage
     ) -> None:
-        update_trace_kwargs = {
-            "id": message.trace_id,
-            "project_name": message.project_name,
-            "end_time": message.end_time,
-            "input": message.input,
-            "output": message.output,
-            "metadata": message.metadata,
-            "tags": message.tags,
-        }
+        update_trace_kwargs = message.as_payload_dict()
 
         cleaned_update_trace_kwargs = dict_utils.remove_none_from_dict(
             update_trace_kwargs

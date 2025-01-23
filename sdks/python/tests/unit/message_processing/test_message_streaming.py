@@ -24,6 +24,7 @@ def create_span_message():
         model=NOT_USED,
         provider=NOT_USED,
         error_info=NOT_USED,
+        total_cost=NOT_USED,
     )
 
 
