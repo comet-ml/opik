@@ -9,11 +9,12 @@ import useTracesOrSpansList, {
 } from "@/hooks/useTracesOrSpansList";
 import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 
-type ROOT_KEY = "input" | "output" | "metadata";
+export type TRACE_AUTOCOMPLETE_ROOT_KEY = "input" | "output" | "metadata";
 
 type TracesPathsAutocompleteProps = {
   projectId: string;
-  rootKeys: ROOT_KEY[];
+  rootKeys: TRACE_AUTOCOMPLETE_ROOT_KEY[];
+  hasError?: boolean;
   value: string;
   onValueChange: (value: string) => void;
 };
@@ -21,6 +22,7 @@ type TracesPathsAutocompleteProps = {
 const TracesPathsAutocomplete: React.FC<TracesPathsAutocompleteProps> = ({
   projectId,
   rootKeys,
+  hasError,
   value,
   onValueChange,
 }) => {
@@ -62,6 +64,7 @@ const TracesPathsAutocomplete: React.FC<TracesPathsAutocompleteProps> = ({
       value={value}
       onValueChange={onValueChange}
       items={items}
+      hasError={hasError}
       isLoading={isPending}
       placeholder="Select a key from recent trace"
     />

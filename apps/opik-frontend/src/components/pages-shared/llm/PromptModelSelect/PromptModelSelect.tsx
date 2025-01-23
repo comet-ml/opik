@@ -34,6 +34,7 @@ interface PromptModelSelectProps {
   value: PROVIDER_MODEL_TYPE | "";
   workspaceName: string;
   onChange: (value: PROVIDER_MODEL_TYPE) => void;
+  hasError?: boolean;
   provider: PROVIDER_TYPE | "";
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
   onlyWithStructuredOutput?: boolean;
@@ -45,6 +46,7 @@ const PromptModelSelect = ({
   value,
   workspaceName,
   onChange,
+  hasError,
   provider,
   onAddProvider,
   onlyWithStructuredOutput,
@@ -255,7 +257,11 @@ const PromptModelSelect = ({
         onValueChange={handleOnChange}
         onOpenChange={handleSelectOpenChange}
       >
-        <SelectTrigger className="size-full data-[placeholder]:text-light-slate">
+        <SelectTrigger
+          className={cn("size-full data-[placeholder]:text-light-slate", {
+            "border-destructive": hasError,
+          })}
+        >
           <SelectValue
             placeholder="Select a LLM model"
             data-testid="select-a-llm-model"
