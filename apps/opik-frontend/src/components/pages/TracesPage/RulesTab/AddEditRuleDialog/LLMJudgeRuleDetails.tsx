@@ -118,7 +118,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
               <SelectBox
                 value={field.value}
                 onChange={(newTemplate: string) => {
-                  // TODO lala trigger validation
                   const { variables, messages, schema, template } =
                     form.getValues("llmJudgeDetails");
                   if (newTemplate !== template) {
