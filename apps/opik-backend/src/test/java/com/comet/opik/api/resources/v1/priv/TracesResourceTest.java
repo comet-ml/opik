@@ -4747,7 +4747,7 @@ class TracesResourceTest {
 
             // Update existing comment
             String updatedText = factory.manufacturePojo(String.class);
-            traceResourceClient.updateComment(updatedText, expectedComment.id(), traceId, API_KEY,
+            traceResourceClient.updateComment(updatedText, expectedComment.id(), API_KEY,
                     TEST_WORKSPACE, 204);
 
             // Get comment by id and assert it was updated
@@ -4779,8 +4779,7 @@ class TracesResourceTest {
             expectedComments.forEach(
                     comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE, 404));
             expectedComments.forEach(comment -> traceResourceClient.updateComment(factory.manufacturePojo(String.class),
-                    comment.id(), traceId,
-                    API_KEY, TEST_WORKSPACE, 404));
+                    comment.id(), API_KEY, TEST_WORKSPACE, 404));
         }
 
         @Test

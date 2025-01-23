@@ -12,6 +12,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.util.Set;
@@ -80,8 +81,8 @@ class CommentDAOImpl implements CommentDAO {
             SELECT
                 *
             FROM comments
-            WHERE entity_id = :entity_id
-            AND workspace_id = :workspace_id
+            WHERE workspace_id = :workspace_id
+            <if(entity_id)> AND entity_id = :entity_id <endif>
             AND id = :id
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
@@ -141,12 +142,20 @@ class CommentDAOImpl implements CommentDAO {
     }
 
     @Override
-    public Mono<Comment> findById(@NonNull UUID traceId, @NonNull UUID commentId) {
+    public Mono<Comment> findById(UUID traceId, @NonNull UUID commentId) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var statement = connection.createStatement(SELECT_COMMENT_BY_ID)
-                    .bind("id", commentId)
-                    .bind("entity_id", traceId);
+            var template = new ST(SELECT_COMMENT_BY_ID);
+            if (traceId != null) {
+                template.add("entity_id", traceId);
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("id", commentId);
+
+            if (traceId != null) {
+                statement.bind("entity_id", traceId);
+            }
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(CommentResultMapper::mapItem)

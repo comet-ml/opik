@@ -303,19 +303,18 @@ public class TracesResource {
     }
 
     @PATCH
-    @Path("/{traceId}/comments/{commentId}")
+    @Path("/comments/{commentId}")
     @Operation(operationId = "updateTraceComment", summary = "Update trace comment by id", description = "Update trace comment by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
     public Response updateTraceComment(@PathParam("commentId") UUID commentId,
-            @PathParam("traceId") @NotNull UUID traceId,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Update trace comment with id '{}' on workspaceId '{}'", commentId, workspaceId);
 
-        commentService.update(traceId, commentId, comment)
+        commentService.update(commentId, comment)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

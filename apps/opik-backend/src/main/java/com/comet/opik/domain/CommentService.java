@@ -21,7 +21,7 @@ public interface CommentService {
 
     Mono<Comment> get(UUID traceId, UUID commentId);
 
-    Mono<Void> update(UUID traceId, UUID commentId, Comment comment);
+    Mono<Void> update(UUID commentId, Comment comment);
 
     Mono<Void> delete(BatchDelete batchDelete);
 }
@@ -52,8 +52,8 @@ class CommentServiceImpl implements CommentService {
     }
 
     @Override
-    public Mono<Void> update(@NonNull UUID traceId, @NonNull UUID commentId, @NonNull Comment comment) {
-        return commentDAO.findById(traceId, commentId)
+    public Mono<Void> update(@NonNull UUID commentId, @NonNull Comment comment) {
+        return commentDAO.findById(null, commentId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId)))
                 .then(Mono.defer(() -> commentDAO.updateComment(commentId, comment)));
     }
