@@ -1,3 +1,5 @@
+import { UsageData } from "@/types/shared";
+
 export enum FEEDBACK_SCORE_TYPE {
   sdk = "sdk",
   ui = "ui",
@@ -9,12 +11,6 @@ export interface TraceFeedbackScore {
   name: string;
   source: FEEDBACK_SCORE_TYPE;
   value: number;
-}
-
-export interface UsageData {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
 }
 
 export interface BaseTraceDataErrorInfo {
