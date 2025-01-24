@@ -615,7 +615,7 @@ class SpanDAO {
             ;
             """;
 
-    public static final String SELECT_PROJECT_ID_FROM_SPANS = """
+    public static final String SELECT_PROJECT_ID_FROM_SPAN = """
             SELECT
                   project_id
             FROM spans
@@ -1263,7 +1263,7 @@ class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
-                    var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_SPANS)
+                    var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_SPAN)
                             .bind("id", spanId);
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.domain.FeedbackScoreMapper.getFeedbackScores;
 
 @UtilityClass
@@ -43,6 +44,7 @@ class ExperimentItemMapper {
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
                 .feedbackScores(getFeedbackScores(row.get("feedback_scores_array", List[].class)))
+                .comments(getComments(row.get("comments_array_agg", List[].class)))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
