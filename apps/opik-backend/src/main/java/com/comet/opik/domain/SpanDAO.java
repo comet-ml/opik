@@ -26,6 +26,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -534,6 +535,7 @@ class SpanDAO {
                     FROM spans
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    <if(last_received_span_id)> AND id > :last_received_span_id <endif>
                     <if(trace_id)> AND trace_id = :trace_id <endif>
                     <if(type)> AND type = :type <endif>
                     <if(filters)> AND <filters> <endif>
@@ -555,7 +557,8 @@ class SpanDAO {
                     <endif>
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                    LIMIT :limit OFFSET :offset
+                    LIMIT :limit
+                    <if(offset)>OFFSET :offset <endif>
                 )
              )
              ORDER BY id DESC
@@ -1147,6 +1150,18 @@ class SpanDAO {
                 .map(spans -> new Span.SpanPage(page, spans.size(), total, spans));
     }
 
+    @WithSpan
+    public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> findSpanStream(limit, criteria, connection))
+                .flatMap(this::mapToDto)
+                .buffer(limit > 100 ? limit / 2 : limit)
+                .concatWith(Mono.just(List.of()))
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(this::enhanceWithFeedbackScores)
+                .flatMap(Flux::fromIterable);
+    }
+
     private Mono<List<Span>> enhanceWithFeedbackScores(List<Span> spans) {
         List<UUID> spanIds = spans.stream().map(Span::id).toList();
 
@@ -1170,10 +1185,31 @@ class SpanDAO {
         return ModelPrice.fromString(model).calculateCost(span.usage());
     }
 
-    private Publisher<? extends Result> find(int page, int size, SpanSearchCriteria spanSearchCriteria,
+    private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
+        log.info("Searching spans by '{}'", criteria);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+
+        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", criteria.projectId())
+                .bind("limit", limit);
+        bindSearchCriteria(statement, criteria);
+
+        Segment segment = startSegment("spans", "Clickhouse", "findSpanStream");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> {
+                    log.info("Closing span search stream");
+                    endSegment(segment);
+                });
+    }
+
+    private Publisher<? extends Result> find(Integer page, int size, SpanSearchCriteria spanSearchCriteria,
             Connection connection) {
 
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria);
+        template.add("offset", (page - 1) * size);
+
         template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", spanSearchCriteria.projectId())
@@ -1221,6 +1257,8 @@ class SpanDAO {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
                 });
+        Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
+                .ifPresent(lastReceivedSpanId -> template.add("last_received_span_id", lastReceivedSpanId));
         return template;
     }
 
@@ -1235,6 +1273,8 @@ class SpanDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.DURATION);
                 });
+        Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
+                .ifPresent(lastReceivedSpanId -> statement.bind("last_received_span_id", lastReceivedSpanId));
     }
 
     @WithSpan

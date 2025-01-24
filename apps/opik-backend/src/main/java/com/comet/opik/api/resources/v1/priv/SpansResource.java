@@ -10,16 +10,20 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
+import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.JsonNode;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -53,6 +57,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -74,6 +79,7 @@ public class SpansResource {
     private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull Streamer streamer;
 
     @GET
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
@@ -330,6 +336,46 @@ public class SpansResource {
                 feedbackScoreNames.scores().size(), projectId, workspaceId);
 
         return Response.ok(feedbackScoreNames).build();
+    }
+
+    @POST
+    @Path("/search")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "searchSpans", summary = "Search spans", description = "Search spans", responses = {
+            @ApiResponse(responseCode = "200", description = "Spans stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    Span.class,
+                    ErrorMessage.class
+            }), maxItems = 2000))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @JsonView(Span.View.Public.class)
+    public ChunkedOutput<JsonNode> searchSpans(
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+        var workspaceName = requestContext.get().getWorkspaceName();
+
+        validateProjectNameAndProjectId(request.projectName(), request.projectId());
+
+        log.info("Streaming spans search results by '{}', workspaceId '{}'", request, workspaceId);
+        var criteria = SpanSearchCriteria.builder()
+                .lastReceivedSpanId(request.lastRetrievedId())
+                .truncate(request.truncate())
+                .traceId(request.traceId())
+                .type(request.type())
+                .projectName(request.projectName())
+                .projectId(request.projectId())
+                .filters(filtersFactory.validateFilter(request.filters()))
+                .projectName(request.projectName())
+                .build();
+
+        var items = spanService.search(request.limit(), criteria)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+
+        return streamer.getOutputStream(items,
+                () -> log.info("Streamed spans search results by '{}', workspaceId '{}'", request, workspaceId));
     }
 
 }
