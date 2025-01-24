@@ -29,7 +29,7 @@ const isPlaygroundOutputWithDatasetItem = (
   return "datasetItemMap" in output;
 };
 
-const updateAllStaleStatusesForPromptOutput = <T>(
+const updateAllStaleStatusesForPromptOutput = (
   promptId: string,
   outputMap: PlaygroundOutputMap,
   value: boolean,

@@ -191,7 +191,7 @@ const PlaygroundPrompt = ({
 
   return (
     <div
-      className="w-full min-w-[var(--min-prompt-width)] h-[var(--prompt-height)]"
+      className="h-[var(--prompt-height)] w-full min-w-[var(--min-prompt-width)]"
       style={
         {
           "--prompt-height": "calc(100% - 64px)",

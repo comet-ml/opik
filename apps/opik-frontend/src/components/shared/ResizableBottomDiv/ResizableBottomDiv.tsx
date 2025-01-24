@@ -44,17 +44,17 @@ const ResizableBottomDiv = ({
 
   return (
     <div
-      className="flex flex-col overflow-hidden border-box h-[var(--container-height)] min-h-[var(--container-height)]"
+      className="box-border flex h-[var(--container-height)] min-h-[var(--container-height)] flex-col overflow-hidden"
       style={
         {
           "--container-height": `${height}px`,
         } as React.CSSProperties
       }
     >
-      <div className="flex flex-grow overflow-hidden">{children}</div>
+      <div className="flex grow overflow-hidden">{children}</div>
 
       <div
-        className="mt-auto sticky flex w-full border-b bottom-0 py-0.5 cursor-row-resize"
+        className="sticky bottom-0 mt-auto flex w-full cursor-row-resize border-b py-0.5"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
