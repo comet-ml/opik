@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -12,7 +11,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
