@@ -200,10 +200,11 @@ class CommentDAOImpl implements CommentDAO {
     }
 
     @Override
-    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, Set<UUID> entityIds) {
-        Preconditions.checkArgument(
-                CollectionUtils.isNotEmpty(entityIds), "Argument 'entityIds' must not be empty");
+    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
         log.info("Deleting comments for entityType '{}', entityIds count '{}'", entityType, entityIds.size());
+        if (entityIds.isEmpty()) {
+            return Mono.just(0L);
+        }
 
         return asyncTemplate.nonTransaction(connection -> {
 
