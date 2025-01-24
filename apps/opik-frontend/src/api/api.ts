@@ -8,6 +8,8 @@ const axiosInstance = axios.create({
 
 axiosInstance.defaults.withCredentials = true;
 
+export const CODE_EXECUTOR_SERVICE_URL = import.meta.env
+  .VITE_GET_STARTED_API_URL;
 export const PROJECTS_REST_ENDPOINT = "/v1/private/projects/";
 export const DATASETS_REST_ENDPOINT = "/v1/private/datasets/";
 export const EXPERIMENTS_REST_ENDPOINT = "/v1/private/experiments/";
