@@ -27,6 +27,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import {
   useAddPrompt,
+  useDatasetVariables,
   useDeletePrompt,
   usePromptById,
   useUpdateOutput,
@@ -54,6 +55,8 @@ const PlaygroundPrompt = ({
   const checkedIfModelIsValidRef = useRef(false);
 
   const prompt = usePromptById(promptId);
+  const datasetVariables = useDatasetVariables();
+
   const [, setLastPickedModel] = useLastPickedModel();
 
   const { model, messages, configs, name } = prompt;
@@ -64,6 +67,12 @@ const PlaygroundPrompt = ({
   const updateOutput = useUpdateOutput();
 
   const provider = model ? getModelProvider(model) : "";
+
+  const hintMessage = datasetVariables?.length
+    ? `Reference dataset variables using mustache syntax: ${datasetVariables
+        .map((dv) => `{{${dv}}}`)
+        .join(", ")}`
+    : "";
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
@@ -181,7 +190,14 @@ const PlaygroundPrompt = ({
   ]);
 
   return (
-    <div className="w-full min-w-[var(--min-prompt-width)]">
+    <div
+      className="w-full min-w-[var(--min-prompt-width)] h-[var(--prompt-height)]"
+      style={
+        {
+          "--prompt-height": "calc(100% - 64px)",
+        } as React.CSSProperties
+      }
+    >
       <div className="mb-2 flex h-8 items-center justify-between">
         <p className="comet-body-s-accented">
           {name} {getAlphabetLetter(index)}
@@ -195,6 +211,7 @@ const PlaygroundPrompt = ({
               provider={provider}
               workspaceName={workspaceName}
               onAddProvider={handleAddProvider}
+              hasError={!model}
             />
           </div>
           <PromptModelConfigs
@@ -229,6 +246,7 @@ const PlaygroundPrompt = ({
         messages={messages}
         onChange={handleUpdateMessage}
         onAddMessage={handleAddMessage}
+        hint={hintMessage}
       />
     </div>
   );

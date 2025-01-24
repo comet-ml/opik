@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useEffect } from "react";
 import PlaygroundOutputTable from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputTable";
 import PlaygroundOutputActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundOutputActions";
 import PlaygroundOutput from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
-import { usePromptIds } from "@/store/PlaygroundStore";
+import { usePromptIds, useSetDatasetVariables } from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 
@@ -21,6 +21,7 @@ const PlaygroundOutputs = ({
   onChangeDatasetId,
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
+  const setDatasetVariables = useSetDatasetVariables();
 
   const { data: datasetItemsData, isLoading: isLoadingDatasetItems } =
     useDatasetItemsList(
@@ -65,8 +66,12 @@ const PlaygroundOutputs = ({
     );
   };
 
+  useEffect(() => {
+    setDatasetVariables(datasetColumns.map((c) => c.name));
+  }, [setDatasetVariables, datasetColumns]);
+
   return (
-    <div className="mt-auto flex min-w-full flex-col border-t">
+    <div className="flex min-w-full flex-col">
       <PlaygroundOutputActions
         datasetId={datasetId}
         datasetItems={datasetItems}
