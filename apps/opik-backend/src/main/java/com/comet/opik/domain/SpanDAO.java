@@ -516,97 +516,97 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-                       SELECT
-                            s.*,
-                            groupArray(tuple(c.*)) AS comments
-                       FROM (
-                            SELECT
-                             id,
-                             workspace_id,
-                             project_id,
-                             trace_id,
-                             parent_span_id,
-                             name,
-                             type,
-                             start_time,
-                             end_time,
-                             <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                             <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
-                             <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
-                             model,
-                             provider,
-                             total_estimated_cost,
-                             tags,
-                             usage,
-                             error_info,
-                             created_at,
-                             last_updated_at,
-                             created_by,
-                             last_updated_by,
-                             if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                         AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                     (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration_millis
-                         FROM spans
-                         WHERE id IN (
-                            SELECT
-                                id
-                            FROM (
-                                SELECT
-                                    id,
-                                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                         NULL) AS duration_millis
-                                FROM spans
-                                WHERE project_id = :project_id
-                                AND workspace_id = :workspace_id
-                                <if(trace_id)> AND trace_id = :trace_id <endif>
-                                <if(type)> AND type = :type <endif>
-                                <if(filters)> AND <filters> <endif>
-                                <if(feedback_scores_filters)>
-                                AND id in (
-                                    SELECT
-                                        entity_id
-                                    FROM (
-                                        SELECT *
-                                        FROM feedback_scores
-                                        WHERE entity_type = 'span'
-                                        AND project_id = :project_id
-                                        ORDER BY entity_id DESC, last_updated_at DESC
-                                        LIMIT 1 BY entity_id, name
-                                    )
-                                    GROUP BY entity_id
-                                    HAVING <feedback_scores_filters>
-                                )
-                                <endif>
-                                ORDER BY id DESC, last_updated_at DESC
-                                LIMIT 1 BY id
-                                LIMIT :limit OFFSET :offset
-                            )
+            SELECT
+                 s.*,
+                 groupArray(tuple(c.*)) AS comments
+            FROM (
+                 SELECT
+                  id,
+                  workspace_id,
+                  project_id,
+                  trace_id,
+                  parent_span_id,
+                  name,
+                  type,
+                  start_time,
+                  end_time,
+                  <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
+                  <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
+                  <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
+                  model,
+                  provider,
+                  total_estimated_cost,
+                  tags,
+                  usage,
+                  error_info,
+                  created_at,
+                  last_updated_at,
+                  created_by,
+                  last_updated_by,
+                  if(end_time IS NOT NULL AND start_time IS NOT NULL
+                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                          NULL) AS duration_millis
+              FROM spans
+              WHERE id IN (
+                 SELECT
+                     id
+                 FROM (
+                     SELECT
+                         id,
+                         if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                  AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                              (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                              NULL) AS duration_millis
+                     FROM spans
+                     WHERE project_id = :project_id
+                     AND workspace_id = :workspace_id
+                     <if(trace_id)> AND trace_id = :trace_id <endif>
+                     <if(type)> AND type = :type <endif>
+                     <if(filters)> AND <filters> <endif>
+                     <if(feedback_scores_filters)>
+                     AND id in (
+                         SELECT
+                             entity_id
+                         FROM (
+                             SELECT *
+                             FROM feedback_scores
+                             WHERE entity_type = 'span'
+                             AND project_id = :project_id
+                             ORDER BY entity_id DESC, last_updated_at DESC
+                             LIMIT 1 BY entity_id, name
                          )
-                         ORDER BY id DESC
-                       ) AS s
-                       LEFT JOIN (
-                            SELECT
-                                id AS comment_id,
-                                text,
-                                created_at AS comment_created_at,
-                                last_updated_at AS comment_last_updated_at,
-                                created_by AS comment_created_by,
-                                last_updated_by AS comment_last_updated_by,
-                                entity_id
-                            FROM comments
-                            WHERE workspace_id = :workspace_id
-                            AND project_id = :project_id
-                            ORDER BY id DESC, last_updated_at DESC
-                            LIMIT 1 BY id
-                       ) AS c ON s.id = c.entity_id
-                       GROUP BY
-                           s.*
-                       ORDER BY s.id DESC
-                       ;
-                       """;
+                         GROUP BY entity_id
+                         HAVING <feedback_scores_filters>
+                     )
+                     <endif>
+                     ORDER BY id DESC, last_updated_at DESC
+                     LIMIT 1 BY id
+                     LIMIT :limit OFFSET :offset
+                 )
+              )
+              ORDER BY id DESC
+            ) AS s
+            LEFT JOIN (
+                 SELECT
+                     id AS comment_id,
+                     text,
+                     created_at AS comment_created_at,
+                     last_updated_at AS comment_last_updated_at,
+                     created_by AS comment_created_by,
+                     last_updated_by AS comment_last_updated_by,
+                     entity_id
+                 FROM comments
+                 WHERE workspace_id = :workspace_id
+                 AND project_id = :project_id
+                 ORDER BY id DESC, last_updated_at DESC
+                 LIMIT 1 BY id
+            ) AS c ON s.id = c.entity_id
+            GROUP BY
+                s.*
+            ORDER BY s.id DESC
+            ;
+            """;
 
     private static final String COUNT_BY_PROJECT_ID = """
             SELECT
