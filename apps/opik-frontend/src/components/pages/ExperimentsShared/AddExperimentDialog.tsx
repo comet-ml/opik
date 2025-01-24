@@ -1,18 +1,16 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
 import { Checkbox } from "@/components/ui/checkbox";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
+import SideDialog from "@/components/shared/SideDialog/SideDialog";
+import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
+import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
+import useUser from "@/plugins/comet/useUser";
+import { SheetTitle } from "@/components/ui/sheet";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -145,6 +143,11 @@ const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
 > = ({ open, setOpen }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { data: user } = useUser();
+
+  const apiKey = user?.apiKeys?.[0];
+  const showColabLinks = !user?.sagemakerRestrictions;
+
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
   const [models, setModels] = useState<EVALUATOR_MODEL[]>([
@@ -298,50 +301,61 @@ eval_results = evaluate(
   };
 
   return (
-    <Dialog open={open} onOpenChange={openChangeHandler}>
-      <DialogContent className="h-[90vh] w-[90vw]">
-        <DialogHeader>
-          <DialogTitle>Create a new experiment</DialogTitle>
-        </DialogHeader>
-        <div className="size-full overflow-y-auto">
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-6">
-            <div className="flex flex-col gap-2">
-              <div className="comet-title-s pt-4">Select dataset</div>
-              <div className="pb-1">
-                <LoadableSelectBox
-                  options={options}
-                  value={datasetName}
-                  placeholder="Select a dataset"
-                  onChange={setDatasetName}
-                  onLoadMore={
-                    total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
-                      ? loadMoreHandler
-                      : undefined
-                  }
-                  isLoading={isLoading}
-                  optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
-                />
-              </div>
-              <div className="comet-title-s pt-4">Select evaluators</div>
-              {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
-              {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="comet-body-accented mt-4">1. Install the SDK</div>
-              <CodeHighlighter data={section1} />
-              <div className="comet-body-accented mt-4">
-                2. Configure your API key
-              </div>
-              <CodeHighlighter data={section2} />
-              <div className="comet-body-accented mt-4">
-                3. Create an Experiment
-              </div>
-              <CodeHighlighter data={section3} />
-            </div>
+    <SideDialog open={open} setOpen={openChangeHandler}>
+      <div className="pb-20">
+        <div className="pb-8">
+          <SheetTitle>Create a new experiment</SheetTitle>
+          <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
+            Select a dataset, assign the relevant evaluators, and follow the
+            instructions to track and compare your training runs
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
+          <div className="flex w-[250px] shrink-0 flex-col gap-2">
+            <div className="comet-title-s">Select evaluators</div>
+            {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
+            {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
+          </div>
+          <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-slate-200 p-6">
+            <div className="comet-body-s text-foreground-secondary">
+              1. Select dataset
+            </div>
+            <LoadableSelectBox
+              options={options}
+              value={datasetName}
+              placeholder="Select a dataset"
+              onChange={setDatasetName}
+              onLoadMore={
+                total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
+                  ? loadMoreHandler
+                  : undefined
+              }
+              isLoading={isLoading}
+              optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
+            />
+            <div className="comet-body-s mt-4 text-foreground-secondary">
+              2. Install the SDK
+            </div>
+            <CodeHighlighter data={section1} />
+            <div className="comet-body-s mt-4 text-foreground-secondary">
+              3. Configure your API key
+            </div>
+            <CodeHighlighter data={section2} />
+            <div className="comet-body-s mt-4 text-foreground-secondary">
+              4. Create an Experiment
+            </div>
+            <CodeHighlighter data={section3} />
+          </div>
+
+          <div className="flex w-[250px] shrink-0 flex-col gap-6 self-start">
+            {apiKey && <ApiKeyCard apiKey={apiKey} />}
+            {showColabLinks ? (
+              <GoogleColabCard link="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb" />
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </SideDialog>
   );
 };
 
