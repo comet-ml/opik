@@ -1,4 +1,4 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm.gemini;
 
 import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
@@ -25,7 +25,7 @@ import java.time.Duration;
 import java.util.List;
 
 @Mapper
-public interface LlmProviderGeminiMapper {
+interface LlmProviderGeminiMapper {
     String ERR_UNEXPECTED_ROLE = "unexpected role '%s'";
     String ERR_ROLE_MSG_TYPE_MISMATCH = "role and message instance are not matching, role: '%s', instance: '%s'";
 

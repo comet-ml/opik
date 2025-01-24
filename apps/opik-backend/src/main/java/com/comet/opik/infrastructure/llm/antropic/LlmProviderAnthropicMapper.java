@@ -1,4 +1,4 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm.antropic;
 
 import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
@@ -27,7 +27,7 @@ import org.mapstruct.factory.Mappers;
 import java.util.List;
 
 @Mapper
-public interface LlmProviderAnthropicMapper {
+interface LlmProviderAnthropicMapper {
     LlmProviderAnthropicMapper INSTANCE = Mappers.getMapper(LlmProviderAnthropicMapper.class);
 
     @Mapping(source = "response", target = "choices", qualifiedByName = "mapToChoices")

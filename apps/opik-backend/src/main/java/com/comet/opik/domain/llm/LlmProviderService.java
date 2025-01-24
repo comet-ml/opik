@@ -1,4 +1,4 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.domain.llm;
 
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;

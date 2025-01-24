@@ -17,8 +17,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
-import com.comet.opik.domain.ChatCompletionService;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
