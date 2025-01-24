@@ -628,7 +628,7 @@ class Opik:
             truncate: Whether to truncate image data stored in input, output or metadata
         """
 
-        page_size = 200
+        page_size = 100
         traces: List[trace_public.TracePublic] = []
 
         filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
@@ -670,7 +670,7 @@ class Opik:
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output or metadata
         """
-        page_size = 200
+        page_size = 100
         spans: List[span_public.SpanPublic] = []
 
         filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
