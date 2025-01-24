@@ -71,6 +71,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -788,7 +789,7 @@ class TracesResourceTest {
         }
 
         @Test
-        void findWithUsage() {
+        void findWithUsageAndComments() {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
@@ -810,12 +811,21 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(
                     traceIdToSpansMap.values().stream().flatMap(List::stream).toList(), API_KEY, TEST_WORKSPACE);
 
+            var traceIdToCommentsMap = traces.stream()
+                    .map(trace -> Pair.of(trace.id(),
+                            IntStream.range(0, 5)
+                                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(trace.id(), API_KEY,
+                                            TEST_WORKSPACE, 201))
+                                    .toList()))
+                    .collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
+
             traces = traces.stream().map(trace -> trace.toBuilder()
                     .usage(traceIdToSpansMap.get(trace.id()).stream()
                             .map(Span::usage)
                             .flatMap(usage -> usage.entrySet().stream())
                             .collect(Collectors.groupingBy(
                                     Map.Entry::getKey, Collectors.summingLong(Map.Entry::getValue))))
+                    .comments(traceIdToCommentsMap.get(trace.id()))
                     .build()).toList();
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), traces, traces.reversed(), List.of(), API_KEY);
         }
@@ -3562,8 +3572,13 @@ class TracesResourceTest {
 
             batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
 
+            // Create some comments, might affect cost/usage query
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(id, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
-            trace = trace.toBuilder().id(id).usage(usage).build();
+            trace = trace.toBuilder().id(id).usage(usage).comments(expectedComments).build();
             Trace createdTrace = getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
 
             assertThat(createdTrace.totalEstimatedCost())

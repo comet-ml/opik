@@ -273,7 +273,7 @@ class TraceDAOImpl implements TraceDAO {
                 t.duration_millis,
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
-                groupArray(tuple(c.*)) AS comments
+                groupUniqArrayArray(c.comments_array) as comments
             FROM (
                 SELECT
                     *,
@@ -300,18 +300,23 @@ class TraceDAOImpl implements TraceDAO {
             ) AS s ON t.id = s.trace_id
             LEFT JOIN (
                 SELECT
-                    id AS comment_id,
-                    text,
-                    created_at AS comment_created_at,
-                    last_updated_at AS comment_last_updated_at,
-                    created_by AS comment_created_by,
-                    last_updated_by AS comment_last_updated_by,
-                    entity_id
-                FROM comments
-                WHERE workspace_id = :workspace_id
-                AND entity_id = :id
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                    entity_id,
+                    groupArray(tuple(*)) AS comments_array
+                FROM (
+                    SELECT
+                        id,
+                        text,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by,
+                        entity_id
+                    FROM comments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                GROUP BY entity_id
             ) AS c ON t.id = c.entity_id
             GROUP BY
                 t.*,
@@ -326,7 +331,7 @@ class TraceDAOImpl implements TraceDAO {
                 t.duration_millis,
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
-                groupArray(tuple(c.*)) AS comments
+                groupUniqArrayArray(c.comments_array) as comments
             FROM (
                 SELECT
                      id,
@@ -386,18 +391,23 @@ class TraceDAOImpl implements TraceDAO {
             ) AS s ON t.id = s.trace_id
             LEFT JOIN (
                 SELECT
-                    id AS comment_id,
-                    text,
-                    created_at AS comment_created_at,
-                    last_updated_at AS comment_last_updated_at,
-                    created_by AS comment_created_by,
-                    last_updated_by AS comment_last_updated_by,
-                    entity_id
-                FROM comments
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                    entity_id,
+                    groupArray(tuple(*)) AS comments_array
+                FROM (
+                    SELECT
+                        id,
+                        text,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by,
+                        entity_id
+                    FROM comments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                GROUP BY entity_id
             ) AS c ON t.id = c.entity_id
             GROUP BY
                 t.*,
