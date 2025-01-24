@@ -20,7 +20,6 @@ const useDatasetCreateMutation = () => {
         ...dataset,
       });
 
-      // TODO workaround to return just created resource while implementation on BE is not done
       return data
         ? data
         : {

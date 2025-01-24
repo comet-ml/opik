@@ -1,5 +1,8 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import useLocalStorageState from "use-local-storage-state";
+import { useNavigate } from "@tanstack/react-router";
+
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -21,7 +24,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import useLocalStorageState from "use-local-storage-state";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
@@ -88,6 +90,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 
 const DatasetsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -177,6 +180,21 @@ const DatasetsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
+  const onDatasetCreated = useCallback(
+    (dataset: Dataset) => {
+      if (!dataset.id) return;
+
+      navigate({
+        to: "/$workspaceName/datasets/$datasetId",
+        params: {
+          datasetId: dataset.id,
+          workspaceName,
+        },
+      });
+    },
+    [workspaceName, navigate],
+  );
+
   if (isPending) {
     return <Loader />;
   }
@@ -241,6 +259,7 @@ const DatasetsPage: React.FunctionComponent = () => {
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        onDatasetCreated={onDatasetCreated}
       />
     </div>
   );
