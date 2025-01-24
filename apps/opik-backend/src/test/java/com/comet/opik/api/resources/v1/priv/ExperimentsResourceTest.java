@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -104,6 +105,7 @@ import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANG
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.v1.priv.TracesResourceTest.IGNORED_FIELDS_COMMENTS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
@@ -994,6 +996,15 @@ class ExperimentsResourceTest {
             Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment = getExpectedScoresPerExperiment(experiments,
                     experimentItems);
 
+            // Add comments to trace
+            List<Comment> comments = IntStream.range(0, 5)
+                    .mapToObj(
+                            i -> traceResourceClient.generateAndCreateComment(trace1.id(), apiKey, workspaceName, 201))
+                    .toList();
+
+            Set<UUID> expectedExperimentIdsWithComments = getExpectedExperimentIdsWithComments(experiments,
+                    experimentItems, trace1.id());
+
             var page = 1;
             var pageSize = experiments.size() + 2; // +2 for the noScoreExperiment and noItemExperiment
 
@@ -1024,6 +1035,15 @@ class ExperimentsResourceTest {
                                             BigDecimal.class)
                                     .build())
                             .isEqualTo(expectedScores);
+
+                    var expectedComments = expectedExperimentIdsWithComments.contains(experiment.id())
+                            ? comments
+                            : null;
+
+                    assertThat(expectedComments)
+                            .usingRecursiveComparison()
+                            .ignoringFields(IGNORED_FIELDS_COMMENTS)
+                            .isEqualTo(experiment.comments());
                 }
             }
         }
@@ -1469,6 +1489,18 @@ class ExperimentsResourceTest {
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
+    private @NotNull Set<UUID> getExpectedExperimentIdsWithComments(
+            List<Experiment> experiments, List<ExperimentItem> experimentItems, UUID traceId) {
+        return experiments.stream()
+                .map(Experiment::id)
+                .filter(id -> experimentItems.stream()
+                        .filter(experimentItem -> experimentItem.experimentId().equals(id))
+                        .map(ExperimentItem::traceId)
+                        .collect(toSet())
+                        .contains(traceId))
+                .collect(toSet());
+    }
+
     private void findAndAssert(
             String workspaceName,
             int page,
@@ -1708,7 +1740,7 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        void createAndGetFeedbackAvg() {
+        void createAndGetFeedbackAvgAndComments() {
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .traceCount(3L)
                     .promptVersion(null)
@@ -1748,6 +1780,12 @@ class ExperimentsResourceTest {
 
             createScoreAndAssert(feedbackScoreBatch);
 
+            // Add comments to trace
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(trace1.id(), API_KEY, TEST_WORKSPACE,
+                            201))
+                    .toList();
+
             int totalNumberOfScores = 15;
             int totalNumberOfScoresPerTrace = 5;
 
@@ -1773,6 +1811,11 @@ class ExperimentsResourceTest {
                             .withComparatorForType(ExperimentsResourceTest.this::customComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedScores);
+
+            assertThat(expectedComments)
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_COMMENTS)
+                    .isEqualTo(experiment.comments());
         }
 
         @Test
@@ -2391,6 +2434,12 @@ class ExperimentsResourceTest {
 
             createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
+            // Add comments to trace
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceWithScores2.getKey().id(), apiKey,
+                            workspaceName, 201))
+                    .toList();
+
             var experiment1 = generateExperiment();
 
             createAndAssert(experiment1, apiKey, workspaceName);
@@ -2439,6 +2488,7 @@ class ExperimentsResourceTest {
                             .output(traceWithScores2.getLeft().output())
                             .feedbackScores(traceWithScores2.getRight().stream()
                                     .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                            .comments(expectedComments)
                             .build())
                     .toList();
             var expectedExperimentItems2 = expectedExperimentItems.subList(limit, size).stream()
@@ -2447,6 +2497,7 @@ class ExperimentsResourceTest {
                             .output(traceWithScores1.getLeft().output())
                             .feedbackScores(traceWithScores1.getRight().stream()
                                     .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                            .comments(null)
                             .build())
                     .toList();
 
@@ -2838,6 +2889,10 @@ class ExperimentsResourceTest {
                     .isEqualTo(expectedExperimentItem.feedbackScores());
             assertThat(actualExperimentItem.input()).isEqualTo(expectedExperimentItem.input());
             assertThat(actualExperimentItem.output()).isEqualTo(expectedExperimentItem.output());
+            assertThat(actualExperimentItem.comments())
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_COMMENTS)
+                    .isEqualTo(expectedExperimentItem.comments());
         } else {
             assertThat(actualExperimentItem.input()).isNull();
             assertThat(actualExperimentItem.output()).isNull();

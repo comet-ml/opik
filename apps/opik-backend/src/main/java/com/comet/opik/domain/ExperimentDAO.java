@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 
 @Singleton
@@ -157,7 +158,8 @@ class ExperimentDAO {
                     ),
                     []
                  ) as feedback_scores,
-                count (DISTINCT ei.trace_id) as trace_count
+                count (DISTINCT ei.trace_id) as trace_count,
+                groupUniqArrayArray(tc.comments_array) as comments_array_agg
             FROM (
                 SELECT
                     *
@@ -206,6 +208,26 @@ class ExperimentDAO {
                     t.id,
                     fs.name
             ) AS tfs ON ei.trace_id = tfs.id
+            LEFT JOIN (
+                SELECT
+                    entity_id,
+                    groupArray(tuple(*)) AS comments_array
+                FROM (
+                    SELECT
+                        id,
+                        text,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by,
+                        entity_id
+                    FROM comments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                GROUP BY entity_id
+            ) AS tc ON ei.trace_id = tc.entity_id
             GROUP BY
                 e.workspace_id,
                 e.dataset_id,
@@ -280,7 +302,8 @@ class ExperimentDAO {
                     ),
                     []
                 ) as feedback_scores,
-                count (DISTINCT ei.trace_id) as trace_count
+                count (DISTINCT ei.trace_id) as trace_count,
+                groupUniqArrayArray(tc.comments_array) as comments_array_agg
             FROM (
                 SELECT
                     *
@@ -331,6 +354,26 @@ class ExperimentDAO {
                     t.id,
                     fs.name
             ) AS tfs ON ei.trace_id = tfs.id
+            LEFT JOIN (
+                SELECT
+                    entity_id,
+                    groupArray(tuple(*)) AS comments_array
+                FROM (
+                    SELECT
+                        id,
+                        text,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by,
+                        entity_id
+                    FROM comments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                GROUP BY entity_id
+            ) AS tc ON ei.trace_id = tc.entity_id
             GROUP BY
                 e.workspace_id,
                 e.dataset_id,
@@ -369,7 +412,8 @@ class ExperimentDAO {
             SELECT
                 *,
                 null AS feedback_scores,
-                null AS trace_count
+                null AS trace_count,
+                null AS comments_array_agg
             FROM experiments
             WHERE workspace_id = :workspace_id
             AND ilike(name, CONCAT('%', :name, '%'))
@@ -513,6 +557,7 @@ class ExperimentDAO {
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .feedbackScores(getFeedbackScores(row))
+                .comments(getComments(row.get("comments_array_agg", List[].class)))
                 .traceCount(row.get("trace_count", Long.class))
                 .promptVersion(row.get("prompt_version_id", UUID.class) != null
                         ? new Experiment.PromptVersionLink(row.get("prompt_version_id", UUID.class), null,

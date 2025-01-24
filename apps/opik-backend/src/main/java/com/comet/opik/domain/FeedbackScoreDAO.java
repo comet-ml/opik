@@ -530,14 +530,14 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, Connection connection) {
         log.info("Deleting feedback scores by span entityId, traceIds count '{}'", traceIds.size());
         var statement = connection.createStatement(DELETE_SPANS_CASCADE_FEEDBACK_SCORE)
-                .bind("trace_ids", traceIds.toArray(UUID[]::new));
+                .bind("trace_ids", traceIds);
         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
     }
 
     private Mono<Long> deleteScoresByEntityIds(EntityType entityType, Set<UUID> entityIds, Connection connection) {
         log.info("Deleting feedback scores by entityType '{}', entityIds count '{}'", entityType, entityIds.size());
         var statement = connection.createStatement(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS)
-                .bind("entity_ids", entityIds.toArray(UUID[]::new))
+                .bind("entity_ids", entityIds)
                 .bind("entity_type", entityType.getType());
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .flatMap(result -> Mono.from(result.getRowsUpdated()));

@@ -206,11 +206,10 @@ public class TraceResourceClient {
         }
     }
 
-    public void updateComment(String updatedText, UUID commentId, UUID traceId, String apiKey, String workspaceName,
+    public void updateComment(String updatedText, UUID commentId, String apiKey, String workspaceName,
             int expectedStatus) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(traceId.toString())
                 .path("comments")
                 .path(commentId.toString())
                 .request()

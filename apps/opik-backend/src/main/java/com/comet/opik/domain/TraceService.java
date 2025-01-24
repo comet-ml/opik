@@ -86,6 +86,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull TraceDAO dao;
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
+    private final @NonNull CommentDAO commentDAO;
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
@@ -303,6 +304,7 @@ class TraceServiceImpl implements TraceService {
         return lockService.executeWithLock(
                 new LockService.Lock(id, TRACE_KEY),
                 Mono.defer(() -> feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id))
+                        .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
                         .then(Mono.defer(
                                 () -> template.nonTransaction(connection -> spanDAO.deleteByTraceId(id, connection))))
                         .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection)))));
@@ -315,6 +317,7 @@ class TraceServiceImpl implements TraceService {
         log.info("Deleting traces, count '{}'", ids.size());
         return template
                 .nonTransaction(connection -> feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, ids))
+                .then(Mono.defer(() -> commentDAO.deleteByEntityIds(CommentDAO.EntityType.TRACE, ids)))
                 .then(Mono
                         .defer(() -> template.nonTransaction(connection -> spanDAO.deleteByTraceIds(ids, connection))))
                 .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(ids, connection))));
