@@ -15,10 +15,10 @@ def ensure_openai_configured():
 def gcp_e2e_test_credentials():
     gcp_credentials_file_name = "gcp_credentials.json"
 
-    gcp_credentials = os.environ["GCP_E2E_TEST_CREDENTIALS"]
+    gcp_credentials = json.loads(os.environ["GCP_E2E_TEST_CREDENTIALS"])
 
     with open(gcp_credentials_file_name, mode="wt") as file:
-        file.write(gcp_credentials)
+        file.write(json.dumps(gcp_credentials))
 
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcp_credentials_file_name
 
