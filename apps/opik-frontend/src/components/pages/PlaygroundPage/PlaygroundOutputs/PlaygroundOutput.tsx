@@ -5,6 +5,7 @@ import { getAlphabetLetter } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import {
   useOutputLoadingByPromptDatasetItemId,
+  useOutputStaleStatusByPromptDatasetItemId,
   useOutputValueByPromptDatasetItemId,
 } from "@/store/PlaygroundStore";
 
@@ -16,13 +17,18 @@ interface PlaygroundOutputProps {
 const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
   const value = useOutputValueByPromptDatasetItemId(promptId);
   const isLoading = useOutputLoadingByPromptDatasetItemId(promptId);
+  const stale = useOutputStaleStatusByPromptDatasetItemId(promptId);
 
   const renderContent = () => {
     if (isLoading && !value) {
       return <PlaygroundOutputLoader />;
     }
 
-    return <ReactMarkdown>{value}</ReactMarkdown>;
+    return (
+      <ReactMarkdown className={stale ? "text-muted-gray" : ""}>
+        {value}
+      </ReactMarkdown>
+    );
   };
 
   return (

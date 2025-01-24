@@ -72,7 +72,7 @@ const PlaygroundPrompts = ({
         </div>
       </div>
 
-      <div className="mb-6 flex min-h-[50%] w-full gap-[var(--item-gap)]">
+      <div className="flex size-full gap-[var(--item-gap)]">
         {promptIds.map((promptId, idx) => (
           <PlaygroundPrompt
             workspaceName={workspaceName}
