@@ -7,6 +7,7 @@ run-name: "SDK Lib Langchain Tests ${{ github.ref_name }} by @${{ github.actor }
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
+  GCP_E2E_TEST_CREDENTIALS:  ${{ secrets.GCP_E2E_TEST_CREDENTIALS }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
 on:
