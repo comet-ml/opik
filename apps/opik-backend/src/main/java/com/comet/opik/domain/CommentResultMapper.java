@@ -16,7 +16,7 @@ import java.util.UUID;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @UtilityClass
-public class CommentResultMapper {
+class CommentResultMapper {
 
     static Publisher<Comment> mapItem(Result results) {
         return results.map((row, rowMetadata) -> Comment.builder()

@@ -26,6 +26,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -36,6 +37,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -51,6 +53,7 @@ public class SpanService {
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
+    private final @NonNull CommentService commentService;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -80,7 +83,7 @@ public class SpanService {
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
-        return spanDAO.getById(id).switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(id))));
+        return spanDAO.getById(id).switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))));
     }
 
     @WithSpan
@@ -237,12 +240,6 @@ public class SpanService {
         return spanDAO.update(id, spanUpdate, existingSpan);
     }
 
-    private NotFoundException newNotFoundException(UUID id) {
-        String message = "Not found span with id '%s'".formatted(id);
-        log.info(message);
-        return new NotFoundException(message);
-    }
-
     private <T> Mono<T> failWithConflict(String error) {
         log.info(error);
         return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(error))));
@@ -318,5 +315,12 @@ public class SpanService {
                         }))
                 .flatMap(project -> spanDAO.getStats(criteria.toBuilder().projectId(project.id()).build()))
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
+    }
+
+    public Mono<Void> deleteByTraceIds(Set<UUID> traceIds) {
+        return spanDAO.getSpanIdsForTraces(traceIds)
+                .flatMap(
+                        spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, new HashSet<>(spanIds)))
+                .then(Mono.defer(() -> spanDAO.deleteByTraceIds(traceIds)));
     }
 }

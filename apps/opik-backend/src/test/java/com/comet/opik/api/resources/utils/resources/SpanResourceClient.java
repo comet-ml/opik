@@ -11,7 +11,6 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamUtils;
@@ -23,13 +22,11 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@RequiredArgsConstructor
-public class SpanResourceClient {
+public class SpanResourceClient extends BaseTestClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/spans";
-
-    private final ClientSupport client;
-    private final String baseURI;
+    public SpanResourceClient(ClientSupport client, String baseURI) {
+        super("%s/v1/private/spans", client, baseURI);
+    }
 
     public UUID createSpan(Span span, String apiKey, String workspaceName) {
         try (var response = createSpan(span, apiKey, workspaceName, HttpStatus.SC_CREATED)) {

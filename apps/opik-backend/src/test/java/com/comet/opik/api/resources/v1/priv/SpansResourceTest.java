@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -99,7 +101,10 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertComments;
 import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertTraceComment;
+import static com.comet.opik.api.resources.utils.AssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
@@ -129,7 +134,7 @@ class SpansResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
-            "totalEstimatedCostVersion"};
+            "totalEstimatedCostVersion", "comments"};
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
@@ -3410,6 +3415,17 @@ class SpansResourceTest {
                     assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
                 });
             }
+
+            if (actualSpan.comments() != null) {
+                assertComments(expectedSpan.comments(), actualSpan.comments());
+
+                actualSpan.comments().forEach(comment -> {
+                    assertThat(comment.createdAt()).isAfter(actualSpan.createdAt());
+                    assertThat(comment.lastUpdatedAt()).isAfter(actualSpan.lastUpdatedAt());
+                    assertThat(comment.createdBy()).isEqualTo(USER);
+                    assertThat(comment.lastUpdatedBy()).isEqualTo(USER);
+                });
+            }
         }
     }
 
@@ -3928,8 +3944,7 @@ class SpansResourceTest {
         void getNotFound() {
             UUID id = generator.generate();
 
-            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(404,
-                    "Not found span with id '%s'".formatted(id));
+            var expectedError = "Span id: %s not found".formatted(id);
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
                     .request()
@@ -3941,7 +3956,7 @@ class SpansResourceTest {
 
                 var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
 
-                assertThat(actualError).isEqualTo(expectedError);
+                assertThat(actualError.getMessage()).isEqualTo(expectedError);
             }
         }
     }
@@ -5214,6 +5229,119 @@ class SpansResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Comment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanComment {
+
+        @Test
+        void createCommentForNonExistingTraceFail() {
+            spanResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
+        }
+
+        @Test
+        void createAndGetComment() {
+            // Create comment for existing span
+            UUID spanId = spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class), API_KEY,
+                    TEST_WORKSPACE);
+            Comment expectedComment = spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Get created comment by id and assert
+            Comment actualComment = spanResourceClient.getCommentById(expectedComment.id(), spanId, API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertTraceComment(expectedComment, actualComment);
+        }
+
+        @Test
+        void createAndUpdateComment() {
+            // Create comment for existing span
+            UUID spanId = spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class), API_KEY,
+                    TEST_WORKSPACE);
+            Comment expectedComment = spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Get created comment by id and assert
+            Comment actualComment = spanResourceClient.getCommentById(expectedComment.id(), spanId, API_KEY,
+                    TEST_WORKSPACE, 200);
+
+            // Update existing comment
+            String updatedText = podamFactory.manufacturePojo(String.class);
+            spanResourceClient.updateComment(updatedText, expectedComment.id(), API_KEY,
+                    TEST_WORKSPACE, 204);
+
+            // Get comment by id and assert it was updated
+            Comment updatedComment = traceResourceClient.getCommentById(expectedComment.id(), spanId, API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertUpdatedComment(actualComment, updatedComment, updatedText);
+        }
+
+        @Test
+        void deleteComments() {
+            // Create comments for existing span
+            UUID spanId = spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class), API_KEY,
+                    TEST_WORKSPACE);
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList().reversed();
+
+            // Check it was created
+            expectedComments.forEach(
+                    comment -> spanResourceClient.getCommentById(comment.id(), spanId, API_KEY, TEST_WORKSPACE, 200));
+
+            // Delete comment
+            BatchDelete request = BatchDelete.builder()
+                    .ids(expectedComments.stream().map(Comment::id).collect(Collectors.toSet())).build();
+            spanResourceClient.deleteComments(request, API_KEY, TEST_WORKSPACE);
+
+            // Verify comments were actually deleted via get and update endpoints
+            expectedComments.forEach(
+                    comment -> spanResourceClient.getCommentById(comment.id(), spanId, API_KEY, TEST_WORKSPACE, 404));
+            expectedComments
+                    .forEach(comment -> spanResourceClient.updateComment(podamFactory.manufacturePojo(String.class),
+                            comment.id(), API_KEY, TEST_WORKSPACE, 404));
+        }
+
+        @Test
+        void getSpanWithComments() {
+            UUID spanId = spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class), API_KEY,
+                    TEST_WORKSPACE);
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            Span actualSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+            assertComments(expectedComments, actualSpan.comments());
+        }
+
+        @Test
+        void getSpanPageWithComments() {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            var spanId = spans.getFirst().id();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, TEST_WORKSPACE);
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            spans = spans.stream()
+                    .map(span -> span.id() != spanId ? span : span.toBuilder().comments(expectedComments).build())
+                    .toList();
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), spans.reversed(), spans.reversed(), List.of(),
+                    API_KEY);
         }
     }
 

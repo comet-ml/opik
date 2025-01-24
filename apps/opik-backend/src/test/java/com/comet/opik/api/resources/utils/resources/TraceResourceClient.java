@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
-import com.comet.opik.api.Comment;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
@@ -10,16 +9,13 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.UUID;
@@ -28,14 +24,11 @@ import java.util.stream.IntStream;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@RequiredArgsConstructor
-public class TraceResourceClient {
+public class TraceResourceClient extends BaseTestClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/traces";
-
-    private final ClientSupport client;
-    private final String baseURI;
-    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+    public TraceResourceClient(ClientSupport client, String baseURI) {
+        super("%s/v1/private/traces", client, baseURI);
+    }
 
     public UUID createTrace(Trace trace, String apiKey, String workspaceName) {
         try (var response = createTrace(trace, apiKey, workspaceName, HttpStatus.SC_CREATED)) {
@@ -176,86 +169,5 @@ public class TraceResourceClient {
 
                     return scores;
                 }).toList();
-    }
-
-    public Comment generateAndCreateComment(UUID traceId, String apiKey, String workspaceName, int expectedStatus) {
-        Comment comment = Comment.builder().text(podamFactory.manufacturePojo(String.class)).build();
-        var commentId = createComment(comment, traceId, apiKey, workspaceName, expectedStatus);
-
-        return comment.toBuilder().id(commentId).build();
-    }
-
-    public UUID createComment(Comment comment, UUID traceId, String apiKey, String workspaceName, int expectedStatus) {
-
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(traceId.toString())
-                .path("comments")
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(comment))) {
-
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-
-            if (expectedStatus == 201) {
-                return TestUtils.getIdFromLocation(response.getLocation());
-            }
-
-            return null;
-        }
-    }
-
-    public void updateComment(String updatedText, UUID commentId, String apiKey, String workspaceName,
-            int expectedStatus) {
-
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("comments")
-                .path(commentId.toString())
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .method(HttpMethod.PATCH, Entity.json(Comment.builder().text(updatedText).build()))) {
-
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-        }
-    }
-
-    public Comment getCommentById(UUID commentId, UUID traceId, String apiKey, String workspaceName,
-            int expectedStatus) {
-
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(traceId.toString())
-                .path("comments")
-                .path(commentId.toString())
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-
-            if (expectedStatus == 200) {
-                return response.readEntity(Comment.class);
-            }
-
-            return null;
-        }
-    }
-
-    public void deleteComments(BatchDelete request, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("comments")
-                .path("delete")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
     }
 }
