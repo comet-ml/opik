@@ -1,6 +1,6 @@
 import { runOnboardingCodeRequest } from "@/api/onboarding/runOnboardingCode";
-import { REAL_LOGS_PLACEHOLDER } from "@/constants/integration-logs";
 import { useState } from "react";
+import { REAL_LOGS_PLACEHOLDER } from "../FrameworkIntegrations/integration-logs";
 
 type UseRunCodeSnippetArgs = {
   executionUrl: string;

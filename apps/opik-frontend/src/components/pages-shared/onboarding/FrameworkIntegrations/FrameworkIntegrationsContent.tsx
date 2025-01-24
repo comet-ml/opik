@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import {
   FrameworkIntegration,
   QUICKSTART_INTEGRATIONS,
-} from "@/constants/quickstart-integrations";
+} from "./quickstart-integrations";
 
 export type FrameworkIntegrationsContentProps = {
   integrationList?: FrameworkIntegration[];

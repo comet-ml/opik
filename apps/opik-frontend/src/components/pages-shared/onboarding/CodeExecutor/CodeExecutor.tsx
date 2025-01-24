@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import useRunCodeSnippet from "./useRunCodeSnippet";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { FINAL_LOG_TEMPLATE } from "@/constants/integration-logs";
+import { FINAL_LOG_TEMPLATE } from "../FrameworkIntegrations/integration-logs";
 
 export enum SUPPORTED_LANGUAGE {
   json = "json",

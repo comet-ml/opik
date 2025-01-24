@@ -13,19 +13,19 @@ import dspyLogoUrl from "/images/integrations/dspy.png";
 import geminiLogoUrl from "/images/integrations/gemini.png";
 import groqLogoUrl from "/images/integrations/groq.png";
 
-import functionDecoratorsCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/FunctionDecorators.py?raw";
-import openAiCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/OpenAI.py?raw";
-import anthropicCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Anthropic.py?raw";
-import bedrockCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Bedrock.py?raw";
-import geminiCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Gemini.py?raw";
-import langChainCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/LangChain.py?raw";
-import langGraphCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/LangGraph.py?raw";
-import llamaIndexCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/LlamaIndex.py?raw";
-import haystackCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Haystack.py?raw";
-import liteLLMCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/LiteLLM.py?raw";
-import ragasCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Ragas.py?raw";
-import groqCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Groq.py?raw";
-import dspyCode from "../components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/DSPy.py?raw";
+import functionDecoratorsCode from "./integration-scripts/FunctionDecorators.py?raw";
+import openAiCode from "./integration-scripts/OpenAI.py?raw";
+import anthropicCode from "./integration-scripts/Anthropic.py?raw";
+import bedrockCode from "./integration-scripts/Bedrock.py?raw";
+import geminiCode from "./integration-scripts/Gemini.py?raw";
+import langChainCode from "./integration-scripts/LangChain.py?raw";
+import langGraphCode from "./integration-scripts/LangGraph.py?raw";
+import llamaIndexCode from "./integration-scripts/LlamaIndex.py?raw";
+import haystackCode from "./integration-scripts/Haystack.py?raw";
+import liteLLMCode from "./integration-scripts/LiteLLM.py?raw";
+import ragasCode from "./integration-scripts/Ragas.py?raw";
+import groqCode from "./integration-scripts/Groq.py?raw";
+import dspyCode from "./integration-scripts/DSPy.py?raw";
 
 import { integrationLogsMap } from "./integration-logs";
 
