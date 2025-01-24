@@ -10,6 +10,7 @@ import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
+import isNumber from "lodash/isNumber";
 import get from "lodash/get";
 
 import useTracesOrSpansList, {
@@ -123,19 +124,28 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "usage.total_tokens",
     label: "Total tokens",
     type: COLUMN_TYPE.number,
-    accessorFn: (row) => (row.usage ? `${row.usage.total_tokens}` : ""),
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.total_tokens)
+        ? `${row.usage.total_tokens}`
+        : "-",
   },
   {
     id: "usage.prompt_tokens",
     label: "Total input tokens",
     type: COLUMN_TYPE.number,
-    accessorFn: (row) => (row.usage ? `${row.usage.prompt_tokens}` : ""),
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.prompt_tokens)
+        ? `${row.usage.prompt_tokens}`
+        : "-",
   },
   {
     id: "usage.completion_tokens",
     label: "Total output tokens",
     type: COLUMN_TYPE.number,
-    accessorFn: (row) => (row.usage ? `${row.usage.completion_tokens}` : ""),
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.completion_tokens)
+        ? `${row.usage.completion_tokens}`
+        : "-",
   },
   {
     id: "total_estimated_cost",

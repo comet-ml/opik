@@ -2,6 +2,7 @@ import React, { useCallback, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +30,7 @@ import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
+import useAppStore from "@/store/AppStore";
 
 type AddPromptDialogProps = {
   open: boolean;
@@ -41,6 +43,8 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   setOpen,
   prompt: defaultPrompt,
 }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
   const [name, setName] = useState(defaultPrompt?.name || "");
   const [template, setTemplate] = useState("");
   const [metadata, setMetadata] = useState("");
@@ -61,6 +65,21 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const title = isEdit ? "Edit prompt" : "Create a new prompt";
   const submitText = isEdit ? "Update prompt" : "Create prompt";
 
+  const onPromptCreated = useCallback(
+    (prompt: Prompt) => {
+      if (!prompt.id) return;
+
+      navigate({
+        to: "/$workspaceName/prompts/$promptId",
+        params: {
+          promptId: prompt.id,
+          workspaceName,
+        },
+      });
+    },
+    [workspaceName, navigate],
+  );
+
   const createPrompt = useCallback(() => {
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
 
@@ -68,14 +87,17 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
       return setShowInvalidJSON(true);
     }
 
-    createMutate({
-      prompt: {
-        name,
-        template,
-        ...(metadata && { metadata: safelyParseJSON(metadata) }),
-        ...(description && { description }),
+    createMutate(
+      {
+        prompt: {
+          name,
+          template,
+          ...(metadata && { metadata: safelyParseJSON(metadata) }),
+          ...(description && { description }),
+        },
       },
-    });
+      { onSuccess: onPromptCreated },
+    );
     setOpen(false);
   }, [
     metadata,
@@ -85,6 +107,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     description,
     setOpen,
     setShowInvalidJSON,
+    onPromptCreated,
   ]);
 
   const editPrompt = useCallback(() => {
