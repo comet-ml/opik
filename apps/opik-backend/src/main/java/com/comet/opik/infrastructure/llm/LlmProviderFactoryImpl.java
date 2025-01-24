@@ -1,49 +1,58 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.EncryptionUtils;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.EnumUtils;
 
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
-@Singleton
+import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
+
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class LlmProviderFactory {
-    public static final String ERROR_MODEL_NOT_SUPPORTED = "model not supported %s";
+class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
-    private final @NonNull LlmProviderClientGenerator llmProviderClientGenerator;
+    private final Map<LlmProvider, LlmServiceProvider> services = new EnumMap<>(LlmProvider.class);
+
+    public void register(LlmProvider llmProvider, LlmServiceProvider service) {
+        services.put(llmProvider, service);
+    }
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
         var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
 
-        return switch (llmProvider) {
-            case LlmProvider.OPEN_AI -> new LlmProviderOpenAi(llmProviderClientGenerator.newOpenAiClient(apiKey));
-            case LlmProvider.ANTHROPIC ->
-                new LlmProviderAnthropic(llmProviderClientGenerator.newAnthropicClient(apiKey));
-            case LlmProvider.GEMINI -> new LlmProviderGemini(llmProviderClientGenerator, apiKey);
-        };
+        return Optional.ofNullable(services.get(llmProvider))
+                .map(provider -> provider.getService(apiKey))
+                .orElseThrow(() -> new LlmProviderUnsupportedException(
+                        "LLM provider not supported: %s".formatted(llmProvider)));
     }
 
     public ChatLanguageModel getLanguageModel(@NonNull String workspaceId,
-            @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
+            @NonNull LlmAsJudgeModelParameters modelParameters) {
         var llmProvider = getLlmProvider(modelParameters.name());
         var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
 
-        return switch (llmProvider) {
-            case LlmProvider.OPEN_AI -> llmProviderClientGenerator.newOpenAiChatLanguageModel(apiKey, modelParameters);
-            default -> throw new BadRequestException(String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name()));
-        };
+        return Optional.ofNullable(services.get(llmProvider))
+                .map(provider -> provider.getLanguageModel(apiKey, modelParameters))
+                .orElseThrow(() -> new BadRequestException(
+                        String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
     }
+
     /**
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */

@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.LogItem;
-import com.comet.opik.utils.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
@@ -25,7 +24,7 @@ import java.util.UUID;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.TemplateUtils.*;
 
 @ImplementedBy(AutomationRuleEvaluatorLogsDAOImpl.class)
 public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
@@ -57,23 +56,15 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 <if(item.hasNext)>,<endif>
             }>
             ;
-
             """;
 
     public static final String FIND_ALL = """
-
             SELECT * FROM automation_rule_evaluator_logs
-
             WHERE workspace_id = :workspace_id
-
             <if(level)> AND level = :level <endif>
-
             <if(ruleId)> AND rule_id = :rule_id <endif>
-
             ORDER BY timestamp DESC
-
             <if(limit)> LIMIT :limit <endif><if(offset)> OFFSET :offset <endif>
-
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -140,10 +131,8 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 .flatMapMany(connection -> {
                     var template = new ST(INSERT_STATEMENT);
 
-                    List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
-
+                    List<QueryItem> queryItems = getQueryItemPlaceHolder(events.size());
                     template.add("items", queryItems);
-
                     Statement statement = connection.createStatement(template.render());
 
                     for (int i = 0; i < events.size(); i++) {

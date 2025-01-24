@@ -52,6 +52,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     private volatile boolean running = true;
 
     private final BlockingQueue<ILoggingEvent> logQueue = new LinkedBlockingQueue<>();
+
     private final AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>(
             Executors.newSingleThreadScheduledExecutor());
 

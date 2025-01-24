@@ -1,5 +1,6 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.domain.llm.LlmProviderService;
 import dev.ai4j.openai4j.OpenAiClient;
 import dev.ai4j.openai4j.OpenAiHttpException;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;

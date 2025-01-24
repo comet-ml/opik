@@ -1,8 +1,6 @@
-package com.comet.opik.domain;
+package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
-import com.comet.opik.domain.llmproviders.LlmProviderFactory;
-import com.comet.opik.domain.llmproviders.LlmProviderService;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;

@@ -1,5 +1,7 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.api.ChunkedResponseHandler;
+import com.comet.opik.domain.llm.LlmProviderService;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -12,13 +14,13 @@ import java.util.function.Consumer;
 
 @RequiredArgsConstructor
 public class LlmProviderGemini implements LlmProviderService {
-    private final @NonNull LlmProviderClientGenerator llmProviderClientGenerator;
+    private final @NonNull GeminiClientGenerator llmProviderClientGenerator;
     private final @NonNull String apiKey;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         var mapper = LlmProviderGeminiMapper.INSTANCE;
-        var response = llmProviderClientGenerator.newGeminiClient(apiKey, request)
+        var response = llmProviderClientGenerator.generate(apiKey, request)
                 .generate(request.messages().stream().map(mapper::toChatMessage).toList());
 
         return mapper.toChatCompletionResponse(request, response);
