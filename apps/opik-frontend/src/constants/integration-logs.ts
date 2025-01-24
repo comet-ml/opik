@@ -1,7 +1,7 @@
 export const REAL_LOGS_PLACEHOLDER = "REAL_LOGS_PLACEHOLDER";
 export const FINAL_LOG_TEMPLATE = "FINAL_LOG_TEMPLATE";
 
-export const fakeLogsMap: Record<string, string[]> = {
+export const integrationLogsMap: Record<string, string[]> = {
   FunctionDecorators: [
     "Initializing Opik demo console",
     "%cmd% pip install opik",

@@ -1,39 +1,6 @@
-import { REAL_LOGS_PLACEHOLDER } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/fake-logs";
-import { CODE_EXECUTOR_SERVICE_URL } from "@/components/pages-shared/onboarding/FrameworkIntegrations/quickstart-integrations";
+import { runOnboardingCodeRequest } from "@/api/onboarding/runOnboardingCode";
+import { REAL_LOGS_PLACEHOLDER } from "@/constants/integration-logs";
 import { useState } from "react";
-
-type RunCodeRequestArgs = {
-  executionUrl: string;
-  workspaceName: string;
-  apiKey: string;
-};
-const runCodeRequest = async ({
-  executionUrl,
-  apiKey,
-  workspaceName,
-}: RunCodeRequestArgs) => {
-  const response = await fetch(`${CODE_EXECUTOR_SERVICE_URL}/${executionUrl}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      opik_api_key: apiKey,
-      comet_workspace: workspaceName,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(response.statusText);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("No reader available");
-  }
-
-  return reader;
-};
 
 type UseRunCodeSnippetArgs = {
   executionUrl: string;
@@ -58,7 +25,7 @@ const useRunCodeSnippet = ({
       if (done) {
         return;
       }
-      return await read();
+      return read();
     }
     return read();
   };
@@ -70,7 +37,7 @@ const useRunCodeSnippet = ({
     for (const log of executionLogs) {
       if (log === REAL_LOGS_PLACEHOLDER) {
         try {
-          const logsStream = await runCodeRequest({
+          const logsStream = await runOnboardingCodeRequest({
             executionUrl,
             apiKey,
             workspaceName,

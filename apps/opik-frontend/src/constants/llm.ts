@@ -86,6 +86,45 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 3.5 Turbo 0125",
     },
   ],
+
+  [PROVIDER_TYPE.ANTHROPIC]: [
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
+      label: "Claude 3.5 Sonnet 2024-10-22",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_20241022,
+      label: "Claude 3.5 Haiku 2024-10-22",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20240620,
+      label: "Claude 3.5 Sonnet 2024-06-20",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
+      label: "Claude 3 Opus 2024-02-29",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_SONNET_20240229,
+      label: "Claude 3 Sonnet 2024-02-29",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_HAIKU_20240307,
+      label: "Claude 3 Haiku 2024-03-07",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
+      label: "Claude 3.5 Sonnet Latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_HAIKU_LATEST,
+      label: "Claude 3.5 Haiku Latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_LATEST,
+      label: "Claude 3 Opus Latest",
+    },
+  ],
 };
 
 export const DEFAULT_OPEN_AI_CONFIGS = {
@@ -94,6 +133,12 @@ export const DEFAULT_OPEN_AI_CONFIGS = {
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
+};
+
+export const DEFAULT_ANTHROPIC_CONFIGS = {
+  TEMPERATURE: 0,
+  MAX_COMPLETION_TOKENS: 1024,
+  TOP_P: 1,
 };
 
 export const LLM_PROMPT_CUSTOM_TEMPLATE: LLMPromptTemplate = {
@@ -145,12 +190,12 @@ export const LLM_PROMPT_TEMPLATES: LLMPromptTemplate[] = [
           "Guidelines:\n" +
           "1. The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.\n" +
           "2. The OUTPUT must not contradict any information given in the CONTEXT.\n" +
-          "2. The OUTPUT should not contradict well-established facts or general knowledge.\n" +
-          "3. Ignore the INPUT when evaluating faithfulness; it's provided for context only.\n" +
-          "4. Consider partial hallucinations where some information is correct but other parts are not.\n" +
-          "5. Pay close attention to the subject of statements. Ensure that attributes, actions, or dates are correctly associated with the right entities (e.g., a person vs. a TV show they star in).\n" +
-          "6. Be vigilant for subtle misattributions or conflations of information, even if the date or other details are correct.\n" +
-          "7. Check that the OUTPUT doesn't oversimplify or generalize information in a way that changes its meaning or accuracy.\n" +
+          "3. The OUTPUT should not contradict well-established facts or general knowledge.\n" +
+          "4. Ignore the INPUT when evaluating faithfulness; it's provided for context only.\n" +
+          "5. Consider partial hallucinations where some information is correct but other parts are not.\n" +
+          "6. Pay close attention to the subject of statements. Ensure that attributes, actions, or dates are correctly associated with the right entities (e.g., a person vs. a TV show they star in).\n" +
+          "7. Be vigilant for subtle misattributions or conflations of information, even if the date or other details are correct.\n" +
+          "8. Check that the OUTPUT doesn't oversimplify or generalize information in a way that changes its meaning or accuracy.\n" +
           "\n" +
           "Analyze the text thoroughly and assign a hallucination score between 0 and 1, where:\n" +
           "- 0.0: The OUTPUT is entirely faithful to the CONTEXT\n" +

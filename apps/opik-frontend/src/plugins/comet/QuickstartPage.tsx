@@ -6,12 +6,7 @@ const QuickstartPage = () => {
 
   if (!user) return;
 
-  return (
-    <Quickstart
-      apiKey={user.apiKeys[0]}
-      showColabLinks={!user?.sagemakerRestrictions}
-    />
-  );
+  return <Quickstart />;
 };
 
 export default QuickstartPage;

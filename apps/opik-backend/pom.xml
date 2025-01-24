@@ -29,9 +29,9 @@
         <testcontainers.version>1.20.2</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.10.0</wiremock.version>
-        <redisson.version>3.42.0</redisson.version>
-        <opentelmetry.version>2.10.0</opentelmetry.version>
-        <aws.java.sdk.version>2.29.9</aws.java.sdk.version>
+        <redisson.version>3.43.0</redisson.version>
+        <opentelmetry.version>2.12.0</opentelmetry.version>
+        <aws.java.sdk.version>2.30.2</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -229,6 +229,11 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-google-ai-gemini</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.27.1</version>
         </dependency>
 
         <!-- Test -->

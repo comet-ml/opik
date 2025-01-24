@@ -2,7 +2,11 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
-import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
+import {
+  ColumnDef,
+  ColumnPinningState,
+  RowSelectionState,
+} from "@tanstack/react-table";
 
 import {
   COLUMN_ID_ID,
@@ -32,6 +36,7 @@ import useRulesList from "@/api/automations/useRulesList";
 import AddEditRuleDialog from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/AddEditRuleDialog";
 import RulesActionsPanel from "@/components/pages/TracesPage/RulesTab/RulesActionsPanel";
 import { RuleRowActionsCell } from "@/components/pages/TracesPage/RulesTab/RuleRowActionsCell";
+import RuleLogsCell from "@/components/pages/TracesPage/RulesTab/RuleLogsCell";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -162,6 +167,15 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           selectedColumns,
         },
       ),
+      {
+        accessorKey: "rule_logs",
+        header: "",
+        cell: RuleLogsCell,
+        size: 110,
+        enableResizing: false,
+        enableHiding: false,
+        enableSorting: false,
+      } as ColumnDef<EvaluatorsRule>,
       generateActionsColumDef({
         cell: RuleRowActionsCell,
         customMeta: {
@@ -192,7 +206,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   if (noData && rows.length === 0 && page === 1) {
     return (
       <>
-        <NoRulesPage openModal={handleNewRuleClick} />;
+        <NoRulesPage openModal={handleNewRuleClick} />
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
           open={openDialog}

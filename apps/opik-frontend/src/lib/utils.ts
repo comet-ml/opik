@@ -1,13 +1,16 @@
 import { type ClassValue, clsx } from "clsx";
 import isObject from "lodash/isObject";
+import isArray from "lodash/isArray";
+import last from "lodash/last";
+import get from "lodash/get";
 import isUndefined from "lodash/isUndefined";
-import { twMerge } from "tailwind-merge";
 import times from "lodash/times";
 import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
 import snakeCase from "lodash/snakeCase";
+import { twMerge } from "tailwind-merge";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
-import { last } from "lodash";
+import { JsonNode } from "@/types/shared";
 
 const BASE_DOCUMENTATION_URL = "https://www.comet.com/docs/opik";
 
@@ -37,6 +40,33 @@ export const safelyParseJSON = (string: string) => {
     console.error(e);
     return {};
   }
+};
+
+export const getJSONPaths = (
+  node: JsonNode,
+  previousPath: string = "",
+  results: string[] = [],
+) => {
+  if (isObject(node) || isArray(node)) {
+    for (const key in node) {
+      const value = get(node, key);
+      const path = previousPath
+        ? isArray(node)
+          ? `${previousPath}[${key}]`
+          : `${previousPath}.${key}`
+        : key;
+
+      if (isArray(value)) {
+        getJSONPaths(value, path, results);
+      } else if (isObject(value)) {
+        getJSONPaths(value, path, results);
+      } else {
+        results.push(path);
+      }
+    }
+  }
+
+  return results;
 };
 
 export const getTextWidth = (

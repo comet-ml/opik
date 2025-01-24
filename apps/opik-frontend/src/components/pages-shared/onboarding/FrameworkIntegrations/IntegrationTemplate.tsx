@@ -1,9 +1,8 @@
 import React from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import useAppStore from "@/store/AppStore";
-import { BASE_API_URL } from "@/api/api";
+import { BASE_API_URL, CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import { maskAPIKey } from "@/lib/utils";
-import { CODE_EXECUTOR_SERVICE_URL } from "./quickstart-integrations";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
 
 const CODE_BLOCK_1 = "pip install opik";

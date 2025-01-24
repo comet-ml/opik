@@ -11,8 +11,8 @@ import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import { Button } from "@/components/ui/button";
 import useRunCodeSnippet from "./useRunCodeSnippet";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { FINAL_LOG_TEMPLATE } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/fake-logs";
 import { Link } from "@tanstack/react-router";
+import { FINAL_LOG_TEMPLATE } from "@/constants/integration-logs";
 
 export enum SUPPORTED_LANGUAGE {
   json = "json",
@@ -114,7 +114,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
       </div>
       {consoleIsOpened && (
         <div
-          className="h-[150px] w-full overflow-auto border border-transparent border-b-slate-200 bg-white"
+          className="h-[240px] w-full overflow-auto border border-transparent border-b-slate-200 bg-white"
           ref={consoleRef}
         >
           <div className="comet-body-s gap-4 text-balance px-4 py-3 font-code">

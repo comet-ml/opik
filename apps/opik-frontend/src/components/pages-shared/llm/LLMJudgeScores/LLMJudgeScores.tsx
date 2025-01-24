@@ -1,17 +1,35 @@
 import React, { useCallback } from "react";
 import { Plus } from "lucide-react";
+import get from "lodash/get";
 
 import { LLMJudgeSchema } from "@/types/automations";
 import { LLM_SCHEMA_TYPE } from "@/types/llm";
 import { Button } from "@/components/ui/button";
+import { FormErrorSkeleton } from "@/components/ui/form";
 import LLMJudgeScore from "@/components/pages-shared/llm/LLMJudgeScores/LLMJudgeScore";
 
+type ScoresValidationError =
+  | {
+      name?: {
+        message: string;
+      };
+    }[]
+  | {
+      message: string;
+    };
+
 interface LLMJudgeScoresProps {
+  validationErrors?: ScoresValidationError;
   scores: LLMJudgeSchema[];
   onChange: (scores: LLMJudgeSchema[]) => void;
 }
 
-const LLMJudgeScores = ({ scores, onChange }: LLMJudgeScoresProps) => {
+const LLMJudgeScores = ({
+  validationErrors,
+  scores,
+  onChange,
+}: LLMJudgeScoresProps) => {
+  const generalError = get(validationErrors, "message");
   const handleAddScore = useCallback(() => {
     onChange([
       ...scores,
@@ -44,18 +62,23 @@ const LLMJudgeScores = ({ scores, onChange }: LLMJudgeScoresProps) => {
           <LLMJudgeScore
             key={score.name + index}
             hideRemoveButton={scores?.length === 1}
+            errorText={get(validationErrors, [index, "name", "message"])}
             onRemoveScore={() => handleRemoveScore(index)}
             onChangeScore={(changes) => handleChangeScore(index, changes)}
             score={score}
           />
         ))}
       </div>
+      {generalError && (
+        <FormErrorSkeleton className="mt-2">{generalError}</FormErrorSkeleton>
+      )}
 
       <Button
         variant="outline"
         size="sm"
         className="mt-2"
         onClick={handleAddScore}
+        type="button"
       >
         <Plus className="mr-2 size-4" />
         Add score

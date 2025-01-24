@@ -34,6 +34,7 @@ interface PromptModelSelectProps {
   value: PROVIDER_MODEL_TYPE | "";
   workspaceName: string;
   onChange: (value: PROVIDER_MODEL_TYPE) => void;
+  hasError?: boolean;
   provider: PROVIDER_TYPE | "";
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
   onlyWithStructuredOutput?: boolean;
@@ -45,6 +46,7 @@ const PromptModelSelect = ({
   value,
   workspaceName,
   onChange,
+  hasError,
   provider,
   onAddProvider,
   onlyWithStructuredOutput,
@@ -76,24 +78,28 @@ const PromptModelSelect = ({
       configuredProviderKeys,
     );
 
-    return Object.entries(filteredByConfiguredProviders).map(
-      ([pn, providerModels]) => {
+    return Object.entries(filteredByConfiguredProviders)
+      .map(([pn, providerModels]) => {
         const providerName = pn as PROVIDER_TYPE;
+
+        const options = providerModels
+          .filter((m) => (onlyWithStructuredOutput ? m.structuredOutput : true))
+          .map((providerModel) => ({
+            label: providerModel.label,
+            value: providerModel.value,
+          }));
+
+        if (!options.length) {
+          return null;
+        }
 
         return {
           label: PROVIDERS[providerName].label,
-          options: providerModels
-            .filter((m) =>
-              onlyWithStructuredOutput ? m.structuredOutput : true,
-            )
-            .map((providerModel) => ({
-              label: providerModel.label,
-              value: providerModel.value,
-            })),
+          options,
           icon: PROVIDERS[providerName].icon,
         };
-      },
-    );
+      })
+      .filter((g): g is NonNullable<typeof g> => !isNull(g));
   }, [configuredProviderKeys, onlyWithStructuredOutput]);
 
   const filteredOptions = useMemo(() => {
@@ -241,7 +247,7 @@ const PromptModelSelect = ({
       return null;
     }
 
-    return <Icon />;
+    return <Icon className="min-w-3.5" />;
   };
 
   return (
@@ -251,14 +257,20 @@ const PromptModelSelect = ({
         onValueChange={handleOnChange}
         onOpenChange={handleSelectOpenChange}
       >
-        <SelectTrigger className="size-full data-[placeholder]:text-light-slate">
+        <SelectTrigger
+          className={cn("size-full data-[placeholder]:text-light-slate", {
+            "border-destructive": hasError,
+          })}
+        >
           <SelectValue
             placeholder="Select a LLM model"
             data-testid="select-a-llm-model"
           >
             <div className="flex items-center gap-2">
               {renderProviderValueIcon()}
-              {provider && PROVIDERS[provider].label} {value}
+              <span className="truncate">
+                {provider && PROVIDERS[provider].label} {value}
+              </span>
             </div>
           </SelectValue>
         </SelectTrigger>

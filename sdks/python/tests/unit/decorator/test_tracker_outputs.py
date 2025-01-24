@@ -1058,7 +1058,9 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
     @tracker.track
     def f(x):
         opik_context.update_current_span(
-            name="span-name", metadata={"span-metadata-key": "span-metadata-value"}
+            name="span-name",
+            metadata={"span-metadata-key": "span-metadata-value"},
+            total_cost=0.42,
         )
         opik_context.update_current_trace(
             name="trace-name",
@@ -1087,6 +1089,7 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
                 output={"output": "f-output"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                total_cost=0.42,
                 spans=[],
             )
         ],
@@ -1254,4 +1257,51 @@ def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__
     )
 
     assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__function_called_with_wrong_arguments__trace_is_still_created_with_attached_type_error__inputs_captured_in_another_format(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        return "the-output"
+
+    with pytest.raises(TypeError):
+        f(y=5)
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"args": tuple(), "kwargs": {"y": 5}},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "TypeError",
+            "traceback": ANY_STRING(),
+            "message": ANY_STRING(),
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"args": tuple(), "kwargs": {"y": 5}},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "TypeError",
+                    "traceback": ANY_STRING(),
+                    "message": ANY_STRING(),
+                },
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

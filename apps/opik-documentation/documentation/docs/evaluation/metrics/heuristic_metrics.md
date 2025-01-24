@@ -9,13 +9,15 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 
 You can use the following heuristic metrics:
 
-| Metric      | Description                                                                                       |
-| ----------- | ------------------------------------------------------------------------------------------------- |
-| Equals      | Checks if the output exactly matches an expected string                                           |
-| Contains    | Check if the output contains a specific substring, can be both case sensitive or case insensitive |
-| RegexMatch  | Checks if the output matches a specified regular expression pattern                               |
-| IsJson      | Checks if the output is a valid JSON object                                                       |
-| Levenshtein | Calculates the Levenshtein distance between the output and an expected string                     |
+| Metric       | Description                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| Equals       | Checks if the output exactly matches an expected string                                           |
+| Contains     | Check if the output contains a specific substring, can be both case sensitive or case insensitive |
+| RegexMatch   | Checks if the output matches a specified regular expression pattern                               |
+| IsJson       | Checks if the output is a valid JSON object                                                       |
+| Levenshtein  | Calculates the Levenshtein distance between the output and an expected string                     |
+| SentenceBLEU | Calculates a single-sentence BLEU score for a candidate vs. one or more references                |
+| CorpusBLEU   | Calculates a corpus-level BLEU score for multiple candidates vs. their references                 |
 
 ## Score an LLM response
 
@@ -97,3 +99,79 @@ metric = LevenshteinRatio()
 score = metric.score(output="Hello world !", reference="hello")
 print(score)
 ```
+
+### BLEU
+
+The BLEU (Bilingual Evaluation Understudy) metrics estimate how close the LLM outputs are to one or more reference translations. Opik provides two separate classes:
+
+- `SentenceBLEU` – Single-sentence BLEU
+- `CorpusBLEU` – Corpus-level BLEU
+  Both rely on the underlying NLTK BLEU implementation with optional smoothing methods, weights, and variable n-gram orders.
+
+You will need nltk library:
+
+```bash
+pip install nltk
+```
+
+Use `SentenceBLEU` to compute single-sentence BLEU between a single candidate and one (or more) references:
+
+```python
+from opik.evaluation.metrics import SentenceBLEU
+
+metric = SentenceBLEU(n_grams=4, smoothing_method="method1")
+
+# Single reference
+score = metric.score(
+    output="Hello world!",
+    reference="Hello world"
+)
+print(score.value, score.reason)
+
+# Multiple references
+score = metric.score(
+    output="Hello world!",
+    reference=["Hello planet", "Hello world"]
+)
+print(score.value, score.reason)
+
+```
+
+Use `CorpusBLEU` to compute corpus-level BLEU for multiple candidates vs. multiple references. Each candidate and its references align by index in the list:
+
+```python
+from opik.evaluation.metrics import CorpusBLEU
+
+metric = CorpusBLEU()
+
+outputs = ["Hello there", "This is a test."]
+references = [
+    # For the first candidate, two references
+    ["Hello world", "Hello there"],
+    # For the second candidate, one reference
+    "This is a test."
+]
+
+score = metric.score(output=outputs, reference=references)
+print(score.value, score.reason)
+```
+
+You can also customize n-grams, smoothing methods, or weights:
+
+```python
+from opik.evaluation.metrics import SentenceBLEU
+
+metric = SentenceBLEU(
+    n_grams=4,
+    smoothing_method="method2",
+    weights=[0.25, 0.25, 0.25, 0.25]
+)
+
+score = metric.score(
+    output="The cat sat on the mat",
+    reference=["The cat is on the mat", "A cat sat here on the mat"]
+)
+print(score.value, score.reason)
+```
+
+**Note:** If any candidate or reference is empty, SentenceBLEU or CorpusBLEU will raise a MetricComputationError. Handle or validate inputs accordingly.
