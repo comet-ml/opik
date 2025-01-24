@@ -1,5 +1,5 @@
 import { TraceFeedbackScore } from "@/types/traces";
-import { DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { AverageFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 
 export interface Dataset {
   id: string;
@@ -38,11 +38,6 @@ export interface ExperimentOutputColumn {
   id: string;
   name: string;
   types: DYNAMIC_COLUMN_TYPE[];
-}
-
-export interface AverageFeedbackScore {
-  name: string;
-  value: number;
 }
 
 export interface ExperimentPromptVersion {

@@ -3,6 +3,7 @@ import isObject from "lodash/isObject";
 import isArray from "lodash/isArray";
 import last from "lodash/last";
 import get from "lodash/get";
+import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import times from "lodash/times";
 import sample from "lodash/sample";
@@ -115,3 +116,6 @@ export const calculateWorkspaceName = (
 
 export const extractIdFromLocation = (location: string) =>
   last(location?.split("/"));
+
+export const formatNumericData = (value: number, precision = 3) =>
+  String(round(value, precision));

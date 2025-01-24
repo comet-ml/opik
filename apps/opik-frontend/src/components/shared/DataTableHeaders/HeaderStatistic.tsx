@@ -1,8 +1,8 @@
 import React from "react";
 import { ChevronDown } from "lucide-react";
-import round from "lodash/round";
 import get from "lodash/get";
 
+import { formatNumericData } from "@/lib/utils";
 import {
   ColumnStatistic,
   DropdownOption,
@@ -14,8 +14,6 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const ROUND_PRECISION = 3;
 
 const OPTIONS: DropdownOption<string>[] = [
   {
@@ -32,8 +30,6 @@ const OPTIONS: DropdownOption<string>[] = [
   },
 ];
 
-const formatData = (value: number) => String(round(value, ROUND_PRECISION));
-
 type HeaderStatisticProps = {
   statistic?: ColumnStatistic;
   dataFormater?: (value: number) => string;
@@ -41,7 +37,7 @@ type HeaderStatisticProps = {
 
 const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   statistic,
-  dataFormater = formatData,
+  dataFormater = formatNumericData,
 }) => {
   const [value, setValue] = React.useState<string>("p50");
   switch (statistic?.type) {
