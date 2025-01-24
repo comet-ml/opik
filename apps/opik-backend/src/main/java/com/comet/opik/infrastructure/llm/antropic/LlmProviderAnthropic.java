@@ -1,5 +1,7 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.api.ChunkedResponseHandler;
+import com.comet.opik.domain.llm.LlmProviderService;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
@@ -14,20 +16,21 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-import static com.comet.opik.domain.ChatCompletionService.ERROR_EMPTY_MESSAGES;
-import static com.comet.opik.domain.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
+import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
+import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
 
 @RequiredArgsConstructor
 @Slf4j
 class LlmProviderAnthropic implements LlmProviderService {
+
     private final @NonNull AnthropicClient anthropicClient;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var mapper = LlmProviderAnthropicMapper.INSTANCE;
-        var response = anthropicClient.createMessage(mapper.toCreateMessageRequest(request));
+        var response = anthropicClient
+                .createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
 
-        return mapper.toResponse(response);
+        return LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
     }
 
     @Override
@@ -35,7 +38,8 @@ class LlmProviderAnthropic implements LlmProviderService {
             @NonNull ChatCompletionRequest request,
             @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
-            @NonNull Runnable handleClose, @NonNull Consumer<Throwable> handleError) {
+            @NonNull Runnable handleClose,
+            @NonNull Consumer<Throwable> handleError) {
         validateRequest(request);
         anthropicClient.createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request),
                 new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));

@@ -1,4 +1,4 @@
-package com.comet.opik.domain.llmproviders;
+package com.comet.opik.infrastructure.llm.openai;
 
 import lombok.RequiredArgsConstructor;
 
