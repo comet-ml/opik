@@ -1,6 +1,5 @@
 import uniq from "lodash/uniq";
-import { AverageFeedbackScore } from "@/types/datasets";
-import { ROW_HEIGHT } from "@/types/shared";
+import { AverageFeedbackScore, ROW_HEIGHT } from "@/types/shared";
 
 interface GetFeedbackScoreMapArguments {
   experiments: {
