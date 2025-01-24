@@ -207,9 +207,9 @@ const PlaygroundOutputActions = ({
           options={datasetOptions}
           value={datasetId || ""}
           placeholder={
-            <div className="flex w-full items-center text-foreground">
+            <div className="flex w-full items-center text-light-slate">
               <Database className="mr-2 size-4" />
-              <span className="truncate">Dataset</span>
+              <span className="truncate font-normal">Dataset</span>
             </div>
           }
           onChange={handleChangeDatasetId}
