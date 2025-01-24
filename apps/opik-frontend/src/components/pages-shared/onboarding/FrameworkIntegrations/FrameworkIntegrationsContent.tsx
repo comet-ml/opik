@@ -1,13 +1,15 @@
 import React, { useState } from "react";
-import { FrameworkIntegration } from "./types";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 import { SquareArrowOutUpRight } from "lucide-react";
 import ApiKeyCard from "../ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "../GoogleColabCard/GoogleColabCard";
 import IntegrationTemplate from "./IntegrationTemplate";
-import { QUICKSTART_INTEGRATIONS } from "./quickstart-integrations";
 import { cn } from "@/lib/utils";
+import {
+  FrameworkIntegration,
+  QUICKSTART_INTEGRATIONS,
+} from "./quickstart-integrations";
 
 export type FrameworkIntegrationsContentProps = {
   integrationList?: FrameworkIntegration[];
@@ -67,7 +69,12 @@ const FrameworkIntegrationsContent: React.FC<
       </div>
       <div className="flex min-w-[650px] flex-1 gap-6">
         <div className="flex w-full flex-1 flex-col">
-          <IntegrationTemplate code={integration.code} apiKey={apiKey} />
+          <IntegrationTemplate
+            code={integration.code}
+            apiKey={apiKey}
+            executionUrl={integration.executionUrl}
+            executionLogs={integration.executionLogs}
+          />
         </div>
 
         <div

@@ -21,6 +21,9 @@ module.exports = {
     extend: {
       fontFamily: {
         sans: ["Inter", ...fontFamily.sans],
+        code: [
+          `Ubuntu Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
+        ],
       },
       colors: {
         border: "hsl(var(--border))",
