@@ -38,3 +38,5 @@ You can evaluate prompts in the playground by using variables in the prompts usi
 ![playground evaluation](/img/evaluation/playground_evaluation.gif)
 
 When using datasets in the playground, you need to ensure the prompt contains variables in the mustache syntax (`{{variable}}`) that align with the columns in the dataset. For example if the dataset contains a column named `user_question` you need to ensure the prompt contains `{{user_question}}`.
+
+Once you are ready to run the experiment, simply select a dataset next to the run button and click on the `Run` button. You will then be able to see the LLM outputs for each sample in the dataset.
