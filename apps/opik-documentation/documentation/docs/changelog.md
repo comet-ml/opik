@@ -6,6 +6,21 @@ pytest_codeblocks_skip: true
 
 # Weekly Changelog
 
+## Week of 2025-01-20
+
+**Opik Dashboard**:
+
+- Added logs to the online scoring initiative so that you can more easily ensure your online evaluation metrics are working as expected
+- Added auto-complete support in the variable mapping section of the online evaluation rules modal
+- Added support for Anthropic models in the playground
+- Experiments are now created when using datasets in the playground
+- Improved the Opik home page
+- Updated the code snippets in the quickstart to make them easier to understand
+
+**SDK**:
+
+- Improved support for litellm completion kwargs
+
 ## Week of 2025-01-13
 
 **Opik Dashboard**:
