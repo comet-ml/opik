@@ -10,7 +10,7 @@ pytest_codeblocks_skip: true
 
 **Opik Dashboard**:
 
-- Added logs to the online scoring initiative so that you can more easily ensure your online evaluation metrics are working as expected
+- Added logs for online evaluation rules so that you can more easily ensure your online evaluation metrics are working as expected
 - Added auto-complete support in the variable mapping section of the online evaluation rules modal
 - Added support for Anthropic models in the playground
 - Experiments are now created when using datasets in the playground
@@ -20,6 +20,7 @@ pytest_codeblocks_skip: true
 **SDK**:
 
 - Improved support for litellm completion kwargs
+- LiteLLM required version is now relaxed to avoid conflicts with other Python packages
 
 ## Week of 2025-01-13
 
