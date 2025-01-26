@@ -1,10 +1,15 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Arrays;
+import java.util.Optional;
 
 /**
  * This information is taken from <a href="https://platform.openai.com/docs/models">openai docs</a>
  */
+@Slf4j
 @RequiredArgsConstructor
 public enum OpenaiModelName {
     CHATGPT_4O_LATEST("chatgpt-4o-latest"),
@@ -33,7 +38,19 @@ public enum OpenaiModelName {
     GPT_O1_PREVIEW_2024_09_12("o1-preview-2024-09-12"),
     ;
 
+    private static final String WARNING_UNKNOWN_MODEL = "could not find OpenaiModelName with value '{}'";
+
     private final String value;
+
+    public static Optional<OpenaiModelName> byValue(String value) {
+        var response = Arrays.stream(OpenaiModelName.values())
+                .filter(modelName -> modelName.value.equals(value))
+                .findFirst();
+        if (response.isEmpty()) {
+            log.warn(WARNING_UNKNOWN_MODEL, value);
+        }
+        return response;
+    }
 
     @Override
     public String toString() {
