@@ -6,7 +6,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.domain.llmproviders.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;

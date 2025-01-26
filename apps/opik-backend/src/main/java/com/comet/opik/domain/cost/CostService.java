@@ -1,6 +1,6 @@
 package com.comet.opik.domain.cost;
 
-import com.comet.opik.domain.llmproviders.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Nullable;
 
@@ -9,29 +9,29 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.CHATGPT_4O_LATEST;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_3_5_TURBO;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_3_5_TURBO_0125;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_3_5_TURBO_1106;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4O;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4O_2024_05_13;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4O_2024_08_06;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4O_2024_11_20;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4O_MINI;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4O_MINI_2024_07_18;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4_0125_PREVIEW;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4_0613;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4_1106_PREVIEW;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4_TURBO;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4_TURBO_2024_04_09;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_4_TURBO_PREVIEW;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1_2024_12_17;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1_MINI;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1_MINI_2024_09_12;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1_PREVIEW;
-import static com.comet.opik.domain.llmproviders.OpenaiModelName.GPT_O1_PREVIEW_2024_09_12;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.CHATGPT_4O_LATEST;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_3_5_TURBO;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_3_5_TURBO_0125;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_3_5_TURBO_1106;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_2024_05_13;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_2024_08_06;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_2024_11_20;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_MINI;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_MINI_2024_07_18;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_0125_PREVIEW;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_0613;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_1106_PREVIEW;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_TURBO;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_TURBO_2024_04_09;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_TURBO_PREVIEW;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_2024_12_17;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_MINI;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_MINI_2024_09_12;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_PREVIEW;
+import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_PREVIEW_2024_09_12;
 
 @Slf4j
 public class CostService {

@@ -7,6 +7,7 @@ import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
