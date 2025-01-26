@@ -7,12 +7,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+
+import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 
 @RequiredArgsConstructor
 public class LlmProviderGemini implements LlmProviderService {
@@ -60,11 +63,14 @@ public class LlmProviderGemini implements LlmProviderService {
                 // Parse JSON
                 JsonNode errorNode = JsonUtils.MAPPER.readTree(jsonPart).get("error");
                 if (errorNode != null) {
-                    // Customize the message based on the error
-                    return Optional.of(new ErrorMessage(
-                            errorNode.get("code").asInt(),
-                            errorNode.get("message").asText(),
-                            errorNode.get("status").asText()));
+                    var code = errorNode.get("code").asInt();
+                    if (familyOf(code) == Response.Status.Family.CLIENT_ERROR) {
+                        // Customize the message based on the error
+                        return Optional.of(new ErrorMessage(
+                                code,
+                                errorNode.get("message").asText(),
+                                errorNode.get("status").asText()));
+                    }
                 }
             } catch (Exception e) {
                 return Optional.empty();
