@@ -30,3 +30,11 @@ You can also easily evaluate how different models impact the prompt by duplicati
 All of the conversations from the playground are logged to the `playground` project so that you can easily refer back to them later:
 
 ![playground conversations](/img/evaluation/playground_conversations.png)
+
+## Running experiments in the playground
+
+You can evaluate prompts in the playground by using variables in the prompts using the `{{variable}}` syntax. You can then connect a dataset and run the prompts on each dataset item. This allows both technical and non-technical users to evaluate prompts quickly and easily.
+
+![playground evaluation](/img/evaluation/playground_evaluation.gif)
+
+When using datasets in the playground, you need to ensure the prompt contains variables in the mustache syntax (`{{variable}}`) that align with the columns in the dataset. For example if the dataset contains a column named `user_question` you need to ensure the prompt contains `{{user_question}}`.
