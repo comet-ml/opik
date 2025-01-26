@@ -2,6 +2,8 @@ package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -40,8 +42,35 @@ public class LlmProviderGemini implements LlmProviderService {
     }
 
     @Override
-    public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable runtimeException) {
+    public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
+        /// gemini throws RuntimeExceptions with message structure as follows:
+        /// ```
+        /// java.lang.RuntimeException: HTTP error (429): {
+        ///   "error": {
+        ///     "code": 429,
+        ///     "message": "Resource has been exhausted (e.g. check quota).",
+        ///     "status": "RESOURCE_EXHAUSTED"
+        ///   }
+        /// }
+        ///  ```
+        String message = throwable.getMessage();
+        if (message.contains("{")) {
+            String jsonPart = message.substring(message.indexOf("{")); // Extract JSON part
+            try {
+                // Parse JSON
+                JsonNode errorNode = JsonUtils.MAPPER.readTree(jsonPart).get("error");
+                if (errorNode != null) {
+                    // Customize the message based on the error
+                    return Optional.of(new ErrorMessage(
+                            errorNode.get("code").asInt(),
+                            errorNode.get("message").asText(),
+                            errorNode.get("status").asText()));
+                }
+            } catch (Exception e) {
+                return Optional.empty();
+            }
+        }
+
         return Optional.empty();
     }
-
 }
