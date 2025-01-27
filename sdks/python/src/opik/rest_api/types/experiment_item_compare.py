@@ -4,6 +4,7 @@ from ..core.pydantic_utilities import UniversalBaseModel
 import typing
 from .json_node_compare import JsonNodeCompare
 from .feedback_score_compare import FeedbackScoreCompare
+from .comment_compare import CommentCompare
 import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
@@ -17,6 +18,7 @@ class ExperimentItemCompare(UniversalBaseModel):
     input: typing.Optional[JsonNodeCompare] = None
     output: typing.Optional[JsonNodeCompare] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreCompare]] = None
+    comments: typing.Optional[typing.List[CommentCompare]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

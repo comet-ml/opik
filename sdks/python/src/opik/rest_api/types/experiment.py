@@ -4,6 +4,7 @@ from ..core.pydantic_utilities import UniversalBaseModel
 import typing
 from .json_node import JsonNode
 from .feedback_score_average import FeedbackScoreAverage
+from .comment import Comment
 import datetime as dt
 from .prompt_version_link import PromptVersionLink
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
@@ -17,6 +18,7 @@ class Experiment(UniversalBaseModel):
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonNode] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
+    comments: typing.Optional[typing.List[Comment]] = None
     trace_count: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None

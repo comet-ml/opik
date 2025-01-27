@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 from ..core.pydantic_utilities import UniversalBaseModel
-import typing_extensions
 import typing
-from ..core.serialization import FieldMetadata
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -12,9 +10,7 @@ from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
 
 class Base(UniversalBaseModel):
     name: str
-    sampling_rate: typing_extensions.Annotated[
-        typing.Optional[float], FieldMetadata(alias="samplingRate")
-    ] = None
+    sampling_rate: typing.Optional[float] = None
     action: typing.Optional[typing.Literal["evaluator"]] = None
 
     if IS_PYDANTIC_V2:

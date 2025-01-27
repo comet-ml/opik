@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNode } from "./JsonNode";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
+import { Comment } from "./Comment";
 import { PromptVersionLink } from "./PromptVersionLink";
 
 export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.Raw, OpikApi.Experiment> =
@@ -20,6 +21,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
             "feedback_scores",
             core.serialization.list(FeedbackScoreAverage).optional()
         ),
+        comments: core.serialization.list(Comment).optional(),
         traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -36,6 +38,7 @@ export declare namespace Experiment {
         name?: string | null;
         metadata?: JsonNode.Raw | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
+        comments?: Comment.Raw[] | null;
         trace_count?: number | null;
         created_at?: string | null;
         last_updated_at?: string | null;

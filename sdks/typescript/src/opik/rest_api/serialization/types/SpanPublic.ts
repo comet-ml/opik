@@ -9,6 +9,7 @@ import { SpanPublicType } from "./SpanPublicType";
 import { JsonNodePublic } from "./JsonNodePublic";
 import { ErrorInfoPublic } from "./ErrorInfoPublic";
 import { FeedbackScorePublic } from "./FeedbackScorePublic";
+import { CommentPublic } from "./CommentPublic";
 
 export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.Raw, OpikApi.SpanPublic> =
     core.serialization.object({
@@ -36,6 +37,7 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
             "feedback_scores",
             core.serialization.list(FeedbackScorePublic).optional()
         ),
+        comments: core.serialization.list(CommentPublic).optional(),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         totalEstimatedCostVersion: core.serialization.property(
             "total_estimated_cost_version",
@@ -67,6 +69,7 @@ export declare namespace SpanPublic {
         created_by?: string | null;
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScorePublic.Raw[] | null;
+        comments?: CommentPublic.Raw[] | null;
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
         duration?: number | null;

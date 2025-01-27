@@ -286,6 +286,40 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/automations/projects/{projectId}/evaluators/{id}/logs:
+    get:
+      tags:
+      - Automation rule evaluators
+      summary: Get automation rule evaluator logs by id
+      description: Get automation rule evaluator logs by id
+      operationId: getEvaluatorLogsById
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1000
+      responses:
+        "200":
+          description: Automation rule evaluator logs resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogPage'
   /v1/private/chat/completions:
     post:
       tags:
@@ -1743,6 +1777,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage_Detail'
+  /v1/private/spans/{id}/comments:
+    post:
+      tags:
+      - Spans
+      summary: Add span comment
+      description: Add span comment
+      operationId: addSpanComment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comment'
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/spans/{spanId}/comments/{commentId}"
   /v1/private/spans/{id}/feedback-scores:
     put:
       tags:
@@ -1930,6 +1993,21 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/spans/comments/delete:
+    post:
+      tags:
+      - Spans
+      summary: Delete span comments
+      description: Delete span comments
+      operationId: deleteSpanComments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/spans/{id}/feedback-scores/delete:
     post:
       tags:
@@ -1982,6 +2060,39 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/spans/{spanId}/comments/{commentId}:
+    get:
+      tags:
+      - Spans
+      summary: Get span comment
+      description: Get span comment
+      operationId: getSpanComment
+      parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: spanId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Comment resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
   /v1/private/spans/stats:
     get:
       tags:
@@ -2038,6 +2149,59 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/spans/comments/{commentId}:
+    patch:
+      tags:
+      - Spans
+      summary: Update span comment by id
+      description: Update span comment by id
+      operationId: updateSpanComment
+      parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comment'
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+  /v1/private/traces/{id}/comments:
+    post:
+      tags:
+      - Traces
+      summary: Add trace comment
+      description: Add trace comment
+      operationId: addTraceComment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comment'
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/traces/{traceId}/comments/{commentId}"
   /v1/private/traces/{id}/feedback-scores:
     put:
       tags:
@@ -2201,6 +2365,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/comments/delete:
+    post:
+      tags:
+      - Traces
+      summary: Delete trace comments
+      description: Delete trace comments
+      operationId: deleteTraceComments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDelete'
+      responses:
+        "204":
+          description: No Content
   /v1/private/traces/{id}/feedback-scores/delete:
     post:
       tags:
@@ -2288,6 +2467,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectStats_Public'
+  /v1/private/traces/{traceId}/comments/{commentId}:
+    get:
+      tags:
+      - Traces
+      summary: Get trace comment
+      description: Get trace comment
+      operationId: getTraceComment
+      parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: traceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Comment resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
   /v1/private/traces/feedback-scores:
     put:
       tags:
@@ -2303,6 +2515,30 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/comments/{commentId}:
+    patch:
+      tags:
+      - Traces
+      summary: Update trace comment by id
+      description: Update trace comment by id
+      operationId: updateTraceComment
+      parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comment'
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
   /is-alive/ping:
     get:
       operationId: isAlive
@@ -2375,27 +2611,27 @@ components:
           type: string
           format: uuid
           readOnly: true
-        projectId:
+        project_id:
           type: string
           format: uuid
           readOnly: true
         name:
           type: string
-        samplingRate:
+        sampling_rate:
           type: number
           format: float
-        createdAt:
+        created_at:
           type: string
           format: date-time
           readOnly: true
-        createdBy:
+        created_by:
           type: string
           readOnly: true
-        lastUpdatedAt:
+        last_updated_at:
           type: string
           format: date-time
           readOnly: true
-        lastUpdatedBy:
+        last_updated_by:
           type: string
           readOnly: true
         type:
@@ -2507,7 +2743,7 @@ components:
       properties:
         name:
           type: string
-        samplingRate:
+        sampling_rate:
           type: number
           format: float
         type:
@@ -2622,27 +2858,27 @@ components:
           type: string
           format: uuid
           readOnly: true
-        projectId:
+        project_id:
           type: string
           format: uuid
           readOnly: true
         name:
           type: string
-        samplingRate:
+        sampling_rate:
           type: number
           format: float
-        createdAt:
+        created_at:
           type: string
           format: date-time
           readOnly: true
-        createdBy:
+        created_by:
           type: string
           readOnly: true
-        lastUpdatedAt:
+        last_updated_at:
           type: string
           format: date-time
           readOnly: true
-        lastUpdatedBy:
+        last_updated_by:
           type: string
           readOnly: true
         type:
@@ -2748,27 +2984,27 @@ components:
           type: string
           format: uuid
           readOnly: true
-        projectId:
+        project_id:
           type: string
           format: uuid
           readOnly: true
         name:
           type: string
-        samplingRate:
+        sampling_rate:
           type: number
           format: float
-        createdAt:
+        created_at:
           type: string
           format: date-time
           readOnly: true
-        createdBy:
+        created_by:
           type: string
           readOnly: true
-        lastUpdatedAt:
+        last_updated_at:
           type: string
           format: date-time
           readOnly: true
-        lastUpdatedBy:
+        last_updated_by:
           type: string
           readOnly: true
         type:
@@ -2783,6 +3019,51 @@ components:
         propertyName: type
         mapping:
           llm_as_judge: '#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public'
+    LogItem:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        rule_id:
+          type: string
+          format: uuid
+          readOnly: true
+        level:
+          type: string
+          readOnly: true
+          enum:
+          - INFO
+          - WARN
+          - ERROR
+          - DEBUG
+          - TRACE
+        message:
+          type: string
+          readOnly: true
+        markers:
+          type: object
+          additionalProperties:
+            type: string
+            readOnly: true
+          readOnly: true
+    LogPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogItem'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
     AutomationRuleEvaluatorUpdate:
       required:
       - code
@@ -3103,6 +3384,31 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+    Comment:
+      required:
+      - text
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
     DatasetItem:
       required:
       - data
@@ -3193,6 +3499,11 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore'
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/Comment'
         created_at:
           type: string
           format: date-time
@@ -3231,6 +3542,7 @@ components:
           enum:
           - ui
           - sdk
+          - online_scoring
         created_at:
           type: string
           format: date-time
@@ -3333,6 +3645,32 @@ components:
           type: string
           description: The field to use for filtering
           readOnly: true
+    Comment_Compare:
+      required:
+      - text
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+      readOnly: true
     DatasetItemPage_Compare:
       type: object
       properties:
@@ -3425,6 +3763,11 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore_Compare'
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/Comment_Compare'
         created_at:
           type: string
           format: date-time
@@ -3464,6 +3807,7 @@ components:
           enum:
           - ui
           - sdk
+          - online_scoring
         created_at:
           type: string
           format: date-time
@@ -3754,6 +4098,11 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScoreAverage'
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/Comment'
         trace_count:
           type: integer
           format: int64
@@ -3864,6 +4213,32 @@ components:
           items:
             type: string
             format: uuid
+    Comment_Public:
+      required:
+      - text
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+      readOnly: true
     ExperimentPage_Public:
       type: object
       properties:
@@ -3903,6 +4278,11 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScoreAverage_Public'
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/Comment_Public'
         trace_count:
           type: integer
           format: int64
@@ -4417,6 +4797,7 @@ components:
           enum:
           - openai
           - anthropic
+          - gemini
         api_key:
           type: string
         name:
@@ -4452,6 +4833,7 @@ components:
           enum:
           - openai
           - anthropic
+          - gemini
         api_key:
           type: string
         name:
@@ -4483,6 +4865,7 @@ components:
           enum:
           - openai
           - anthropic
+          - gemini
         api_key:
           type: string
         name:
@@ -5116,6 +5499,11 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore'
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/Comment'
         total_estimated_cost:
           minimum: 0.0
           exclusiveMinimum: false
@@ -5268,6 +5656,7 @@ components:
           enum:
           - ui
           - sdk
+          - online_scoring
         created_at:
           type: string
           format: date-time
@@ -5359,6 +5748,11 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore_Public'
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/Comment_Public'
         total_estimated_cost:
           minimum: 0.0
           exclusiveMinimum: false
@@ -5480,6 +5874,7 @@ components:
           enum:
           - ui
           - sdk
+          - online_scoring
     SpanUpdate:
       required:
       - trace_id
@@ -5593,6 +5988,11 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore'
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/Comment'
         total_estimated_cost:
           type: number
           readOnly: true
@@ -5718,6 +6118,11 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/FeedbackScore_Public'
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/Comment_Public'
         total_estimated_cost:
           type: number
           readOnly: true
