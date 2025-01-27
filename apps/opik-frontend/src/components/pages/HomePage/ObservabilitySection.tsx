@@ -37,12 +37,6 @@ export const COLUMNS = convertColumnDataToColumn<Project, Project>(
       },
     },
     {
-      id: "total_estimated_cost",
-      label: "Total cost",
-      type: COLUMN_TYPE.cost,
-      cell: CostCell as never,
-    },
-    {
       id: "created_at",
       label: "Created",
       type: COLUMN_TYPE.time,
@@ -56,6 +50,12 @@ export const COLUMNS = convertColumnDataToColumn<Project, Project>(
       accessorFn: (row) =>
         formatDate(row.last_updated_trace_at ?? row.last_updated_at),
       sortable: true,
+    },
+    {
+      id: "total_estimated_cost",
+      label: "Total cost",
+      type: COLUMN_TYPE.cost,
+      cell: CostCell as never,
     },
   ],
   {},
