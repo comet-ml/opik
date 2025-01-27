@@ -143,17 +143,25 @@ public class ExperimentService {
     private List<PromptVersionLink> buildPromptVersions(Map<UUID, String> promptVersions, Experiment experiment) {
         if (hasPromptVersionLinks(experiment)) {
 
-            List<PromptVersionLink> promptVersionLinks = Optional.ofNullable(experiment.promptVersions())
-                    .orElse(List.of())
+            Stream<PromptVersionLink> promptVersionLinks = Optional.ofNullable(experiment.promptVersions())
+                    .orElseGet(List::of)
                     .stream()
                     .map(version -> new PromptVersionLink(
                             version.id(),
                             promptVersions.get(version.id()),
-                            version.promptId()))
-                    .collect(Collectors.toList());
+                            version.promptId()));
 
-            return promptVersionLinks.isEmpty() ? null : promptVersionLinks;
+            Stream<PromptVersionLink> promptVersionLink = Optional.ofNullable(experiment.promptVersion())
+                    .stream()
+                    .map(version -> new PromptVersionLink(
+                            version.id(),
+                            promptVersions.get(version.id()),
+                            version.promptId()));
 
+            List<PromptVersionLink> versionLinks = Stream.concat(promptVersionLinks, promptVersionLink).distinct()
+                    .toList();
+
+            return versionLinks.isEmpty() ? null : versionLinks;
         }
 
         return null;

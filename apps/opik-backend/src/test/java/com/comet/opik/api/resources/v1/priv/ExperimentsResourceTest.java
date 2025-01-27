@@ -2275,7 +2275,10 @@ class ExperimentsResourceTest {
             }
 
             if (expectedExperiment.promptVersions() != null) {
-                assertThat(actualExperiment.promptVersions()).isEqualTo(expectedExperiment.promptVersions());
+                assertThat(actualExperiment.promptVersions())
+                        .usingRecursiveComparison()
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedExperiment.promptVersions());
             }
 
             UUID expectedDatasetId = null;
