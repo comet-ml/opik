@@ -8,13 +8,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = (props) => {
 
   if (!user) return;
 
-  return (
-    <FrameworkIntegrationsContent
-      apiKey={user.apiKeys[0]}
-      showColabLinks={!user?.sagemakerRestrictions}
-      {...props}
-    />
-  );
+  return <FrameworkIntegrationsContent apiKey={user.apiKeys[0]} {...props} />;
 };
 
 export default FrameworkIntegrations;

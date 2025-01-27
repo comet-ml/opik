@@ -1,15 +1,13 @@
 import React from "react";
+import useUser from "./useUser";
 import GoogleColabCardCore, {
   GoogleColabCardCoreProps,
-} from "./GoogleColabCardCore";
-import usePluginsStore from "@/store/PluginsStore";
+} from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
 
 const GoogleColabCard: React.FC<GoogleColabCardCoreProps> = (props) => {
-  const GoogleColabCard = usePluginsStore((state) => state.GoogleColabCard);
+  const { data: user } = useUser();
 
-  if (GoogleColabCard) {
-    return <GoogleColabCard {...props} />;
-  }
+  if (user?.sagemakerRestrictions) return;
 
   return <GoogleColabCardCore {...props} />;
 };

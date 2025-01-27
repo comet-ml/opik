@@ -5,6 +5,7 @@ import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import AddExperimentDialog from "../ExperimentsShared/AddExperimentDialog";
 import { Link } from "@tanstack/react-router";
+import { SheetTitle } from "@/components/ui/sheet";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -61,7 +62,7 @@ const GetStartedSection = () => {
       >
         <div className="flex w-full min-w-fit flex-col pb-12">
           <div className="pb-8">
-            <h1 className="comet-title-l text-center">Log a trace</h1>
+            <SheetTitle>Log a trace</SheetTitle>
             <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
               Select a framework and follow the instructions to integrate Comet
               with your code, or explore our ready-to-run examples on the right

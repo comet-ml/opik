@@ -14,7 +14,6 @@ import {
 export type FrameworkIntegrationsContentProps = {
   integrationList?: FrameworkIntegration[];
   apiKey?: string;
-  showColabLinks?: boolean;
   stickyOffset?: number;
 };
 const FrameworkIntegrationsContent: React.FC<
@@ -22,7 +21,6 @@ const FrameworkIntegrationsContent: React.FC<
 > = ({
   integrationList = QUICKSTART_INTEGRATIONS,
   apiKey,
-  showColabLinks,
   stickyOffset = 0,
 }) => {
   const [integrationIndex, setIntegrationIndex] = useState<number>(0);
@@ -83,8 +81,8 @@ const FrameworkIntegrationsContent: React.FC<
             stickyOffsetStyle,
           )}
         >
-          {apiKey && <ApiKeyCard apiKey={apiKey} />}
-          {showColabLinks ? <GoogleColabCard link={integration.colab} /> : null}
+          <ApiKeyCard />
+          <GoogleColabCard link={integration.colab} />
         </div>
       </div>
     </div>
