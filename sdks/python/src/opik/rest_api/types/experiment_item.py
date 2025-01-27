@@ -4,6 +4,7 @@ from ..core.pydantic_utilities import UniversalBaseModel
 import typing
 from .json_node import JsonNode
 from .feedback_score import FeedbackScore
+from .comment import Comment
 import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
@@ -17,6 +18,7 @@ class ExperimentItem(UniversalBaseModel):
     input: typing.Optional[JsonNode] = None
     output: typing.Optional[JsonNode] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
+    comments: typing.Optional[typing.List[Comment]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

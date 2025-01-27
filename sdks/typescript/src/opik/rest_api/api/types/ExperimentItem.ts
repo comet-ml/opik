@@ -12,6 +12,7 @@ export interface ExperimentItem {
     input?: OpikApi.JsonNode;
     output?: OpikApi.JsonNode;
     feedbackScores?: OpikApi.FeedbackScore[];
+    comments?: OpikApi.Comment[];
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;
