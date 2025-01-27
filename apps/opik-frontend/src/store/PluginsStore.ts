@@ -7,7 +7,6 @@ import { FrameworkIntegrationsProps } from "@/components/pages-shared/onboarding
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
   UserMenu: React.ComponentType | null;
-  QuickstartPage: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
   FrameworkIntegrations: React.ComponentType<FrameworkIntegrationsProps> | null;
@@ -19,7 +18,6 @@ const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
 const PLUGIN_NAMES = [
   "Logo",
   "UserMenu",
-  "QuickstartPage",
   "GetStartedPage",
   "FrameworkIntegrations",
   "WorkspacePreloader",
@@ -29,7 +27,6 @@ const PLUGIN_NAMES = [
 const usePluginsStore = create<PluginStore>((set) => ({
   Logo: null,
   UserMenu: null,
-  QuickstartPage: null,
   GetStartedPage: null,
   FrameworkIntegrations: null,
   WorkspacePreloader: null,
