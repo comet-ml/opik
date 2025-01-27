@@ -45,6 +45,7 @@ import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -478,87 +479,131 @@ class SpanDAO {
 
     private static final String SELECT_BY_ID = """
             SELECT
-            *,
-            if(end_time IS NOT NULL AND start_time IS NOT NULL
-                        AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                    (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                    NULL) AS duration_millis
-            FROM
-            spans
-            WHERE id = :id
-            AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
-            LIMIT 1
+                s.*,
+                groupArray(tuple(c.*)) AS comments
+            FROM (
+                SELECT
+                    *,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) AS duration_millis
+                FROM spans
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS s
+            LEFT JOIN (
+                SELECT
+                    id AS comment_id,
+                    text,
+                    created_at AS comment_created_at,
+                    last_updated_at AS comment_last_updated_at,
+                    created_by AS comment_created_by,
+                    last_updated_by AS comment_last_updated_by,
+                    entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND entity_id = :id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS c ON s.id = c.entity_id
+            GROUP BY
+                s.*
             ;
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            SELECT
-                 id,
-                 workspace_id,
-                 project_id,
-                 trace_id,
-                 parent_span_id,
-                 name,
-                 type,
-                 start_time,
-                 end_time,
-                 <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                 <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
-                 <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
-                 model,
-                 provider,
-                 total_estimated_cost,
-                 tags,
-                 usage,
-                 error_info,
-                 created_at,
-                 last_updated_at,
-                 created_by,
-                 last_updated_by,
-                 if(end_time IS NOT NULL AND start_time IS NOT NULL
-                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration_millis
-             FROM spans
-             WHERE id IN (
+            WITH spans_final AS (
                 SELECT
-                    id
-                FROM (
-                    SELECT
-                        id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                             NULL) AS duration_millis
-                    FROM spans
-                    WHERE project_id = :project_id
-                    AND workspace_id = :workspace_id
-                    <if(trace_id)> AND trace_id = :trace_id <endif>
-                    <if(type)> AND type = :type <endif>
-                    <if(filters)> AND <filters> <endif>
-                    <if(feedback_scores_filters)>
-                    AND id in (
-                        SELECT
-                            entity_id
-                        FROM (
-                            SELECT *
-                            FROM feedback_scores
-                            WHERE entity_type = 'span'
-                            AND project_id = :project_id
-                            ORDER BY entity_id DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id
-                        HAVING <feedback_scores_filters>
-                    )
-                    <endif>
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    LIMIT :limit OFFSET :offset
-                )
-             )
-             ORDER BY id DESC
+                  id,
+                  workspace_id,
+                  project_id,
+                  trace_id,
+                  parent_span_id,
+                  name,
+                  type,
+                  start_time,
+                  end_time,
+                  <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
+                  <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
+                  <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
+                  model,
+                  provider,
+                  total_estimated_cost,
+                  tags,
+                  usage,
+                  error_info,
+                  created_at,
+                  last_updated_at,
+                  created_by,
+                  last_updated_by,
+                  if(end_time IS NOT NULL AND start_time IS NOT NULL
+                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                          NULL) AS duration_millis
+                FROM spans
+                WHERE id IN (
+                 SELECT
+                     id
+                 FROM (
+                     SELECT
+                         id,
+                         if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                  AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                              (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                              NULL) AS duration_millis
+                     FROM spans
+                     WHERE project_id = :project_id
+                     AND workspace_id = :workspace_id
+                     <if(trace_id)> AND trace_id = :trace_id <endif>
+                     <if(type)> AND type = :type <endif>
+                     <if(filters)> AND <filters> <endif>
+                     <if(feedback_scores_filters)>
+                     AND id in (
+                         SELECT
+                             entity_id
+                         FROM (
+                             SELECT *
+                             FROM feedback_scores
+                             WHERE entity_type = 'span'
+                             AND project_id = :project_id
+                             ORDER BY entity_id DESC, last_updated_at DESC
+                             LIMIT 1 BY entity_id, name
+                         )
+                         GROUP BY entity_id
+                         HAVING <feedback_scores_filters>
+                     )
+                     <endif>
+                     ORDER BY id DESC, last_updated_at DESC
+                     LIMIT 1 BY id
+                     LIMIT :limit OFFSET :offset
+                 )
+              )
+            ), comments_final AS (
+                SELECT
+                     id AS comment_id,
+                     text,
+                     created_at AS comment_created_at,
+                     last_updated_at AS comment_last_updated_at,
+                     created_by AS comment_created_by,
+                     last_updated_by AS comment_last_updated_by,
+                     entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            SELECT
+                 s.*,
+                 groupArray(tuple(c.*)) AS comments
+            FROM spans_final s
+            LEFT JOIN comments_final AS c ON s.id = c.entity_id
+            GROUP BY
+                s.*
+            ORDER BY s.id DESC
             ;
             """;
 
@@ -721,6 +766,14 @@ class SpanDAO {
                 GROUP BY project_id
             ) AS stats
             ;
+            """;
+
+    public static final String SELECT_SPAN_IDS_BY_TRACE_ID = """
+            SELECT
+                  DISTINCT id
+            FROM spans
+            WHERE trace_id IN :trace_ids
+            AND workspace_id = :workspace_id
             """;
 
     private static final String ESTIMATED_COST_VERSION = "1.0";
@@ -1058,21 +1111,22 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Void> deleteByTraceId(@NonNull UUID traceId, @NonNull Connection connection) {
-        return deleteByTraceIds(Set.of(traceId), connection);
-    }
-
-    @WithSpan
-    public Mono<Void> deleteByTraceIds(Set<UUID> traceIds, @NonNull Connection connection) {
+    public Mono<Long> deleteByTraceIds(Set<UUID> traceIds) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
         log.info("Deleting spans by traceIds, count '{}'", traceIds.size());
-        var statement = connection.createStatement(DELETE_BY_TRACE_IDS)
-                .bind("trace_ids", traceIds);
         var segment = startSegment("spans", "Clickhouse", "delete_by_trace_id");
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .doFinally(signalType -> endSegment(segment))
-                .then();
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(DELETE_BY_TRACE_IDS)
+                            .bind("trace_ids", traceIds);
+
+                    return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+                })
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum)
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private Publisher<Span> mapToDto(Result result) {
@@ -1119,6 +1173,7 @@ class SpanDAO {
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
                     .usage(row.get("usage", Map.class))
+                    .comments(getComments(row.get("comments", List[].class)))
                     .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
                             .filter(str -> !str.isBlank())
                             .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
@@ -1291,6 +1346,23 @@ class SpanDAO {
                 })
                 .flatMap(result -> result.map(((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "span_count"))))
                 .singleOrEmpty();
+    }
+
+    @WithSpan
+    public Mono<List<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_SPAN_IDS_BY_TRACE_ID)
+                            .bind("trace_ids", traceIds);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
+                .collectList();
     }
 
     private boolean isManualCost(Span span) {

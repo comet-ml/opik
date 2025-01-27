@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
@@ -17,13 +18,15 @@ import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 @ImplementedBy(CommentServiceImpl.class)
 public interface CommentService {
 
-    Mono<UUID> create(UUID traceId, Comment comment);
+    Mono<UUID> create(UUID entityId, Comment comment, CommentDAO.EntityType entityType);
 
-    Mono<Comment> get(UUID traceId, UUID commentId);
+    Mono<Comment> get(UUID entityId, UUID commentId);
 
     Mono<Void> update(UUID commentId, Comment comment);
 
     Mono<Void> delete(BatchDelete batchDelete);
+
+    Mono<Long> deleteByEntityIds(CommentDAO.EntityType entityType, Set<UUID> entityIds);
 }
 
 @Slf4j
@@ -33,21 +36,27 @@ class CommentServiceImpl implements CommentService {
 
     private final @NonNull CommentDAO commentDAO;
     private final @NonNull TraceDAO traceDAO;
+    private final @NonNull SpanDAO spanDAO;
     private final @NonNull IdGenerator idGenerator;
 
     @Override
-    public Mono<UUID> create(@NonNull UUID traceId, @NonNull Comment comment) {
+    public Mono<UUID> create(@NonNull UUID entityId, @NonNull Comment comment, CommentDAO.EntityType entityType) {
         UUID id = idGenerator.generateId();
-        return traceDAO.getProjectIdFromTrace(traceId)
-                .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
-                .flatMap(projectId -> commentDAO.addComment(id, traceId, projectId,
+        var monoProjectId = switch (entityType) {
+            case TRACE -> traceDAO.getProjectIdFromTrace(entityId);
+            case SPAN -> spanDAO.getProjectIdFromSpan(entityId);
+        };
+
+        return monoProjectId
+                .switchIfEmpty(Mono.error(failWithNotFound(entityType.getType(), entityId)))
+                .flatMap(projectId -> commentDAO.addComment(id, entityId, entityType, projectId,
                         comment))
                 .map(__ -> id);
     }
 
     @Override
-    public Mono<Comment> get(@NonNull UUID traceId, @NonNull UUID commentId) {
-        return commentDAO.findById(traceId, commentId)
+    public Mono<Comment> get(@NonNull UUID entityId, @NonNull UUID commentId) {
+        return commentDAO.findById(entityId, commentId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId)));
     }
 
@@ -60,6 +69,14 @@ class CommentServiceImpl implements CommentService {
 
     @Override
     public Mono<Void> delete(@NonNull BatchDelete batchDelete) {
-        return commentDAO.deleteByIds(batchDelete.ids());
+        return commentDAO.deleteByIds(batchDelete.ids()).then();
+    }
+
+    @Override
+    public Mono<Long> deleteByEntityIds(CommentDAO.EntityType entityType, Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+        return commentDAO.deleteByEntityIds(entityType, entityIds);
     }
 }

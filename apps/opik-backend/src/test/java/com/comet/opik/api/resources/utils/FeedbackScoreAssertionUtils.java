@@ -9,7 +9,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @UtilityClass
-public class AssertionUtils {
+public class FeedbackScoreAssertionUtils {
 
     public static void assertFeedbackScoreNames(FeedbackScoreNames actual, List<String> expectedNames) {
         assertThat(actual.scores()).hasSize(expectedNames.size());
