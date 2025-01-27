@@ -31,10 +31,11 @@ class SpanServiceTest {
 
     private final SpanDAO spanDAO = mock(SpanDAO.class);
     private final ProjectService projectService = mock(ProjectService.class);
+    private final CommentService commentService = mock(CommentService.class);;
 
     private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
     private final SpanService spanService = new SpanService(spanDAO, projectService, generator::generate,
-            DUMMY_LOCK_SERVICE);
+            DUMMY_LOCK_SERVICE, commentService);
 
     @Test
     void allPublicConstructors() {

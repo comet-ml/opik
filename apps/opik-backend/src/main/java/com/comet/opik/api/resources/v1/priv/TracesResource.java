@@ -16,6 +16,7 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
@@ -270,7 +271,7 @@ public class TracesResource {
 
         log.info("Add comment for trace with id '{}' on workspaceId '{}'", id, workspaceId);
 
-        var commentId = commentService.create(id, comment)
+        var commentId = commentService.create(id, comment, CommentDAO.EntityType.TRACE)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
