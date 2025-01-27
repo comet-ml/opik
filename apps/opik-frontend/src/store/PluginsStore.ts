@@ -2,6 +2,7 @@ import React from "react";
 import { create } from "zustand";
 
 import WorkspacePreloader from "@/components/shared/WorkspacePreloader/WorkspacePreloader";
+import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
 import { FrameworkIntegrationsProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 
 type PluginStore = {
@@ -10,6 +11,8 @@ type PluginStore = {
   GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
   FrameworkIntegrations: React.ComponentType<FrameworkIntegrationsProps> | null;
+  GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
+  ApiKeyCard: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -20,6 +23,8 @@ const PLUGIN_NAMES = [
   "UserMenu",
   "GetStartedPage",
   "FrameworkIntegrations",
+  "GoogleColabCard",
+  "ApiKeyCard",
   "WorkspacePreloader",
   "init",
 ];
@@ -29,6 +34,8 @@ const usePluginsStore = create<PluginStore>((set) => ({
   UserMenu: null,
   GetStartedPage: null,
   FrameworkIntegrations: null,
+  GoogleColabCard: null,
+  ApiKeyCard: null,
   WorkspacePreloader: null,
   init: null,
   setupPlugins: async (folderName: string) => {
