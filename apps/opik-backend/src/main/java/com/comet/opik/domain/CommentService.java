@@ -74,6 +74,9 @@ class CommentServiceImpl implements CommentService {
 
     @Override
     public Mono<Long> deleteByEntityIds(CommentDAO.EntityType entityType, Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(0L);
+        }
         return commentDAO.deleteByEntityIds(entityType, entityIds);
     }
 }
