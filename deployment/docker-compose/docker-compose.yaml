@@ -2,6 +2,7 @@ name: opik
 
 services:
   mysql:
+    platform: linux/${TARGETARCH:-amd64}
     image: mysql:8.4.2
     hostname: mysql
     environment:
@@ -18,6 +19,7 @@ services:
       - mysql:/var/lib/mysql/:type=volume,source=~/opik/mysql
 
   redis:
+    platform: linux/${TARGETARCH:-amd64}
     image: redis:7.2.4-alpine3.19
     hostname: redis
     command: redis-server --requirepass opik
@@ -29,6 +31,7 @@ services:
       start_period: 30s
 
   clickhouse:
+    platform: linux/${TARGETARCH:-amd64}
     image: clickhouse/clickhouse-server:24.3.6.48-alpine
     hostname: clickhouse
     environment:
@@ -48,6 +51,7 @@ services:
       retries: 300
 
   backend:
+    platform: linux/${TARGETARCH:-amd64}
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
     build:
       context: ../../apps/opik-backend
@@ -91,6 +95,7 @@ services:
         condition: service_healthy
 
   python-backend:
+    platform: linux/${TARGETARCH:-amd64}
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     build:
       context: ../../apps/opik-python-backend
@@ -101,6 +106,7 @@ services:
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
 
   frontend:
+    platform: linux/${TARGETARCH:-amd64}
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
     build:
       context: ../../apps/opik-frontend
