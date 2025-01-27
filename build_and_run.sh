@@ -65,11 +65,20 @@ if $BUILD; then
     eval $(minikube docker-env)
     echo "### Build docker images"
 
+    # Create and use buildx builder for multi-arch builds
+    echo "## Setting up Docker buildx for multi-arch builds"
+    docker buildx create --name opik-builder --use || true
+    docker buildx inspect --bootstrap
+
     echo "## Build Opik backend"
     cd apps/${OPIK_BACKEND}
     DOCKER_IMAGE_NAME=${DOCKER_REGISTRY_LOCAL}/${OPIK_BACKEND}:latest
     echo "DOCKER_IMAGE_NAME is ${DOCKER_IMAGE_NAME}"
-    DOCKER_BUILDKIT=1 docker build --build-arg OPIK_VERSION=latest -t ${DOCKER_IMAGE_NAME} .
+    DOCKER_BUILDKIT=1 docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --build-arg OPIK_VERSION=latest \
+        --load \
+        -t ${DOCKER_IMAGE_NAME} .
     cd -
 
     if $FE_BUILD; then
@@ -82,16 +91,18 @@ if $BUILD; then
           DOCKER_FE_BUILD_ARGS="--build-arg BUILD_MODE=comet"
         fi
 
-        DOCKER_BUILDKIT=1 docker build \
+        DOCKER_BUILDKIT=1 docker buildx build \
+            --platform linux/amd64,linux/arm64 \
             --build-arg OPIK_VERSION=latest \
             ${DOCKER_FE_BUILD_ARGS} \
+            --load \
             -t ${DOCKER_IMAGE_NAME} .
         cd -
     fi
 fi
 
 ### Install/upgrade Opik on minikube
-echo 
+echo
 echo "### Install Opik using latest versions"
 cd deployment/helm_chart/opik
 VERSION=latest
