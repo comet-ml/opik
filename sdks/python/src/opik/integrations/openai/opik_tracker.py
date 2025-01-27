@@ -4,13 +4,13 @@ import openai
 
 from . import chat_completion_chunks_aggregator, openai_decorator
 
-T = TypeVar("OpenAI Client", openai.OpenAI, openai.AsyncOpenAI)
+OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
 
 def track_openai(
-    openai_client: T,
+    openai_client: OpenAIClient,
     project_name: Optional[str] = None,
-) -> T:
+) -> OpenAIClient:
     """Adds Opik tracking to an OpenAI client.
 
     Tracks calls to:
