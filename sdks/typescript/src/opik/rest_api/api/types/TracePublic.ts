@@ -21,6 +21,7 @@ export interface TracePublic {
     createdBy?: string;
     lastUpdatedBy?: string;
     feedbackScores?: OpikApi.FeedbackScorePublic[];
+    comments?: OpikApi.CommentPublic[];
     totalEstimatedCost?: number;
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
     duration?: number;

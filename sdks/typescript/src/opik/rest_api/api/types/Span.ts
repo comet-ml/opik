@@ -28,6 +28,7 @@ export interface Span {
     createdBy?: string;
     lastUpdatedBy?: string;
     feedbackScores?: OpikApi.FeedbackScore[];
+    comments?: OpikApi.Comment[];
     totalEstimatedCost?: number;
     totalEstimatedCostVersion?: string;
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
