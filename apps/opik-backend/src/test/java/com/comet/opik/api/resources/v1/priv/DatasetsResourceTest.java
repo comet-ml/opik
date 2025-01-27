@@ -37,6 +37,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.sorting.Direction;
@@ -200,6 +201,7 @@ class DatasetsResourceTest {
     private ClientSupport client;
     private PromptResourceClient promptResourceClient;
     private ExperimentResourceClient experimentResourceClient;
+    private DatasetResourceClient datasetResourceClient;
     private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
@@ -222,6 +224,7 @@ class DatasetsResourceTest {
 
         promptResourceClient = new PromptResourceClient(client, baseURI, factory);
         experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
+        datasetResourceClient = new DatasetResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -2231,21 +2234,8 @@ class DatasetsResourceTest {
                     .sorted(Comparator.comparing(Dataset::id))
                     .toList();
 
-            WebTarget webTarget = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .queryParam("with_experiments_only", true)
-                    .queryParam("prompt_id", promptVersion.promptId());
-
-            if (expectedDatasets.size() > 0) {
-                webTarget = webTarget.queryParam("size", expectedDatasets.size());
-            }
-
-            var actualResponse = webTarget
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+            var actualEntity = datasetResourceClient.getDatasetPage(apiKey, workspaceName, expectedDatasets.size(),
+                    promptVersion);
 
             findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
@@ -2307,21 +2297,8 @@ class DatasetsResourceTest {
                     .sorted(Comparator.comparing(Dataset::id))
                     .toList();
 
-            WebTarget webTarget = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .queryParam("with_experiments_only", true)
-                    .queryParam("prompt_id", promptVersion.promptId());
-
-            if (!expectedDatasets.isEmpty()) {
-                webTarget = webTarget.queryParam("size", expectedDatasets.size());
-            }
-
-            var actualResponse = webTarget
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+            var actualEntity = datasetResourceClient.getDatasetPage(apiKey, workspaceName, expectedDatasets.size(),
+                    promptVersion);
 
             findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
