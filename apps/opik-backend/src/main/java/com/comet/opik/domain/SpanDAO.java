@@ -488,12 +488,11 @@ class SpanDAO {
                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) AS duration_millis
-                FROM
-                spans
+                FROM spans
                 WHERE id = :id
                 AND workspace_id = :workspace_id
                 ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1
+                LIMIT 1 BY id
             ) AS s
             LEFT JOIN (
                 SELECT
@@ -516,11 +515,8 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            SELECT
-                 s.*,
-                 groupArray(tuple(c.*)) AS comments
-            FROM (
-                 SELECT
+            WITH spans_final AS (
+                SELECT
                   id,
                   workspace_id,
                   project_id,
@@ -547,8 +543,8 @@ class SpanDAO {
                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
                           NULL) AS duration_millis
-              FROM spans
-              WHERE id IN (
+                FROM spans
+                WHERE id IN (
                  SELECT
                      id
                  FROM (
@@ -585,10 +581,8 @@ class SpanDAO {
                      LIMIT :limit OFFSET :offset
                  )
               )
-              ORDER BY id DESC
-            ) AS s
-            LEFT JOIN (
-                 SELECT
+            ), comments_final AS (
+                SELECT
                      id AS comment_id,
                      text,
                      created_at AS comment_created_at,
@@ -596,12 +590,17 @@ class SpanDAO {
                      created_by AS comment_created_by,
                      last_updated_by AS comment_last_updated_by,
                      entity_id
-                 FROM comments
-                 WHERE workspace_id = :workspace_id
-                 AND project_id = :project_id
-                 ORDER BY id DESC, last_updated_at DESC
-                 LIMIT 1 BY id
-            ) AS c ON s.id = c.entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            SELECT
+                 s.*,
+                 groupArray(tuple(c.*)) AS comments
+            FROM spans_final s
+            LEFT JOIN comments_final AS c ON s.id = c.entity_id
             GROUP BY
                 s.*
             ORDER BY s.id DESC
@@ -1112,7 +1111,7 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Void> deleteByTraceIds(Set<UUID> traceIds) {
+    public Mono<Long> deleteByTraceIds(Set<UUID> traceIds) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
         log.info("Deleting spans by traceIds, count '{}'", traceIds.size());
@@ -1125,8 +1124,9 @@ class SpanDAO {
 
                     return makeMonoContextAware(bindWorkspaceIdToMono(statement));
                 })
-                .doFinally(signalType -> endSegment(segment))
-                .then();
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum)
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private Publisher<Span> mapToDto(Result result) {
@@ -1350,6 +1350,10 @@ class SpanDAO {
 
     @WithSpan
     public Mono<List<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
+
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     var statement = connection.createStatement(SELECT_SPAN_IDS_BY_TRACE_ID)

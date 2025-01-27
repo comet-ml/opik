@@ -318,9 +318,14 @@ public class SpanService {
     }
 
     public Mono<Void> deleteByTraceIds(Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Mono.empty();
+        }
+
         return spanDAO.getSpanIdsForTraces(traceIds)
                 .flatMap(
                         spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, new HashSet<>(spanIds)))
-                .then(Mono.defer(() -> spanDAO.deleteByTraceIds(traceIds)));
+                .then(Mono.defer(() -> spanDAO.deleteByTraceIds(traceIds)))
+                .then();
     }
 }
