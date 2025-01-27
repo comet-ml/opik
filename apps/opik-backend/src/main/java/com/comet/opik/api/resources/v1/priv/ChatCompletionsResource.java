@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.domain.ChatCompletionService;
+import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;

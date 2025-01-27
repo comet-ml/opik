@@ -84,7 +84,7 @@ class TraceServiceImpl implements TraceService {
     public static final String TRACE_KEY = "Trace";
 
     private final @NonNull TraceDAO dao;
-    private final @NonNull SpanDAO spanDAO;
+    private final @NonNull SpanService spanService;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull CommentDAO commentDAO;
     private final @NonNull TransactionTemplateAsync template;
@@ -305,8 +305,7 @@ class TraceServiceImpl implements TraceService {
                 new LockService.Lock(id, TRACE_KEY),
                 Mono.defer(() -> feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id))
                         .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
-                        .then(Mono.defer(
-                                () -> template.nonTransaction(connection -> spanDAO.deleteByTraceId(id, connection))))
+                        .then(Mono.defer(() -> spanService.deleteByTraceIds(Set.of(id))))
                         .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection)))));
     }
 
@@ -318,8 +317,7 @@ class TraceServiceImpl implements TraceService {
         return template
                 .nonTransaction(connection -> feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, ids))
                 .then(Mono.defer(() -> commentDAO.deleteByEntityIds(CommentDAO.EntityType.TRACE, ids)))
-                .then(Mono
-                        .defer(() -> template.nonTransaction(connection -> spanDAO.deleteByTraceIds(ids, connection))))
+                .then(Mono.defer(() -> spanService.deleteByTraceIds(ids)))
                 .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(ids, connection))));
     }
 

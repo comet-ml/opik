@@ -6,12 +6,11 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.resources.utils.TestUtils;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamUtils;
@@ -23,13 +22,11 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@RequiredArgsConstructor
-public class SpanResourceClient {
+public class SpanResourceClient extends BaseCommentResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/spans";
-
-    private final ClientSupport client;
-    private final String baseURI;
+    public SpanResourceClient(ClientSupport client, String baseURI) {
+        super("%s/v1/private/spans", client, baseURI);
+    }
 
     public UUID createSpan(Span span, String apiKey, String workspaceName) {
         try (var response = createSpan(span, apiKey, workspaceName, HttpStatus.SC_CREATED)) {
@@ -122,8 +119,8 @@ public class SpanResourceClient {
         }
     }
 
-    public ModelPrice randomModelPrice() {
-        return ModelPrice.values()[randomNumber(0, ModelPrice.values().length - 2)];
+    public OpenaiModelName randomModel() {
+        return OpenaiModelName.values()[randomNumber(0, OpenaiModelName.values().length - 1)];
     }
 
     private int randomNumber(int min, int max) {

@@ -85,8 +85,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
@@ -1310,7 +1310,7 @@ class ProjectsResourceTest {
                 List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
                         .map(span -> span.toBuilder()
                                 .usage(spanResourceClient.getTokenUsage())
-                                .model(spanResourceClient.randomModelPrice().getName())
+                                .model(spanResourceClient.randomModel().toString())
                                 .traceId(trace.id())
                                 .projectName(trace.projectName())
                                 .totalEstimatedCost(null)
