@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNodeCompare } from "./JsonNodeCompare";
 import { FeedbackScoreCompare } from "./FeedbackScoreCompare";
+import { CommentCompare } from "./CommentCompare";
 
 export const ExperimentItemCompare: core.serialization.ObjectSchema<
     serializers.ExperimentItemCompare.Raw,
@@ -22,6 +23,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
         "feedback_scores",
         core.serialization.list(FeedbackScoreCompare).optional()
     ),
+    comments: core.serialization.list(CommentCompare).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -37,6 +39,7 @@ export declare namespace ExperimentItemCompare {
         input?: JsonNodeCompare.Raw | null;
         output?: JsonNodeCompare.Raw | null;
         feedback_scores?: FeedbackScoreCompare.Raw[] | null;
+        comments?: CommentCompare.Raw[] | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;

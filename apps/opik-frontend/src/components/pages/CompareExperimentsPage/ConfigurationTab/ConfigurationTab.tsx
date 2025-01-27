@@ -96,7 +96,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     return experiments.reduce<Record<string, Record<string, FiledValue>>>(
       (acc, experiment) => {
         acc[experiment.id] = isObject(experiment.metadata)
-          ? flattie(experiment.metadata, "|", true)
+          ? flattie(experiment.metadata, ".", true)
           : {};
 
         return acc;

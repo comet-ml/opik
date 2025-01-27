@@ -75,7 +75,13 @@ const DialogAutoScrollBody: React.FC<DialogBodyProps> = ({
   className,
   children,
 }) => {
-  const [height, setHeight] = React.useState<number>(0);
+  const [heightObject, setHeightObject] = React.useState<{
+    height: number;
+    maxHeight: number;
+  }>({
+    height: 0,
+    maxHeight: 0,
+  });
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     const vh = Math.max(
       document.documentElement.clientHeight || 0,
@@ -94,11 +100,27 @@ const DialogAutoScrollBody: React.FC<DialogBodyProps> = ({
       MIN_BODY_HEIGHT,
     );
 
-    setHeight(contentHeight > maxHeight ? maxHeight : 0);
+    setHeightObject((state) => {
+      const newState = {
+        maxHeight,
+        height: contentHeight > maxHeight ? maxHeight : 0,
+      };
+
+      if (
+        state.height !== newState.height ||
+        state.maxHeight != newState.maxHeight
+      ) {
+        return newState;
+      }
+      return state;
+    });
   }, true);
 
-  const hasScroll = height > 0;
-  const style = hasScroll ? { height: `${height}px` } : {};
+  const hasScroll = heightObject.height > 0;
+  const style = {
+    ...(heightObject.height && { height: `${heightObject.height}px` }),
+    ...(heightObject.maxHeight && { maxHeight: `${heightObject.maxHeight}px` }),
+  };
 
   return (
     <div
