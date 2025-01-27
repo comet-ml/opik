@@ -1,6 +1,7 @@
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import React from "react";
 import FrameworkIntegrations from "../FrameworkIntegrations/FrameworkIntegrations";
+import { SheetTitle } from "@/components/ui/sheet";
 
 type QuickstartDialogProps = {
   open: boolean;
@@ -14,7 +15,7 @@ const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
     <SideDialog open={open} setOpen={setOpen}>
       <div className="flex w-full min-w-fit flex-col pb-12">
         <div className="pb-8">
-          <h1 className="comet-title-l text-center">Quickstart guide</h1>
+          <SheetTitle>Quickstart guide</SheetTitle>
           <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
             Select the framework and follow the instructions to integrate Opik
             with your own code or use our ready-to-run examples on the right.
