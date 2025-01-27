@@ -2,8 +2,8 @@ import React from "react";
 import { create } from "zustand";
 
 import WorkspacePreloader from "@/components/shared/WorkspacePreloader/WorkspacePreloader";
-import { FrameworkIntegration } from "@/components/pages-shared/onboarding/FrameworkIntegrations/types";
 import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
+import { FrameworkIntegrationsProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -11,9 +11,7 @@ type PluginStore = {
   QuickstartPage: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
-  FrameworkIntegrations: React.ComponentType<{
-    integrationList?: FrameworkIntegration[];
-  }> | null;
+  FrameworkIntegrations: React.ComponentType<FrameworkIntegrationsProps> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   ApiKeyCard: React.ComponentType | null;
   init: unknown;
