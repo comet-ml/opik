@@ -22,7 +22,7 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class SpanResourceClient extends BaseTestClient {
+public class SpanResourceClient extends BaseCommentResourceClient {
 
     public SpanResourceClient(ClientSupport client, String baseURI) {
         super("%s/v1/private/spans", client, baseURI);

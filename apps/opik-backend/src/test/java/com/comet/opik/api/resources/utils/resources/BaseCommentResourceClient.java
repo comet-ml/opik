@@ -18,7 +18,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
-public abstract class BaseTestClient {
+public abstract class BaseCommentResourceClient {
     protected final String RESOURCE_PATH;
     protected final ClientSupport client;
     protected final String baseURI;

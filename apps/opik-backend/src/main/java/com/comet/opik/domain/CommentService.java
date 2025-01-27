@@ -24,7 +24,7 @@ public interface CommentService {
 
     Mono<Void> update(UUID commentId, Comment comment);
 
-    Mono<Long> delete(BatchDelete batchDelete);
+    Mono<Void> delete(BatchDelete batchDelete);
 
     Mono<Long> deleteByEntityIds(CommentDAO.EntityType entityType, Set<UUID> entityIds);
 }
@@ -68,8 +68,8 @@ class CommentServiceImpl implements CommentService {
     }
 
     @Override
-    public Mono<Long> delete(@NonNull BatchDelete batchDelete) {
-        return commentDAO.deleteByIds(batchDelete.ids());
+    public Mono<Void> delete(@NonNull BatchDelete batchDelete) {
+        return commentDAO.deleteByIds(batchDelete.ids()).then();
     }
 
     @Override

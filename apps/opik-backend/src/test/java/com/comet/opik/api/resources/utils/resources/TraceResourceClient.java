@@ -24,7 +24,7 @@ import java.util.stream.IntStream;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class TraceResourceClient extends BaseTestClient {
+public class TraceResourceClient extends BaseCommentResourceClient {
 
     public TraceResourceClient(ClientSupport client, String baseURI) {
         super("%s/v1/private/traces", client, baseURI);
