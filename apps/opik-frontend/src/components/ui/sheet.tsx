@@ -64,12 +64,13 @@ const SheetContent = React.forwardRef<
       {...props}
     >
       <div className="flex h-[60px] items-center border-b border-b-[#E2E8F0] px-6">
-        <SheetPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
-          <Button size="icon-sm" variant="outline">
+        <Button asChild size="icon-sm" variant="outline">
+          <SheetPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
             <X className="size-4" />
-          </Button>
-          <span className="sr-only">Close</span>
-        </SheetPrimitive.Close>
+
+            <span className="sr-only">Close</span>
+          </SheetPrimitive.Close>
+        </Button>
       </div>
       <div className="max-h-full overflow-y-auto p-6">{children}</div>
     </SheetPrimitive.Content>
@@ -111,7 +112,7 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold text-foreground", className)}
+    className={cn("comet-title-l text-center", className)}
     {...props}
   />
 ));
