@@ -516,94 +516,93 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH spans_final AS (
-                SELECT
-                    id
-                FROM (
-                    SELECT
-                        id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                             NULL) AS duration_millis
-                    FROM spans
-                    WHERE project_id = :project_id
-                    AND workspace_id = :workspace_id
-                    <if(last_received_span_id)> AND id > :last_received_span_id <endif>
-                    <if(trace_id)> AND trace_id = :trace_id <endif>
-                    <if(type)> AND type = :type <endif>
-                    <if(filters)> AND <filters> <endif>
-                    <if(feedback_scores_filters)>
-                    AND id in (
-                        SELECT
-                            entity_id
-                        FROM (
-                            SELECT *
-                            FROM feedback_scores
-                            WHERE entity_type = 'span'
-                            AND project_id = :project_id
-                            ORDER BY entity_id DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id
-                        HAVING <feedback_scores_filters>
-                    )
-                    <endif>
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    LIMIT :limit
-                    <if(offset)>OFFSET :offset <endif>
+            WITH span_ids AS (
+                  SELECT
+                      id
+                  FROM (
+                      SELECT
+                          id,
+                          if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                   AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                               (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                               NULL) AS duration_millis
+                      FROM spans
+                      WHERE project_id = :project_id
+                      AND workspace_id = :workspace_id
+                      <if(last_received_span_id)> AND id > :last_received_span_id <endif>
+                      <if(trace_id)> AND trace_id = :trace_id <endif>
+                      <if(type)> AND type = :type <endif>
+                      <if(filters)> AND <filters> <endif>
+                      <if(feedback_scores_filters)>
+                      AND id in (
+                          SELECT
+                              entity_id
+                          FROM (
+                              SELECT *
+                              FROM feedback_scores
+                              WHERE entity_type = 'span'
+                              AND project_id = :project_id
+                              ORDER BY entity_id DESC, last_updated_at DESC
+                              LIMIT 1 BY entity_id, name
+                          )
+                          GROUP BY entity_id
+                          HAVING <feedback_scores_filters>
+                      )
+                      <endif>
+                      ORDER BY id DESC, last_updated_at DESC
+                      LIMIT 1 BY id
+                      LIMIT :limit
+                      <if(offset)>OFFSET :offset <endif>
                 )
-             )
             ), comments_final AS (
-                SELECT
-                     id AS comment_id,
-                     text,
-                     created_at AS comment_created_at,
-                     last_updated_at AS comment_last_updated_at,
-                     created_by AS comment_created_by,
-                     last_updated_by AS comment_last_updated_by,
-                     entity_id
-                FROM comments
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
+              SELECT
+                   id AS comment_id,
+                   text,
+                   created_at AS comment_created_at,
+                   last_updated_at AS comment_last_updated_at,
+                   created_by AS comment_created_by,
+                   last_updated_by AS comment_last_updated_by,
+                   entity_id
+              FROM comments
+              WHERE workspace_id = :workspace_id
+              AND project_id = :project_id
+              ORDER BY id DESC, last_updated_at DESC
+              LIMIT 1 BY id
             )
             SELECT
-                  s.id as id,
-                  s.workspace_id as workspace_id,
-                  s.project_id as project_id,
-                  s.trace_id as trace_id,
-                  s.parent_span_id as parent_span_id,
-                  s.name as name,
-                  s.type as tupe,
-                  s.start_time as start_time,
-                  s.end_time as end_time,
-                  <if(truncate)> replaceRegexpAll(s.input, '<truncate>', '"[image]"') as input <else> s.input as input<endif>,
-                  <if(truncate)> replaceRegexpAll(s.output, '<truncate>', '"[image]"') as output <else> s.output as output<endif>,
-                  <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif>,
-                  s.model as model,
-                  s.provider as provider,
-                  s.total_estimated_cost as total_estimated_cost,
-                  s.tags as tags,
-                  s.usage as usage,
-                  s.error_info as error_info,
-                  s.created_at as created_at,
-                  s.last_updated_at as last_updated_at,
-                  s.created_by as created_by,
-                  s.last_updated_by as last_updated_by,
-                  if(s.end_time IS NOT NULL AND s.start_time IS NOT NULL
-                              AND notEquals(s.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                          (dateDiff('microsecond', s.start_time, s.end_time) / 1000.0),
-                          NULL) AS duration_millis,
-                 groupArray(tuple(c.*)) AS comments
-            FROM spans s      
+                s.id as id,
+                s.workspace_id as workspace_id,
+                s.project_id as project_id,
+                s.trace_id as trace_id,
+                s.parent_span_id as parent_span_id,
+                s.name as name,
+                s.type as type,
+                s.start_time as start_time,
+                s.end_time as end_time,
+                <if(truncate)> replaceRegexpAll(s.input, '<truncate>', '"[image]"') as input <else> s.input as input<endif>,
+                <if(truncate)> replaceRegexpAll(s.output, '<truncate>', '"[image]"') as output <else> s.output as output<endif>,
+                <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif>,
+                s.model as model,
+                s.provider as provider,
+                s.total_estimated_cost as total_estimated_cost,
+                s.tags as tags,
+                s.usage as usage,
+                s.error_info as error_info,
+                s.created_at as created_at,
+                s.last_updated_at as last_updated_at,
+                s.created_by as created_by,
+                s.last_updated_by as last_updated_by,
+                if(s.end_time IS NOT NULL AND s.start_time IS NOT NULL
+                            AND notEquals(s.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                        (dateDiff('microsecond', s.start_time, s.end_time) / 1000.0),
+                        NULL) AS duration_millis,
+               groupArray(tuple(c.*)) AS comments
+            FROM spans s
             LEFT JOIN comments_final AS c ON s.id = c.entity_id
-            WHERE s.id IN (SELECT id FROM spans_final)       
+            WHERE s.id IN (SELECT id FROM span_ids)
             GROUP BY
-                s.*,
-                duration_millis
+              s.*,
+              duration_millis
             ORDER BY s.id DESC
             ;
             """;

@@ -330,7 +330,7 @@ public class SpanService {
                 .flatMapMany(newCriteria -> spanDAO.search(limit, newCriteria))
                 .switchIfEmpty(Flux.empty());
     }
-  
+
     public Mono<Void> deleteByTraceIds(Set<UUID> traceIds) {
         if (traceIds.isEmpty()) {
             return Mono.empty();

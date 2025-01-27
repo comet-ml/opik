@@ -42,7 +42,6 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -53,7 +52,6 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
-import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -62,7 +60,6 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
-import org.glassfish.jersey.client.ChunkedInput;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,6 +111,8 @@ import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.ass
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.resources.SpanResourceClient.IGNORED_FIELDS;
+import static com.comet.opik.api.resources.utils.resources.SpanResourceClient.IGNORED_FIELDS_SCORES;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -137,13 +136,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class SpansResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
-    public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
-            "totalEstimatedCostVersion", "comments"};
-    public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
-
-    private static final GenericType<ChunkedInput<String>> CHUNKED_INPUT_STRING_GENERIC_TYPE = new GenericType<>() {
-    };
 
     public static final String API_KEY = UUID.randomUUID().toString();
     public static final String USER = UUID.randomUUID().toString();
@@ -505,7 +497,7 @@ class SpansResourceTest {
                 if (expected) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
-                    var expectedSpans = getStreamedItems(actualResponse);
+                    var expectedSpans = spanResourceClient.getStreamedItems(actualResponse);
                     assertThat(expectedSpans).hasSize(1);
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
@@ -800,7 +792,7 @@ class SpansResourceTest {
                 if (expected) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
-                    var expectedSpans = getStreamedItems(actualResponse);
+                    var expectedSpans = spanResourceClient.getStreamedItems(actualResponse);
                     assertThat(expectedSpans).hasSize(1);
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
@@ -809,18 +801,6 @@ class SpansResourceTest {
                 }
             }
         }
-    }
-
-    private List<Span> getStreamedItems(Response response) {
-        var items = new ArrayList<Span>();
-        try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
-            String stringItem;
-            while ((stringItem = inputStream.read()) != null) {
-                items.add(JsonUtils.readValue(stringItem, new TypeReference<Span>() {
-                }));
-            }
-        }
-        return items;
     }
 
     private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
@@ -1029,31 +1009,20 @@ class SpansResourceTest {
                     .toList();
             spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("search")
-                    .queryParam("size", 5)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(SpanSearchStreamRequest.builder().projectName(projectName).truncate(truncate)
-                            .limit(5).build()))) {
+            var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).truncate(truncate)
+                    .limit(5).build();
 
-                var actualSpans = getStreamedItems(actualResponse);
+            var expectedSpans = spans.stream()
+                    .map(span -> span.toBuilder()
+                            .input(expected)
+                            .output(expected)
+                            .metadata(expected)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(span.startTime(),
+                                    span.endTime()))
+                            .build())
+                    .toList();
 
-                var expectedSpans = spans.stream()
-                        .map(span -> span.toBuilder()
-                                .input(expected)
-                                .output(expected)
-                                .metadata(expected)
-                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(span.startTime(),
-                                        span.endTime()))
-                                .build())
-                        .toList();
-
-                assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .containsExactlyElementsOf(expectedSpans);
-            }
+            spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans, USER);
         }
 
         @Test
@@ -1216,12 +1185,8 @@ class SpansResourceTest {
                             .value(spans.getFirst().name())
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans, spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1269,13 +1234,8 @@ class SpansResourceTest {
                                     : filterValue)
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans,
-                        apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans,
+                    expectedSpans, unexpectedSpans);
         }
 
         static Stream<Arguments> getSpansByProject__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
@@ -1327,13 +1287,9 @@ class SpansResourceTest {
                     .value("0")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans.reversed());
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                        apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans.reversed(),
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1367,13 +1323,9 @@ class SpansResourceTest {
                     .value(spans.getFirst().name().toUpperCase())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans.reversed());
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                        apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans.reversed(),
+                    spans,
+                    unexpectedSpans);
         }
 
         private Stream<Arguments> equalAndNotEqualFilters() {
@@ -1425,13 +1377,9 @@ class SpansResourceTest {
                     .value(spans.getFirst().name().substring(0, spans.getFirst().name().length() - 4).toUpperCase())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1466,13 +1414,9 @@ class SpansResourceTest {
                     .value(spans.getFirst().name().substring(3).toUpperCase())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1507,13 +1451,9 @@ class SpansResourceTest {
                     .value(spans.getFirst().name().substring(2, spans.getFirst().name().length() - 3).toUpperCase())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1553,13 +1493,9 @@ class SpansResourceTest {
                     .value(spanName.toUpperCase())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1593,14 +1529,9 @@ class SpansResourceTest {
                     .value(spans.getFirst().startTime().toString())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans.reversed());
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                        apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1639,13 +1570,9 @@ class SpansResourceTest {
                     .value(Instant.now().toString())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1684,13 +1611,9 @@ class SpansResourceTest {
                     .value(spans.getFirst().startTime().toString())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1729,13 +1652,9 @@ class SpansResourceTest {
                     .value(Instant.now().toString())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1774,13 +1693,10 @@ class SpansResourceTest {
                     .value(spans.getFirst().startTime().toString())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -1815,13 +1731,10 @@ class SpansResourceTest {
                     .value(spans.getFirst().endTime().toString())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -1856,13 +1769,9 @@ class SpansResourceTest {
                     .value(spans.getFirst().input().toString())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1897,13 +1806,9 @@ class SpansResourceTest {
                     .value(spans.getFirst().output().toString())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1944,14 +1849,9 @@ class SpansResourceTest {
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans.reversed());
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                        apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -1993,13 +1893,10 @@ class SpansResourceTest {
                     .value("2023")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2042,13 +1939,10 @@ class SpansResourceTest {
                     .value("TRUE")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2090,13 +1984,10 @@ class SpansResourceTest {
                     .value("NULL")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2138,13 +2029,9 @@ class SpansResourceTest {
                     .value("CHAT-GPT")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -2186,13 +2073,9 @@ class SpansResourceTest {
                     .value("02")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -2235,13 +2118,10 @@ class SpansResourceTest {
                     .value("TRU")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2283,13 +2163,10 @@ class SpansResourceTest {
                     .value("NUL")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2331,13 +2208,10 @@ class SpansResourceTest {
                     .value("2023")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2376,13 +2250,10 @@ class SpansResourceTest {
                     .value("a")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2421,13 +2292,9 @@ class SpansResourceTest {
                     .value("a")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -2466,13 +2333,10 @@ class SpansResourceTest {
                     .value("a")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2514,13 +2378,10 @@ class SpansResourceTest {
                     .value("2025")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2559,13 +2420,10 @@ class SpansResourceTest {
                     .value("z")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2604,13 +2462,9 @@ class SpansResourceTest {
                     .value("z")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -2649,13 +2503,10 @@ class SpansResourceTest {
                     .value("z")
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2694,13 +2545,9 @@ class SpansResourceTest {
                             .toUpperCase())
                     .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         static Stream<Arguments> getSpansByProject__whenFilterUsage__thenReturnSpansFiltered() {
@@ -2761,13 +2608,9 @@ class SpansResourceTest {
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -2808,13 +2651,9 @@ class SpansResourceTest {
                             .value("123")
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -2855,13 +2694,10 @@ class SpansResourceTest {
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -2902,13 +2738,9 @@ class SpansResourceTest {
                             .value("456")
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -2949,13 +2781,9 @@ class SpansResourceTest {
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -3014,14 +2842,9 @@ class SpansResourceTest {
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans.reversed());
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                        apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(),
+                    spans, unexpectedSpans);
         }
 
         private Stream<Arguments> getSpansByProject__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered() {
@@ -3096,13 +2919,10 @@ class SpansResourceTest {
                             .value("2345.6788")
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
@@ -3154,13 +2974,9 @@ class SpansResourceTest {
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -3212,13 +3028,9 @@ class SpansResourceTest {
                             .value("2345.6788")
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
@@ -3271,13 +3083,10 @@ class SpansResourceTest {
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         Stream<Arguments> getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered() {
@@ -3366,13 +3175,9 @@ class SpansResourceTest {
                             .value(String.valueOf(duration))
                             .build());
 
-            if (useStreamSearch) {
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans);
-            } else {
-                getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
-            }
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         static Stream<Filter> getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400() {
@@ -3666,34 +3471,10 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400(Filter filter) {
+        void getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400(SpanFilter filter) {
+            int expectedStatus = HttpStatus.SC_BAD_REQUEST;
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    HttpStatus.SC_BAD_REQUEST,
-                    "Invalid operator '%s' for field '%s' of type '%s'".formatted(
-                            filter.operator().getQueryParamOperator(),
-                            filter.field().getQueryParamField(),
-                            filter.field().getType()));
-            var projectName = generator.generate().toString();
-            var filters = List.of(filter);
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", projectName)
-                    .queryParam("filters", toURLEncodedQueryParam(filters))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get();
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualError).isEqualTo(expectedError);
-        }
-
-        @ParameterizedTest
-        @MethodSource("getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400")
-        void searchSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400(SpanFilter filter) {
-            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    HttpStatus.SC_BAD_REQUEST,
+                    expectedStatus,
                     "Invalid operator '%s' for field '%s' of type '%s'".formatted(
                             filter.operator().getQueryParamOperator(),
                             filter.field().getQueryParamField(),
@@ -3701,19 +3482,20 @@ class SpansResourceTest {
             var projectName = generator.generate().toString();
             List<SpanFilter> filters = List.of(filter);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("search")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(
-                            SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build()))) {
+            Stream.of(true, false).forEach(useStreamSearch -> {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-
-                assertThat(actualError).isEqualTo(expectedError);
-            }
+                if (useStreamSearch) {
+                    var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
+                            .filters(List.copyOf(filters)).build();
+                    var actualErrorMessage = spanResourceClient.searchSpan(API_KEY, TEST_WORKSPACE, streamRequest,
+                            expectedStatus, io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualErrorMessage).isEqualTo(expectedError);
+                } else {
+                    var actualError = spanResourceClient.findSpans(API_KEY, TEST_WORKSPACE, projectName, filters,
+                            expectedStatus, io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                }
+            });
         }
 
         static Stream<Filter> getSpansByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400() {
@@ -3806,48 +3588,17 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400(Filter filter) {
+        void getSpansByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400(SpanFilter filter) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    HttpStatus.SC_BAD_REQUEST,
-                    "Invalid value '%s' or key '%s' for field '%s' of type '%s'".formatted(
-                            filter.value(),
-                            filter.key(),
-                            filter.field().getQueryParamField(),
-                            filter.field().getType()));
-            var projectName = generator.generate().toString();
-            var filters = List.of(filter);
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("workspace_name", workspaceName)
-                    .queryParam("project_name", projectName)
-                    .queryParam("filters", toURLEncodedQueryParam(filters))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualError).isEqualTo(expectedError);
-        }
-
-        @ParameterizedTest
-        @MethodSource("getSpansByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400")
-        void searchSpansByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400(SpanFilter filter) {
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var expectedStatus = HttpStatus.SC_BAD_REQUEST;
 
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    HttpStatus.SC_BAD_REQUEST,
+                    expectedStatus,
                     "Invalid value '%s' or key '%s' for field '%s' of type '%s'".formatted(
                             filter.value(),
                             filter.key(),
@@ -3856,19 +3607,19 @@ class SpansResourceTest {
             var projectName = generator.generate().toString();
             var filters = List.of(filter);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("search")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(
-                            SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-                var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(actualError).isEqualTo(expectedError);
-            }
+            Stream.of(true, false).forEach(useStreamSearch -> {
+                if (useStreamSearch) {
+                    var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
+                            .filters(List.copyOf(filters)).build();
+                    var actualErrorMessage = spanResourceClient.searchSpan(API_KEY, TEST_WORKSPACE, streamRequest,
+                            expectedStatus, io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualErrorMessage).isEqualTo(expectedError);
+                } else {
+                    var actualError = spanResourceClient.findSpans(API_KEY, TEST_WORKSPACE, projectName, filters,
+                            expectedStatus, io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                }
+            });
         }
 
         private List<FeedbackScore> updateFeedbackScore(List<FeedbackScore> feedbackScores, int index, double val) {
@@ -3885,24 +3636,13 @@ class SpansResourceTest {
         }
     }
 
-    private void getStreamAndAssertContent(String apiKey, String workspaceName, SpanSearchStreamRequest streamRequest,
-            List<Span> expectedSpans) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("search")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(streamRequest))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-
-            var actualSpans = getStreamedItems(actualResponse);
-
-            assertThat(actualSpans).hasSize(expectedSpans.size());
-            assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                    .containsExactlyElementsOf(expectedSpans);
-            assertIgnoredFields(actualSpans, expectedSpans);
+    private void getSpansAndAssert(boolean useStreamSearch, String projectName, List<SpanFilter> filters, String apiKey,
+            String workspaceName, List<Span> expectedSpans, List<Span> spans, List<Span> unexpectedSpans) {
+        if (useStreamSearch) {
+            var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build();
+            spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans, USER);
+        } else {
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
     }
 
@@ -3966,7 +3706,8 @@ class SpansResourceTest {
             assertThat(actualSpans)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedSpans);
-            assertIgnoredFields(actualSpans, expectedSpans);
+
+            spanResourceClient.assertIgnoredFields(actualSpans, expectedSpans, USER);
 
             if (!unexpectedSpans.isEmpty()) {
                 assertThat(actualSpans)
@@ -3980,54 +3721,6 @@ class SpansResourceTest {
         return CollectionUtils.isEmpty(filters)
                 ? null
                 : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
-    }
-
-    private void assertIgnoredFields(List<Span> actualSpans, List<Span> expectedSpans) {
-        for (int i = 0; i < actualSpans.size(); i++) {
-            var actualSpan = actualSpans.get(i);
-            var expectedSpan = expectedSpans.get(i);
-            var expectedFeedbackScores = expectedSpan.feedbackScores() == null
-                    ? null
-                    : expectedSpan.feedbackScores().reversed();
-            assertThat(actualSpan.projectId()).isNotNull();
-            assertThat(actualSpan.projectName()).isNull();
-            assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-            assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-            assertThat(actualSpan.feedbackScores())
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                    .withIgnoredFields(IGNORED_FIELDS_SCORES)
-                                    .build())
-                    .isEqualTo(expectedFeedbackScores);
-            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                    expectedSpan.startTime(), expectedSpan.endTime());
-            if (actualSpan.duration() == null || expected == null) {
-                assertThat(actualSpan.duration()).isEqualTo(expected);
-            } else {
-                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
-            }
-
-            if (actualSpan.feedbackScores() != null) {
-                actualSpan.feedbackScores().forEach(feedbackScore -> {
-                    assertThat(feedbackScore.createdAt()).isAfter(expectedSpan.createdAt());
-                    assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-                    assertThat(feedbackScore.createdBy()).isEqualTo(USER);
-                    assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
-                });
-            }
-
-            if (actualSpan.comments() != null) {
-                assertComments(expectedSpan.comments(), actualSpan.comments());
-
-                actualSpan.comments().forEach(comment -> {
-                    assertThat(comment.createdAt()).isAfter(actualSpan.createdAt());
-                    assertThat(comment.lastUpdatedAt()).isAfter(actualSpan.lastUpdatedAt());
-                    assertThat(comment.createdBy()).isEqualTo(USER);
-                    assertThat(comment.lastUpdatedBy()).isEqualTo(USER);
-                });
-            }
-        }
     }
 
     private UUID createAndAssert(Span expectedSpan, String apiKey, String workspaceName) {
