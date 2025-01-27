@@ -7,10 +7,9 @@ import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
+import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
-import useUser from "@/plugins/comet/useUser";
-import { SheetTitle } from "@/components/ui/sheet";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -143,10 +142,6 @@ const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
 > = ({ open, setOpen }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { data: user } = useUser();
-
-  const apiKey = user?.apiKeys?.[0];
-  const showColabLinks = !user?.sagemakerRestrictions;
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
@@ -348,10 +343,8 @@ eval_results = evaluate(
           </div>
 
           <div className="flex w-[250px] shrink-0 flex-col gap-6 self-start">
-            {apiKey && <ApiKeyCard apiKey={apiKey} />}
-            {showColabLinks ? (
-              <GoogleColabCard link="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb" />
-            ) : null}
+            <ApiKeyCard />
+            <GoogleColabCard link="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb" />
           </div>
         </div>
       </div>
