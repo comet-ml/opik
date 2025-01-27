@@ -1,0 +1,96 @@
+---
+sidebar_label: Overview
+description: Describes how to manage prompts in Opik
+pytest_codeblocks_skip: true
+---
+
+Opik provides a prompt library that you can use to manage your prompts. Storing prompts in a library allows you to version them, reuse them across projects, and manage them in a central location.
+
+Using a prompt library does not mean you can't store your prompt in code, we have designed the prompt library to be work seamlessly with your existing prompt files while providing the benefits of a central prompt library.
+
+## Creating a prompt
+
+<Tip>
+  If you already have prompts stored in code, you can use the the
+  [`Prompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/Prompt.html) object in the SDK to sync these
+  prompts with the library. This allows you to store the prompt text in your code while also having it versioned and
+  stored in the library See [Versioning prompts stored in code](/prompt_engineering/managing_prompts_in_code.mdx) for
+  more details.
+</Tip>
+
+You can create a new prompt in the library using both the SDK and the UI:
+
+<Tabs>
+    <Tab value="Using the UI" title="Using the UI">
+        You can create a prompt in the UI by navigating to the Prompt library and clicking `Create new prompt`. This will open a dialog where you can enter the prompt name, the prompt text, and optionally a description:
+
+        <Frame>
+
+<img src="/img/prompt_engineering/prompt_library.png" />
+</Frame>
+
+        You can also edit a prompt by clicking on the prompt name in the library and clicking `Edit prompt`.
+    </Tab>
+    <Tab value="Using the Python SDK" title="Using the Python SDK">
+        ```python
+        import opik
+
+        opik.configure()
+        client = opik.Opik()
+
+        # Create a new prompt
+        prompt = client.create_prompt(name="prompt-summary", prompt="Write a summary of the following text: {{text}}")
+        ```
+    </Tab>
+
+</Tabs>
+
+## Using prompts
+
+Once a prompt is created in the library, you can download it in code using the [`Opik.get_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt) method:
+
+```python
+import opik
+
+opik.configure()
+client = opik.Opik()
+
+# Get the prompt
+prompt = client.get_prompt(name="prompt-summary")
+
+# Create the prompt message
+prompt.format(text="Hello, world!")
+```
+
+If you are not using the SDK, you can download a prompt by using the [REST API](/reference/rest_api/retrieve-prompt-version.api.mdx).
+
+### Linking prompts to Experiments
+
+[Experiments](/evaluation/evaluate_your_llm.md) allow you to evaluate the performance of your LLM application on a set of examples. When evaluating
+different prompts, it can be useful to link the evaluation to a specific prompt version. This can be achieved by passing the `prompt` parameter when
+creating an Experiment:
+
+```python
+import opik
+
+opik.configure()
+client = opik.Opik()
+
+# Create a prompt
+prompt = opik.Prompt(name="My prompt", prompt="...")
+
+# Run the evaluation
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+    prompt=prompt,
+)
+```
+
+The experiment will now be linked to the prompt allowing you to view all experiments that use a specific prompt:
+
+<Frame>
+  <img src="/img/evaluation/linked_prompt.png" />
+</Frame>

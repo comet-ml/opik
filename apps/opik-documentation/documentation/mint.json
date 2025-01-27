@@ -1,0 +1,176 @@
+{
+  "name": "Opik Documentation",
+  "logo": {
+    "light": "img/opik-logo.svg",
+    "dark": "img/logo-dark-mode.svg"
+  },
+  "favicon": "img/logo.svg",
+  "colors": {
+    "primary": "#2e8555",
+    "light": "#2e8555",
+    "dark": "#166534"
+  },
+  "topbarCtaButton": {
+    "type": "github",
+    "url": "https://github.com/comet-ml/opik"
+  },
+  "topAnchor": {
+    "name": "Guides",
+    "icon": "building"
+  },
+  "anchors": [
+    {
+      "name": "Self-host",
+      "icon": "server",
+      "color": "#2e8555",
+      "url": "guides/self-host"
+    },
+    {
+      "name": "Cookbooks",
+      "icon": "notebook",
+      "color": "#2e8555",
+      "url": "cookbook"
+    },
+    {
+      "name": "API Reference",
+      "openapi": "/rest_api/opik.yaml",
+      "url": "api-reference",
+      "icon": "square-terminal"
+    },
+    {
+      "name": "Python SDK reference",
+      "color": "#2e8555",
+      "url": "https://www.comet.com/docs/opik/python-sdk-reference/",
+      "icon": "python"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": ["guides/home", "guides/quickstart", "guides/changelog", "guides/roadmap", "guides/FAQ"]
+    },
+    {
+      "group": "Self-host",
+      "pages": [
+        "guides/self-host/overview",
+        "guides/self-host/local_deployment",
+        "guides/self-host/kubernetes",
+        {
+          "group": "Configuration",
+          "pages": ["guides/self-host/configure/anonymous_usage_statistics"]
+        }
+      ]
+    },
+    {
+      "group": "Observability",
+      "pages": [
+        "guides/tracing/log_traces",
+        "guides/tracing/log_agents",
+        "guides/tracing/log_multimodal_traces",
+        "guides/tracing/log_distributed_traces",
+        "guides/tracing/annotate_traces",
+        "guides/tracing/cost_tracking",
+        "guides/tracing/sdk_configuration",
+        "guides/tracing/export_data",
+        {
+          "group": "Integrations",
+          "pages": [
+            "guides/tracing/integrations/overview",
+            "guides/tracing/integrations/openai",
+            "guides/tracing/integrations/litellm",
+            "guides/tracing/integrations/langchain",
+            "guides/tracing/integrations/aisuite",
+            "guides/tracing/integrations/anthropic",
+            "guides/tracing/integrations/bedrock",
+            "guides/tracing/integrations/crewai",
+            "guides/tracing/integrations/dify",
+            "guides/tracing/integrations/dspy",
+            "guides/tracing/integrations/gemini",
+            "guides/tracing/integrations/groq",
+            "guides/tracing/integrations/guardrails-ai",
+            "guides/tracing/integrations/haystack",
+            "guides/tracing/integrations/langgraph",
+            "guides/tracing/integrations/llama_index",
+            "guides/tracing/integrations/ollama",
+            "guides/tracing/integrations/predibase",
+            "guides/tracing/integrations/ragas",
+            "guides/tracing/integrations/watsonx"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "Evaluation",
+      "pages": [
+        "guides/evaluation/overview",
+        "guides/evaluation/concepts",
+        "guides/evaluation/evaluate_prompt",
+        "guides/evaluation/evaluate_your_llm",
+        "guides/evaluation/update_existing_experiment",
+        "guides/evaluation/manage_datasets",
+        {
+          "group": "Metrics",
+          "pages": [
+            "guides/evaluation/metrics/overview",
+            "guides/evaluation/metrics/heuristic_metrics",
+            "guides/evaluation/metrics/hallucination",
+            "guides/evaluation/metrics/g_eval",
+            "guides/evaluation/metrics/moderation",
+            "guides/evaluation/metrics/answer_relevance",
+            "guides/evaluation/metrics/context_precision",
+            "guides/evaluation/metrics/context_recall",
+            "guides/evaluation/metrics/custom_model",
+            "guides/evaluation/metrics/custom_metric"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "Prompt engineering",
+      "pages": [
+        "guides/prompt_engineering/prompt_management",
+        "guides/prompt_engineering/managing_prompts_in_code",
+        "guides/prompt_engineering/playground"
+      ]
+    },
+    {
+      "group": "Testing",
+      "pages": ["guides/testing/pytest_integration"]
+    },
+    {
+      "group": "Production",
+      "pages": ["guides/production/production_monitoring", "guides/production/rules", "guides/production/gateway"]
+    },
+    {
+      "group": "Cookbooks",
+      "pages": [
+        "cookbook/quickstart_notebook",
+        "cookbook/openai",
+        "cookbook/litellm",
+        "cookbook/langchain",
+        "cookbook/aisuite",
+        "cookbook/anthropic",
+        "cookbook/bedrock",
+        "cookbook/crewai",
+        "cookbook/dspy",
+        "cookbook/gemini",
+        "cookbook/groq",
+        "cookbook/guardrails-ai",
+        "cookbook/haystack",
+        "cookbook/langgraph",
+        "cookbook/llama-index",
+        "cookbook/ollama",
+        "cookbook/predibase",
+        "cookbook/ragas",
+        "cookbook/watsonx",
+        "cookbook/evaluate_hallucination_metric",
+        "cookbook/evaluate_moderation_metric"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/comet-ml/opik",
+    "slack": "https://chat.comet.com",
+    "x": "https://x.com/cometml"
+  }
+}
