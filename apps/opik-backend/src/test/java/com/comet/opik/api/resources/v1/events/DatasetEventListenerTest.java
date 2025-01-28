@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -63,7 +64,7 @@ class DatasetEventListenerTest {
     private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
 
     @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    private static final TestDropwizardAppExtension APP;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
 
@@ -75,7 +76,7 @@ class DatasetEventListenerTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -83,6 +84,7 @@ class DatasetEventListenerTest {
 
     private String baseURI;
     private ClientSupport client;
+    private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
@@ -100,6 +102,8 @@ class DatasetEventListenerTest {
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+
+        experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -214,9 +218,8 @@ class DatasetEventListenerTest {
     }
 
     private Experiment generateExperiment(Dataset dataset) {
-        return factory.manufacturePojo(Experiment.class).toBuilder()
+        return experimentResourceClient.createPartialExperiment()
                 .datasetName(dataset.name())
-                .promptVersion(null)
                 .build();
     }
 

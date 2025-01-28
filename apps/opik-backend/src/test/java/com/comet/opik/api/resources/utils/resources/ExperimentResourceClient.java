@@ -5,6 +5,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.client.Entity;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
@@ -12,6 +13,7 @@ import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -25,6 +27,18 @@ public class ExperimentResourceClient {
     private final ClientSupport client;
     private final String baseURI;
     private final PodamFactory podamFactory;
+
+    public Experiment.ExperimentBuilder createPartialExperiment() {
+        return podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                .promptVersion(null)
+                .promptVersions(null);
+    }
+
+    public List<Experiment> generateExperimentList() {
+        return PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class).stream()
+                .map(experiment -> experiment.toBuilder().promptVersion(null).promptVersions(null).build())
+                .toList();
+    }
 
     public UUID create(Experiment experiment, String apiKey, String workspaceName) {
 
@@ -42,6 +56,7 @@ public class ExperimentResourceClient {
     public UUID createExperiment(String apiKey, String workspaceName) {
         Experiment experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                 .promptVersion(null)
+                .promptVersions(null)
                 .build();
 
         return create(experiment, apiKey, workspaceName);

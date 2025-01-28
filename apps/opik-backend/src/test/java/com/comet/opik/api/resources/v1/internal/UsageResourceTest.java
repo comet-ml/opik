@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.internal;
 
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
-import com.comet.opik.api.Experiment;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -13,6 +12,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -93,6 +93,7 @@ class UsageResourceTest {
     private ClientSupport client;
     private TransactionTemplateAsync clickHouseTemplate;
     private TransactionTemplate mySqlTemplate;
+    private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync clickHouseTemplate,
@@ -111,6 +112,8 @@ class UsageResourceTest {
         this.mySqlTemplate = mySqlTemplate;
 
         ClientSupportUtils.config(client);
+
+        this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -189,12 +192,7 @@ class UsageResourceTest {
         @Test
         @DisplayName("Get experiments daily info for BI events, no Auth")
         void experimentBiInfoTest() {
-            var experiments = PodamFactoryUtils.manufacturePojoList(factory, Experiment.class)
-                    .stream()
-                    .map(e -> e.toBuilder()
-                            .promptVersion(null)
-                            .build())
-                    .toList();
+            var experiments = experimentResourceClient.generateExperimentList();
             biInfoTest(experiments, EXPERIMENT_RESOURCE_URL_TEMPLATE, "experiments",
                     subtractClickHouseTableRecordsCreatedAtOneDay("experiments"));
         }

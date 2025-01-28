@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
@@ -12,6 +14,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,5 +60,23 @@ public class DatasetResourceClient {
                         assertThat(actualResponse.hasEntity()).isFalse();
                     }
                 });
+    }
+
+    public DatasetPage getDatasetPage(String apiKey, String workspaceName, Integer size, PromptVersion promptVersion) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("with_experiments_only", true)
+                .queryParam("prompt_id", promptVersion.promptId());
+
+        if (size != null && size > 0) {
+            webTarget = webTarget.queryParam("size", size);
+        }
+
+        var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        return actualResponse.readEntity(DatasetPage.class);
     }
 }

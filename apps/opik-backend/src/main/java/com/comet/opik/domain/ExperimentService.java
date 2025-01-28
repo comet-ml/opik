@@ -25,6 +25,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -32,12 +33,12 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
@@ -128,6 +129,7 @@ public class ExperimentService {
                                                             .orElse(null))
                                                     .promptVersion(
                                                             buildPromptVersion(tuple.getT1(), experiment))
+                                                    .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
                                                     .build())
                                             .toList())
                                     .build());
@@ -138,12 +140,54 @@ public class ExperimentService {
         return datasets.stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
     }
 
+    private List<PromptVersionLink> buildPromptVersions(Map<UUID, String> promptVersions, Experiment experiment) {
+        if (hasPromptVersionLinks(experiment)) {
+
+            Stream<PromptVersionLink> promptVersionLinks = Optional.ofNullable(experiment.promptVersions())
+                    .orElseGet(List::of)
+                    .stream()
+                    .map(version -> new PromptVersionLink(
+                            version.id(),
+                            promptVersions.get(version.id()),
+                            version.promptId()));
+
+            Stream<PromptVersionLink> promptVersionLink = Optional.ofNullable(experiment.promptVersion())
+                    .stream()
+                    .map(version -> new PromptVersionLink(
+                            version.id(),
+                            promptVersions.get(version.id()),
+                            version.promptId()));
+
+            List<PromptVersionLink> versionLinks = Stream.concat(promptVersionLinks, promptVersionLink).distinct()
+                    .toList();
+
+            return versionLinks.isEmpty() ? null : versionLinks;
+        }
+
+        return null;
+    }
+
     private PromptVersionLink buildPromptVersion(Map<UUID, String> promptVersions, Experiment experiment) {
-        if (experiment.promptVersion() != null) {
-            return new PromptVersionLink(
-                    experiment.promptVersion().id(),
-                    promptVersions.get(experiment.promptVersion().id()),
-                    experiment.promptVersion().promptId());
+        if (hasPromptVersionLinks(experiment)) {
+
+            PromptVersionLink versionLink = experiment.promptVersion();
+
+            if (versionLink != null) {
+                return new PromptVersionLink(
+                        versionLink.id(),
+                        promptVersions.get(versionLink.id()),
+                        versionLink.promptId());
+            } else {
+                return Optional.ofNullable(experiment.promptVersions())
+                        .stream()
+                        .flatMap(List::stream)
+                        .findFirst()
+                        .map(version -> new PromptVersionLink(
+                                version.id(),
+                                promptVersions.get(version.id()),
+                                version.promptId()))
+                        .orElse(null);
+            }
         }
 
         return null;
@@ -151,9 +195,20 @@ public class ExperimentService {
 
     private Set<UUID> getPromptVersionIds(ExperimentPage experimentPage) {
         return experimentPage.content().stream()
-                .map(Experiment::promptVersion)
-                .filter(Objects::nonNull)
-                .map(PromptVersionLink::id)
+                .flatMap(experiment -> {
+
+                    // to be deprecated soon
+                    var promptVersion = Optional.ofNullable(experiment.promptVersion())
+                            .map(PromptVersionLink::id)
+                            .stream();
+
+                    var promptVersions = Optional.ofNullable(experiment.promptVersions())
+                            .stream()
+                            .flatMap(List::stream)
+                            .map(PromptVersionLink::id);
+
+                    return Stream.concat(promptVersion, promptVersions).distinct();
+                })
                 .collect(Collectors.toSet());
     }
 
@@ -180,9 +235,7 @@ public class ExperimentService {
                 .switchIfEmpty(Mono.defer(() -> Mono.error(newNotFoundException(errorMsg))))
                 .flatMap(experiment -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    Set<UUID> promptVersionIds = experiment.promptVersion() != null
-                            ? Set.of(experiment.promptVersion().id())
-                            : Set.of();
+                    Set<UUID> promptVersionIds = getPromptVersionIds(experiment);
 
                     return Mono.zip(
                             promptService.getVersionsCommitByVersionsIds(promptVersionIds),
@@ -190,11 +243,33 @@ public class ExperimentService {
                                     .subscribeOn(Schedulers.boundedElastic()))
                             .map(tuple -> experiment.toBuilder()
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
+                                    .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
                                     .datasetName(tuple.getT2()
                                             .map(Dataset::name)
                                             .orElse(null))
                                     .build());
                 }));
+    }
+
+    private Set<UUID> getPromptVersionIds(Experiment experiment) {
+        if (hasPromptVersionLinks(experiment)) {
+
+            // to be deprecated soon
+            var promptVersion = Optional.ofNullable(experiment.promptVersion())
+                    .map(PromptVersionLink::id)
+                    .map(Set::of)
+                    .orElse(Set.of());
+
+            var promptVersions = Optional.ofNullable(experiment.promptVersions())
+                    .stream()
+                    .flatMap(List::stream)
+                    .map(PromptVersionLink::id)
+                    .collect(Collectors.toSet());
+
+            return SetUtils.union(promptVersion, promptVersions);
+        }
+
+        return Set.of();
     }
 
     public Mono<Experiment> create(@NonNull Experiment experiment) {
@@ -210,17 +285,32 @@ public class ExperimentService {
                     .onErrorResume(e -> handleDatasetCreationError(e, experiment.datasetName()).map(Dataset::id))
                     .flatMap(datasetId -> {
 
-                        if (experiment.promptVersion() != null) {
-                            return validatePromptVersion(experiment).flatMap(promptVersion -> {
+                        if (hasPromptVersionLinks(experiment)) {
+                            return validatePromptVersion(experiment).flatMap(promptVersions -> {
 
-                                var link = PromptVersionLink.builder()
-                                        .id(promptVersion.id())
-                                        .commit(promptVersion.commit())
-                                        .promptId(promptVersion.promptId())
-                                        .build();
+                                var builder = experiment.toBuilder();
 
-                                return create(experiment.toBuilder().promptVersion(link).build(), id, name,
-                                        datasetId);
+                                // add prompt versions to new prompt version map field
+                                builder.promptVersions(
+                                        promptVersions.values().stream()
+                                                .map(promptVersion -> PromptVersionLink.builder()
+                                                        .id(promptVersion.id())
+                                                        .commit(promptVersion.commit())
+                                                        .promptId(promptVersion.promptId())
+                                                        .build())
+                                                .toList());
+
+                                // add prompt version to old prompt version field (to be deprecated soon)
+                                if (experiment.promptVersion() != null) {
+                                    PromptVersion promptVersion = promptVersions.get(experiment.promptVersion().id());
+                                    builder.promptVersion(PromptVersionLink.builder()
+                                            .id(promptVersion.id())
+                                            .commit(promptVersion.commit())
+                                            .promptId(promptVersion.promptId())
+                                            .build());
+                                }
+
+                                return create(builder.build(), id, name, datasetId);
                             });
                         }
 
@@ -238,9 +328,15 @@ public class ExperimentService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Mono<PromptVersion> validatePromptVersion(Experiment experiment) {
-        return promptService.findVersionById(experiment.promptVersion().id())
-                .subscribeOn(Schedulers.boundedElastic())
+    private static boolean hasPromptVersionLinks(Experiment experiment) {
+        return experiment.promptVersion() != null || CollectionUtils.isNotEmpty(experiment.promptVersions());
+    }
+
+    private Mono<Map<UUID, PromptVersion>> validatePromptVersion(Experiment experiment) {
+
+        Set<UUID> versionIds = getPromptVersionIds(experiment);
+
+        return promptService.findVersionByIds(versionIds)
                 .onErrorResume(e -> {
                     if (e instanceof NotFoundException) {
                         return Mono

@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -24,8 +25,8 @@ interface PromptVersionDAO {
             "VALUES (:bean.id, :bean.promptId, :bean.commit, :bean.template, :bean.metadata, :bean.changeDescription, :bean.createdBy, :workspace_id)")
     void save(@Bind("workspace_id") String workspaceId, @BindMethods("bean") PromptVersion prompt);
 
-    @SqlQuery("SELECT * FROM prompt_versions WHERE id = :id AND workspace_id = :workspace_id")
-    PromptVersion findById(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);
+    @SqlQuery("SELECT * FROM prompt_versions WHERE id IN (<ids>) AND workspace_id = :workspace_id")
+    List<PromptVersion> findByIds(@BindList("ids") Collection<UUID> ids, @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("SELECT count(id) FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id")
     long countByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId);

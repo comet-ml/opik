@@ -53,7 +53,7 @@ public interface PromptService {
 
     PromptVersion getVersionById(UUID id);
 
-    Mono<PromptVersion> findVersionById(UUID id);
+    Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
     PromptVersion retrievePromptVersion(String name, String commit);
 
@@ -126,7 +126,7 @@ class PromptServiceImpl implements PromptService {
 
             promptVersionDAO.save(workspaceId, promptVersion);
 
-            return promptVersionDAO.findById(versionId, workspaceId);
+            return promptVersionDAO.findByIds(List.of(versionId), workspaceId).getFirst();
         });
 
         log.info("Created Prompt version for prompt id '{}'", createdPrompt.id());
@@ -343,7 +343,7 @@ class PromptServiceImpl implements PromptService {
         PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            return promptVersionDAO.findById(id, workspaceId);
+            return promptVersionDAO.findByIds(List.of(id), workspaceId).getFirst();
         });
 
         return promptVersion.toBuilder()
@@ -375,11 +375,37 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
+    @Override
+    public Mono<Map<UUID, PromptVersion>> findVersionByIds(@NonNull Set<UUID> ids) {
+
+        if (ids.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> {
+            return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+                return promptVersionDAO.findByIds(ids, workspaceId).stream()
+                        .collect(toMap(PromptVersion::id, promptVersion -> promptVersion.toBuilder()
+                                .variables(getVariables(promptVersion.template()))
+                                .build()));
+            });
+        })
+                .flatMap(versions -> {
+                    if (versions.size() != ids.size()) {
+                        return Mono.error(new NotFoundException(PROMPT_VERSION_NOT_FOUND));
+                    }
+                    return Mono.just(versions);
+                })
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
     public PromptVersion getVersionById(@NonNull String workspaceId, @NonNull UUID id) {
         PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            return promptVersionDAO.findById(id, workspaceId);
+            return promptVersionDAO.findByIds(List.of(id), workspaceId).stream().findFirst().orElse(null);
         });
 
         if (promptVersion == null) {
@@ -438,12 +464,6 @@ class PromptServiceImpl implements PromptService {
     public PromptVersion getVersionById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
         return getVersionById(workspaceId, id);
-    }
-
-    @Override
-    public Mono<PromptVersion> findVersionById(UUID id) {
-        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> getVersionById(workspaceId, id))
-                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     @Override
