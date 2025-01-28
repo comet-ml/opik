@@ -38,7 +38,7 @@ setup(
     long_description_content_type="text/markdown",
     install_requires=[
         "click",
-        "httpx<0.28.0",
+        "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
         "levenshtein<1.0.0",
         "litellm",
         "openai<2.0.0",
