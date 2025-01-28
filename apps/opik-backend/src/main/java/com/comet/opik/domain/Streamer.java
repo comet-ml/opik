@@ -19,11 +19,19 @@ import java.util.concurrent.TimeoutException;
 public class Streamer {
 
     public <T> ChunkedOutput<JsonNode> getOutputStream(@NonNull Flux<T> flux) {
+        return getOutputStream(flux, () -> {
+        });
+    }
+
+    public <T> ChunkedOutput<JsonNode> getOutputStream(@NonNull Flux<T> flux, Runnable onCompleted) {
         var outputStream = new ChunkedOutput<JsonNode>(JsonNode.class, "\r\n");
         Schedulers.boundedElastic()
                 .schedule(() -> flux.doOnNext(item -> sendItem(item, outputStream))
                         .onErrorResume(throwable -> handleError(throwable, outputStream))
-                        .doFinally(signalType -> close(outputStream))
+                        .doFinally(signalType -> {
+                            close(outputStream);
+                            onCompleted.run();
+                        })
                         .subscribe());
         return outputStream;
     }
