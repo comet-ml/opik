@@ -26,6 +26,7 @@ class TestDatasetItemsCrud:
         ["create_delete_dataset_sdk", "create_delete_dataset_ui"],
     )
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
+    @pytest.mark.sanity
     def test_dataset_item_insertion(
         self,
         request,

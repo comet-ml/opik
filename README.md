@@ -190,6 +190,14 @@ Opik allows you to evaluate your LLM application during development through [Dat
 
 You can also run evaluations as part of your CI/CD pipeline using our [PyTest integration](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik).
 
+## ⭐ Star Us on GitHub
+
+If you find Opik useful, please consider giving us a star! Your support helps us grow our community and continue improving the product.
+
+<img src="https://github.com/user-attachments/assets/ffc208bb-3dc0-40d8-9a20-8513b5e4a59d" alt="Opik GitHub Star History" width="600"/>
+
+
+
 ## 🤝 Contributing
 
 There are many ways to contribute to Opik:

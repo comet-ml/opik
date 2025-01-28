@@ -49,6 +49,9 @@ from .column_compare_types_item import ColumnCompareTypesItem
 from .column_public import ColumnPublic
 from .column_public_types_item import ColumnPublicTypesItem
 from .column_types_item import ColumnTypesItem
+from .comment import Comment
+from .comment_compare import CommentCompare
+from .comment_public import CommentPublic
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
 from .data_point_number_public import DataPointNumberPublic
@@ -143,6 +146,9 @@ from .llm_as_judge_output_schema_public_type import LlmAsJudgeOutputSchemaPublic
 from .llm_as_judge_output_schema_type import LlmAsJudgeOutputSchemaType
 from .llm_as_judge_output_schema_write import LlmAsJudgeOutputSchemaWrite
 from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteType
+from .log_item import LogItem
+from .log_item_level import LogItemLevel
+from .log_page import LogPage
 from .message import Message
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
@@ -248,6 +254,9 @@ __all__ = [
     "ColumnPublic",
     "ColumnPublicTypesItem",
     "ColumnTypesItem",
+    "Comment",
+    "CommentCompare",
+    "CommentPublic",
     "CompletionTokensDetails",
     "CountValueStatPublic",
     "DataPointNumberPublic",
@@ -336,6 +345,9 @@ __all__ = [
     "LlmAsJudgeOutputSchemaType",
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
+    "LogItem",
+    "LogItemLevel",
+    "LogPage",
     "Message",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
