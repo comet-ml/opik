@@ -20,6 +20,7 @@ export type SelectBoxProps = {
   disabled?: boolean;
   testId?: string;
   renderOption?: (option: DropdownOption<string>) => React.ReactNode;
+  renderTrigger?: (value: string) => React.ReactNode;
 };
 
 export const SelectBox = ({
@@ -31,6 +32,7 @@ export const SelectBox = ({
   placeholder = "Select value",
   disabled = false,
   renderOption,
+  renderTrigger,
   testId,
 }: SelectBoxProps) => {
   const variantClass =
@@ -45,7 +47,11 @@ export const SelectBox = ({
           className,
         )}
       >
-        <SelectValue placeholder={placeholder} data-testid={testId} />
+        {isFunction(renderTrigger) ? (
+          renderTrigger(value)
+        ) : (
+          <SelectValue placeholder={placeholder} data-testid={testId} />
+        )}
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => {
@@ -58,6 +64,7 @@ export const SelectBox = ({
               key={option.value}
               value={option.value}
               description={option.description}
+              disabled={option.disabled}
             >
               {option.label}
             </SelectItem>

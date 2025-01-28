@@ -7,6 +7,7 @@ export type DropdownOption<TDataType> = {
   value: TDataType;
   label: string;
   description?: string;
+  disabled?: boolean;
 };
 
 export const COLUMN_ID_ID = "id";
