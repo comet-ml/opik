@@ -3,8 +3,6 @@
 from __future__ import annotations
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
-import typing_extensions
-from ..core.serialization import FieldMetadata
 import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
@@ -13,25 +11,13 @@ from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 
 class Base(UniversalBaseModel):
     id: typing.Optional[str] = None
-    project_id: typing_extensions.Annotated[
-        typing.Optional[str], FieldMetadata(alias="projectId")
-    ] = None
+    project_id: typing.Optional[str] = None
     name: str
-    sampling_rate: typing_extensions.Annotated[
-        typing.Optional[float], FieldMetadata(alias="samplingRate")
-    ] = None
-    created_at: typing_extensions.Annotated[
-        typing.Optional[dt.datetime], FieldMetadata(alias="createdAt")
-    ] = None
-    created_by: typing_extensions.Annotated[
-        typing.Optional[str], FieldMetadata(alias="createdBy")
-    ] = None
-    last_updated_at: typing_extensions.Annotated[
-        typing.Optional[dt.datetime], FieldMetadata(alias="lastUpdatedAt")
-    ] = None
-    last_updated_by: typing_extensions.Annotated[
-        typing.Optional[str], FieldMetadata(alias="lastUpdatedBy")
-    ] = None
+    sampling_rate: typing.Optional[float] = None
+    created_at: typing.Optional[dt.datetime] = None
+    created_by: typing.Optional[str] = None
+    last_updated_at: typing.Optional[dt.datetime] = None
+    last_updated_by: typing.Optional[str] = None
     action: typing.Optional[typing.Literal["evaluator"]] = None
 
     if IS_PYDANTIC_V2:

@@ -5,7 +5,7 @@ import FrameworkIntegrationsContent, {
 
 export type FrameworkIntegrationsProps = Omit<
   FrameworkIntegrationsContentProps,
-  "apiKey" | "showColabLinks"
+  "apiKey"
 >;
 const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = (props) => {
   const FrameworkIntegrations = usePluginsStore(

@@ -1,10 +1,8 @@
-import React, { useCallback } from "react";
+import React from "react";
 import get from "lodash/get";
-import capitalize from "lodash/capitalize";
 import isNumber from "lodash/isNumber";
-import copy from "clipboard-copy";
 import { StringParam, useQueryParam } from "use-query-params";
-import { Clock, Coins, Copy, Hash, PenLine } from "lucide-react";
+import { Clock, Coins, Hash, PenLine } from "lucide-react";
 
 import { Span, Trace } from "@/types/traces";
 import {
@@ -20,12 +18,10 @@ import MetadataTab from "./MatadataTab";
 import FeedbackScoreTab from "./FeedbackScoreTab";
 import AgentGraphTab from "./AgentGraphTab";
 import ErrorTab from "./ErrorTab";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
 import { formatDuration } from "@/lib/date";
-import { isObjectSpan } from "@/lib/traces";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
+import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
 
 type TraceDataViewerProps = {
   data: Trace | Span;
@@ -46,10 +42,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   annotateOpen,
   setAnnotateOpen,
 }) => {
-  const { toast } = useToast();
-  const isSpan = isObjectSpan(data);
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
-  const entity = isSpan ? "span" : "trace";
   const tokens = data.usage?.total_tokens;
 
   const agentGraphData = get(
@@ -69,13 +62,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
       ? "input"
       : tab;
 
-  const copyClickHandler = useCallback(() => {
-    toast({
-      description: `${capitalize(entity)} ID successfully copied to clipboard`,
-    });
-    copy(data.id);
-  }, [toast, entity, data.id]);
-
   return (
     <div className="size-full max-w-full overflow-auto p-6">
       <div className="min-w-[400px] max-w-full overflow-x-hidden">
@@ -90,22 +76,13 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 {data?.name}
               </div>
             </div>
-            <div className="flex flex-nowrap gap-2">
-              <Button size="sm" variant="ghost" onClick={copyClickHandler}>
-                <Copy className="mr-2 size-4" />
-                Copy ID
-              </Button>
-              {!annotateOpen && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setAnnotateOpen(true)}
-                >
-                  <PenLine className="mr-2 size-4" />
-                  Annotate
-                </Button>
-              )}
-            </div>
+            <TraceDataViewerActionsPanel
+              data={data}
+              traceId={traceId}
+              spanId={spanId}
+              annotateOpen={annotateOpen}
+              setAnnotateOpen={setAnnotateOpen}
+            />
           </div>
           <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
             <TooltipWrapper content="Duration in seconds">

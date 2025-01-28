@@ -8,6 +8,7 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 
@@ -73,6 +74,16 @@ public class FiltersFactory {
                 .map(this::toValidAndDecoded)
                 .toList();
         return filters.isEmpty() ? null : filters;
+    }
+
+    public <T extends Filter> List<T> validateFilter(List<T> filters) {
+        if (CollectionUtils.isEmpty(filters)) {
+            return filters;
+        }
+        return filters.stream()
+                .map(this::toValidAndDecoded)
+                .map(filter -> (T) filter)
+                .toList();
     }
 
     private Filter toValidAndDecoded(Filter filter) {

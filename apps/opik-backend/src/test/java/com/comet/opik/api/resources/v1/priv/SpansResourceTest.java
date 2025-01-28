@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -11,6 +13,7 @@ import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
@@ -68,6 +71,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -99,11 +103,16 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTraceComment;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.resources.SpanResourceClient.IGNORED_FIELDS;
+import static com.comet.opik.api.resources.utils.resources.SpanResourceClient.IGNORED_FIELDS_SCORES;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -127,10 +136,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class SpansResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
-    public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
-            "totalEstimatedCostVersion"};
-    public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
     public static final String USER = UUID.randomUUID().toString();
@@ -471,6 +476,37 @@ class SpansResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @MethodSource("credentials")
+        void search__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+
+            var span = podamFactory.manufacturePojo(Span.class);
+            String workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            createAndAssert(span, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/search")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(SpanSearchStreamRequest.builder().projectName(span.projectName()).build()))) {
+
+                if (expected) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+                    var expectedSpans = spanResourceClient.getStreamedItems(actualResponse);
+                    assertThat(expectedSpans).hasSize(1);
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
+
     }
 
     private void assertExpectedResponseWithoutBody(boolean expected, Response actualResponse, int expectedStatus) {
@@ -732,6 +768,39 @@ class SpansResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @MethodSource("credentials")
+        void search__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
+                String workspaceName) {
+
+            var span = podamFactory.manufacturePojo(Span.class);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, workspaceId);
+
+            createAndAssert(span, apiKey, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/search")
+                    .request()
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(SpanSearchStreamRequest.builder().projectName(span.projectName()).build()))) {
+
+                if (expected) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+                    var expectedSpans = spanResourceClient.getStreamedItems(actualResponse);
+                    assertThat(expectedSpans).hasSize(1);
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                }
+            }
+        }
     }
 
     private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
@@ -916,6 +985,46 @@ class SpansResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        void searchWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = Stream.of(podamFactory.manufacturePojo(Span.class))
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .parentSpanId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .input(original)
+                            .output(original)
+                            .metadata(original)
+                            .build())
+                    .toList();
+            spans.forEach(expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
+
+            var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).truncate(truncate)
+                    .limit(5).build();
+
+            var expectedSpans = spans.stream()
+                    .map(span -> span.toBuilder()
+                            .input(expected)
+                            .output(expected)
+                            .metadata(expected)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(span.startTime(),
+                                    span.endTime()))
+                            .build())
+                    .toList();
+
+            spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans, USER);
+        }
+
         @Test
         void createAndGetByProjectNameAndTraceId() {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
@@ -1038,8 +1147,9 @@ class SpansResourceTest {
                     unexpectedSpans, apiKey);
         }
 
-        @Test
-        void getSpansByProject__whenFilterIdAndNameEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterIdAndNameEqual__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1074,12 +1184,15 @@ class SpansResourceTest {
                             .operator(Operator.EQUAL)
                             .value(spans.getFirst().name())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans, spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterByCorrespondingField__thenReturnSpansFiltered(SpanField filterField,
+        void getSpansByProject__whenFilterByCorrespondingField__thenReturnSpansFiltered(boolean useStreamSearch,
+                SpanField filterField,
                 Operator filterOperator, String filterValue) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -1112,7 +1225,7 @@ class SpansResourceTest {
                     expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
 
             // Check that it's filtered by cost
-            var filters = List.of(
+            List<SpanFilter> filters = List.of(
                     SpanFilter.builder()
                             .field(filterField)
                             .operator(filterOperator)
@@ -1120,13 +1233,26 @@ class SpansResourceTest {
                                     ? expectedSpans.getFirst().provider()
                                     : filterValue)
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, expectedSpans, expectedSpans, unexpectedSpans,
-                    apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans,
+                    expectedSpans, unexpectedSpans);
+        }
+
+        static Stream<Arguments> getSpansByProject__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
+            return Stream.of(
+                    Arguments.of(false, SpanField.TOTAL_ESTIMATED_COST, Operator.GREATER_THAN, "0"),
+                    Arguments.of(false, SpanField.MODEL, Operator.EQUAL, "gpt-3.5-turbo-1106"),
+                    Arguments.of(false, SpanField.PROVIDER, Operator.EQUAL, null),
+                    // Stream params
+                    Arguments.of(true, SpanField.TOTAL_ESTIMATED_COST, Operator.GREATER_THAN, "0"),
+                    Arguments.of(true, SpanField.MODEL, Operator.EQUAL, "gpt-3.5-turbo-1106"),
+                    Arguments.of(true, SpanField.PROVIDER, Operator.EQUAL, null));
         }
 
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
-        void getSpansByProject__whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
+        void getSpansByProject__whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnSpansFiltered(
+                boolean useStreamSearch, Operator operator,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
                 Function<List<Span>, List<Span>> getExpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
@@ -1155,25 +1281,21 @@ class SpansResourceTest {
             var expectedSpans = getExpectedSpans.apply(spans);
             var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
-            var filters = List.of(SpanFilter.builder()
+            List<SpanFilter> filters = List.of(SpanFilter.builder()
                     .field(SpanField.TOTAL_ESTIMATED_COST)
                     .operator(operator)
                     .value("0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                    apiKey);
-        }
 
-        static Stream<Arguments> getSpansByProject__whenFilterByCorrespondingField__thenReturnSpansFiltered() {
-            return Stream.of(
-                    Arguments.of(SpanField.TOTAL_ESTIMATED_COST, Operator.GREATER_THAN, "0"),
-                    Arguments.of(SpanField.MODEL, Operator.EQUAL, "gpt-3.5-turbo-1106"),
-                    Arguments.of(SpanField.PROVIDER, Operator.EQUAL, null));
+            getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans.reversed(),
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
-        void getSpansByProject__whenFilterNameEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
+        void getSpansByProject__whenFilterNameEqual_NotEqual__thenReturnSpansFiltered(boolean useStreamSearch,
+                Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
@@ -1195,27 +1317,37 @@ class SpansResourceTest {
             var expectedSpans = getExpectedSpans.apply(spans);
             var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
-            var filters = List.of(SpanFilter.builder()
+            List<SpanFilter> filters = List.of(SpanFilter.builder()
                     .field(SpanField.NAME)
                     .operator(operator)
                     .value(spans.getFirst().name().toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                    apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans.reversed(),
+                    spans,
+                    unexpectedSpans);
         }
 
         private Stream<Arguments> equalAndNotEqualFilters() {
             return Stream.of(
-                    Arguments.of(Operator.EQUAL,
+                    Arguments.of(false, Operator.EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
-                    Arguments.of(Operator.NOT_EQUAL,
+                    Arguments.of(false, Operator.NOT_EQUAL,
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())),
+                    // Stream params
+                    Arguments.of(true, Operator.EQUAL,
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
+                    Arguments.of(true, Operator.NOT_EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())));
         }
 
-        @Test
-        void getSpansByProject__whenFilterNameStartsWith__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterNameStartsWith__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1244,11 +1376,15 @@ class SpansResourceTest {
                     .operator(Operator.STARTS_WITH)
                     .value(spans.getFirst().name().substring(0, spans.getFirst().name().length() - 4).toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterNameEndsWith__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterNameEndsWith__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1277,11 +1413,15 @@ class SpansResourceTest {
                     .operator(Operator.ENDS_WITH)
                     .value(spans.getFirst().name().substring(3).toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterNameContains__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterNameContains__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1310,11 +1450,15 @@ class SpansResourceTest {
                     .operator(Operator.CONTAINS)
                     .value(spans.getFirst().name().substring(2, spans.getFirst().name().length() - 3).toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterNameNotContains__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterNameNotContains__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1348,12 +1492,16 @@ class SpansResourceTest {
                     .operator(Operator.NOT_CONTAINS)
                     .value(spanName.toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
-        void getSpansByProject__whenFilterStartTimeEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
+        void getSpansByProject__whenFilterStartTimeEqual_NotEqual__thenReturnSpansFiltered(boolean useStreamSearch,
+                Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
@@ -1380,12 +1528,15 @@ class SpansResourceTest {
                     .operator(operator)
                     .value(spans.getFirst().startTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                    apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterStartTimeGreaterThan__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterStartTimeGreaterThan__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1418,11 +1569,15 @@ class SpansResourceTest {
                     .operator(Operator.GREATER_THAN)
                     .value(Instant.now().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterStartTimeGreaterThanEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterStartTimeGreaterThanEqual__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1455,11 +1610,15 @@ class SpansResourceTest {
                     .operator(Operator.GREATER_THAN_EQUAL)
                     .value(spans.getFirst().startTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterStartTimeLessThan__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterStartTimeLessThan__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1492,11 +1651,15 @@ class SpansResourceTest {
                     .operator(Operator.LESS_THAN)
                     .value(Instant.now().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterStartTimeLessThanEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterStartTimeLessThanEqual__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1529,11 +1692,16 @@ class SpansResourceTest {
                     .operator(Operator.LESS_THAN_EQUAL)
                     .value(spans.getFirst().startTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterEndTimeEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterEndTimeEqual__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1562,11 +1730,16 @@ class SpansResourceTest {
                     .operator(Operator.EQUAL)
                     .value(spans.getFirst().endTime().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterInputEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterInputEqual__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1595,11 +1768,15 @@ class SpansResourceTest {
                     .operator(Operator.EQUAL)
                     .value(spans.getFirst().input().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterOutputEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterOutputEqual__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1628,12 +1805,16 @@ class SpansResourceTest {
                     .operator(Operator.EQUAL)
                     .value(spans.getFirst().output().toString())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
-        void getSpansByProject__whenFilterMetadataEqualString__thenReturnSpansFiltered(Operator operator,
+        void getSpansByProject__whenFilterMetadataEqualString__thenReturnSpansFiltered(boolean useStreamSearch,
+                Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
@@ -1667,12 +1848,15 @@ class SpansResourceTest {
                     .key("$.model[0].version")
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                    apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataEqualNumber__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataEqualNumber__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1708,11 +1892,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("2023")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataEqualBoolean__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataEqualBoolean__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1749,11 +1938,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("TRUE")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataEqualNull__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataEqualNull__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1789,11 +1983,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("NULL")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataContainsString__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataContainsString__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1829,11 +2028,15 @@ class SpansResourceTest {
                     .key("model[0].version")
                     .value("CHAT-GPT")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataContainsNumber__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataContainsNumber__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1869,11 +2072,15 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("02")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataContainsBoolean__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataContainsBoolean__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1910,11 +2117,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("TRU")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataContainsNull__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataContainsNull__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1950,11 +2162,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("NUL")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataGreaterThanNumber__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataGreaterThanNumber__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1990,11 +2207,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("2023")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataGreaterThanString__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataGreaterThanString__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2027,11 +2249,16 @@ class SpansResourceTest {
                     .key("model[0].version")
                     .value("a")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataGreaterThanBoolean__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataGreaterThanBoolean__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2064,11 +2291,15 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("a")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataGreaterThanNull__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataGreaterThanNull__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2101,11 +2332,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("a")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataLessThanNumber__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataLessThanNumber__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2141,11 +2377,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("2025")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataLessThanString__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataLessThanString__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2178,11 +2419,16 @@ class SpansResourceTest {
                     .key("model[0].version")
                     .value("z")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataLessThanBoolean__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataLessThanBoolean__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2215,11 +2461,15 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("z")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterMetadataLessThanNull__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterMetadataLessThanNull__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2252,11 +2502,16 @@ class SpansResourceTest {
                     .key("model[0].year")
                     .value("z")
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterTagsContains__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterTagsContains__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2289,19 +2544,26 @@ class SpansResourceTest {
                             .substring(0, spans.getFirst().name().length() - 4)
                             .toUpperCase())
                     .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         static Stream<Arguments> getSpansByProject__whenFilterUsage__thenReturnSpansFiltered() {
             return Stream.of(
-                    arguments("completion_tokens", SpanField.USAGE_COMPLETION_TOKENS),
-                    arguments("prompt_tokens", SpanField.USAGE_PROMPT_TOKENS),
-                    arguments("total_tokens", SpanField.USAGE_TOTAL_TOKENS));
+                    arguments(false, "completion_tokens", SpanField.USAGE_COMPLETION_TOKENS),
+                    arguments(false, "prompt_tokens", SpanField.USAGE_PROMPT_TOKENS),
+                    arguments(false, "total_tokens", SpanField.USAGE_TOTAL_TOKENS),
+                    arguments(true, "completion_tokens", SpanField.USAGE_COMPLETION_TOKENS),
+                    arguments(true, "prompt_tokens", SpanField.USAGE_PROMPT_TOKENS),
+                    arguments(true, "total_tokens", SpanField.USAGE_TOTAL_TOKENS));
         }
 
         @ParameterizedTest
         @MethodSource("getSpansByProject__whenFilterUsage__thenReturnSpansFiltered")
-        void getSpansByProject__whenFilterUsageEqual__thenReturnSpansFiltered(String usageKey, Field field) {
+        void getSpansByProject__whenFilterUsageEqual__thenReturnSpansFiltered(boolean useStreamSearch, String usageKey,
+                Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2345,12 +2607,16 @@ class SpansResourceTest {
                             .operator(Operator.EQUAL)
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
         @MethodSource("getSpansByProject__whenFilterUsage__thenReturnSpansFiltered")
-        void getSpansByProject__whenFilterUsageGreaterThan__thenReturnSpansFiltered(String usageKey, Field field) {
+        void getSpansByProject__whenFilterUsageGreaterThan__thenReturnSpansFiltered(boolean useStreamSearch,
+                String usageKey, Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2384,12 +2650,16 @@ class SpansResourceTest {
                             .operator(Operator.GREATER_THAN)
                             .value("123")
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
         @MethodSource("getSpansByProject__whenFilterUsage__thenReturnSpansFiltered")
-        void getSpansByProject__whenFilterUsageGreaterThanEqual__thenReturnSpansFiltered(String usageKey, Field field) {
+        void getSpansByProject__whenFilterUsageGreaterThanEqual__thenReturnSpansFiltered(boolean useStreamSearch,
+                String usageKey, Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2423,12 +2693,17 @@ class SpansResourceTest {
                             .operator(Operator.GREATER_THAN_EQUAL)
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         @ParameterizedTest
         @MethodSource("getSpansByProject__whenFilterUsage__thenReturnSpansFiltered")
-        void getSpansByProject__whenFilterUsageLessThan__thenReturnSpansFiltered(String usageKey, Field field) {
+        void getSpansByProject__whenFilterUsageLessThan__thenReturnSpansFiltered(boolean useStreamSearch,
+                String usageKey, Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2462,12 +2737,16 @@ class SpansResourceTest {
                             .operator(Operator.LESS_THAN)
                             .value("456")
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
         @MethodSource("getSpansByProject__whenFilterUsage__thenReturnSpansFiltered")
-        void getSpansByProject__whenFilterUsageLessThanEqual__thenReturnSpansFiltered(String usageKey, Field field) {
+        void getSpansByProject__whenFilterUsageLessThanEqual__thenReturnSpansFiltered(boolean useStreamSearch,
+                String usageKey, Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2501,12 +2780,16 @@ class SpansResourceTest {
                             .operator(Operator.LESS_THAN_EQUAL)
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans,
+                    unexpectedSpans);
         }
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered(Operator operator,
+        void getSpansByProject__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered(boolean useStreamSearch,
+                Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans) {
 
@@ -2558,22 +2841,31 @@ class SpansResourceTest {
                             .key(spans.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans.reversed(), unexpectedSpans,
-                    apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(),
+                    spans, unexpectedSpans);
         }
 
         private Stream<Arguments> getSpansByProject__whenFilterFeedbackScoresEqual_NotEqual__thenReturnSpansFiltered() {
             return Stream.of(
-                    Arguments.of(Operator.EQUAL,
+                    Arguments.of(false, Operator.EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
-                    Arguments.of(Operator.NOT_EQUAL,
+                    Arguments.of(false, Operator.NOT_EQUAL,
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(2, spans.size()),
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(0, 2)),
+                    Arguments.of(true, Operator.EQUAL,
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
+                    Arguments.of(true, Operator.NOT_EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(2, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(0, 2)));
         }
 
-        @Test
-        void getSpansByProject__whenFilterFeedbackScoresGreaterThan__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterFeedbackScoresGreaterThan__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2626,11 +2918,17 @@ class SpansResourceTest {
                             .key(spans.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value("2345.6788")
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
-        @Test
-        void getSpansByProject__whenFilterFeedbackScoresGreaterThanEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterFeedbackScoresGreaterThanEqual__thenReturnSpansFiltered(
+                boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2675,11 +2973,15 @@ class SpansResourceTest {
                             .key(spans.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterFeedbackScoresLessThan__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterFeedbackScoresLessThan__thenReturnSpansFiltered(boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2725,11 +3027,16 @@ class SpansResourceTest {
                             .key(spans.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value("2345.6788")
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
-        @Test
-        void getSpansByProject__whenFilterFeedbackScoresLessThanEqual__thenReturnSpansFiltered() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void getSpansByProject__whenFilterFeedbackScoresLessThanEqual__thenReturnSpansFiltered(
+                boolean useStreamSearch) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2775,30 +3082,50 @@ class SpansResourceTest {
                             .key(spans.getFirst().feedbackScores().get(2).name().toUpperCase())
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+
         }
 
         Stream<Arguments> getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered() {
             return Stream.of(
-                    arguments(Operator.EQUAL,
+                    arguments(false, Operator.EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN,
+                    arguments(false, Operator.GREATER_THAN,
                             Duration.ofMillis(8L).toNanos() / 1000, 7.0),
-                    arguments(Operator.GREATER_THAN_EQUAL,
+                    arguments(false, Operator.GREATER_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.GREATER_THAN_EQUAL,
+                    arguments(false, Operator.GREATER_THAN_EQUAL,
                             Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN,
+                    arguments(false, Operator.LESS_THAN,
                             Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
-                    arguments(Operator.LESS_THAN_EQUAL,
+                    arguments(false, Operator.LESS_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 1.0),
-                    arguments(Operator.LESS_THAN_EQUAL,
+                    arguments(false, Operator.LESS_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 2.0),
+                    // Stream search
+                    arguments(true, Operator.EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(true, Operator.GREATER_THAN,
+                            Duration.ofMillis(8L).toNanos() / 1000, 7.0),
+                    arguments(true, Operator.GREATER_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(true, Operator.GREATER_THAN_EQUAL,
+                            Duration.ofMillis(1L).plusNanos(1000).toNanos() / 1000, 1.0),
+                    arguments(true, Operator.LESS_THAN,
+                            Duration.ofMillis(1L).plusNanos(1).toNanos() / 1000, 2.0),
+                    arguments(true, Operator.LESS_THAN_EQUAL,
+                            Duration.ofMillis(1L).toNanos() / 1000, 1.0),
+                    arguments(true, Operator.LESS_THAN_EQUAL,
                             Duration.ofMillis(1L).toNanos() / 1000, 2.0));
         }
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered(Operator operator, long end,
+        void getSpansByProject__whenFilterByDuration__thenReturnSpansFiltered(boolean useStreamSearch,
+                Operator operator, long end,
                 double duration) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2848,7 +3175,9 @@ class SpansResourceTest {
                             .value(String.valueOf(duration))
                             .build());
 
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
         }
 
         static Stream<Filter> getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400() {
@@ -3142,27 +3471,31 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400(Filter filter) {
+        void getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400(SpanFilter filter) {
+            int expectedStatus = HttpStatus.SC_BAD_REQUEST;
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    HttpStatus.SC_BAD_REQUEST,
+                    expectedStatus,
                     "Invalid operator '%s' for field '%s' of type '%s'".formatted(
                             filter.operator().getQueryParamOperator(),
                             filter.field().getQueryParamField(),
                             filter.field().getType()));
             var projectName = generator.generate().toString();
-            var filters = List.of(filter);
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", projectName)
-                    .queryParam("filters", toURLEncodedQueryParam(filters))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get();
+            List<SpanFilter> filters = List.of(filter);
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            Stream.of(true, false).forEach(useStreamSearch -> {
 
-            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualError).isEqualTo(expectedError);
+                if (useStreamSearch) {
+                    var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
+                            .filters(List.copyOf(filters)).build();
+                    var actualErrorMessage = spanResourceClient.searchSpan(API_KEY, TEST_WORKSPACE, streamRequest,
+                            expectedStatus, io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualErrorMessage).isEqualTo(expectedError);
+                } else {
+                    var actualError = spanResourceClient.findSpans(API_KEY, TEST_WORKSPACE, projectName, filters,
+                            expectedStatus, io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                }
+            });
         }
 
         static Stream<Filter> getSpansByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400() {
@@ -3255,15 +3588,17 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getSpansByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400(Filter filter) {
+        void getSpansByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400(SpanFilter filter) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            var expectedStatus = HttpStatus.SC_BAD_REQUEST;
+
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    HttpStatus.SC_BAD_REQUEST,
+                    expectedStatus,
                     "Invalid value '%s' or key '%s' for field '%s' of type '%s'".formatted(
                             filter.value(),
                             filter.key(),
@@ -3271,19 +3606,20 @@ class SpansResourceTest {
                             filter.field().getType()));
             var projectName = generator.generate().toString();
             var filters = List.of(filter);
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("workspace_name", workspaceName)
-                    .queryParam("project_name", projectName)
-                    .queryParam("filters", toURLEncodedQueryParam(filters))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(actualError).isEqualTo(expectedError);
+            Stream.of(true, false).forEach(useStreamSearch -> {
+                if (useStreamSearch) {
+                    var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
+                            .filters(List.copyOf(filters)).build();
+                    var actualErrorMessage = spanResourceClient.searchSpan(API_KEY, TEST_WORKSPACE, streamRequest,
+                            expectedStatus, io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualErrorMessage).isEqualTo(expectedError);
+                } else {
+                    var actualError = spanResourceClient.findSpans(API_KEY, TEST_WORKSPACE, projectName, filters,
+                            expectedStatus, io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                }
+            });
         }
 
         private List<FeedbackScore> updateFeedbackScore(List<FeedbackScore> feedbackScores, int index, double val) {
@@ -3297,6 +3633,16 @@ class SpansResourceTest {
                 List<FeedbackScore> destination, List<FeedbackScore> source, int index) {
             destination.set(index, source.get(index).toBuilder().build());
             return destination;
+        }
+    }
+
+    private void getSpansAndAssert(boolean useStreamSearch, String projectName, List<SpanFilter> filters, String apiKey,
+            String workspaceName, List<Span> expectedSpans, List<Span> spans, List<Span> unexpectedSpans) {
+        if (useStreamSearch) {
+            var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build();
+            spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans, USER);
+        } else {
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
         }
     }
 
@@ -3360,7 +3706,8 @@ class SpansResourceTest {
             assertThat(actualSpans)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedSpans);
-            assertIgnoredFields(actualSpans, expectedSpans);
+
+            spanResourceClient.assertIgnoredFields(actualSpans, expectedSpans, USER);
 
             if (!unexpectedSpans.isEmpty()) {
                 assertThat(actualSpans)
@@ -3374,43 +3721,6 @@ class SpansResourceTest {
         return CollectionUtils.isEmpty(filters)
                 ? null
                 : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
-    }
-
-    private void assertIgnoredFields(List<Span> actualSpans, List<Span> expectedSpans) {
-        for (int i = 0; i < actualSpans.size(); i++) {
-            var actualSpan = actualSpans.get(i);
-            var expectedSpan = expectedSpans.get(i);
-            var expectedFeedbackScores = expectedSpan.feedbackScores() == null
-                    ? null
-                    : expectedSpan.feedbackScores().reversed();
-            assertThat(actualSpan.projectId()).isNotNull();
-            assertThat(actualSpan.projectName()).isNull();
-            assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-            assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-            assertThat(actualSpan.feedbackScores())
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                    .withIgnoredFields(IGNORED_FIELDS_SCORES)
-                                    .build())
-                    .isEqualTo(expectedFeedbackScores);
-            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                    expectedSpan.startTime(), expectedSpan.endTime());
-            if (actualSpan.duration() == null || expected == null) {
-                assertThat(actualSpan.duration()).isEqualTo(expected);
-            } else {
-                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
-            }
-
-            if (actualSpan.feedbackScores() != null) {
-                actualSpan.feedbackScores().forEach(feedbackScore -> {
-                    assertThat(feedbackScore.createdAt()).isAfter(expectedSpan.createdAt());
-                    assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-                    assertThat(feedbackScore.createdBy()).isEqualTo(USER);
-                    assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
-                });
-            }
-        }
     }
 
     private UUID createAndAssert(Span expectedSpan, String apiKey, String workspaceName) {
@@ -3928,8 +4238,7 @@ class SpansResourceTest {
         void getNotFound() {
             UUID id = generator.generate();
 
-            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(404,
-                    "Not found span with id '%s'".formatted(id));
+            var expectedError = "Span id: %s not found".formatted(id);
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
                     .request()
@@ -3941,7 +4250,7 @@ class SpansResourceTest {
 
                 var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
 
-                assertThat(actualError).isEqualTo(expectedError);
+                assertThat(actualError.getMessage()).isEqualTo(expectedError);
             }
         }
     }
@@ -5214,6 +5523,119 @@ class SpansResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Comment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanComment {
+
+        @Test
+        void createCommentForNonExistingTraceFail() {
+            spanResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
+        }
+
+        @Test
+        void createAndGetComment() {
+            // Create comment for existing span
+            UUID spanId = spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class), API_KEY,
+                    TEST_WORKSPACE);
+            Comment expectedComment = spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Get created comment by id and assert
+            Comment actualComment = spanResourceClient.getCommentById(expectedComment.id(), spanId, API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertTraceComment(expectedComment, actualComment);
+        }
+
+        @Test
+        void createAndUpdateComment() {
+            // Create comment for existing span
+            UUID spanId = spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class), API_KEY,
+                    TEST_WORKSPACE);
+            Comment expectedComment = spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Get created comment by id and assert
+            Comment actualComment = spanResourceClient.getCommentById(expectedComment.id(), spanId, API_KEY,
+                    TEST_WORKSPACE, 200);
+
+            // Update existing comment
+            String updatedText = podamFactory.manufacturePojo(String.class);
+            spanResourceClient.updateComment(updatedText, expectedComment.id(), API_KEY,
+                    TEST_WORKSPACE, 204);
+
+            // Get comment by id and assert it was updated
+            Comment updatedComment = traceResourceClient.getCommentById(expectedComment.id(), spanId, API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertUpdatedComment(actualComment, updatedComment, updatedText);
+        }
+
+        @Test
+        void deleteComments() {
+            // Create comments for existing span
+            UUID spanId = spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class), API_KEY,
+                    TEST_WORKSPACE);
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList().reversed();
+
+            // Check it was created
+            expectedComments.forEach(
+                    comment -> spanResourceClient.getCommentById(comment.id(), spanId, API_KEY, TEST_WORKSPACE, 200));
+
+            // Delete comment
+            BatchDelete request = BatchDelete.builder()
+                    .ids(expectedComments.stream().map(Comment::id).collect(Collectors.toSet())).build();
+            spanResourceClient.deleteComments(request, API_KEY, TEST_WORKSPACE);
+
+            // Verify comments were actually deleted via get and update endpoints
+            expectedComments.forEach(
+                    comment -> spanResourceClient.getCommentById(comment.id(), spanId, API_KEY, TEST_WORKSPACE, 404));
+            expectedComments
+                    .forEach(comment -> spanResourceClient.updateComment(podamFactory.manufacturePojo(String.class),
+                            comment.id(), API_KEY, TEST_WORKSPACE, 404));
+        }
+
+        @Test
+        void getSpanWithComments() {
+            UUID spanId = spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class), API_KEY,
+                    TEST_WORKSPACE);
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            Span actualSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+            assertComments(expectedComments, actualSpan.comments());
+        }
+
+        @Test
+        void getSpanPageWithComments() {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            var spanId = spans.getFirst().id();
+
+            spanResourceClient.batchCreateSpans(spans, API_KEY, TEST_WORKSPACE);
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            spans = spans.stream()
+                    .map(span -> span.id() != spanId ? span : span.toBuilder().comments(expectedComments).build())
+                    .toList();
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), spans.reversed(), spans.reversed(), List.of(),
+                    API_KEY);
         }
     }
 

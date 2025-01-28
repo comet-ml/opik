@@ -1,9 +1,9 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import find from "lodash/find";
 import { BooleanParam, useQueryParam } from "use-query-params";
 
-import { Database, Trash } from "lucide-react";
+import { Trash } from "lucide-react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -21,10 +21,6 @@ import ResizableSidePanel from "@/components/shared/ResizableSidePanel/Resizable
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import AddToDatasetDialog from "@/components/pages/TracesPage/AddToDataset/AddToDatasetDialog";
-import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
-
-type OpenPopupType = "delete" | "addDataset";
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -47,8 +43,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onClose,
   onRowChange,
 }) => {
-  const resetKeyRef = useRef(0);
-  const [open, setOpen] = useState<boolean | OpenPopupType>(false);
+  const [open, setOpen] = useState<boolean>(false);
   const [annotateOpen = false, setAnnotateOpen] = useQueryParam(
     "annotation",
     BooleanParam,
@@ -83,8 +78,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   );
 
   const traceDeleteMutation = useTraceDeleteMutation();
-
-  const rows = useMemo(() => (trace ? [trace] : []), [trace]);
 
   const handleTraceDelete = useCallback(() => {
     onClose();
@@ -165,32 +158,14 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     return (
       <div className="flex gap-2">
         <ConfirmDialog
-          open={open === "delete"}
+          open={open}
           setOpen={setOpen}
           onConfirm={handleTraceDelete}
           title="Delete trace"
           description="Are you sure you want to delete this trace?"
           confirmText="Delete trace"
         />
-        <AddToDatasetDialog
-          key={resetKeyRef.current}
-          rows={rows}
-          open={open === "addDataset"}
-          setOpen={setOpen}
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setOpen("addDataset");
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-        >
-          <Database className="mr-2 size-4" />
-          Add to dataset
-        </Button>
-        <ShareURLButton />
-        <Button variant="outline" size="sm" onClick={() => setOpen("delete")}>
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
           <Trash className="mr-2 size-4" />
           Delete
         </Button>
