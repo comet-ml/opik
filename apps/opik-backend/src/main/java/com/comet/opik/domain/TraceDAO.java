@@ -326,6 +326,76 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
+            WITH traces_ids AS (
+                SELECT
+                    id
+                FROM (
+                    SELECT
+                        DISTINCT
+                            id,
+                            if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                             NULL) AS duration_millis,
+                            row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    <if(filters)> AND <filters> <endif>
+                    <if(feedback_scores_filters)>
+                    AND id in (
+                        SELECT
+                            entity_id
+                        FROM (
+                            SELECT *
+                            FROM feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            ORDER BY entity_id DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
+                    )
+                    <endif>
+                ) WHERE latest = 1
+                ORDER BY id DESC
+                LIMIT :limit OFFSET :offset
+            ), span_usage AS (
+                SELECT
+                    *
+                FROM (
+                    SELECT
+                        trace_id,
+                        usage,
+                        total_estimated_cost,
+                        row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                )  WHERE latest = 1
+            ), comments_final AS (
+                SELECT
+                    entity_id,
+                    groupArray(tuple(*)) AS comments_array
+                FROM (
+                    SELECT
+                        id,
+                        text,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by,
+                        entity_id
+                    FROM comments
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                GROUP BY entity_id
+            )
             SELECT
                 t.*,
                 t.duration_millis,
@@ -353,62 +423,13 @@ class TraceDAOImpl implements TraceDAO {
                                  AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                              (dateDiff('microsecond', start_time, end_time) / 1000.0),
                              NULL) AS duration_millis
-                 FROM traces
-                 WHERE project_id = :project_id
-                 AND workspace_id = :workspace_id
-                 <if(filters)> AND <filters> <endif>
-                 <if(feedback_scores_filters)>
-                 AND id in (
-                    SELECT
-                        entity_id
-                    FROM (
-                        SELECT *
-                        FROM feedback_scores
-                        WHERE entity_type = 'trace'
-                        AND workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        ORDER BY entity_id DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                    )
-                    GROUP BY entity_id
-                    HAVING <feedback_scores_filters>
-                 )
-                 <endif>
-                 ORDER BY id DESC, last_updated_at DESC
-                 LIMIT 1 BY id
-                 LIMIT :limit OFFSET :offset
-            ) AS t
-            LEFT JOIN (
-                SELECT
-                    trace_id,
-                    usage,
-                    total_estimated_cost
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
+                FROM traces
+                WHERE id IN (SELECT id FROM traces_ids)
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ) AS s ON t.id = s.trace_id
-            LEFT JOIN (
-                SELECT
-                    entity_id,
-                    groupArray(tuple(*)) AS comments_array
-                FROM (
-                    SELECT
-                        id,
-                        text,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by,
-                        entity_id
-                    FROM comments
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                GROUP BY entity_id
-            ) AS c ON t.id = c.entity_id
+            ) AS t
+            LEFT JOIN span_usage AS s ON t.id = s.trace_id
+            LEFT JOIN comments_final AS c ON t.id = c.entity_id
             GROUP BY
                 t.*,
                 t.duration_millis
@@ -416,6 +437,7 @@ class TraceDAOImpl implements TraceDAO {
             HAVING <trace_aggregation_filters>
             <endif>
             ORDER BY t.id DESC
+            SETTINGS join_algorithm = 'partial_merge'
             ;
             """;
 
@@ -445,9 +467,11 @@ class TraceDAOImpl implements TraceDAO {
                 count(id) as count
             FROM (
                 SELECT
-                    t.id,
-                    sumMap(s.usage) as usage,
-                    sum(s.total_estimated_cost) as total_estimated_cost
+                    t.id
+                    <if(trace_aggregation_filters)>
+                    ,sumMap(s.usage) as usage
+                    ,sum(s.total_estimated_cost) as total_estimated_cost
+                    <endif>
                 FROM (
                     SELECT
                         id,
@@ -479,6 +503,7 @@ class TraceDAOImpl implements TraceDAO {
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS t
+                <if(trace_aggregation_filters)>
                 LEFT JOIN (
                     SELECT
                         trace_id,
@@ -492,7 +517,6 @@ class TraceDAOImpl implements TraceDAO {
                 ) AS s ON t.id = s.trace_id
                 GROUP BY
                     t.id
-                <if(trace_aggregation_filters)>
                 HAVING <trace_aggregation_filters>
                 <endif>
                 ORDER BY t.id DESC
@@ -671,65 +695,68 @@ class TraceDAOImpl implements TraceDAO {
                         s.total_estimated_cost as total_estimated_cost
                     FROM (
                         SELECT
-                             workspace_id,
-                             project_id,
-                             id,
-                             if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                         AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                     (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration_millis,
-                             if(length(input) > 0, 1, 0) as input_count,
-                             if(length(output) > 0, 1, 0) as output_count,
-                             if(length(metadata) > 0, 1, 0) as metadata_count,
-                             length(tags) as tags_count
-                        FROM traces
-                        WHERE project_id IN :project_ids
-                        AND workspace_id = :workspace_id
-                        <if(filters)> AND <filters> <endif>
-                        <if(feedback_scores_filters)>
-                        AND id IN (
+                            *
+                        FROM (
                             SELECT
-                                entity_id
-                            FROM (
-                                SELECT *
-                                FROM feedback_scores
-                                WHERE entity_type = 'trace'
-                                AND workspace_id = :workspace_id
-                                AND project_id IN :project_ids
-                                ORDER BY entity_id DESC, last_updated_at DESC
-                                LIMIT 1 BY entity_id, name
-                            )
-                            GROUP BY entity_id
-                            HAVING <feedback_scores_filters>
-                        )
-                        <endif>
-                        <if(trace_aggregation_filters)>
-                        AND id IN (
-                            SELECT
-                                trace_id
-                            FROM (
+                                 workspace_id,
+                                 project_id,
+                                 id,
+                                 if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                         NULL) AS duration_millis,
+                                 if(length(input) > 0, 1, 0) as input_count,
+                                 if(length(output) > 0, 1, 0) as output_count,
+                                 if(length(metadata) > 0, 1, 0) as metadata_count,
+                                 length(tags) as tags_count,
+                                 row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                            FROM traces
+                            WHERE project_id IN :project_ids
+                            AND workspace_id = :workspace_id
+                            <if(filters)> AND <filters> <endif>
+                            <if(feedback_scores_filters)>
+                            AND id IN (
                                 SELECT
-                                    trace_id,
-                                    sumMap(usage) as usage,
-                                    sum(total_estimated_cost) as total_estimated_cost
+                                    entity_id
+                                FROM (
+                                    SELECT *
+                                    FROM feedback_scores
+                                    WHERE entity_type = 'trace'
+                                    AND workspace_id = :workspace_id
+                                    AND project_id IN :project_ids
+                                    ORDER BY entity_id DESC, last_updated_at DESC
+                                    LIMIT 1 BY entity_id, name
+                                )
+                                GROUP BY entity_id
+                                HAVING <feedback_scores_filters>
+                            )
+                            <endif>
+                            <if(trace_aggregation_filters)>
+                            AND id IN (
+                                SELECT
+                                    trace_id
                                 FROM (
                                     SELECT
                                         trace_id,
-                                        usage,
-                                        total_estimated_cost
-                                    FROM spans
-                                    WHERE workspace_id = :workspace_id
-                                    AND project_id IN :project_ids
-                                    ORDER BY id DESC, last_updated_at DESC
-                                    LIMIT 1 BY id
+                                        sumMap(usage) as usage,
+                                        sum(total_estimated_cost) as total_estimated_cost
+                                    FROM (
+                                        SELECT
+                                            trace_id,
+                                            usage,
+                                            total_estimated_cost
+                                        FROM spans
+                                        WHERE workspace_id = :workspace_id
+                                        AND project_id IN :project_ids
+                                        ORDER BY id DESC, last_updated_at DESC
+                                        LIMIT 1 BY id
+                                    )
+                                    GROUP BY trace_id
+                                    HAVING <trace_aggregation_filters>
                                 )
-                                GROUP BY trace_id
-                                HAVING <trace_aggregation_filters>
                             )
-                        )
-                        <endif>
-                        ORDER BY id DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                            <endif>
+                        ) WHERE latest = 1
                     ) AS t
                     LEFT JOIN (
                         SELECT
@@ -738,14 +765,17 @@ class TraceDAOImpl implements TraceDAO {
                             sum(total_estimated_cost) as total_estimated_cost
                         FROM (
                             SELECT
-                                trace_id,
-                                usage,
-                                total_estimated_cost
-                            FROM spans
-                            WHERE workspace_id = :workspace_id
-                            AND project_id IN :project_ids
-                            ORDER BY id DESC, last_updated_at DESC
-                            LIMIT 1 BY id
+                                *
+                            FROM (
+                                SELECT
+                                    trace_id,
+                                    usage,
+                                    total_estimated_cost,
+                                    row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                                FROM spans
+                                WHERE workspace_id = :workspace_id
+                                AND project_id IN :project_ids
+                            ) WHERE latest = 1
                         )
                         GROUP BY trace_id
                     ) AS s ON t.id = s.trace_id
@@ -759,21 +789,25 @@ class TraceDAOImpl implements TraceDAO {
                             ) as feedback_scores
                         FROM (
                             SELECT
-                                project_id,
-                                entity_id,
-                                name,
-                                value
-                            FROM feedback_scores
-                            WHERE entity_type = 'trace'
-                            AND workspace_id = :workspace_id
-                            AND project_id IN :project_ids
-                            ORDER BY entity_id DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
+                                *
+                            FROM (
+                                SELECT
+                                    project_id,
+                                    entity_id,
+                                    name,
+                                    value,
+                                    row_number() OVER (PARTITION BY entity_id, name ORDER BY last_updated_at DESC) AS latest
+                                FROM feedback_scores
+                                WHERE entity_type = 'trace'
+                                AND workspace_id = :workspace_id
+                                AND project_id IN :project_ids
+                            ) WHERE latest = 1
                         ) GROUP BY  project_id, entity_id
                     ) as f ON t.id = f.entity_id
                 )
                 GROUP BY project_id
             ) AS stats
+            SETTINGS join_algorithm = 'partial_merge'
             ;
             """;
 
