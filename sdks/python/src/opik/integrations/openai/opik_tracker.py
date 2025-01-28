@@ -1,14 +1,16 @@
-from typing import Optional, Union
+from typing import Optional, TypeVar
 
 import openai
 
 from . import chat_completion_chunks_aggregator, openai_decorator
 
+OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
+
 
 def track_openai(
-    openai_client: Union[openai.OpenAI, openai.AsyncOpenAI],
+    openai_client: OpenAIClient,
     project_name: Optional[str] = None,
-) -> Union[openai.OpenAI, openai.AsyncOpenAI]:
+) -> OpenAIClient:
     """Adds Opik tracking to an OpenAI client.
 
     Tracks calls to:
