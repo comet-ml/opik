@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -80,6 +81,7 @@ class DatasetExperimentE2ETest {
 
     private String baseURI;
     private ClientSupport client;
+    private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
@@ -96,6 +98,7 @@ class DatasetExperimentE2ETest {
 
         ClientSupportUtils.config(client);
 
+        this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -328,9 +331,8 @@ class DatasetExperimentE2ETest {
     }
 
     private Experiment generateExperiment(Dataset dataset) {
-        return factory.manufacturePojo(Experiment.class).toBuilder()
+        return experimentResourceClient.createPartialExperiment()
                 .datasetName(dataset.name())
-                .promptVersion(null)
                 .build();
     }
 
