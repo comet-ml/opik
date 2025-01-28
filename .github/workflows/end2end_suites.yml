@@ -96,9 +96,9 @@ jobs:
                 elif [ "$SUITE" == "feedback_definitions" ]; then
                     pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "sanity" ]; then
-                    pytest -s tests/application_sanity/test_sanity.py --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s sanity --browser chromium --base-url http://localhost:5173 --setup-show
                 elif [ "$SUITE" == "all_features" ]; then
-                    pytest -s tests --browser chromium --base-url http://localhost:5173 --setup-show --ignore=tests/application_sanity
+                    pytest -s tests --browser chromium --base-url http://localhost:5173 --setup-show
                 fi
 
             - name: Stop Opik server
