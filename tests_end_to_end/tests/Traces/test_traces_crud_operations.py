@@ -21,6 +21,7 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @pytest.mark.sanity
     def test_trace_creation(
         self, page: Page, traces_number, create_delete_project_sdk, create_traces
     ):
