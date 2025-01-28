@@ -14,7 +14,6 @@ import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
 import DatasetsPage from "@/components/pages/DatasetsPage/DatasetsPage";
 import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
-import QuickstartPage from "@/components/pages/QuickstartPage/QuickstartPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
 import EmptyPageLayout from "@/components/layout/EmptyPageLayout/EmptyPageLayout";
@@ -91,7 +90,12 @@ const workspaceRoute = createRoute({
 const quickstartRoute = createRoute({
   path: "/$workspaceName/quickstart",
   getParentRoute: () => workspaceGuardPartialLayoutRoute,
-  component: QuickstartPage,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/home"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
 });
 
 // ----------- get started

@@ -30,6 +30,7 @@ import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
+import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 
 enum MENU_ITEM_TYPE {
   link = "link",
@@ -208,6 +209,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   setExpanded,
 }) => {
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
+  const [openQuickstart, setOpenQuickstart] = useState(false);
 
   const matchRoute = useMatchRoute();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -281,10 +283,10 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
     {
       id: "quickstart",
-      path: "/$workspaceName/quickstart",
-      type: MENU_ITEM_TYPE.router,
+      type: MENU_ITEM_TYPE.button,
       icon: GraduationCap,
       label: "Quickstart guide",
+      onClick: () => setOpenQuickstart(true),
     },
     {
       id: "provideFeedback",
@@ -415,6 +417,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         open={openProvideFeedback}
         setOpen={setOpenProvideFeedback}
       />
+
+      <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
     </>
   );
 };

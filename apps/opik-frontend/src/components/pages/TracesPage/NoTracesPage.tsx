@@ -1,13 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Book, GraduationCap } from "lucide-react";
 import logFirstTraceImageUrl from "/images/log-first-trace.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
-import { Link } from "@tanstack/react-router";
-import useAppStore from "@/store/AppStore";
+import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 
 const NoTracesPage = () => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const [openQuickstart, setOpenQuickstart] = useState(false);
 
   return (
     <div className="min-w-[340px] py-6">
@@ -34,14 +33,14 @@ const NoTracesPage = () => {
               Read documentation
             </a>
           </Button>
-          <Link to="/$workspaceName/quickstart" params={{ workspaceName }}>
-            <Button>
-              <GraduationCap className="mr-2 size-4" />
-              Explore Quickstart guide
-            </Button>
-          </Link>
+          <Button onClick={() => setOpenQuickstart(true)}>
+            <GraduationCap className="mr-2 size-4" />
+            Explore Quickstart guide
+          </Button>
         </div>
       </div>
+
+      <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
     </div>
   );
 };
