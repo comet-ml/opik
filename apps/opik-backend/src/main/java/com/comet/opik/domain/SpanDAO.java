@@ -100,7 +100,7 @@ class SpanDAO {
                         :metadata<item.index>,
                         :model<item.index>,
                         :provider<item.index>,
-                        toDecimal64(:total_estimated_cost<item.index>, 8),
+                        toDecimal128(:total_estimated_cost<item.index>, 12),
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
@@ -247,7 +247,7 @@ class SpanDAO {
                     :metadata as metadata,
                     :model as model,
                     :provider as provider,
-                    toDecimal64(:total_estimated_cost, 8) as total_estimated_cost,
+                    toDecimal128(:total_estimated_cost, 12) as total_estimated_cost,
                     :total_estimated_cost_version as total_estimated_cost_version,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
@@ -311,7 +311,7 @@ class SpanDAO {
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
             	<if(model)> :model <else> model <endif> as model,
             	<if(provider)> :provider <else> provider <endif> as provider,
-            	<if(total_estimated_cost)> toDecimal64(:total_estimated_cost, 8) <else> total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
@@ -457,7 +457,7 @@ class SpanDAO {
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
                     <if(model)> :model <else> '' <endif> as model,
                     <if(provider)> :provider <else> '' <endif> as provider,
-                    <if(total_estimated_cost)> toDecimal64(:total_estimated_cost, 8) <else> toDecimal64(0, 8) <endif> as total_estimated_cost,
+                    <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
@@ -685,7 +685,7 @@ class SpanDAO {
                     avgMap(usage) as usage,
                     avgMap(feedback_scores) AS feedback_scores,
                     avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                    toDecimal64(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 8) AS total_estimated_cost_avg
+                    toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
                 FROM (
                     SELECT
                         s.workspace_id as workspace_id,
