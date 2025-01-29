@@ -5,7 +5,6 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
-import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -44,6 +43,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.ProjectStats.ProjectStatItem;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.Collections.reverseOrder;
@@ -306,12 +306,10 @@ class ProjectServiceImpl implements ProjectService {
                             Map<String, Object> statsMap = entry.getValue()
                                     .stats()
                                     .stream()
-                                    .collect(toMap(ProjectStats.ProjectStatItem::getName,
-                                            ProjectStats.ProjectStatItem::getValue));
+                                    .collect(toMap(ProjectStatItem::getName, ProjectStatItem::getValue));
 
                             return Map.entry(entry.getKey(), statsMap);
                         })
-                        .map(entry -> Map.entry(entry.getKey(), entry.getValue()))
                         .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
                 .block();
     }
