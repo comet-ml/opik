@@ -4,7 +4,7 @@ from typing import Any, List, Dict
 LOGGER = logging.getLogger(__name__)
 
 
-def aggregate(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Implementation is based on the following AWS example (see the section `Conversation with streaming example`).
     https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-examples.html

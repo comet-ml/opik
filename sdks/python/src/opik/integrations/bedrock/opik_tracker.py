@@ -48,7 +48,7 @@ def track_bedrock(client: Any, project_name: Optional[str] = None) -> Any:
             type="llm",
             name="bedrock_converse_stream",
             project_name=project_name,
-            generations_aggregator=chunks_aggregator.aggregate,
+            generations_aggregator=chunks_aggregator.aggregate_converse_stream_chunks,
         )
         tracked_converse_stream = stream_wrapper(client.converse_stream)
         client.converse_stream = tracked_converse_stream
