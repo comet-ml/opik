@@ -10,6 +10,7 @@ import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
+import ConfigureEnvCode from "@/components/pages-shared/onboarding/ConfigureEnvCode/ConfigureEnvCode";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -149,8 +150,6 @@ const AddExperimentDialog: React.FunctionComponent<
     LLM_JUDGES_MODELS_OPTIONS[0].value,
   ]); // Set the first LLM judge model as checked
   const section1 = "pip install opik";
-  const section2 =
-    'export OPIK_API_KEY="Your API key"\nexport OPIK_WORKSPACE="Your workspace"';
 
   const importString =
     models.length > 0
@@ -335,7 +334,7 @@ eval_results = evaluate(
             <div className="comet-body-s mt-4 text-foreground-secondary">
               3. Configure your API key
             </div>
-            <CodeHighlighter data={section2} />
+            <ConfigureEnvCode />
             <div className="comet-body-s mt-4 text-foreground-secondary">
               4. Create an Experiment
             </div>
