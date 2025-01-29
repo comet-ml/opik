@@ -326,7 +326,20 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH traces_ids AS (
+            WITH span_usage AS (
+                SELECT
+                    *
+                FROM (
+                    SELECT
+                        trace_id,
+                        usage,
+                        total_estimated_cost,
+                        row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                )  WHERE latest = 1
+            ), traces_ids AS (
                 SELECT
                     id
                 FROM (
@@ -359,22 +372,24 @@ class TraceDAOImpl implements TraceDAO {
                         HAVING <feedback_scores_filters>
                     )
                     <endif>
+                   <if(trace_aggregation_filters)>
+                   AND id in (
+                        SELECT
+                            trace_id
+                        FROM (
+                            SELECT
+                                trace_id,
+                                sumMap(usage) as usage,
+                                sum(total_estimated_cost) as total_estimated_cost
+                            FROM span_usage
+                            GROUP BY trace_id
+                            HAVING <trace_aggregation_filters>
+                        )
+                    )
+                    <endif>
                 ) WHERE latest = 1
                 ORDER BY id DESC
                 LIMIT :limit OFFSET :offset
-            ), span_usage AS (
-                SELECT
-                    *
-                FROM (
-                    SELECT
-                        trace_id,
-                        usage,
-                        total_estimated_cost,
-                        row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
-                    FROM spans
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                )  WHERE latest = 1
             ), comments_final AS (
                 SELECT
                     entity_id,
@@ -433,9 +448,6 @@ class TraceDAOImpl implements TraceDAO {
             GROUP BY
                 t.*,
                 t.duration_millis
-            <if(trace_aggregation_filters)>
-            HAVING <trace_aggregation_filters>
-            <endif>
             ORDER BY t.id DESC
             SETTINGS join_algorithm = 'partial_merge'
             ;
