@@ -4,7 +4,7 @@ import { Database, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import AddToDatasetDialog from "@/components/pages/TracesPage/AddToDataset/AddToDatasetDialog";
+import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
