@@ -33,7 +33,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
-import TracesActionsPanel from "@/components/pages/TracesPage/TracesActionsPanel";
+import TracesActionsPanel from "@/components/pages/TracesPage/TracesSpansTab/TracesActionsPanel";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";

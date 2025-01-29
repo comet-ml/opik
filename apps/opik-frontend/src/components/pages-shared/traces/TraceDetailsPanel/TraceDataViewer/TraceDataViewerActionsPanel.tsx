@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import AddToDatasetDialog from "@/components/pages/TracesPage/AddToDataset/AddToDatasetDialog";
+import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 
 type TraceDataViewerActionsPanelProps = {
   data: Trace | Span;

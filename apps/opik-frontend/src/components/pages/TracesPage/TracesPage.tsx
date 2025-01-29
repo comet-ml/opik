@@ -4,7 +4,7 @@ import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
-import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab";
+import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesSpansTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 
