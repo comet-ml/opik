@@ -21,6 +21,10 @@ def async_http_connections_expire_immediately() -> Iterator[None]:
     Related issues:
     https://github.com/comet-ml/opik/issues/1132
     https://github.com/encode/httpx/discussions/2959
+
+    TODO: this function might probably require extra logic for handling the cases
+    when there is already existing async connection pool with opened connections, but it is
+    out of scope for now.
     """
     try:
         original = httpcore.AsyncHTTPConnection.__init__
