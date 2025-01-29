@@ -10,6 +10,8 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import org.apache.hc.core5.http.ContentType;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.util.Set;
@@ -47,6 +49,23 @@ public class LlmProviderApiKeyResourceClient {
 
             return null;
         }
+    }
+
+    public Response createProviderApiKey(
+            String body, String apiKey, String workspaceName, int expectedStatus) {
+
+        var request = Entity.entity(body, ContentType.APPLICATION_JSON.toString());
+
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(request);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+        return actualResponse;
     }
 
     public ProviderApiKey createProviderApiKey(
