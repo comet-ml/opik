@@ -352,6 +352,16 @@ class TraceDAOImpl implements TraceDAO {
                              NULL) AS duration_millis,
                             row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
                     FROM traces
+                    <if(trace_aggregation_filters)>
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            sumMap(usage) as usage,
+                            sum(total_estimated_cost) as total_estimated_cost
+                        FROM span_usage
+                        GROUP BY trace_id
+                    ) s ON traces.id = s.trace_id
+                    <endif>
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     <if(filters)> AND <filters> <endif>
@@ -372,20 +382,8 @@ class TraceDAOImpl implements TraceDAO {
                         HAVING <feedback_scores_filters>
                     )
                     <endif>
-                   <if(trace_aggregation_filters)>
-                   AND id in (
-                        SELECT
-                            trace_id
-                        FROM (
-                            SELECT
-                                trace_id,
-                                sumMap(usage) as usage,
-                                sum(total_estimated_cost) as total_estimated_cost
-                            FROM span_usage
-                            GROUP BY trace_id
-                            HAVING <trace_aggregation_filters>
-                        )
-                    )
+                    <if(trace_aggregation_filters)>
+                    AND <trace_aggregation_filters>
                     <endif>
                 ) WHERE latest = 1
                 ORDER BY id DESC
@@ -449,7 +447,7 @@ class TraceDAOImpl implements TraceDAO {
                 t.*,
                 t.duration_millis
             ORDER BY t.id DESC
-            SETTINGS join_algorithm = 'partial_merge'
+            SETTINGS join_algorithm = 'auto'
             ;
             """;
 
@@ -807,25 +805,22 @@ class TraceDAOImpl implements TraceDAO {
                             ) as feedback_scores
                         FROM (
                             SELECT
-                                *
-                            FROM (
-                                SELECT
-                                    project_id,
-                                    entity_id,
-                                    name,
-                                    value,
-                                    row_number() OVER (PARTITION BY entity_id, name ORDER BY last_updated_at DESC) AS latest
-                                FROM feedback_scores
-                                WHERE entity_type = 'trace'
-                                AND workspace_id = :workspace_id
-                                AND project_id IN :project_ids
-                            ) WHERE latest = 1
+                                project_id,
+                                entity_id,
+                                name,
+                                value
+                            FROM feedback_scores
+                            WHERE entity_type = 'trace'
+                            AND workspace_id = :workspace_id
+                            AND project_id IN :project_ids
+                            ORDER BY entity_id DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
                         ) GROUP BY  project_id, entity_id
                     ) as f ON t.id = f.entity_id
                 )
                 GROUP BY project_id
             ) AS stats
-            SETTINGS join_algorithm = 'partial_merge'
+            SETTINGS join_algorithm = 'auto'
             ;
             """;
 
