@@ -224,7 +224,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         if opik_monitor.enabled_in_config():
             all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
-        response = await self._engine.completion(
+        response = await self._engine.acompletion(
             model=self.model_name, messages=messages, **all_kwargs
         )
 
