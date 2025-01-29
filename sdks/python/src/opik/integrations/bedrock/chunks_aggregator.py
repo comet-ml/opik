@@ -35,3 +35,15 @@ def aggregate(items: List[Dict[str, Any]]) -> Dict[str, Any]:
                 result["metrics"]["latencyMs"] = metadata["metrics"]["latencyMs"]
 
     return result
+
+
+def aggregate_invoke_agent_chunks(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    merged_chunks = b""
+
+    for item in items:
+        if "chunk" in item:
+            merged_chunks += item["chunk"]["bytes"]
+
+    result: Dict[str, Any] = {"output": merged_chunks.decode("utf-8")}
+
+    return result
