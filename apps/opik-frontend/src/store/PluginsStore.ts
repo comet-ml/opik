@@ -13,6 +13,7 @@ type PluginStore = {
   FrameworkIntegrations: React.ComponentType<FrameworkIntegrationsProps> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   ApiKeyCard: React.ComponentType | null;
+  ConfigureEnvCode: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -25,6 +26,7 @@ const PLUGIN_NAMES = [
   "FrameworkIntegrations",
   "GoogleColabCard",
   "ApiKeyCard",
+  "ConfigureEnvCode",
   "WorkspacePreloader",
   "init",
 ];
@@ -37,6 +39,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   GoogleColabCard: null,
   ApiKeyCard: null,
   WorkspacePreloader: null,
+  ConfigureEnvCode: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
