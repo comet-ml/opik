@@ -685,7 +685,7 @@ class TraceDAOImpl implements TraceDAO {
                     avgMap(usage) as usage,
                     avgMap(feedback_scores) AS feedback_scores,
                     avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                    toDecimal64(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 8) AS total_estimated_cost_avg
+                    toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
                 FROM (
                     SELECT
                         t.workspace_id as workspace_id,
