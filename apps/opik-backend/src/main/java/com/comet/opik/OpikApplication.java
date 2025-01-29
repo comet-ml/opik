@@ -1,6 +1,6 @@
 package com.comet.opik;
 
-import com.comet.opik.api.error.JsonInvalidFormatExceptionMapper;
+import com.comet.opik.api.error.JsonProcessingExceptionMapper;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -104,6 +104,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 
-        jersey.register(JsonInvalidFormatExceptionMapper.class);
+        jersey.register(JsonProcessingExceptionMapper.class);
     }
 }

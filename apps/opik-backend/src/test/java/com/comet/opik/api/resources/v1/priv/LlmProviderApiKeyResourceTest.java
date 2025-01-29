@@ -15,7 +15,9 @@ import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceCli
 import com.comet.opik.domain.LlmProviderApiKeyDAO;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -24,6 +26,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -36,6 +41,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
@@ -43,6 +49,7 @@ import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Proxy Resource Test")
@@ -158,6 +165,38 @@ class LlmProviderApiKeyResourceTest {
                 .build();
         llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), providerApiKeyUpdate, apiKey,
                 workspaceName, 422);
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Create provider Api Key with invalid payload")
+    void createAndUpdateProviderApiKeyInvalidPayload(String body, String errorMsg) {
+
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        try (var actualResponse = llmProviderApiKeyResourceClient.createProviderApiKey(body, apiKey, workspaceName,
+                400)) {
+            var actualError = actualResponse.readEntity(ErrorMessage.class);
+
+            assertThat(actualError.getMessage()).startsWith(errorMsg);
+        }
+    }
+
+    Stream<Arguments> createAndUpdateProviderApiKeyInvalidPayload() {
+        String body = "qwerty12345";
+        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
+        return Stream.of(
+                arguments(body,
+                        "Unable to process JSON. Unrecognized token '%s': was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')"
+                                .formatted(body)),
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey).replace(providerApiKey.provider().getValue(),
+                                "something"),
+                        "Unable to process JSON. Cannot construct instance of `com.comet.opik.api.LlmProvider`, problem: Unknown llm provider 'something'"));
     }
 
     @Test
