@@ -1,5 +1,6 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.api.PromptType;
 import com.github.mustachejava.Code;
 import com.github.mustachejava.DefaultMustacheFactory;
 import com.github.mustachejava.Mustache;
@@ -22,6 +23,14 @@ import java.util.Set;
 public class MustacheUtils {
 
     public static final MustacheFactory MF = new DefaultMustacheFactory();
+
+    public static Set<String> extractVariables(String template, PromptType type) {
+        if (type == PromptType.JINJA2) {
+            return Set.of();
+        }
+
+        return extractVariables(template);
+    }
 
     public static Set<String> extractVariables(String template) {
         Set<String> variables = new HashSet<>();
