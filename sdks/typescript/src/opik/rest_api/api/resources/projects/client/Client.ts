@@ -704,9 +704,101 @@ export class Projects {
     }
 
     /**
+     * Get Project Stats
+     *
+     * @param {OpikApi.GetProjectStatsRequest} request
+     * @param {Projects.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.projects.getProjectStats()
+     */
+    public getProjectStats(
+        request: OpikApi.GetProjectStatsRequest = {},
+        requestOptions?: Projects.RequestOptions
+    ): core.APIPromise<OpikApi.ProjectStatsSummary> {
+        return core.APIPromise.from(
+            (async () => {
+                const { page, size, name, sorting } = request;
+                const _queryParams: Record<string, string | string[] | object | object[]> = {};
+                if (page != null) {
+                    _queryParams["page"] = page.toString();
+                }
+                if (size != null) {
+                    _queryParams["size"] = size.toString();
+                }
+                if (name != null) {
+                    _queryParams["name"] = name;
+                }
+                if (sorting != null) {
+                    _queryParams["sorting"] = sorting;
+                }
+                const _response = await core.fetcher({
+                    url: urlJoin(
+                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
+                        "v1/private/projects/stats"
+                    ),
+                    method: "GET",
+                    headers: {
+                        "Comet-Workspace":
+                            (await core.Supplier.get(this._options.workspaceName)) != null
+                                ? await core.Supplier.get(this._options.workspaceName)
+                                : undefined,
+                        "X-Fern-Language": "JavaScript",
+                        "X-Fern-Runtime": core.RUNTIME.type,
+                        "X-Fern-Runtime-Version": core.RUNTIME.version,
+                        ...(await this._getCustomAuthorizationHeaders()),
+                        ...requestOptions?.headers,
+                    },
+                    contentType: "application/json",
+                    queryParameters: _queryParams,
+                    requestType: "json",
+                    timeoutMs:
+                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+                    maxRetries: requestOptions?.maxRetries,
+                    withCredentials: true,
+                    abortSignal: requestOptions?.abortSignal,
+                });
+                if (_response.ok) {
+                    return {
+                        ok: _response.ok,
+                        body: serializers.ProjectStatsSummary.parseOrThrow(_response.body, {
+                            unrecognizedObjectKeys: "passthrough",
+                            allowUnrecognizedUnionMembers: true,
+                            allowUnrecognizedEnumValues: true,
+                            breadcrumbsPrefix: ["response"],
+                        }),
+                        headers: _response.headers,
+                    };
+                }
+                if (_response.error.reason === "status-code") {
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+                }
+                switch (_response.error.reason) {
+                    case "non-json":
+                        throw new errors.OpikApiError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.rawBody,
+                        });
+                    case "timeout":
+                        throw new errors.OpikApiTimeoutError(
+                            "Timeout exceeded when calling GET /v1/private/projects/stats."
+                        );
+                    case "unknown":
+                        throw new errors.OpikApiError({
+                            message: _response.error.errorMessage,
+                        });
+                }
+            })()
+        );
+    }
+
+    /**
      * Retrieve project
      *
-     * @param {OpikApi.ProjectRetrievePublic} request
+     * @param {OpikApi.ProjectRetrieveDetailed} request
      * @param {Projects.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.BadRequestError}
@@ -719,9 +811,9 @@ export class Projects {
      *     })
      */
     public retrieveProject(
-        request: OpikApi.ProjectRetrievePublic,
+        request: OpikApi.ProjectRetrieveDetailed,
         requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<OpikApi.ProjectPublic> {
+    ): core.APIPromise<OpikApi.ProjectDetailed> {
         return core.APIPromise.from(
             (async () => {
                 const _response = await core.fetcher({
@@ -743,7 +835,7 @@ export class Projects {
                     },
                     contentType: "application/json",
                     requestType: "json",
-                    body: serializers.ProjectRetrievePublic.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+                    body: serializers.ProjectRetrieveDetailed.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
                     timeoutMs:
                         requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
                     maxRetries: requestOptions?.maxRetries,
@@ -753,7 +845,7 @@ export class Projects {
                 if (_response.ok) {
                     return {
                         ok: _response.ok,
-                        body: serializers.ProjectPublic.parseOrThrow(_response.body, {
+                        body: serializers.ProjectDetailed.parseOrThrow(_response.body, {
                             unrecognizedObjectKeys: "passthrough",
                             allowUnrecognizedUnionMembers: true,
                             allowUnrecognizedEnumValues: true,

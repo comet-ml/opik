@@ -1429,6 +1429,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage_Public'
+  /v1/private/projects/stats:
+    get:
+      tags:
+      - Projects
+      summary: Get Project Stats
+      description: Get Project Stats
+      operationId: getProjectStats
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Project Stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectStatsSummary'
   /v1/private/projects/retrieve:
     post:
       tags:
@@ -1440,32 +1477,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProjectRetrieve_Public'
+              $ref: '#/components/schemas/ProjectRetrieve_Detailed'
       responses:
         "200":
           description: Project resource
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Project_Public'
+                $ref: '#/components/schemas/Project_Detailed'
         "422":
           description: Unprocessable Content
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorMessage_Public'
+                $ref: '#/components/schemas/ErrorMessage_Detailed'
         "400":
           description: Bad Request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorMessage_Public'
+                $ref: '#/components/schemas/ErrorMessage_Detailed'
         "404":
           description: Not Found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorMessage_Public'
+                $ref: '#/components/schemas/ErrorMessage_Detailed'
   /v1/private/prompts:
     get:
       tags:
@@ -2149,6 +2186,37 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/spans/search:
+    post:
+      tags:
+      - Spans
+      summary: Search spans
+      description: Search spans
+      operationId: searchSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpanSearchStreamRequest_Public'
+      responses:
+        "200":
+          description: Spans stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                  - $ref: '#/components/schemas/Span_Public'
+                  - $ref: '#/components/schemas/ErrorMessage_Public'
+        "400":
+          description: Bad Request
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage_Public'
   /v1/private/spans/comments/{commentId}:
     patch:
       tags:
@@ -4123,6 +4191,10 @@ components:
           readOnly: true
         prompt_version:
           $ref: '#/components/schemas/PromptVersionLink'
+        prompt_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVersionLink'
     FeedbackScoreAverage:
       required:
       - name
@@ -4133,7 +4205,6 @@ components:
           type: string
         value:
           type: number
-      readOnly: true
     PromptVersionLink:
       required:
       - id
@@ -4165,6 +4236,10 @@ components:
           $ref: '#/components/schemas/JsonNode_Write'
         prompt_version:
           $ref: '#/components/schemas/PromptVersionLink_Write'
+        prompt_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVersionLink_Write'
     JsonNode_Write:
       type: object
     PromptVersionLink_Write:
@@ -4303,6 +4378,10 @@ components:
           readOnly: true
         prompt_version:
           $ref: '#/components/schemas/PromptVersionLink_Public'
+        prompt_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVersionLink_Public'
     FeedbackScoreAverage_Public:
       required:
       - name
@@ -4334,10 +4413,13 @@ components:
     ErrorMessage_Public:
       type: object
       properties:
-        errors:
-          type: array
-          items:
-            type: string
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
     Identifier_Public:
       required:
       - name
@@ -4892,7 +4974,6 @@ components:
           type: number
         p99:
           type: number
-      readOnly: true
     Project:
       required:
       - name
@@ -4951,15 +5032,6 @@ components:
           type: string
         description:
           type: string
-    PercentageValues_Public:
-      type: object
-      properties:
-        p50:
-          type: number
-        p90:
-          type: number
-        p99:
-          type: number
     Project_Public:
       required:
       - name
@@ -4990,24 +5062,6 @@ components:
         last_updated_trace_at:
           type: string
           format: date-time
-          readOnly: true
-        feedback_scores:
-          type: array
-          readOnly: true
-          items:
-            $ref: '#/components/schemas/FeedbackScoreAverage_Public'
-        duration:
-          $ref: '#/components/schemas/PercentageValues_Public'
-        total_estimated_cost:
-          type: number
-          format: double
-          readOnly: true
-        usage:
-          type: object
-          additionalProperties:
-            type: number
-            format: double
-            readOnly: true
           readOnly: true
     FeedbackScoreNames:
       type: object
@@ -5087,7 +5141,111 @@ components:
         interval_end:
           type: string
           format: date-time
-    ProjectRetrieve_Public:
+    ProjectStatsSummary:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectStatsSummaryItem'
+    ProjectStatsSummaryItem:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        feedback_scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedbackScoreAverage'
+        duration:
+          $ref: '#/components/schemas/PercentageValues'
+        total_estimated_cost:
+          type: number
+          format: double
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    FeedbackScoreAverage_Detailed:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+      readOnly: true
+    PercentageValues_Detailed:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+      readOnly: true
+    Project_Detailed:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_trace_at:
+          type: string
+          format: date-time
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/FeedbackScoreAverage_Detailed'
+        duration:
+          $ref: '#/components/schemas/PercentageValues_Detailed'
+        total_estimated_cost:
+          type: number
+          format: double
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            readOnly: true
+          readOnly: true
+    ErrorMessage_Detailed:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+    ProjectRetrieve_Detailed:
       required:
       - name
       type: object
@@ -5807,6 +5965,15 @@ components:
         properties:
           value:
             $ref: '#/components/schemas/PercentageValues_Public'
+    PercentageValues_Public:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
     ProjectStatItemObject_Public:
       type: object
       properties:
@@ -5875,6 +6042,69 @@ components:
           - ui
           - sdk
           - online_scoring
+    ChunkedOutputJsonNode_Public:
+      type: object
+      properties:
+        type:
+          type: object
+          properties:
+            typeName:
+              type: string
+        closed:
+          type: boolean
+    SpanFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+        key:
+          type: string
+        value:
+          type: string
+    SpanSearchStreamRequest_Public:
+      type: object
+      properties:
+        trace_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpanFilter_Public'
+        limit:
+          type: integer
+          format: int32
+        last_retrieved_id:
+          type: string
+          format: uuid
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
     SpanUpdate:
       required:
       - trace_id

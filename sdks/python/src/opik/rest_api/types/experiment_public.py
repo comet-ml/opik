@@ -25,6 +25,7 @@ class ExperimentPublic(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     prompt_version: typing.Optional[PromptVersionLinkPublic] = None
+    prompt_versions: typing.Optional[typing.List[PromptVersionLinkPublic]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

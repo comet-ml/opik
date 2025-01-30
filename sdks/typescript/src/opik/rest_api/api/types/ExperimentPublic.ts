@@ -18,4 +18,5 @@ export interface ExperimentPublic {
     createdBy?: string;
     lastUpdatedBy?: string;
     promptVersion?: OpikApi.PromptVersionLinkPublic;
+    promptVersions?: OpikApi.PromptVersionLinkPublic[];
 }
