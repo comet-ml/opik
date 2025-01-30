@@ -7,14 +7,14 @@ from . import helpers, stream_wrappers
 
 LOGGER = logging.getLogger(__name__)
 
-KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "system", "toolConfig", "guardrailConfig"]
+KWARGS_KEYS_TO_LOG_AS_INPUTS = ["inputText"]
 RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["output"]
 
 
-class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
+class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of AWS bedrock client `converse` and `converse_stream` function.
+    calls of AWS bedrock client `invoke_agent` function.
 
     Besides special processing for input arguments and response content, it
     overrides _generators_handler() method to work correctly with bedrock's streams
@@ -29,7 +29,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
-        ), "Expected kwargs to be not None in BedrockRuntime.Client.converse(**kwargs)"
+        ), "Expected kwargs to be not None in BedrockRuntime.Client.invoke_agent(**kwargs)"
 
         name = track_options.name if track_options.name is not None else func.__name__
         input, metadata = dict_utils.split_dict_by_keys(
@@ -52,19 +52,11 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
     def _end_span_inputs_preprocessor(
         self, output: Any, capture_output: bool
     ) -> arguments_helpers.EndSpanParameters:
-        usage = output["usage"]
-        usage_in_openai_format = {
-            "prompt_tokens": usage["inputTokens"],
-            "completion_tokens": usage["outputTokens"],
-            "total_tokens": usage["inputTokens"] + usage["outputTokens"],
-        }
-
         output, metadata = dict_utils.split_dict_by_keys(
             output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
         )
         result = arguments_helpers.EndSpanParameters(
             output=output,
-            usage=usage_in_openai_format,
             metadata=metadata,
         )
 
@@ -88,11 +80,11 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
 
         assert generations_aggregator is not None
 
-        if isinstance(output, dict) and "stream" in output:
+        if isinstance(output, dict) and "completion" in output:
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
 
             wrapped_stream = stream_wrappers.wrap_stream(
-                stream=output["stream"],
+                stream=output["completion"],
                 capture_output=capture_output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
@@ -101,7 +93,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
                 finally_callback=self._after_call,
             )
 
-            output["stream"] = wrapped_stream
+            output["completion"] = wrapped_stream
             return cast(helpers.ConverseStreamOutput, output)
 
         STREAM_NOT_FOUND = None
