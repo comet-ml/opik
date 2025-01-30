@@ -13,6 +13,7 @@ import useRunCodeSnippet from "./useRunCodeSnippet";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { FINAL_LOG_TEMPLATE } from "../FrameworkIntegrations/integration-logs";
+import { SheetClose } from "@/components/ui/sheet";
 
 export enum SUPPORTED_LANGUAGE {
   json = "json",
@@ -131,22 +132,24 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
                   >
                     OPIK: Your LLM calls have been logged to your Opik
                     dashboard,
-                    <Button
-                      size="sm"
-                      variant="link"
-                      className="inline-flex h-auto"
-                      asChild
-                    >
-                      <Link
-                        to="/$workspaceName/redirect/projects"
-                        params={{ workspaceName }}
-                        search={{
-                          name: "Default Project",
-                        }}
+                    <SheetClose asChild>
+                      <Button
+                        size="sm"
+                        variant="link"
+                        className="inline-flex h-auto"
+                        asChild
                       >
-                        view them here 🚀
-                      </Link>
-                    </Button>
+                        <Link
+                          to="/$workspaceName/redirect/projects"
+                          params={{ workspaceName }}
+                          search={{
+                            name: "Default Project",
+                          }}
+                        >
+                          view them here 🚀
+                        </Link>
+                      </Button>
+                    </SheetClose>
                   </div>
                 );
               }
