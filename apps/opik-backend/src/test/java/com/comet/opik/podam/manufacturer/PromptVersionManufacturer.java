@@ -1,10 +1,12 @@
 package com.comet.opik.podam.manufacturer;
 
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.lang3.RandomStringUtils;
 import uk.co.jemos.podam.api.AttributeMetadata;
 import uk.co.jemos.podam.api.DataProviderStrategy;
+import uk.co.jemos.podam.api.PodamUtils;
 import uk.co.jemos.podam.common.ManufacturingContext;
 import uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer;
 
@@ -43,10 +45,15 @@ public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVe
                 .template(template)
                 .metadata(strategy.getTypeValue(metadata, context, JsonNode.class))
                 .changeDescription(strategy.getTypeValue(metadata, context, String.class))
+                .type(randomPromptType())
                 .variables(Set.of(variable1, variable2, variable3))
                 .promptId(strategy.getTypeValue(metadata, context, UUID.class))
                 .createdBy(strategy.getTypeValue(metadata, context, String.class))
                 .createdAt(Instant.now())
                 .build();
+    }
+
+    public PromptType randomPromptType() {
+        return PromptType.values()[PodamUtils.getIntegerInRange(0, PromptType.values().length - 1)];
     }
 }

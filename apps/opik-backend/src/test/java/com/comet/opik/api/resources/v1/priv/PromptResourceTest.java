@@ -93,7 +93,8 @@ class PromptResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
-    private static final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription"};
+    private static final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription",
+            "type"};
 
     static {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
@@ -1393,6 +1394,7 @@ class PromptResourceTest {
                     .template(promptVersion.template())
                     .metadata(promptVersion.metadata())
                     .changeDescription(promptVersion.changeDescription())
+                    .type(promptVersion.type())
                     .versionCount(2L)
                     .build();
 
@@ -1456,6 +1458,7 @@ class PromptResourceTest {
         assertThat(promptVersion.template()).isEqualTo(expectedPrompt.template());
         assertThat(promptVersion.metadata()).isEqualTo(expectedPrompt.metadata());
         assertThat(promptVersion.changeDescription()).isEqualTo(expectedPrompt.changeDescription());
+        assertThat(promptVersion.type()).isEqualTo(expectedPrompt.type());
         assertThat(promptVersion.variables()).isEqualTo(expectedVariables);
         assertThat(promptVersion.createdBy()).isEqualTo(USER);
         assertThat(promptVersion.createdAt()).isBetween(expectedPrompt.createdAt(), Instant.now());

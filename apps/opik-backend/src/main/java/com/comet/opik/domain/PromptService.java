@@ -119,6 +119,7 @@ class PromptServiceImpl implements PromptService {
                     .template(promptRequest.template())
                     .metadata(promptRequest.metadata())
                     .changeDescription(promptRequest.changeDescription())
+                    .type(promptRequest.type())
                     .createdBy(createdPrompt.createdBy())
                     .build();
 
