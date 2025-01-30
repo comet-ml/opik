@@ -4,10 +4,12 @@ from .types import (
     FindFeedbackScoreNames1RequestType,
     GetSpanStatsRequestType,
     GetSpansByProjectRequestType,
+    SpanSearchStreamRequestPublicType,
 )
 
 __all__ = [
     "FindFeedbackScoreNames1RequestType",
     "GetSpanStatsRequestType",
     "GetSpansByProjectRequestType",
+    "SpanSearchStreamRequestPublicType",
 ]

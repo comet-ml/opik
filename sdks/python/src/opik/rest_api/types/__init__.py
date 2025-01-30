@@ -42,6 +42,8 @@ from .categorical_feedback_detail_update import CategoricalFeedbackDetailUpdate
 from .chat_completion_choice import ChatCompletionChoice
 from .chat_completion_response import ChatCompletionResponse
 from .chunked_output_json_node import ChunkedOutputJsonNode
+from .chunked_output_json_node_public import ChunkedOutputJsonNodePublic
+from .chunked_output_json_node_public_type import ChunkedOutputJsonNodePublicType
 from .chunked_output_json_node_type import ChunkedOutputJsonNodeType
 from .column import Column
 from .column_compare import ColumnCompare
@@ -77,6 +79,7 @@ from .error_info_public import ErrorInfoPublic
 from .error_info_write import ErrorInfoWrite
 from .error_message import ErrorMessage
 from .error_message_detail import ErrorMessageDetail
+from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
 from .experiment_item import ExperimentItem
@@ -103,6 +106,7 @@ from .feedback_public import (
 )
 from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
+from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
 from .feedback_score_average_public import FeedbackScoreAveragePublic
 from .feedback_score_batch import FeedbackScoreBatch
 from .feedback_score_batch_item import FeedbackScoreBatchItem
@@ -161,8 +165,10 @@ from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
 from .page_columns import PageColumns
 from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
+from .percentage_values_detailed import PercentageValuesDetailed
 from .percentage_values_public import PercentageValuesPublic
 from .project import Project
+from .project_detailed import ProjectDetailed
 from .project_metric_response_public import ProjectMetricResponsePublic
 from .project_metric_response_public_interval import ProjectMetricResponsePublicInterval
 from .project_metric_response_public_metric_type import (
@@ -177,6 +183,8 @@ from .project_stat_item_object_public import (
     ProjectStatItemObjectPublic_Percentage,
 )
 from .project_stats_public import ProjectStatsPublic
+from .project_stats_summary import ProjectStatsSummary
+from .project_stats_summary_item import ProjectStatsSummaryItem
 from .prompt import Prompt
 from .prompt_detail import PromptDetail
 from .prompt_page_public import PromptPagePublic
@@ -198,6 +206,8 @@ from .results_number_public import ResultsNumberPublic
 from .score_name import ScoreName
 from .span import Span
 from .span_batch import SpanBatch
+from .span_filter_public import SpanFilterPublic
+from .span_filter_public_operator import SpanFilterPublicOperator
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
@@ -247,6 +257,8 @@ __all__ = [
     "ChatCompletionChoice",
     "ChatCompletionResponse",
     "ChunkedOutputJsonNode",
+    "ChunkedOutputJsonNodePublic",
+    "ChunkedOutputJsonNodePublicType",
     "ChunkedOutputJsonNodeType",
     "Column",
     "ColumnCompare",
@@ -282,6 +294,7 @@ __all__ = [
     "ErrorInfoWrite",
     "ErrorMessage",
     "ErrorMessageDetail",
+    "ErrorMessageDetailed",
     "ErrorMessagePublic",
     "Experiment",
     "ExperimentItem",
@@ -302,6 +315,7 @@ __all__ = [
     "FeedbackPublic_Numerical",
     "FeedbackScore",
     "FeedbackScoreAverage",
+    "FeedbackScoreAverageDetailed",
     "FeedbackScoreAveragePublic",
     "FeedbackScoreBatch",
     "FeedbackScoreBatchItem",
@@ -360,8 +374,10 @@ __all__ = [
     "PageColumns",
     "PercentageValueStatPublic",
     "PercentageValues",
+    "PercentageValuesDetailed",
     "PercentageValuesPublic",
     "Project",
+    "ProjectDetailed",
     "ProjectMetricResponsePublic",
     "ProjectMetricResponsePublicInterval",
     "ProjectMetricResponsePublicMetricType",
@@ -372,6 +388,8 @@ __all__ = [
     "ProjectStatItemObjectPublic_Count",
     "ProjectStatItemObjectPublic_Percentage",
     "ProjectStatsPublic",
+    "ProjectStatsSummary",
+    "ProjectStatsSummaryItem",
     "Prompt",
     "PromptDetail",
     "PromptPagePublic",
@@ -393,6 +411,8 @@ __all__ = [
     "ScoreName",
     "Span",
     "SpanBatch",
+    "SpanFilterPublic",
+    "SpanFilterPublicOperator",
     "SpanPagePublic",
     "SpanPublic",
     "SpanPublicType",

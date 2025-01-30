@@ -10,11 +10,15 @@ export const ErrorMessagePublic: core.serialization.ObjectSchema<
     serializers.ErrorMessagePublic.Raw,
     OpikApi.ErrorMessagePublic
 > = core.serialization.object({
-    errors: core.serialization.list(core.serialization.string()).optional(),
+    code: core.serialization.number().optional(),
+    message: core.serialization.string().optional(),
+    details: core.serialization.string().optional(),
 });
 
 export declare namespace ErrorMessagePublic {
     interface Raw {
-        errors?: string[] | null;
+        code?: number | null;
+        message?: string | null;
+        details?: string | null;
     }
 }

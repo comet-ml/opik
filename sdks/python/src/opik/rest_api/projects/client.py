@@ -22,6 +22,8 @@ from .types.project_metric_request_public_interval import (
 import datetime as dt
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..errors.not_found_error import NotFoundError
+from ..types.project_stats_summary import ProjectStatsSummary
+from ..types.project_detailed import ProjectDetailed
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -549,9 +551,74 @@ class ProjectsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def get_project_stats(
+        self,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsSummary:
+        """
+        Get Project Stats
+
+        Parameters
+        ----------
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsSummary
+            Project Stats
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.projects.get_project_stats()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/projects/stats",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "name": name,
+                "sorting": sorting,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ProjectStatsSummary,
+                    parse_obj_as(
+                        type_=ProjectStatsSummary,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     def retrieve_project(
         self, *, name: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> ProjectPublic:
+    ) -> ProjectDetailed:
         """
         Retrieve project
 
@@ -564,7 +631,7 @@ class ProjectsClient:
 
         Returns
         -------
-        ProjectPublic
+        ProjectDetailed
             Project resource
 
         Examples
@@ -594,9 +661,9 @@ class ProjectsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    ProjectPublic,
+                    ProjectDetailed,
                     parse_obj_as(
-                        type_=ProjectPublic,  # type: ignore
+                        type_=ProjectDetailed,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1221,9 +1288,82 @@ class AsyncProjectsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    async def get_project_stats(
+        self,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsSummary:
+        """
+        Get Project Stats
+
+        Parameters
+        ----------
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsSummary
+            Project Stats
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.projects.get_project_stats()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/projects/stats",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "name": name,
+                "sorting": sorting,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    ProjectStatsSummary,
+                    parse_obj_as(
+                        type_=ProjectStatsSummary,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     async def retrieve_project(
         self, *, name: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> ProjectPublic:
+    ) -> ProjectDetailed:
         """
         Retrieve project
 
@@ -1236,7 +1376,7 @@ class AsyncProjectsClient:
 
         Returns
         -------
-        ProjectPublic
+        ProjectDetailed
             Project resource
 
         Examples
@@ -1274,9 +1414,9 @@ class AsyncProjectsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    ProjectPublic,
+                    ProjectDetailed,
                     parse_obj_as(
-                        type_=ProjectPublic,  # type: ignore
+                        type_=ProjectDetailed,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

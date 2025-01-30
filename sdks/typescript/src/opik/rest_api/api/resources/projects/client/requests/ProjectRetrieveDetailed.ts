@@ -8,6 +8,6 @@
  *         name: "name"
  *     }
  */
-export interface ProjectRetrievePublic {
+export interface ProjectRetrieveDetailed {
     name: string;
 }

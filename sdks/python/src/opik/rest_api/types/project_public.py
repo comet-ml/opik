@@ -3,8 +3,6 @@
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
 import datetime as dt
-from .feedback_score_average_public import FeedbackScoreAveragePublic
-from .percentage_values_public import PercentageValuesPublic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 
@@ -18,10 +16,6 @@ class ProjectPublic(UniversalBaseModel):
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
     last_updated_trace_at: typing.Optional[dt.datetime] = None
-    feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
-    duration: typing.Optional[PercentageValuesPublic] = None
-    total_estimated_cost: typing.Optional[float] = None
-    usage: typing.Optional[typing.Dict[str, float]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

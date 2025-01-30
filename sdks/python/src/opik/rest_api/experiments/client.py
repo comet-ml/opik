@@ -106,6 +106,9 @@ class ExperimentsClient:
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
+        prompt_versions: typing.Optional[
+            typing.Sequence[PromptVersionLinkWrite]
+        ] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -122,6 +125,8 @@ class ExperimentsClient:
         metadata : typing.Optional[JsonNodeWrite]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
+
+        prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -153,6 +158,11 @@ class ExperimentsClient:
                 "prompt_version": convert_and_respect_annotation_metadata(
                     object_=prompt_version,
                     annotation=PromptVersionLinkWrite,
+                    direction="write",
+                ),
+                "prompt_versions": convert_and_respect_annotation_metadata(
+                    object_=prompt_versions,
+                    annotation=typing.Sequence[PromptVersionLinkWrite],
                     direction="write",
                 ),
             },
@@ -729,6 +739,9 @@ class AsyncExperimentsClient:
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
+        prompt_versions: typing.Optional[
+            typing.Sequence[PromptVersionLinkWrite]
+        ] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -745,6 +758,8 @@ class AsyncExperimentsClient:
         metadata : typing.Optional[JsonNodeWrite]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
+
+        prompt_versions : typing.Optional[typing.Sequence[PromptVersionLinkWrite]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -784,6 +799,11 @@ class AsyncExperimentsClient:
                 "prompt_version": convert_and_respect_annotation_metadata(
                     object_=prompt_version,
                     annotation=PromptVersionLinkWrite,
+                    direction="write",
+                ),
+                "prompt_versions": convert_and_respect_annotation_metadata(
+                    object_=prompt_versions,
+                    annotation=typing.Sequence[PromptVersionLinkWrite],
                     direction="write",
                 ),
             },

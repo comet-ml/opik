@@ -28,6 +28,10 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         promptVersion: core.serialization.property("prompt_version", PromptVersionLink.optional()),
+        promptVersions: core.serialization.property(
+            "prompt_versions",
+            core.serialization.list(PromptVersionLink).optional()
+        ),
     });
 
 export declare namespace Experiment {
@@ -45,5 +49,6 @@ export declare namespace Experiment {
         created_by?: string | null;
         last_updated_by?: string | null;
         prompt_version?: PromptVersionLink.Raw | null;
+        prompt_versions?: PromptVersionLink.Raw[] | null;
     }
 }

@@ -3,5 +3,7 @@
  */
 
 export interface ErrorMessagePublic {
-    errors?: string[];
+    code?: number;
+    message?: string;
+    details?: string;
 }
