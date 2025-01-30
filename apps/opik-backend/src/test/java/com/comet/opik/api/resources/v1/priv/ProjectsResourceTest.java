@@ -8,6 +8,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -85,6 +86,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
@@ -1149,23 +1151,12 @@ class ProjectsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class)
-                    .parallelStream()
-                    .map(project -> project.toBuilder()
-                            .id(createProject(project, apiKey, workspaceName))
-                            .totalEstimatedCost(null)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .duration(null)
-                            .build())
-                    .toList();
+            Comparator<Project> comparator = Comparator.comparing(Project::id).reversed();
 
-            List<Project> expectedProjects = projects.parallelStream()
-                    .map(project -> buildProjectStats(project, apiKey, workspaceName))
-                    .sorted(Comparator.comparing(Project::id).reversed())
-                    .toList();
+            List<ProjectStatsSummaryItem> expectedProjectStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/stats")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
@@ -1174,15 +1165,13 @@ class ProjectsResourceTest {
             var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
 
-            assertThat(expectedProjects).hasSameSizeAs(actualEntity.content());
+            assertThat(expectedProjectStats).hasSameSizeAs(actualEntity.content());
 
             assertThat(actualEntity.content())
                     .usingRecursiveComparison()
-                    .ignoringFields("createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt", "lastUpdatedTraceAt")
-                    .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                    .isEqualTo(expectedProjects);
+                    .isEqualTo(expectedProjectStats);
         }
 
         @Test
@@ -1194,6 +1183,38 @@ class ProjectsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            Comparator<Project> comparator = Comparator.comparing(Project::lastUpdatedTraceAt).reversed();
+
+            List<ProjectStatsSummaryItem> expectedProjectStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
+
+            var sorting = List.of(SortingField.builder()
+                    .field(SortableFields.LAST_UPDATED_TRACE_AT)
+                    .direction(Direction.DESC)
+                    .build());
+
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                            StandardCharsets.UTF_8))
+                    .path("/stats")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            assertThat(expectedProjectStats).hasSameSizeAs(actualEntity.content());
+
+            assertThat(actualEntity.content())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .isEqualTo(expectedProjectStats);
+        }
+
+        private List<ProjectStatsSummaryItem> getProjectStatsSummaryItems(String apiKey, String workspaceName, Comparator<Project> comparing) {
             var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class)
                     .parallelStream()
                     .map(project -> project.toBuilder()
@@ -1205,36 +1226,18 @@ class ProjectsResourceTest {
                             .build())
                     .toList();
 
-            List<Project> expectedProjects = projects.parallelStream()
+            return projects
+                    .parallelStream()
                     .map(project -> buildProjectStats(project, apiKey, workspaceName))
-                    .sorted(Comparator.comparing(Project::id).reversed())
+                    .sorted(comparing)
+                    .map(project -> ProjectStatsSummaryItem.builder()
+                            .duration(project.duration())
+                            .totalEstimatedCost(project.totalEstimatedCost())
+                            .usage(project.usage())
+                            .feedbackScores(project.feedbackScores())
+                            .projectId(project.id())
+                            .build())
                     .toList();
-
-            var sorting = List.of(SortingField.builder()
-                    .field(SortableFields.LAST_UPDATED_TRACE_AT)
-                    .direction(Direction.DESC)
-                    .build());
-
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
-                            StandardCharsets.UTF_8))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
-
-            assertThat(expectedProjects).hasSameSizeAs(actualEntity.content());
-
-            assertThat(actualEntity.content())
-                    .usingRecursiveComparison()
-                    .ignoringFields("createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt", "lastUpdatedTraceAt")
-                    .ignoringCollectionOrder()
-                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                    .isEqualTo(expectedProjects);
         }
 
         @Test
@@ -1257,34 +1260,34 @@ class ProjectsResourceTest {
                             .build())
                     .toList();
 
-            List<Project> expectedProjects = projects.parallelStream()
-                    .map(project -> project.toBuilder()
+            List<ProjectStatsSummaryItem> expectedProjectStats = projects.parallelStream()
+                    .map(project -> ProjectStatsSummaryItem.builder()
                             .duration(null)
                             .totalEstimatedCost(null)
                             .usage(null)
                             .feedbackScores(null)
                             .build())
-                    .sorted(Comparator.comparing(Project::id).reversed())
+                    .sorted(Comparator.comparing(ProjectStatsSummaryItem::projectId).reversed())
                     .toList();
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/stats")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
-            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+            var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
 
-            assertThat(expectedProjects).hasSameSizeAs(actualEntity.content());
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            assertThat(expectedProjectStats).hasSameSizeAs(actualEntity.content());
 
             assertThat(actualEntity.content())
                     .usingRecursiveComparison()
-                    .ignoringFields("createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt", "lastUpdatedTraceAt")
-                    .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                    .isEqualTo(expectedProjects);
+                    .isEqualTo(expectedProjectStats);
         }
 
         private Project buildProjectStats(Project project, String apiKey, String workspaceName) {
@@ -1356,6 +1359,7 @@ class ProjectsResourceTest {
                             .flatMap(usage -> usage.entrySet().stream())
                             .collect(groupingBy(Map.Entry::getKey, averagingDouble(Map.Entry::getValue))))
                     .feedbackScores(getScoreAverages(traces))
+                    .lastUpdatedTraceAt(traces.stream().map(Trace::lastUpdatedAt).max(Instant::compareTo).orElse(null))
                     .build();
         }
 
