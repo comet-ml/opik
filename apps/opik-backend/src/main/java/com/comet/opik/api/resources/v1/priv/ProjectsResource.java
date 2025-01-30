@@ -292,7 +292,8 @@ public class ProjectsResource {
 
         log.info("Find projects stats by '{}' on workspaceId '{}'", criteria, workspaceId);
         ProjectStatsSummary projectStatisticsSummary = projectService.getStats(page, size, criteria, sortingFields);
-        log.info("Found projects stats by '{}', count '{}' on workspaceId '{}'", criteria, projectStatisticsSummary.content().size(), workspaceId);
+        log.info("Found projects stats by '{}', count '{}' on workspaceId '{}'", criteria,
+                projectStatisticsSummary.content().size(), workspaceId);
 
         return Response.ok().entity(projectStatisticsSummary).build();
     }

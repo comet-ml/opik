@@ -85,7 +85,8 @@ public interface ProjectService {
 
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
-    ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria, @NonNull List<SortingField> sortingFields);
+    ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull List<SortingField> sortingFields);
 }
 
 @Slf4j
@@ -487,7 +488,8 @@ class ProjectServiceImpl implements ProjectService {
                                 .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats.get(project.id())))
                                 .usage(StatsMapper.getStatsUsage(projectStats.get(project.id())))
                                 .duration(StatsMapper.getStatsDuration(projectStats.get(project.id())))
-                                .totalEstimatedCost(StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
+                                .totalEstimatedCost(
+                                        StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
                                 .build();
                     })
                     .orElseThrow(this::createNotFoundError);

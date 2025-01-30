@@ -115,6 +115,8 @@ class ProjectsResourceTest {
     public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "usage"};
+    public static final String[] IGNORED_FIELD_MIN = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
+            "lastUpdatedTraceAt"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -582,6 +584,8 @@ class ProjectsResourceTest {
 
             var id = createProject(project, apiKey, workspaceName);
 
+            project = buildProjectStats(project.toBuilder().id(id).build(), apiKey, workspaceName);
+
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("retrieve")
                     .request()
@@ -589,16 +593,17 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 assertThat(actualResponse.hasEntity()).isTrue();
 
                 var actualEntity = actualResponse.readEntity(Project.class);
                 assertThat(actualEntity)
                         .usingRecursiveComparison()
-                        .ignoringFields(IGNORED_FIELDS)
-                        .isEqualTo(project.toBuilder()
-                                .id(id)
-                                .build());
+                        .ignoringFields(IGNORED_FIELD_MIN)
+                        .ignoringCollectionOrder()
+                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                        .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                        .isEqualTo(project);
             }
         }
 
@@ -1153,7 +1158,8 @@ class ProjectsResourceTest {
 
             Comparator<Project> comparator = Comparator.comparing(Project::id).reversed();
 
-            List<ProjectStatsSummaryItem> expectedProjectStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
+            List<ProjectStatsSummaryItem> expectedProjectStats = getProjectStatsSummaryItems(apiKey, workspaceName,
+                    comparator);
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("/stats")
@@ -1162,13 +1168,14 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
-            var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+            var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
 
             assertThat(expectedProjectStats).hasSameSizeAs(actualEntity.content());
 
             assertThat(actualEntity.content())
                     .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                     .isEqualTo(expectedProjectStats);
@@ -1185,7 +1192,8 @@ class ProjectsResourceTest {
 
             Comparator<Project> comparator = Comparator.comparing(Project::lastUpdatedTraceAt).reversed();
 
-            List<ProjectStatsSummaryItem> expectedProjectStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
+            List<ProjectStatsSummaryItem> expectedProjectStats = getProjectStatsSummaryItems(apiKey, workspaceName,
+                    comparator);
 
             var sorting = List.of(SortingField.builder()
                     .field(SortableFields.LAST_UPDATED_TRACE_AT)
@@ -1209,12 +1217,14 @@ class ProjectsResourceTest {
 
             assertThat(actualEntity.content())
                     .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                     .isEqualTo(expectedProjectStats);
         }
 
-        private List<ProjectStatsSummaryItem> getProjectStatsSummaryItems(String apiKey, String workspaceName, Comparator<Project> comparing) {
+        private List<ProjectStatsSummaryItem> getProjectStatsSummaryItems(String apiKey, String workspaceName,
+                Comparator<Project> comparing) {
             var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class)
                     .parallelStream()
                     .map(project -> project.toBuilder()
@@ -1266,6 +1276,7 @@ class ProjectsResourceTest {
                             .totalEstimatedCost(null)
                             .usage(null)
                             .feedbackScores(null)
+                            .projectId(project.id())
                             .build())
                     .sorted(Comparator.comparing(ProjectStatsSummaryItem::projectId).reversed())
                     .toList();
@@ -1288,107 +1299,6 @@ class ProjectsResourceTest {
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                     .isEqualTo(expectedProjectStats);
-        }
-
-        private Project buildProjectStats(Project project, String apiKey, String workspaceName) {
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> {
-                        Instant startTime = Instant.now();
-                        Instant endTime = startTime.plusMillis(PodamUtils.getIntegerInRange(1, 1000));
-                        return trace.toBuilder()
-                                .projectName(project.name())
-                                .startTime(startTime)
-                                .endTime(endTime)
-                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime))
-                                .build();
-                    })
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-
-            List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                    FeedbackScoreBatchItem.class);
-
-            traces = traces.stream().map(trace -> {
-                List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
-                        .map(span -> span.toBuilder()
-                                .usage(spanResourceClient.getTokenUsage())
-                                .model(spanResourceClient.randomModel().toString())
-                                .traceId(trace.id())
-                                .projectName(trace.projectName())
-                                .totalEstimatedCost(null)
-                                .build())
-                        .toList();
-
-                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-                List<FeedbackScoreBatchItem> feedbackScores = scores.stream()
-                        .map(feedbackScore -> feedbackScore.toBuilder()
-                                .projectId(project.id())
-                                .projectName(project.name())
-                                .id(trace.id())
-                                .build())
-                        .toList();
-
-                traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
-
-                return trace.toBuilder()
-                        .feedbackScores(
-                                feedbackScores.stream()
-                                        .map(score -> FeedbackScore.builder()
-                                                .value(score.value())
-                                                .name(score.name())
-                                                .build())
-                                        .toList())
-                        .usage(StatsUtils.aggregateSpansUsage(spans))
-                        .totalEstimatedCost(StatsUtils.aggregateSpansCost(spans))
-                        .build();
-            }).toList();
-
-            List<BigDecimal> durations = StatsUtils.calculateQuantiles(
-                    traces.stream()
-                            .map(Trace::duration)
-                            .toList(),
-                    List.of(0.5, 0.90, 0.99));
-
-            return project.toBuilder()
-                    .duration(new ProjectStats.PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
-                    .totalEstimatedCost(getTotalEstimatedCost(traces))
-                    .usage(traces.stream()
-                            .map(Trace::usage)
-                            .flatMap(usage -> usage.entrySet().stream())
-                            .collect(groupingBy(Map.Entry::getKey, averagingDouble(Map.Entry::getValue))))
-                    .feedbackScores(getScoreAverages(traces))
-                    .lastUpdatedTraceAt(traces.stream().map(Trace::lastUpdatedAt).max(Instant::compareTo).orElse(null))
-                    .build();
-        }
-
-        private List<FeedbackScoreAverage> getScoreAverages(List<Trace> traces) {
-            return traces.stream()
-                    .map(Trace::feedbackScores)
-                    .flatMap(List::stream)
-                    .collect(groupingBy(FeedbackScore::name,
-                            BigDecimalCollectors.averagingBigDecimal(FeedbackScore::value)))
-                    .entrySet()
-                    .stream()
-                    .map(entry -> FeedbackScoreAverage.builder()
-                            .name(entry.getKey())
-                            .value(entry.getValue())
-                            .build())
-                    .toList();
-        }
-
-        private double getTotalEstimatedCost(List<Trace> traces) {
-            long count = traces.stream()
-                    .map(Trace::totalEstimatedCost)
-                    .filter(Objects::nonNull)
-                    .filter(cost -> cost.compareTo(BigDecimal.ZERO) > 0)
-                    .count();
-
-            return traces.stream()
-                    .map(Trace::totalEstimatedCost)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(count), ValidationUtils.SCALE, RoundingMode.HALF_UP).doubleValue();
         }
 
         @Test
@@ -1505,6 +1415,107 @@ class ProjectsResourceTest {
                         .isEqualTo(expectedLastTraceByProjectId);
             });
         }
+    }
+
+    private Project buildProjectStats(Project project, String apiKey, String workspaceName) {
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                .map(trace -> {
+                    Instant startTime = Instant.now();
+                    Instant endTime = startTime.plusMillis(PodamUtils.getIntegerInRange(1, 1000));
+                    return trace.toBuilder()
+                            .projectName(project.name())
+                            .startTime(startTime)
+                            .endTime(endTime)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime))
+                            .build();
+                })
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                FeedbackScoreBatchItem.class);
+
+        traces = traces.stream().map(trace -> {
+            List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .usage(spanResourceClient.getTokenUsage())
+                            .model(spanResourceClient.randomModel().toString())
+                            .traceId(trace.id())
+                            .projectName(trace.projectName())
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            List<FeedbackScoreBatchItem> feedbackScores = scores.stream()
+                    .map(feedbackScore -> feedbackScore.toBuilder()
+                            .projectId(project.id())
+                            .projectName(project.name())
+                            .id(trace.id())
+                            .build())
+                    .toList();
+
+            traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            return trace.toBuilder()
+                    .feedbackScores(
+                            feedbackScores.stream()
+                                    .map(score -> FeedbackScore.builder()
+                                            .value(score.value())
+                                            .name(score.name())
+                                            .build())
+                                    .toList())
+                    .usage(StatsUtils.aggregateSpansUsage(spans))
+                    .totalEstimatedCost(StatsUtils.aggregateSpansCost(spans))
+                    .build();
+        }).toList();
+
+        List<BigDecimal> durations = StatsUtils.calculateQuantiles(
+                traces.stream()
+                        .map(Trace::duration)
+                        .toList(),
+                List.of(0.5, 0.90, 0.99));
+
+        return project.toBuilder()
+                .duration(new ProjectStats.PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
+                .totalEstimatedCost(getTotalEstimatedCost(traces))
+                .usage(traces.stream()
+                        .map(Trace::usage)
+                        .flatMap(usage -> usage.entrySet().stream())
+                        .collect(groupingBy(Map.Entry::getKey, averagingDouble(Map.Entry::getValue))))
+                .feedbackScores(getScoreAverages(traces))
+                .lastUpdatedTraceAt(traces.stream().map(Trace::lastUpdatedAt).max(Instant::compareTo).orElse(null))
+                .build();
+    }
+
+    private List<FeedbackScoreAverage> getScoreAverages(List<Trace> traces) {
+        return traces.stream()
+                .map(Trace::feedbackScores)
+                .flatMap(List::stream)
+                .collect(groupingBy(FeedbackScore::name,
+                        BigDecimalCollectors.averagingBigDecimal(FeedbackScore::value)))
+                .entrySet()
+                .stream()
+                .map(entry -> FeedbackScoreAverage.builder()
+                        .name(entry.getKey())
+                        .value(entry.getValue())
+                        .build())
+                .toList();
+    }
+
+    private double getTotalEstimatedCost(List<Trace> traces) {
+        long count = traces.stream()
+                .map(Trace::totalEstimatedCost)
+                .filter(Objects::nonNull)
+                .filter(cost -> cost.compareTo(BigDecimal.ZERO) > 0)
+                .count();
+
+        return traces.stream()
+                .map(Trace::totalEstimatedCost)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(count), ValidationUtils.SCALE, RoundingMode.HALF_UP).doubleValue();
     }
 
     @Nested

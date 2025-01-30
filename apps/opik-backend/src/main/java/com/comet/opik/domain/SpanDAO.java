@@ -604,7 +604,7 @@ class SpanDAO {
             FROM (
             	SELECT
             		*,
-            		row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest\s
+            		row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
             	FROM spans
             	WHERE id IN (SELECT id FROM span_ids)
             ) AS s
