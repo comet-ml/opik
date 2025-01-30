@@ -6,3 +6,13 @@ disallow_untyped_calls = false
 disallow_untyped_defs = false
 check_untyped_defs = false
 disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+pythonpath = "."
+env = [
+    "OPIK_TEST_ENV=local",
+    "OPIK_API_KEY=",
+    "OPIK_TEST_USER_EMAIL=",
+    "OPIK_TEST_USER_NAME=",
+    "OPIK_TEST_USER_PASSWORD="
+]

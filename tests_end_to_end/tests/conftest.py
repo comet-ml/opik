@@ -1,6 +1,8 @@
 import pytest
 import os
 import opik
+from opik import track, opik_context
+from tests.config import EnvConfig, Environment, get_environment_config
 from playwright.sync_api import Page, Browser
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
@@ -32,15 +34,49 @@ def page_with_clipboard_perms(browser_clipboard_permissions):
     page.close()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def configure_local():
-    os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
-    os.environ["OPIK_WORKSPACE"] = "default"
+@pytest.fixture(scope="session")
+def env_name() -> str:
+    """
+    Get the environment name from pytest command line option.
+    Defaults to 'local' if not specified.
+    """
+    return os.getenv("OPIK_TEST_ENV", "local")
+
+
+@pytest.fixture(scope="session")
+def env_config(env_name) -> EnvConfig:
+    """
+    Get the environment configuration based on the environment name.
+    """
+    try:
+        env = Environment(env_name)
+    except ValueError:
+        raise ValueError(
+            f"Invalid environment: {env_name}. Must be one of: {[e.value for e in Environment]}"
+        )
+    return get_environment_config(env)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def client() -> opik.Opik:
-    return opik.Opik(workspace="default", host="http://localhost:5173/api")
+def configure_env(env_config: EnvConfig):
+    """Configure environment variables for the test session"""
+    os.environ["OPIK_URL_OVERRIDE"] = env_config.api_url
+    os.environ["OPIK_WORKSPACE"] = env_config.workspace
+    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
+    if env_config.api_key:
+        os.environ["OPIK_API_KEY"] = env_config.api_key
+
+
+@pytest.fixture(scope="session", autouse=True)
+def client(env_config: EnvConfig) -> opik.Opik:
+    """Create an Opik client configured for the current environment"""
+    kwargs = {
+        "workspace": env_config.workspace,
+        "host": env_config.api_url,
+    }
+    if env_config.api_key:
+        kwargs["api_key"] = env_config.api_key
+    return opik.Opik(**kwargs)
 
 
 @pytest.fixture(scope="function")
