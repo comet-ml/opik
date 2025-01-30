@@ -12,14 +12,20 @@ export interface Project {
   description: string;
   created_at: string;
   created_by: string;
-  usage: UsageData;
-  feedback_scores: AverageFeedbackScore[];
-  total_estimated_cost: number;
-  duration?: ProjectDuration;
   last_updated_at: string;
   last_updated_by: string;
   last_updated_trace_at?: string;
 }
+
+export interface ProjectStatistic {
+  id: string;
+  usage?: UsageData;
+  feedback_scores?: AverageFeedbackScore[];
+  total_estimated_cost?: number;
+  duration?: ProjectDuration;
+}
+
+export type ProjectWithStatistic = Project & ProjectStatistic;
 
 export type ProjectMetricValue = number | null;
 
