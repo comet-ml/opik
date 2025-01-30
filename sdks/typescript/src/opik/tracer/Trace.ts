@@ -19,12 +19,12 @@ export class Trace {
   private spans: Span[] = [];
 
   constructor(
-    private data: SavedTrace,
+    public data: SavedTrace,
     private opik: OpikClient
   ) {}
 
-  public end = async () => {
-    await this.update({ endTime: new Date() });
+  public end = () => {
+    return this.update({ endTime: new Date() });
   };
 
   public span = async (spanData: SpanData) => {
@@ -47,15 +47,23 @@ export class Trace {
     return span;
   };
 
-  public update = async (
-    updates: Omit<TraceUpdate, "projectId" | "projectName">
-  ) => {
+  public update = (updates: Omit<TraceUpdate, "projectId">) => {
+    /*
     await this.opik.apiClient.traces
       .updateTrace(this.data.id, {
         projectName: this.data.projectName ?? this.opik.config.projectName,
         ...updates,
       })
       .asRaw();
-    this.data = { ...this.data, ...updates };
+    */
+    const requestUpdates = {
+      projectName: this.data.projectName ?? this.opik.config.projectName,
+      ...updates,
+    };
+
+    this.opik.traceBatchQueue.update(this.data.id, requestUpdates);
+    this.data = { ...this.data, ...requestUpdates };
+
+    return this;
   };
 }

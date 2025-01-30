@@ -22,6 +22,7 @@ export class OpikClient {
       workspaceName: this.config.workspaceName,
     });
   }
+
   public loadProject = async (projectName: string): Promise<ProjectPublic> => {
     if (this.existingProjects.has(projectName)) {
       return this.existingProjects.get(projectName)!;
@@ -50,18 +51,26 @@ export class OpikClient {
     return this.loadProject(projectName);
   };
 
-  public trace = async (trace: TraceData) => {
-    const projectName = trace.projectName ?? this.config.projectName;
-    const traceWithId: SavedTrace = {
-      id: uuid(),
-      startTime: new Date(),
-      ...trace,
-      projectName,
-    };
+  public trace = (traceData: TraceData) => {
+    const projectName = traceData.projectName ?? this.config.projectName;
+    const trace = new Trace(
+      {
+        id: uuid(),
+        startTime: new Date(),
+        ...traceData,
+        projectName,
+      },
+      this
+    );
 
-    await this.loadProject(projectName);
-    await this.apiClient.traces.createTrace(traceWithId).asRaw();
+    // await this.loadProject(projectName);
+    // await this.apiClient.traces.createTrace(traceWithId).asRaw();
+    this.traceBatchQueue.create(trace.data);
 
-    return new Trace(traceWithId, this);
+    return trace;
+  };
+
+  public flush = async () => {
+    await this.batchQueue.flush();
   };
 }
