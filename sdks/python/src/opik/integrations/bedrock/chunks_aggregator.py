@@ -38,6 +38,12 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
 
 
 def aggregate_invoke_agent_chunks(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    The implementation was supposed to follow Amazon's documentation,
+    https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agent-runtime/client/invoke_agent.html
+    but at the time of writing this code, the `completion` payload only contains `chunks` and nothing else.
+    So, a simpler parsing approach was used.
+    """
     merged_chunks = b""
 
     for item in items:

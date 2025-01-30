@@ -1,17 +1,22 @@
-from typing import Any, Optional
-from . import converse_decorator
-from . import invoke_agent_decorator
-from . import chunks_aggregator
+from typing import Optional, TYPE_CHECKING
+
+from . import chunks_aggregator, converse_decorator, invoke_agent_decorator
+
+if TYPE_CHECKING:
+    import botocore.client
 
 
-def track_bedrock(client: Any, project_name: Optional[str] = None) -> Any:
+def track_bedrock(
+    client: "botocore.client.BaseClient",
+    project_name: Optional[str] = None,
+) -> "botocore.client.BaseClient":
     """Adds Opik tracking to an AWS Bedrock client.
 
     Tracks calls to `converse()` and `converse_stream()` methods
     Can be used within other Opik-tracked functions.
 
     Args:
-        client: An instance of an AWS Bedrock client.
+        client: An instance of an AWS Bedrock client (botocore.client.BedrockRuntime or botocore.client.AgentsforBedrockRuntime).
         project_name: The name of the project to log data.
 
     Returns:
