@@ -435,14 +435,14 @@ class TraceDAOImpl implements TraceDAO {
                      if(end_time IS NOT NULL AND start_time IS NOT NULL
                                  AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                              (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                             NULL) AS duration_millis
+                             NULL) AS duration_millis,
+                     row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
                 FROM traces
                 WHERE id IN (SELECT id FROM traces_ids)
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ) AS t
             LEFT JOIN span_usage AS s ON t.id = s.trace_id
             LEFT JOIN comments_final AS c ON t.id = c.entity_id
+            WHERE t.latest = 1
             GROUP BY
                 t.*,
                 t.duration_millis
