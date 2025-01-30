@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.TemplateParseUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
@@ -2181,7 +2182,8 @@ class PromptResourceTest {
 
         assertThat(createdPromptVersion.promptId()).isEqualTo(promptId);
         assertThat(createdPromptVersion.template()).isEqualTo(promptVersion.template());
-        assertThat(createdPromptVersion.variables()).isEqualTo(promptVersion.variables());
+        assertThat(createdPromptVersion.variables())
+                .isEqualTo(TemplateParseUtils.extractVariables(promptVersion.template(), promptVersion.type()));
         assertThat(createdPromptVersion.createdAt()).isBetween(promptVersion.createdAt(), Instant.now());
         assertThat(createdPromptVersion.createdBy()).isEqualTo(USER);
     }

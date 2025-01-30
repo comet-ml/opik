@@ -2,11 +2,12 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.MustacheUtils;
+import com.comet.opik.utils.TemplateParseUtils;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -348,7 +349,7 @@ class PromptServiceImpl implements PromptService {
         });
 
         return promptVersion.toBuilder()
-                .variables(getVariables(promptVersion.template()))
+                .variables(getVariables(promptVersion.template(), promptVersion.type()))
                 .build();
     }
 
@@ -369,7 +370,7 @@ class PromptServiceImpl implements PromptService {
                     .latestVersion(
                             Optional.ofNullable(prompt.latestVersion())
                                     .map(promptVersion -> promptVersion.toBuilder()
-                                            .variables(getVariables(promptVersion.template()))
+                                            .variables(getVariables(promptVersion.template(), promptVersion.type()))
                                             .build())
                                     .orElse(null))
                     .build();
@@ -389,7 +390,7 @@ class PromptServiceImpl implements PromptService {
 
                 return promptVersionDAO.findByIds(ids, workspaceId).stream()
                         .collect(toMap(PromptVersion::id, promptVersion -> promptVersion.toBuilder()
-                                .variables(getVariables(promptVersion.template()))
+                                .variables(getVariables(promptVersion.template(), promptVersion.type()))
                                 .build()));
             });
         })
@@ -414,16 +415,16 @@ class PromptServiceImpl implements PromptService {
         }
 
         return promptVersion.toBuilder()
-                .variables(getVariables(promptVersion.template()))
+                .variables(getVariables(promptVersion.template(), promptVersion.type()))
                 .build();
     }
 
-    private Set<String> getVariables(String template) {
+    private Set<String> getVariables(String template, PromptType type) {
         if (template == null) {
             return null;
         }
 
-        return MustacheUtils.extractVariables(template);
+        return TemplateParseUtils.extractVariables(template, type);
     }
 
     private EntityAlreadyExistsException newConflict(String alreadyExists) {
@@ -492,7 +493,7 @@ class PromptServiceImpl implements PromptService {
             }
 
             return promptVersion.toBuilder()
-                    .variables(getVariables(promptVersion.template()))
+                    .variables(getVariables(promptVersion.template(), promptVersion.type()))
                     .build();
         });
     }

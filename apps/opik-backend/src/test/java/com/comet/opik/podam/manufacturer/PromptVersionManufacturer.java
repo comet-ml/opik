@@ -11,7 +11,6 @@ import uk.co.jemos.podam.common.ManufacturingContext;
 import uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer;
 
 import java.time.Instant;
-import java.util.Set;
 import java.util.UUID;
 
 public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVersion> {
@@ -46,7 +45,6 @@ public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVe
                 .metadata(strategy.getTypeValue(metadata, context, JsonNode.class))
                 .changeDescription(strategy.getTypeValue(metadata, context, String.class))
                 .type(randomPromptType())
-                .variables(Set.of(variable1, variable2, variable3))
                 .promptId(strategy.getTypeValue(metadata, context, UUID.class))
                 .createdBy(strategy.getTypeValue(metadata, context, String.class))
                 .createdAt(Instant.now())
