@@ -8,7 +8,7 @@ from .. import Prompt
 from ..api_objects.prompt import prompt_template
 from ..api_objects.dataset import dataset
 from ..api_objects import opik_client
-from . import scorer, scores_logger, report, evaluation_result, utils
+from . import scorer, scores_logger, report, evaluation_result, utils, asyncio_support
 
 
 def evaluate(
@@ -80,18 +80,19 @@ def evaluate(
 
     start_time = time.time()
 
-    test_results = scorer.score_tasks(
-        client=client,
-        experiment_=experiment,
-        dataset_=dataset,
-        task=task,
-        scoring_metrics=scoring_metrics,
-        nb_samples=nb_samples,
-        workers=task_threads,
-        verbose=verbose,
-        project_name=project_name,
-        scoring_key_mapping=scoring_key_mapping,
-    )
+    with asyncio_support.async_http_connections_expire_immediately():
+        test_results = scorer.score_tasks(
+            client=client,
+            experiment_=experiment,
+            dataset_=dataset,
+            task=task,
+            scoring_metrics=scoring_metrics,
+            nb_samples=nb_samples,
+            workers=task_threads,
+            verbose=verbose,
+            project_name=project_name,
+            scoring_key_mapping=scoring_key_mapping,
+        )
 
     total_time = time.time() - start_time
 
@@ -159,12 +160,13 @@ def evaluate_experiment(
         scoring_key_mapping=scoring_key_mapping,
     )
 
-    test_results = scorer.score_test_cases(
-        test_cases=test_cases,
-        scoring_metrics=scoring_metrics,
-        workers=scoring_threads,
-        verbose=verbose,
-    )
+    with asyncio_support.async_http_connections_expire_immediately():
+        test_results = scorer.score_test_cases(
+            test_cases=test_cases,
+            scoring_metrics=scoring_metrics,
+            workers=scoring_threads,
+            verbose=verbose,
+        )
 
     first_trace_id = test_results[0].test_case.trace_id
     project_name = utils.get_trace_project_name(client=client, trace_id=first_trace_id)
@@ -280,18 +282,19 @@ def evaluate_prompt(
 
     start_time = time.time()
 
-    test_results = scorer.score_tasks(
-        client=client,
-        experiment_=experiment,
-        dataset_=dataset,
-        task=_build_prompt_evaluation_task(model=model, messages=messages),
-        scoring_metrics=scoring_metrics,
-        nb_samples=nb_samples,
-        workers=task_threads,
-        verbose=verbose,
-        project_name=project_name,
-        scoring_key_mapping=None,
-    )
+    with asyncio_support.async_http_connections_expire_immediately():
+        test_results = scorer.score_tasks(
+            client=client,
+            experiment_=experiment,
+            dataset_=dataset,
+            task=_build_prompt_evaluation_task(model=model, messages=messages),
+            scoring_metrics=scoring_metrics,
+            nb_samples=nb_samples,
+            workers=task_threads,
+            verbose=verbose,
+            project_name=project_name,
+            scoring_key_mapping=None,
+        )
 
     total_time = time.time() - start_time
 
