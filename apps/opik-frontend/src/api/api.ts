@@ -27,6 +27,8 @@ export const TRACES_KEY = "traces";
 export const TRACE_KEY = "trace";
 export const PROVIDERS_KEYS_KEY = "providerKeys";
 export const AUTOMATIONS_KEY = "automations";
+export const PROJECTS_KEY = "projects";
+export const PROJECT_STATISTICS_KEY = "project-statistics";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

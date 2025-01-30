@@ -1,7 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
-import api, { PROJECTS_REST_ENDPOINT } from "@/api/api";
+import api, {
+  PROJECT_STATISTICS_KEY,
+  PROJECTS_KEY,
+  PROJECTS_REST_ENDPOINT,
+} from "@/api/api";
 
 type UseProjectDeleteMutationParams = {
   projectId: string;
@@ -30,7 +34,12 @@ const useProjectDeleteMutation = () => {
       });
     },
     onSettled: () => {
-      return queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({
+        queryKey: [PROJECT_STATISTICS_KEY],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [PROJECTS_KEY],
+      });
     },
   });
 };
