@@ -34,4 +34,7 @@ export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
   [COLUMN_TYPE.numberDictionary]: "justify-start",
 };
 
-export const OPIK_URL_OVERRIDE_CONFIG = `os.environ["OPIK_URL_OVERRIDE"] = "${window.location.origin}${BASE_API_URL}"`;
+export const OPIK_URL_OVERRIDE_CONFIG = `os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
+  BASE_API_URL,
+  window.location.origin,
+).toString()}"`;
