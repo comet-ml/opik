@@ -18,7 +18,7 @@ export interface Project {
 }
 
 export interface ProjectStatistic {
-  id: string;
+  project_id?: string;
   usage?: UsageData;
   feedback_scores?: AverageFeedbackScore[];
   total_estimated_cost?: number;

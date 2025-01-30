@@ -48,7 +48,7 @@ export default function useProjectWithStatisticsList(
         statisticMap = projectsStatisticData.content.reduce<
           Record<string, ProjectStatistic>
         >((acc, statistic) => {
-          acc[statistic.id] = statistic;
+          acc[statistic.project_id!] = statistic;
           return acc;
         }, {});
       }
