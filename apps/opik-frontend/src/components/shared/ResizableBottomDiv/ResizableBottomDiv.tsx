@@ -25,7 +25,9 @@ const ResizableBottomDiv = ({
   const startHeight = useRef(0);
 
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    
     isResizing.current = true;
     startY.current = e.clientY;
     startHeight.current = height;
@@ -34,11 +36,14 @@ const ResizableBottomDiv = ({
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!isResizing.current) return;
 
+    e.preventDefault();
+
     const deltaY = e.clientY - startY.current;
     let newHeight = startHeight.current + deltaY;
     const computedMaxHeight = maxHeight ?? window.innerHeight;
     newHeight = Math.max(minHeight, Math.min(computedMaxHeight, newHeight));
-    setHeight(newHeight);
+
+    requestAnimationFrame(() => setHeight(newHeight));
   };
 
   const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
