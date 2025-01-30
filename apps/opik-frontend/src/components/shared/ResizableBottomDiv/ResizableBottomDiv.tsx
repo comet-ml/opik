@@ -27,7 +27,6 @@ const ResizableBottomDiv = ({
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    
     isResizing.current = true;
     startY.current = e.clientY;
     startHeight.current = height;
