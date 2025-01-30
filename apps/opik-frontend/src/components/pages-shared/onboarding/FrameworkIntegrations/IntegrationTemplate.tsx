@@ -1,9 +1,10 @@
 import React from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import useAppStore from "@/store/AppStore";
-import { BASE_API_URL, CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
-import { maskAPIKey } from "@/lib/utils";
+import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
+import { buildApiKeyConfig, buildWorkspaceNameConfig } from "@/lib/utils";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
+import { OPIK_URL_OVERRIDE_CONFIG } from "@/constants/shared";
 
 const CODE_BLOCK_1 = "pip install opik";
 
@@ -22,18 +23,16 @@ const putConfigInCode = ({
   maskApiKey,
 }: PutConfigInCodeArgs): string => {
   if (apiKey) {
+    const apiKeyConfig = buildApiKeyConfig(apiKey, maskApiKey);
+    const workspaceConfig = buildWorkspaceNameConfig(workspaceName);
+
     return code.replace(
       OPIK_API_KEY_TEMPLATE,
-      `os.environ["OPIK_API_KEY"] = "${
-        maskApiKey ? maskAPIKey(apiKey) : apiKey
-      }"\nos.environ["OPIK_WORKSPACE"] = "${workspaceName}"`,
+      `${apiKeyConfig}\n${workspaceConfig}`,
     );
   }
 
-  return code.replace(
-    OPIK_API_KEY_TEMPLATE,
-    `os.environ["OPIK_URL_OVERRIDE"] = "${window.location.origin}${BASE_API_URL}"`,
-  );
+  return code.replace(OPIK_API_KEY_TEMPLATE, OPIK_URL_OVERRIDE_CONFIG);
 };
 
 type IntegrationTemplateProps = {

@@ -1,6 +1,6 @@
-import { BASE_API_URL } from "@/api/api";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
-import { maskAPIKey } from "@/lib/utils";
+import { OPIK_URL_OVERRIDE_CONFIG } from "@/constants/shared";
+import { buildApiKeyConfig, buildWorkspaceNameConfig } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 
 const getConfigCode = (
@@ -8,13 +8,10 @@ const getConfigCode = (
   apiKey?: string,
   shouldMaskApiKey = false,
 ) => {
-  if (!apiKey)
-    return `os.environ["OPIK_URL_OVERRIDE"] = "${window.location.origin}${BASE_API_URL}"`;
+  if (!apiKey) return OPIK_URL_OVERRIDE_CONFIG;
 
-  const apiKeyConfig = `os.environ["OPIK_API_KEY"] = "${
-    shouldMaskApiKey ? maskAPIKey(apiKey) : apiKey
-  }"`;
-  const workspaceConfig = `os.environ["OPIK_WORKSPACE"] = "${workspaceName}"`;
+  const apiKeyConfig = buildApiKeyConfig(apiKey, shouldMaskApiKey);
+  const workspaceConfig = buildWorkspaceNameConfig(workspaceName);
 
   return `${apiKeyConfig} \n${workspaceConfig}`;
 };

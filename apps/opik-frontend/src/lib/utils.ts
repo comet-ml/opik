@@ -119,3 +119,8 @@ export const extractIdFromLocation = (location: string) =>
 
 export const formatNumericData = (value: number, precision = 3) =>
   String(round(value, precision));
+
+export const buildApiKeyConfig = (apiKey: string, masked = false) =>
+  `os.environ["OPIK_API_KEY"] = "${masked ? maskAPIKey(apiKey) : apiKey}"`;
+export const buildWorkspaceNameConfig = (workspaceName: string) =>
+  `os.environ["OPIK_WORKSPACE"] = "${workspaceName}"`;
