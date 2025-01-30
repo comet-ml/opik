@@ -19,7 +19,6 @@ public enum PromptType {
 
     @JsonCreator
     public static PromptType fromString(String value) {
-        if (value == null) return MUSTACHE;
         return Arrays.stream(values())
                 .filter(promptType -> promptType.value.equals(value))
                 .findFirst()

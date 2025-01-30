@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
@@ -41,7 +42,9 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -1827,9 +1830,11 @@ class PromptResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetPromptVersionById {
 
-        @Test
+        @ParameterizedTest
+        @NullSource
+        @EnumSource(PromptType.class)
         @DisplayName("Success: should get prompt version by id")
-        void shouldGetPromptVersionById() {
+        void shouldGetPromptVersionById(PromptType type) {
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
@@ -1842,6 +1847,7 @@ class PromptResourceTest {
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .promptId(promptId)
+                    .type(type)
                     .build();
 
             var request = new CreatePromptVersion(prompt.name(), promptVersion);
