@@ -601,9 +601,15 @@ class SpanDAO {
                         (dateDiff('microsecond', s.start_time, s.end_time) / 1000.0),
                         NULL) AS duration_millis,
                groupArray(tuple(c.*)) AS comments
-            FROM spans s
+            FROM (
+            	SELECT
+            		*,
+            		row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+            	FROM spans
+            	WHERE id IN (SELECT id FROM span_ids)
+            ) AS s
             LEFT JOIN comments_final AS c ON s.id = c.entity_id
-            WHERE s.id IN (SELECT id FROM span_ids)
+            WHERE s.latest = 1
             GROUP BY
               s.*,
               duration_millis
