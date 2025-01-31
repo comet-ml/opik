@@ -55,9 +55,9 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       id: "prompt",
       label: "Prompt commit",
       type: COLUMN_TYPE.list,
+      accessorFn: (row) => get(row, ["prompt_versions"], []),
       cell: MultiResourceCell as never,
       customMeta: {
-        listKey: "prompt_versions",
         nameKey: "commit",
         idKey: "prompt_id",
         resource: RESOURCE_TYPE.prompt,

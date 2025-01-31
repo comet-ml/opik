@@ -19,16 +19,14 @@ type CustomMeta = {
 
 const MultiResourceCell = (context: CellContext<unknown, string>) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const cellData = context.row.original;
   const {
     resource,
     nameKey = "name",
     idKey = "id",
-    listKey,
     getSearch,
   } = (custom ?? {}) as CustomMeta;
 
-  const list = get(cellData, listKey, []);
+  const list = context.getValue<Record<string, unknown>[]>();
 
   const renderResourceLink = (cellData: unknown) => {
     const name = get(cellData, nameKey, undefined);
@@ -63,7 +61,7 @@ const MultiResourceCell = (context: CellContext<unknown, string>) => {
       {isEmpty
         ? "-"
         : list.map<React.ReactNode>((item, idx) => (
-            <React.Fragment key={item[idKey]}>
+            <React.Fragment key={`${item[idKey]}`}>
               {renderSeparator(idx)}
               {renderResourceLink(item)}
             </React.Fragment>
