@@ -1,14 +1,18 @@
-from typing import List, Dict, Any, Optional, Union, Callable
+import logging
 import time
+from typing import Any, Callable, Dict, List, Optional, Union
 
-from .types import LLMTask
+from . import asyncio_support, evaluation_result, report, scorer, scores_logger, utils
 from .metrics import base_metric
 from .models import base_model, models_factory
+from .types import LLMTask
 from .. import Prompt
-from ..api_objects.prompt import prompt_template
-from ..api_objects.dataset import dataset
 from ..api_objects import opik_client
-from . import scorer, scores_logger, report, evaluation_result, utils, asyncio_support
+from ..api_objects.dataset import dataset
+from ..api_objects.experiment.helpers import check_prompt_args
+from ..api_objects.prompt import prompt_template
+
+LOGGER = logging.getLogger(__name__)
 
 
 def evaluate(
@@ -22,6 +26,7 @@ def evaluate(
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
     prompt: Optional[Prompt] = None,
+    prompts: Optional[List[Prompt]] = None,
     scoring_key_mapping: Optional[
         Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
     ] = None,
@@ -59,7 +64,9 @@ def evaluate(
             are executed sequentially in the current thread.
             Use more than 1 worker if your task object is compatible with sharing across threads.
 
-        prompt: Prompt object to link with experiment.
+        prompt: Prompt object to link with experiment. Deprecated, use `prompts` argument instead.
+
+        prompts: A list of Prompt objects to link with experiment.
 
         scoring_key_mapping: A dictionary that allows you to rename keys present in either the dataset item or the task output
             so that they match the keys expected by the scoring metrics. For example if you have a dataset item with the following content:
@@ -69,13 +76,18 @@ def evaluate(
     if scoring_metrics is None:
         scoring_metrics = []
 
+    checked_prompts = check_prompt_args(
+        prompt=prompt,
+        prompts=prompts,
+    )
+
     client = opik_client.get_client_cached()
 
     experiment = client.create_experiment(
         name=experiment_name,
         dataset_name=dataset.name,
         experiment_config=experiment_config,
-        prompt=prompt,
+        prompts=checked_prompts,
     )
 
     start_time = time.time()
@@ -246,13 +258,17 @@ def evaluate_prompt(
 
         experiment_name: name of the experiment.
 
+        project_name: The name of the project to log data
+
         experiment_config: configuration of the experiment.
 
-        scoring_threads: amount of thread workers to run scoring metrics.
+        verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
 
         nb_samples: number of samples to evaluate.
 
-        verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
+        task_threads: amount of thread workers to run scoring metrics.
+
+        prompt: Prompt object to link with experiment.
     """
     if isinstance(model, str):
         model = models_factory.get(model_name=model)
@@ -273,11 +289,13 @@ def evaluate_prompt(
 
     client = opik_client.get_client_cached()
 
+    prompts = [prompt] if prompt else None
+
     experiment = client.create_experiment(
         name=experiment_name,
         dataset_name=dataset.name,
         experiment_config=experiment_config,
-        prompt=prompt,
+        prompts=prompts,
     )
 
     start_time = time.time()
