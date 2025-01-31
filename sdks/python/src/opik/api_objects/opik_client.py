@@ -529,7 +529,7 @@ class Opik:
             dataset_name=dataset_name,
             id=id,
             metadata=metadata,
-            prompt_versions=prompt_versions
+            prompt_versions=prompt_versions,
         )
 
         experiment_ = experiment.Experiment(

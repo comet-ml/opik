@@ -11,7 +11,7 @@ def fake_prompt(with_postfix: bool = False):
 
     fake_prompt_obj = types.SimpleNamespace(
         __internal_api__version_id__="some-prompt-version-id",
-        prompt=f"some-prompt-value",
+        prompt="some-prompt-value",
     )
 
     if with_postfix:

@@ -5,7 +5,7 @@ from typing import List, Optional
 from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
-from . import experiment_item, helpers
+from . import experiment_item
 from .. import constants, helpers
 from ...api_objects.prompt import Prompt
 

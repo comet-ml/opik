@@ -72,7 +72,9 @@ def check_prompt_args(
     prompts: Optional[List[prompt.Prompt]] = None,
 ) -> Optional[List[prompt.Prompt]]:
     if prompts is not None and len(prompts) > 0 and prompt is not None:
-        LOGGER.warning("Arguments `prompt` and `prompts` are mutually exclusive, `prompts` will be used`.")
+        LOGGER.warning(
+            "Arguments `prompt` and `prompts` are mutually exclusive, `prompts` will be used`."
+        )
     elif prompt is not None:
         prompts = [prompt]
     elif prompts is not None and len(prompts) == 0:
