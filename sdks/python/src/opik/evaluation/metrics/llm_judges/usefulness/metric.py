@@ -115,14 +115,11 @@ class Usefulness(base_metric.BaseMetric):
             dict_content = json.loads(content)
             score: float = float(dict_content["score"])
 
-            if not (0.0 <= score <= 1.0):
-                score = 0.5
-
             return score_result.ScoreResult(
                 name=self.name, value=score, reason=dict_content["reason"]
             )
         except Exception as e:
-            LOGGER.error(f"Failed to parse model output: {e}")
+            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
             raise MetricComputationError(
-                "Failed to parse usefulness score from model output"
+                f"Failed to parse usefulness score from model output: {repr(e)}"
             )
