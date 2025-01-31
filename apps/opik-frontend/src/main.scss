@@ -247,3 +247,14 @@
     scrollbar-width: none;
   }
 }
+
+// workaround to force firefox work correctly with cell height - https://stackoverflow.com/questions/36575846/how-to-make-div-fill-td-height-in-firefox
+.comet-fix-cell-height {
+  height: 1px;
+}
+
+@-moz-document url-prefix() {
+  .comet-fix-cell-height {
+    height: 100%;
+  }
+}
