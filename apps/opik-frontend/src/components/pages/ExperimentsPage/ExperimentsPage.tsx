@@ -61,6 +61,7 @@ import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpa
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -89,14 +90,15 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
     id: "prompt",
     label: "Prompt commit",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
+    type: COLUMN_TYPE.list,
+    accessorFn: (row) => get(row, ["prompt_versions"], []),
+    cell: MultiResourceCell as never,
     customMeta: {
-      nameKey: "prompt_version.commit",
-      idKey: "prompt_version.prompt_id",
+      nameKey: "commit",
+      idKey: "prompt_id",
       resource: RESOURCE_TYPE.prompt,
       getSearch: (data: GroupedExperiment) => ({
-        activeVersionId: get(data, "prompt_version.id", null),
+        activeVersionId: get(data, "id", null),
       }),
     },
   },
