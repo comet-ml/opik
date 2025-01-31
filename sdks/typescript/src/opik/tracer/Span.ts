@@ -11,11 +11,11 @@ export class Span {
     private opik: OpikClient
   ) {}
 
-  public end = async () => {
-    await this.update({ endTime: new Date() });
+  public end = () => {
+    return this.update({ endTime: new Date() });
   };
 
-  public update = async (
+  public update = (
     updates: Omit<
       SpanUpdate,
       "traceId" | "parentSpanId" | "projectId" | "projectName"
@@ -30,5 +30,7 @@ export class Span {
     this.opik.spanBatchQueue.update(this.data.id, spanUpdates);
 
     this.data = { ...this.data, ...updates };
+
+    return this;
   };
 }

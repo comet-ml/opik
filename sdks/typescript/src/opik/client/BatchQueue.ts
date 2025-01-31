@@ -94,12 +94,20 @@ export abstract class BatchQueue<EntityData = {}> {
   };
 
   protected flushCreate = async () => {
+    if (this.createQueue.size === 0) {
+      return;
+    }
+
     const entities = Array.from(this.createQueue.values());
     await this.createEntities(entities);
     this.createQueue.clear();
   };
 
   protected flushDelete = async () => {
+    if (this.deleteQueue.size === 0) {
+      return;
+    }
+
     const ids = Array.from(this.deleteQueue);
     await this.deleteEntities(ids);
     this.deleteQueue.clear();

@@ -10,8 +10,8 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
     super({ delay });
   }
 
-  protected async createEntities(entities: SavedTrace[]) {
-    await this.apiClient.traces.createTraces({ traces: entities });
+  protected async createEntities(traces: SavedTrace[]) {
+    await this.apiClient.traces.createTraces({ traces }).asRaw();
   }
 
   protected async getEntity(id: string) {
@@ -21,10 +21,10 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   }
 
   protected async updateEntity(id: string, updates: Partial<SavedTrace>) {
-    return this.apiClient.traces.updateTrace(id, updates);
+    await this.apiClient.traces.updateTrace(id, updates).asRaw();
   }
 
   protected async deleteEntities(ids: string[]) {
-    return this.apiClient.traces.deleteTraces({ ids });
+    await this.apiClient.traces.deleteTraces({ ids }).asRaw();
   }
 }

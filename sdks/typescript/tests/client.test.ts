@@ -5,21 +5,23 @@ describe("OpikApiClient", () => {
 
   beforeAll(() => {
     client = new Opik({
-      projectName: "opik-sdk-typescript",
+      projectName: "opik-sdk-typescript-test",
     });
   });
 
   it("should log a trace and a span", async () => {
-    const someTrace = await client.trace({
+    const someTrace = client.trace({
       name: "test",
     });
 
-    const someSpan = await someTrace.span({
+    const someSpan = someTrace.span({
       name: "test span",
       type: "llm",
     });
 
-    await someSpan.end();
-    await someTrace.end();
+    someSpan.end();
+    someTrace.end();
+
+    await client.flush();
   });
 });

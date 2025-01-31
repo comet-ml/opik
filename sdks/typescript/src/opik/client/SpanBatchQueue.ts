@@ -13,7 +13,7 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 
   protected async createEntities(spans: SavedSpan[]) {
-    await this.apiClient.spans.createSpans({ spans });
+    await this.apiClient.spans.createSpans({ spans }).asRaw();
   }
 
   protected async getEntity(id: string) {
@@ -23,12 +23,12 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 
   protected async updateEntity(id: string, updates: SpanUpdate) {
-    return this.apiClient.spans.updateSpan(id, updates);
+    await this.apiClient.spans.updateSpan(id, updates).asRaw();
   }
 
   protected async deleteEntities(ids: string[]) {
     for (const id of ids) {
-      await this.apiClient.spans.deleteSpanById(id);
+      await this.apiClient.spans.deleteSpanById(id).asRaw();
     }
   }
 }

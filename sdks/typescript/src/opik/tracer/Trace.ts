@@ -27,7 +27,7 @@ export class Trace {
     return this.update({ endTime: new Date() });
   };
 
-  public span = async (spanData: SpanData) => {
+  public span = (spanData: SpanData) => {
     const projectName = spanData.projectName ?? this.opik.config.projectName;
     const spanWithId: SavedSpan = {
       id: uuid(),
