@@ -2,9 +2,13 @@ import React from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import useAppStore from "@/store/AppStore";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
-import { buildApiKeyConfig, buildWorkspaceNameConfig } from "@/lib/utils";
+import {
+  buildApiKeyConfig,
+  buildOpikUrlOverrideConfig,
+  buildWorkspaceNameConfig,
+} from "@/lib/utils";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
-import { OPIK_URL_OVERRIDE_CONFIG } from "@/constants/shared";
+import { OPIK_HIGHLIGHT_LINE_TEMPLATE } from "@/constants/shared";
 
 const CODE_BLOCK_1 = "pip install opik";
 
@@ -21,18 +25,34 @@ const putConfigInCode = ({
   workspaceName,
   apiKey,
   maskApiKey,
-}: PutConfigInCodeArgs): string => {
-  if (apiKey) {
-    const apiKeyConfig = buildApiKeyConfig(apiKey, maskApiKey);
-    const workspaceConfig = buildWorkspaceNameConfig(workspaceName);
+}: PutConfigInCodeArgs): { code: string; lines: number[] } => {
+  let patchedCode = "";
 
-    return code.replace(
+  if (apiKey) {
+    const apiKeyConfig = buildApiKeyConfig(apiKey, maskApiKey, true);
+    const workspaceConfig = buildWorkspaceNameConfig(workspaceName, true);
+
+    patchedCode = code.replace(
       OPIK_API_KEY_TEMPLATE,
       `${apiKeyConfig}\n${workspaceConfig}`,
     );
+  } else {
+    patchedCode = code.replace(
+      OPIK_API_KEY_TEMPLATE,
+      buildOpikUrlOverrideConfig(true),
+    );
   }
 
-  return code.replace(OPIK_API_KEY_TEMPLATE, OPIK_URL_OVERRIDE_CONFIG);
+  return {
+    code: patchedCode.replaceAll(OPIK_HIGHLIGHT_LINE_TEMPLATE, ""),
+    lines: patchedCode.split("\n").reduce<number[]>((acc, line, idx) => {
+      if (line.includes(OPIK_HIGHLIGHT_LINE_TEMPLATE)) {
+        acc.push(idx + 1);
+      }
+
+      return acc;
+    }, []),
+  };
 };
 
 type IntegrationTemplateProps = {
@@ -49,13 +69,17 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   executionLogs,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const codeWithConfig = putConfigInCode({
+  const { code: codeWithConfig, lines } = putConfigInCode({
     code,
     workspaceName,
     apiKey,
     maskApiKey: true,
   });
-  const codeWithConfigToCopy = putConfigInCode({ code, workspaceName, apiKey });
+  const { code: codeWithConfigToCopy } = putConfigInCode({
+    code,
+    workspaceName,
+    apiKey,
+  });
 
   const canExecuteCode =
     executionUrl && apiKey && Boolean(CODE_EXECUTOR_SERVICE_URL);
@@ -82,11 +106,13 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
             copyData={codeWithConfigToCopy}
             apiKey={apiKey}
             workspaceName={workspaceName}
+            highlightedLines={lines}
           />
         ) : (
           <CodeHighlighter
             data={codeWithConfig}
             copyData={codeWithConfigToCopy}
+            highlightedLines={lines}
           />
         )}
       </div>

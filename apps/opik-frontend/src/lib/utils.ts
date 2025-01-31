@@ -11,7 +11,9 @@ import mapKeys from "lodash/mapKeys";
 import snakeCase from "lodash/snakeCase";
 import { twMerge } from "tailwind-merge";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
+import { OPIK_HIGHLIGHT_LINE_TEMPLATE } from "@/constants/shared";
 import { JsonNode } from "@/types/shared";
+import { BASE_API_URL } from "@/api/api";
 
 const BASE_DOCUMENTATION_URL = "https://www.comet.com/docs/opik";
 
@@ -120,7 +122,25 @@ export const extractIdFromLocation = (location: string) =>
 export const formatNumericData = (value: number, precision = 3) =>
   String(round(value, precision));
 
-export const buildApiKeyConfig = (apiKey: string, masked = false) =>
-  `os.environ["OPIK_API_KEY"] = "${masked ? maskAPIKey(apiKey) : apiKey}"`;
-export const buildWorkspaceNameConfig = (workspaceName: string) =>
-  `os.environ["OPIK_WORKSPACE"] = "${workspaceName}"`;
+export const buildApiKeyConfig = (
+  apiKey: string,
+  masked = false,
+  withHighlight = false,
+) =>
+  `os.environ["OPIK_API_KEY"] = "${masked ? maskAPIKey(apiKey) : apiKey}"${
+    withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""
+  }`;
+
+export const buildWorkspaceNameConfig = (
+  workspaceName: string,
+  withHighlight = false,
+) =>
+  `os.environ["OPIK_WORKSPACE"] = "${workspaceName}"${
+    withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""
+  }`;
+
+export const buildOpikUrlOverrideConfig = (withHighlight = false) =>
+  `os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
+    BASE_API_URL,
+    window.location.origin,
+  ).toString()}${withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""}"`;

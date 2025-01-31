@@ -68,6 +68,7 @@ const FrameworkIntegrationsContent: React.FC<
       <div className="flex min-w-[650px] flex-1 gap-6">
         <div className="flex w-full flex-1 flex-col">
           <IntegrationTemplate
+            // key={integrationIndex}
             code={integration.code}
             apiKey={apiKey}
             executionUrl={integration.executionUrl}

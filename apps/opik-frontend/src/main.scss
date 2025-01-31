@@ -258,3 +258,19 @@
     height: 100%;
   }
 }
+
+.comet-line-highlight {
+  background: hsl(var(--primary-100)) !important;
+  position: relative;
+
+  &:before {
+    content: "";
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 2px;
+    background: hsl(var(--primary));
+  }
+}
