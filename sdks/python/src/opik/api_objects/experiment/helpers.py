@@ -59,3 +59,18 @@ def get_experiment_data_by_name(
         for experiment in experiment_page_public.content:
             if experiment.name == name:
                 return experiment
+
+
+def check_prompt_args(
+    prompt: Optional[prompt.Prompt] = None,
+    prompts: Optional[List[prompt.Prompt]] = None,
+) -> Optional[List[prompt.Prompt]]:
+
+    if prompts is not None and len(prompts) > 0 and prompt is not None:
+        LOGGER.warning("Arguments `prompt` and `prompts` are mutually exclusive, `prompts` will be used`.")
+    elif prompt is not None:
+        prompts = [prompt]
+    elif prompts is not None and len(prompts) == 0:
+        prompts = None
+
+    return prompts
