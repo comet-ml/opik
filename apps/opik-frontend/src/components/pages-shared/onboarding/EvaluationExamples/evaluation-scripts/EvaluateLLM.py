@@ -10,20 +10,21 @@ dataset = opik_client.get_or_create_dataset("RAG evaluation dataset")
 dataset.insert([
     {
         "input": "What are the key features of Python?",
-        "context": "Python is known for its simplicity and readability. Key features include dynamic typing, automatic memory management, and an extensive standard library.",
-        "expected_output": "Python's key features include dynamic typing, automatic memory management, and an extensive standard library."
+        "context": "Python is known for its simplicity and readability.",
+        "expected_output": "Python's key features include dynamic typing and automatic memory management."
     },
     {
         "input": "How does garbage collection work in Python?",
-        "context": "Python uses reference counting and a cyclic garbage collector. When an object's reference count drops to zero, it is deallocated.",
-        "expected_output": "Python uses reference counting for garbage collection. Objects are deallocated when their reference count reaches zero."
+        "context": "Python uses reference counting and a cyclic garbage collector.",
+        "expected_output": "Python uses reference counting for garbage collection."
     }
 ])
 
-def rag_task(item):
-    # Simulate RAG pipeline
+# Create the evaluation task
+def evaluation_task(dataset_item):
+    # Simulate RAG pipeline, replace this with your LLM application
     output = "<LLM response placeholder>"
-
+    
     return {
         "output": output
     }
@@ -31,7 +32,7 @@ def rag_task(item):
 # Run the evaluation
 result = evaluate(
     dataset=dataset,
-    task=rag_task,
+    task=evaluation_task,
     scoring_metrics=[
         ContextPrecision(),
         ContextRecall()
