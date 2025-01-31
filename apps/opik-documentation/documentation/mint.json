@@ -144,6 +144,7 @@
     {
       "group": "Cookbooks",
       "pages": [
+        "cookbook/overview",
         "cookbook/quickstart_notebook",
         "cookbook/openai",
         "cookbook/litellm",
