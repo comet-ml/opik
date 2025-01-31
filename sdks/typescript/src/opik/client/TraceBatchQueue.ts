@@ -1,13 +1,13 @@
 import { OpikApiClient } from "@/rest_api/Client";
+import { SavedTrace } from "@/tracer/Trace";
 import { BatchQueue } from "./BatchQueue";
-import { SavedTrace, Trace } from "@/tracer/Trace";
 
 export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   constructor(
     private readonly apiClient: OpikApiClient,
     delay?: number
   ) {
-    super(delay);
+    super({ delay });
   }
 
   protected async createEntities(entities: SavedTrace[]) {

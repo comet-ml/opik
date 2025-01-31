@@ -1,8 +1,10 @@
 import { loadConfig, OpikConfig } from "@/config/Config";
 import { OpikApiClient } from "@/rest_api";
-import type { Trace as ITrace, ProjectPublic } from "@/rest_api/api";
-import { SavedTrace, Trace } from "@/tracer/Trace";
+import type { Trace as ITrace } from "@/rest_api/api";
+import { Trace } from "@/tracer/Trace";
 import { v7 as uuid } from "uuid";
+import { SpanBatchQueue } from "./SpanBatchQueue";
+import { TraceBatchQueue } from "./TraceBatchQueue";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -11,7 +13,8 @@ interface TraceData extends Omit<ITrace, "startTime"> {
 export class OpikClient {
   public apiClient: OpikApiClient;
   public config: OpikConfig;
-  private existingProjects: Map<string, ProjectPublic> = new Map();
+  public spanBatchQueue: SpanBatchQueue;
+  public traceBatchQueue: TraceBatchQueue;
 
   constructor(explicitConfig?: Partial<OpikConfig>) {
     this.config = loadConfig(explicitConfig);
@@ -21,35 +24,10 @@ export class OpikClient {
       environment: this.config.host,
       workspaceName: this.config.workspaceName,
     });
+
+    this.spanBatchQueue = new SpanBatchQueue(this.apiClient);
+    this.traceBatchQueue = new TraceBatchQueue(this.apiClient);
   }
-
-  public loadProject = async (projectName: string): Promise<ProjectPublic> => {
-    if (this.existingProjects.has(projectName)) {
-      return this.existingProjects.get(projectName)!;
-    }
-
-    const { data: projectsPage } = await this.apiClient.projects
-      .findProjects({ name: projectName })
-      .asRaw();
-
-    const project = projectsPage.content?.find(
-      (p) => p.name.toLowerCase() === projectName.toLowerCase()
-    );
-
-    if (project) {
-      this.existingProjects.set(projectName, project);
-      return project;
-    }
-
-    // Create the project if it doesn't exist
-    await this.apiClient.projects
-      .createProject({
-        name: projectName,
-      })
-      .asRaw();
-
-    return this.loadProject(projectName);
-  };
 
   public trace = (traceData: TraceData) => {
     const projectName = traceData.projectName ?? this.config.projectName;
@@ -63,14 +41,13 @@ export class OpikClient {
       this
     );
 
-    // await this.loadProject(projectName);
-    // await this.apiClient.traces.createTrace(traceWithId).asRaw();
     this.traceBatchQueue.create(trace.data);
 
     return trace;
   };
 
   public flush = async () => {
-    await this.batchQueue.flush();
+    await this.traceBatchQueue.flush();
+    await this.spanBatchQueue.flush();
   };
 }

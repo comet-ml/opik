@@ -21,13 +21,13 @@ export class Span {
       "traceId" | "parentSpanId" | "projectId" | "projectName"
     >
   ) => {
-    await this.opik.apiClient.spans
-      .updateSpan(this.data.id, {
-        projectName: this.data.projectName ?? this.opik.config.projectName,
-        traceId: this.data.traceId,
-        ...updates,
-      })
-      .asRaw();
+    const spanUpdates = {
+      projectName: this.data.projectName ?? this.opik.config.projectName,
+      traceId: this.data.traceId,
+      ...updates,
+    };
+
+    this.opik.spanBatchQueue.update(this.data.id, spanUpdates);
 
     this.data = { ...this.data, ...updates };
   };

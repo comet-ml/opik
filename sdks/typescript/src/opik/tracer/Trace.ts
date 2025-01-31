@@ -37,10 +37,7 @@ export class Trace {
       traceId: this.data.id,
     };
 
-    await this.opik.loadProject(projectName);
-    await this.opik.apiClient.spans
-      .createSpans({ spans: [spanWithId] })
-      .asRaw();
+    this.opik.spanBatchQueue.create(spanWithId);
 
     const span = new Span(spanWithId, this.opik);
     this.spans.push(span);
@@ -48,21 +45,13 @@ export class Trace {
   };
 
   public update = (updates: Omit<TraceUpdate, "projectId">) => {
-    /*
-    await this.opik.apiClient.traces
-      .updateTrace(this.data.id, {
-        projectName: this.data.projectName ?? this.opik.config.projectName,
-        ...updates,
-      })
-      .asRaw();
-    */
-    const requestUpdates = {
+    const traceUpdates = {
       projectName: this.data.projectName ?? this.opik.config.projectName,
       ...updates,
     };
 
-    this.opik.traceBatchQueue.update(this.data.id, requestUpdates);
-    this.data = { ...this.data, ...requestUpdates };
+    this.opik.traceBatchQueue.update(this.data.id, traceUpdates);
+    this.data = { ...this.data, ...traceUpdates };
 
     return this;
   };

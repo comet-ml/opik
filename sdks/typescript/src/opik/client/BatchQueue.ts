@@ -1,12 +1,29 @@
 type CreateEntity = { id: string };
 
-const DEFAULT_DELAY = 300;
+const DEFAULT_DEBOUNCE_BATCH_DELAY = 300;
 
 export abstract class BatchQueue<EntityData = {}> {
   private createQueue = new Map<string, EntityData>();
   private createTimerId: NodeJS.Timeout | null = null;
+  private deleteQueue = new Set<string>();
+  private deleteTimerId: NodeJS.Timeout | null = null;
+  private readonly delay: number;
+  private readonly enableCreateBatch: boolean;
+  private readonly enableDeleteBatch: boolean;
 
-  constructor(private readonly delay = DEFAULT_DELAY) {}
+  constructor({
+    delay = DEFAULT_DEBOUNCE_BATCH_DELAY,
+    enableCreateBatch = true,
+    enableDeleteBatch = true,
+  }: {
+    delay?: number;
+    enableCreateBatch?: boolean;
+    enableDeleteBatch?: boolean;
+  }) {
+    this.delay = delay;
+    this.enableCreateBatch = enableCreateBatch;
+    this.enableDeleteBatch = enableDeleteBatch;
+  }
 
   protected abstract createEntities(entities: EntityData[]): Promise<void>;
   protected abstract getEntity(id: string): Promise<EntityData | undefined>;
@@ -17,8 +34,14 @@ export abstract class BatchQueue<EntityData = {}> {
   protected abstract deleteEntities(ids: string[]): Promise<void>;
 
   public create = (entity: CreateEntity & EntityData) => {
+    if (!this.enableCreateBatch) {
+      this.createEntities([entity]);
+      return;
+    }
+
     if (this.createQueue.has(entity.id)) {
-      throw new Error(`Entity with id ${entity.id} already exists`);
+      // error, override or ignore?
+      // throw new Error(`Entity with id ${entity.id} already exists`);
     }
 
     this.createQueue.set(entity.id, entity);
@@ -26,7 +49,7 @@ export abstract class BatchQueue<EntityData = {}> {
     if (this.createTimerId) {
       clearTimeout(this.createTimerId);
     }
-    this.createTimerId = setTimeout(() => this.flush(), this.delay);
+    this.createTimerId = setTimeout(() => this.flushCreate(), this.delay);
   };
 
   public get = async (id: string) => {
@@ -43,7 +66,8 @@ export abstract class BatchQueue<EntityData = {}> {
     const entity = this.createQueue.get(id);
 
     if (entity) {
-      return this.createQueue.set(id, { ...entity, ...updates });
+      this.createQueue.set(id, { ...entity, ...updates });
+      return;
     }
 
     this.updateEntity(id, updates);
@@ -52,15 +76,37 @@ export abstract class BatchQueue<EntityData = {}> {
   public delete = (id: string) => {
     if (this.createQueue.has(id)) {
       // is it needed to call the delete anyway?
-      return this.createQueue.delete(id);
+      this.createQueue.delete(id);
+      return;
     }
 
-    this.deleteEntities([id]);
+    if (!this.enableDeleteBatch) {
+      this.deleteEntities([id]);
+      return;
+    }
+
+    this.deleteQueue.add(id);
+
+    if (this.deleteTimerId) {
+      clearTimeout(this.deleteTimerId);
+    }
+    this.deleteTimerId = setTimeout(() => this.flushDelete(), this.delay);
   };
 
-  public flush = async () => {
+  protected flushCreate = async () => {
     const entities = Array.from(this.createQueue.values());
     await this.createEntities(entities);
     this.createQueue.clear();
+  };
+
+  protected flushDelete = async () => {
+    const ids = Array.from(this.deleteQueue);
+    await this.deleteEntities(ids);
+    this.deleteQueue.clear();
+  };
+
+  public flush = async () => {
+    await this.flushCreate();
+    await this.flushDelete();
   };
 }
