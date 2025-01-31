@@ -115,6 +115,11 @@ class Usefulness(base_metric.BaseMetric):
             dict_content = json.loads(content)
             score: float = float(dict_content["score"])
 
+            if not (0.0 <= score <= 1.0):
+                raise MetricComputationError(
+                    f"Usefulness score must be between 0.0 and 1.0, got {score}"
+                )
+
             return score_result.ScoreResult(
                 name=self.name, value=score, reason=dict_content["reason"]
             )
