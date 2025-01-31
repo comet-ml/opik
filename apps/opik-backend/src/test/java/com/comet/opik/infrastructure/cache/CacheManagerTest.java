@@ -96,7 +96,7 @@ class CacheManagerTest {
         Assertions.assertThat(dto).isEqualTo(dto2);
 
         // wait for cache to expire
-        Mono.delay(Duration.ofMillis(500)).block();
+        Mono.delay(Duration.ofMillis(1000)).block();
 
         // third call, should call real method again
         var dto3 = service.get(id, workspaceId);

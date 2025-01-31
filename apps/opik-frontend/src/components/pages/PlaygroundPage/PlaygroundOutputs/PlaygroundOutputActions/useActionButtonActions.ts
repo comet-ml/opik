@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { PROJECTS_KEY } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
 import { usePromptIds, useResetOutputMap } from "@/store/PlaygroundStore";
@@ -97,7 +98,7 @@ const useActionButtonActions = ({
       },
       onCreateTraces: () => {
         queryClient.invalidateQueries({
-          queryKey: ["projects"],
+          queryKey: [PROJECTS_KEY],
         });
       },
     };

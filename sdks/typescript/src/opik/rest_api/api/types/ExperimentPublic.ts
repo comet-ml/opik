@@ -11,10 +11,12 @@ export interface ExperimentPublic {
     name?: string;
     metadata?: OpikApi.JsonNodePublic;
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
+    comments?: OpikApi.CommentPublic[];
     traceCount?: number;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;
     promptVersion?: OpikApi.PromptVersionLinkPublic;
+    promptVersions?: OpikApi.PromptVersionLinkPublic[];
 }

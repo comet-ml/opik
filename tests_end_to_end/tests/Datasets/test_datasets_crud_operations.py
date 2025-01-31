@@ -13,27 +13,6 @@ import time
 
 
 class TestDatasetsCrud:
-    def test_create_dataset_ui_datasets_page(self, page: Page):
-        """
-        Basic test to check dataset creation via UI. Uses the UI after creation to check the dataset exists
-        1. Create dataset via UI from the datasets page
-        2. Check the dataset exists in the dataset table
-        3. If no errors raised, test passes
-        """
-        datasets_page = DatasetsPage(page)
-        datasets_page.go_to_page()
-        dataset_name = "automated_tests_dataset"
-        try:
-            datasets_page.create_dataset_by_name(dataset_name=dataset_name)
-            datasets_page.check_dataset_exists_on_page_by_name(
-                dataset_name=dataset_name
-            )
-        except Exception as e:
-            print(f"error during dataset creation: {e}")
-            raise
-        finally:
-            delete_dataset_by_name_if_exists(dataset_name=dataset_name)
-
     def test_create_dataset_ui_add_traces_to_new_dataset(
         self, page: Page, create_delete_project_sdk, create_10_test_traces
     ):
@@ -65,27 +44,10 @@ class TestDatasetsCrud:
         finally:
             delete_dataset_by_name_if_exists(dataset_name=dataset_name)
 
-    def test_create_dataset_sdk_client(self, client: opik.Opik):
-        """
-        Basic test to check dataset creation via SDK. Uses the SDK to fetch the created dataset to check it exists
-        1. Create dataset via SDK Opik client
-        2. Get the project via SDK OpikAPI client
-        3. If dataset creation fails, client.get_dataset will throw an error and the test will fail.
-        """
-        dataset_name = "automated_tests_dataset"
-        try:
-            client.create_dataset(name=dataset_name)
-            time.sleep(0.2)
-            assert client.get_dataset(name=dataset_name) is not None
-        except Exception as e:
-            print(f"error during dataset creation: {e}")
-            raise
-        finally:
-            delete_dataset_by_name_if_exists(dataset_name=dataset_name)
-
     @pytest.mark.parametrize(
         "dataset_fixture", ["create_delete_dataset_ui", "create_delete_dataset_sdk"]
     )
+    @pytest.mark.sanity
     def test_dataset_visibility(
         self, request, page: Page, client: opik.Opik, dataset_fixture
     ):

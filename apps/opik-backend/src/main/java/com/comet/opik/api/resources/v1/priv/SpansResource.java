@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
@@ -10,16 +12,22 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
+import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.domain.CommentDAO;
+import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.JsonNode;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -53,6 +61,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -72,8 +81,10 @@ public class SpansResource {
 
     private final @NonNull SpanService spanService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull Streamer streamer;
 
     @GET
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
@@ -332,4 +343,130 @@ public class SpansResource {
         return Response.ok(feedbackScoreNames).build();
     }
 
+    @POST
+    @Path("/search")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "searchSpans", summary = "Search spans", description = "Search spans", responses = {
+            @ApiResponse(responseCode = "200", description = "Spans stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    Span.class,
+                    ErrorMessage.class
+            }), maxItems = 2000))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @JsonView(Span.View.Public.class)
+    public ChunkedOutput<JsonNode> searchSpans(
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+        var workspaceName = requestContext.get().getWorkspaceName();
+
+        validateProjectNameAndProjectId(request.projectName(), request.projectId());
+
+        log.info("Streaming spans search results by '{}', workspaceId '{}'", request, workspaceId);
+        var criteria = SpanSearchCriteria.builder()
+                .lastReceivedSpanId(request.lastRetrievedId())
+                .truncate(request.truncate())
+                .traceId(request.traceId())
+                .type(request.type())
+                .projectName(request.projectName())
+                .projectId(request.projectId())
+                .filters(filtersFactory.validateFilter(request.filters()))
+                .projectName(request.projectName())
+                .build();
+
+        var items = spanService.search(request.limit(), criteria)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+
+        return streamer.getOutputStream(items,
+                () -> log.info("Streamed spans search results by '{}', workspaceId '{}'", request, workspaceId));
+    }
+
+    @POST
+    @Path("/{id}/comments")
+    @Operation(operationId = "addSpanComment", summary = "Add span comment", description = "Add span comment", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}/comments/{commentId}", schema = @Schema(implementation = String.class))})})
+    public Response addSpanComment(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment,
+            @Context UriInfo uriInfo) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Add comment for span with id '{}' on workspaceId '{}'", id, workspaceId);
+
+        var commentId = commentService.create(id, comment, CommentDAO.EntityType.SPAN)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(commentId)).build();
+        log.info("Added comment with id '{}' for span with id '{}' on workspaceId '{}'", comment.id(), id,
+                workspaceId);
+
+        return Response.created(uri).build();
+    }
+
+    @GET
+    @Path("/{spanId}/comments/{commentId}")
+    @Operation(operationId = "getSpanComment", summary = "Get span comment", description = "Get span comment", responses = {
+            @ApiResponse(responseCode = "200", description = "Comment resource", content = @Content(schema = @Schema(implementation = Comment.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    public Response getSpanComment(@PathParam("commentId") @NotNull UUID commentId,
+            @PathParam("spanId") @NotNull UUID spanId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting span comment by id '{}' on workspace_id '{}'", commentId, workspaceId);
+
+        Comment comment = commentService.get(spanId, commentId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Got span comment by id '{}', on workspace_id '{}'", comment.id(), workspaceId);
+
+        return Response.ok(comment).build();
+    }
+
+    @PATCH
+    @Path("/comments/{commentId}")
+    @Operation(operationId = "updateSpanComment", summary = "Update span comment by id", description = "Update span comment by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found")})
+    public Response updateSpanComment(@PathParam("commentId") UUID commentId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Update span comment with id '{}' on workspaceId '{}'", commentId, workspaceId);
+
+        commentService.update(commentId, comment)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Updated span comment with id '{}' on workspaceId '{}'", commentId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/comments/delete")
+    @Operation(operationId = "deleteSpanComments", summary = "Delete span comments", description = "Delete span comments", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+    })
+    public Response deleteSpanComments(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Delete span comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+
+        commentService.delete(batchDelete)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted span comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
+
+        return Response.noContent().build();
+    }
 }

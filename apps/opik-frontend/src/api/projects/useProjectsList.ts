@@ -1,5 +1,9 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import api, {
+  PROJECTS_KEY,
+  PROJECTS_REST_ENDPOINT,
+  QueryConfig,
+} from "@/api/api";
 import { Project } from "@/types/projects";
 import { processSorting } from "@/lib/sorting";
 import { Sorting } from "@/types/sorting";
@@ -40,7 +44,7 @@ export default function useProjectsList(
   options?: QueryConfig<UseProjectsListResponse>,
 ) {
   return useQuery({
-    queryKey: ["projects", params],
+    queryKey: [PROJECTS_KEY, params],
     queryFn: (context) => getProjectsList(context, params),
     ...options,
   });

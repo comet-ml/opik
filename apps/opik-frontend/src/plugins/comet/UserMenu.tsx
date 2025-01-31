@@ -40,10 +40,13 @@ import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
 import { buildUrl } from "./utils";
 import { APP_VERSION } from "@/constants/app";
+import { useState } from "react";
+import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 
 const UserMenu = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [openQuickstart, setOpenQuickstart] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -274,12 +277,13 @@ const UserMenu = () => {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <Link to="/$workspaceName/quickstart" params={{ workspaceName }}>
-              <DropdownMenuItem className="cursor-pointer">
-                <GraduationCap className="mr-2 size-4" />
-                <span>Quickstart guide</span>
-              </DropdownMenuItem>
-            </Link>
+            <DropdownMenuItem
+              onClick={() => setOpenQuickstart(true)}
+              className="cursor-pointer"
+            >
+              <GraduationCap className="mr-2 size-4" />
+              <span>Quickstart guide</span>
+            </DropdownMenuItem>
             <a href={buildDocsUrl()} target="_blank" rel="noreferrer">
               <DropdownMenuItem className="cursor-pointer">
                 <Book className="mr-2 size-4" />
@@ -358,6 +362,8 @@ const UserMenu = () => {
     <div className="flex shrink-0 items-center gap-4">
       {renderAppSelector()}
       {renderUserMenu()}
+
+      <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
     </div>
   );
 };

@@ -18,7 +18,7 @@ class RegexMatch(base_metric.BaseMetric):
 
     Example:
         >>> from opik.evaluation.metrics import RegexMatch
-        >>> regex_metric = RegexMatch(r"\d{3}-\d{2}-\d{4}")
+        >>> regex_metric = RegexMatch("\\d{3}-\\d{2}-\\d{4}")
         >>> result = regex_metric.score("My SSN is 123-45-6789")
         >>> print(result.value)
         1.0

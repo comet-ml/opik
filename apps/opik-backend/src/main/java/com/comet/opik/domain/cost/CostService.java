@@ -1,115 +1,111 @@
 package com.comet.opik.domain.cost;
 
-import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Nullable;
 
 import java.math.BigDecimal;
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.CHATGPT_4O_LATEST;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_3_5_TURBO;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_3_5_TURBO_0125;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_3_5_TURBO_1106;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_2024_05_13;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_2024_08_06;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_2024_11_20;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_MINI;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4O_MINI_2024_07_18;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_0125_PREVIEW;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_0613;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_1106_PREVIEW;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_TURBO;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_TURBO_2024_04_09;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_4_TURBO_PREVIEW;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_2024_12_17;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_MINI;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_MINI_2024_09_12;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_PREVIEW;
-import static com.comet.opik.infrastructure.llm.openai.OpenaiModelName.GPT_O1_PREVIEW_2024_09_12;
-
 @Slf4j
 public class CostService {
-    private static final String WARNING_MISSING_PRICE = "missing price for model '{}'";
-    private static final Map<OpenaiModelName, ModelPrice> modelPrices = new EnumMap<>(OpenaiModelName.class);
+    private static final Map<String, ModelPrice> modelPrices = new HashMap<>();
 
     static {
-        modelPrices.put(CHATGPT_4O_LATEST, new ModelPrice(new BigDecimal("0.000005"),
+        // OpenAI models
+        modelPrices.put("chatgpt-4o-latest", new ModelPrice(new BigDecimal("0.000005"),
                 new BigDecimal("0.000015"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4O, new ModelPrice(new BigDecimal("0.0000025"), new BigDecimal("0.000010"),
+        modelPrices.put("gpt-4o", new ModelPrice(new BigDecimal("0.0000025"), new BigDecimal("0.000010"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4O_2024_05_13, new ModelPrice(new BigDecimal("0.000005"),
+        modelPrices.put("gpt-4o-2024-05-13", new ModelPrice(new BigDecimal("0.000005"),
                 new BigDecimal("0.000015"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4O_2024_08_06, new ModelPrice(new BigDecimal("0.0000025"),
+        modelPrices.put("gpt-4o-2024-08-06", new ModelPrice(new BigDecimal("0.0000025"),
                 new BigDecimal("0.000010"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4O_2024_11_20, new ModelPrice(new BigDecimal("0.0000025"),
+        modelPrices.put("gpt-4o-2024-11-20", new ModelPrice(new BigDecimal("0.0000025"),
                 new BigDecimal("0.000010"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4O_MINI, new ModelPrice(new BigDecimal("0.00000015"), new BigDecimal("0.00000060"),
+        modelPrices.put("gpt-4o-mini", new ModelPrice(new BigDecimal("0.00000015"), new BigDecimal("0.00000060"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4O_MINI_2024_07_18, new ModelPrice(new BigDecimal("0.00000015"),
+        modelPrices.put("gpt-4o-mini-2024-07-18", new ModelPrice(new BigDecimal("0.00000015"),
                 new BigDecimal("0.00000060"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_3_5_TURBO, new ModelPrice(new BigDecimal("0.0000015"), new BigDecimal("0.000002"),
+        modelPrices.put("gpt-3.5-turbo", new ModelPrice(new BigDecimal("0.0000015"), new BigDecimal("0.000002"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_3_5_TURBO_1106, new ModelPrice(new BigDecimal("0.000001"),
+        modelPrices.put("gpt-3.5-turbo-1106", new ModelPrice(new BigDecimal("0.000001"),
                 new BigDecimal("0.000002"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_3_5_TURBO_0125, new ModelPrice(new BigDecimal("0.00000050"),
+        modelPrices.put("gpt-3.5-turbo-0125", new ModelPrice(new BigDecimal("0.00000050"),
                 new BigDecimal("0.0000015"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4, new ModelPrice(new BigDecimal("0.000030"), new BigDecimal("0.000060"),
+        modelPrices.put("gpt-4", new ModelPrice(new BigDecimal("0.000030"), new BigDecimal("0.000060"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4_0613, new ModelPrice(new BigDecimal("0.000030"), new BigDecimal("0.000060"),
+        modelPrices.put("gpt-4-0613", new ModelPrice(new BigDecimal("0.000030"), new BigDecimal("0.000060"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4_TURBO, new ModelPrice(new BigDecimal("0.000010"), new BigDecimal("0.000030"),
+        modelPrices.put("gpt-4-turbo", new ModelPrice(new BigDecimal("0.000010"), new BigDecimal("0.000030"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4_TURBO_2024_04_09, new ModelPrice(new BigDecimal("0.000010"),
+        modelPrices.put("gpt-4-turbo-2024-04-09", new ModelPrice(new BigDecimal("0.000010"),
                 new BigDecimal("0.000030"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4_TURBO_PREVIEW, new ModelPrice(new BigDecimal("0.000010"),
+        modelPrices.put("gpt-4-turbo-preview", new ModelPrice(new BigDecimal("0.000010"),
                 new BigDecimal("0.000030"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4_0125_PREVIEW, new ModelPrice(new BigDecimal("0.000010"),
+        modelPrices.put("gpt-4-0125-preview", new ModelPrice(new BigDecimal("0.000010"),
                 new BigDecimal("0.000030"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_4_1106_PREVIEW, new ModelPrice(new BigDecimal("0.000010"),
+        modelPrices.put("gpt-4-1106-preview", new ModelPrice(new BigDecimal("0.000010"),
                 new BigDecimal("0.000030"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_O1, new ModelPrice(new BigDecimal("0.000015"), new BigDecimal("0.00006"),
+        modelPrices.put("o1", new ModelPrice(new BigDecimal("0.000015"), new BigDecimal("0.00006"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_O1_2024_12_17, new ModelPrice(new BigDecimal("0.000015"),
+        modelPrices.put("o1-2024-12-17", new ModelPrice(new BigDecimal("0.000015"),
                 new BigDecimal("0.000060"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_O1_MINI, new ModelPrice(new BigDecimal("0.000003"), new BigDecimal("0.000012"),
+        modelPrices.put("o1-mini", new ModelPrice(new BigDecimal("0.000003"), new BigDecimal("0.000012"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_O1_MINI_2024_09_12, new ModelPrice(new BigDecimal("0.000003"),
+        modelPrices.put("o1-mini-2024-09-12", new ModelPrice(new BigDecimal("0.000003"),
                 new BigDecimal("0.000012"), SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_O1_PREVIEW, new ModelPrice(new BigDecimal("0.000015"), new BigDecimal("0.000060"),
+        modelPrices.put("o1-preview", new ModelPrice(new BigDecimal("0.000015"), new BigDecimal("0.000060"),
                 SpanCostCalculator::textGenerationCost));
-        modelPrices.put(GPT_O1_PREVIEW_2024_09_12, new ModelPrice(new BigDecimal("0.000015"),
+        modelPrices.put("o1-preview-2024-09-12", new ModelPrice(new BigDecimal("0.000015"),
                 new BigDecimal("0.000060"), SpanCostCalculator::textGenerationCost));
+
+        // VertexAI models
+        modelPrices.put("gemini-pro", new ModelPrice(new BigDecimal("0.0000005"),
+                new BigDecimal("0.0000015"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.0-pro", new ModelPrice(new BigDecimal("0.0000005"),
+                new BigDecimal("0.0000015"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.0-pro-001", new ModelPrice(new BigDecimal("0.0000005"),
+                new BigDecimal("0.0000015"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.0-ultra", new ModelPrice(new BigDecimal("0.0000005"),
+                new BigDecimal("0.0000015"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.0-ultra-001", new ModelPrice(new BigDecimal("0.0000005"),
+                new BigDecimal("0.0000015"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.0-pro-002", new ModelPrice(new BigDecimal("0.0000005"),
+                new BigDecimal("0.0000015"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-pro", new ModelPrice(new BigDecimal("0.00000125"),
+                new BigDecimal("0.000005"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-pro-002", new ModelPrice(new BigDecimal("0.00000125"),
+                new BigDecimal("0.000005"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-pro-001", new ModelPrice(new BigDecimal("0.00000125"),
+                new BigDecimal("0.000005"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-pro-preview-0514", new ModelPrice(new BigDecimal("0.000000078125"),
+                new BigDecimal("0.0000003125"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-pro-preview-0215", new ModelPrice(new BigDecimal("0.000000078125"),
+                new BigDecimal("0.0000003125"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-pro-preview-0409", new ModelPrice(new BigDecimal("0.000000078125"),
+                new BigDecimal("0.0000003125"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-flash", new ModelPrice(new BigDecimal("0.000000075"),
+                new BigDecimal("0.0000003"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-flash-exp-0827", new ModelPrice(new BigDecimal("0.000000004688"),
+                new BigDecimal("0.0000000046875"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-flash-002", new ModelPrice(new BigDecimal("0.000000075"),
+                new BigDecimal("0.0000003"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-flash-001", new ModelPrice(new BigDecimal("0.000000075"),
+                new BigDecimal("0.0000003"), SpanCostCalculator::textGenerationCost));
+        modelPrices.put("gemini-1.5-flash-preview-0514", new ModelPrice(new BigDecimal("0.000000075"),
+                new BigDecimal("0.0000000046875"), SpanCostCalculator::textGenerationCost));
     }
 
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
             new BigDecimal("0"), SpanCostCalculator::defaultCost);
 
     public static BigDecimal calculateCost(@Nullable String rawModelName, @Nullable Map<String, Integer> usage) {
-        return OpenaiModelName.byValue(rawModelName)
-                .map(modelName -> calculateCost(modelName, usage))
-                .orElseGet(() -> calculateDefaultCost(usage));
-    }
+        ModelPrice modelPrice = Optional.ofNullable(rawModelName)
+                .map(modelPrices::get)
+                .orElse(DEFAULT_COST);
 
-    private static BigDecimal calculateCost(OpenaiModelName modelName, Map<String, Integer> usage) {
-        var modelPrice = Optional.ofNullable(modelPrices.get(modelName))
-                .orElseGet(() -> {
-                    log.warn(WARNING_MISSING_PRICE, modelName);
-                    return DEFAULT_COST;
-                });
-        return calculateCost(modelPrice, usage);
-    }
-
-    private static BigDecimal calculateDefaultCost(Map<String, Integer> usage) {
-        return calculateCost(DEFAULT_COST, usage);
-    }
-
-    private static BigDecimal calculateCost(ModelPrice modelPrice, Map<String, Integer> usage) {
         return modelPrice.calculator().apply(modelPrice, Optional.ofNullable(usage).orElse(Map.of()));
     }
 }

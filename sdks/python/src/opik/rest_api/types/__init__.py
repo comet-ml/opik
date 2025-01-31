@@ -42,6 +42,8 @@ from .categorical_feedback_detail_update import CategoricalFeedbackDetailUpdate
 from .chat_completion_choice import ChatCompletionChoice
 from .chat_completion_response import ChatCompletionResponse
 from .chunked_output_json_node import ChunkedOutputJsonNode
+from .chunked_output_json_node_public import ChunkedOutputJsonNodePublic
+from .chunked_output_json_node_public_type import ChunkedOutputJsonNodePublicType
 from .chunked_output_json_node_type import ChunkedOutputJsonNodeType
 from .column import Column
 from .column_compare import ColumnCompare
@@ -49,6 +51,9 @@ from .column_compare_types_item import ColumnCompareTypesItem
 from .column_public import ColumnPublic
 from .column_public_types_item import ColumnPublicTypesItem
 from .column_types_item import ColumnTypesItem
+from .comment import Comment
+from .comment_compare import CommentCompare
+from .comment_public import CommentPublic
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
 from .data_point_number_public import DataPointNumberPublic
@@ -74,6 +79,7 @@ from .error_info_public import ErrorInfoPublic
 from .error_info_write import ErrorInfoWrite
 from .error_message import ErrorMessage
 from .error_message_detail import ErrorMessageDetail
+from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
 from .experiment_item import ExperimentItem
@@ -100,6 +106,7 @@ from .feedback_public import (
 )
 from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
+from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
 from .feedback_score_average_public import FeedbackScoreAveragePublic
 from .feedback_score_batch import FeedbackScoreBatch
 from .feedback_score_batch_item import FeedbackScoreBatchItem
@@ -143,6 +150,9 @@ from .llm_as_judge_output_schema_public_type import LlmAsJudgeOutputSchemaPublic
 from .llm_as_judge_output_schema_type import LlmAsJudgeOutputSchemaType
 from .llm_as_judge_output_schema_write import LlmAsJudgeOutputSchemaWrite
 from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteType
+from .log_item import LogItem
+from .log_item_level import LogItemLevel
+from .log_page import LogPage
 from .message import Message
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
@@ -155,8 +165,10 @@ from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
 from .page_columns import PageColumns
 from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
+from .percentage_values_detailed import PercentageValuesDetailed
 from .percentage_values_public import PercentageValuesPublic
 from .project import Project
+from .project_detailed import ProjectDetailed
 from .project_metric_response_public import ProjectMetricResponsePublic
 from .project_metric_response_public_interval import ProjectMetricResponsePublicInterval
 from .project_metric_response_public_metric_type import (
@@ -171,17 +183,23 @@ from .project_stat_item_object_public import (
     ProjectStatItemObjectPublic_Percentage,
 )
 from .project_stats_public import ProjectStatsPublic
+from .project_stats_summary import ProjectStatsSummary
+from .project_stats_summary_item import ProjectStatsSummaryItem
 from .prompt import Prompt
 from .prompt_detail import PromptDetail
 from .prompt_page_public import PromptPagePublic
 from .prompt_public import PromptPublic
+from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
+from .prompt_version_detail_type import PromptVersionDetailType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
+from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
@@ -192,6 +210,8 @@ from .results_number_public import ResultsNumberPublic
 from .score_name import ScoreName
 from .span import Span
 from .span_batch import SpanBatch
+from .span_filter_public import SpanFilterPublic
+from .span_filter_public_operator import SpanFilterPublicOperator
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
@@ -241,6 +261,8 @@ __all__ = [
     "ChatCompletionChoice",
     "ChatCompletionResponse",
     "ChunkedOutputJsonNode",
+    "ChunkedOutputJsonNodePublic",
+    "ChunkedOutputJsonNodePublicType",
     "ChunkedOutputJsonNodeType",
     "Column",
     "ColumnCompare",
@@ -248,6 +270,9 @@ __all__ = [
     "ColumnPublic",
     "ColumnPublicTypesItem",
     "ColumnTypesItem",
+    "Comment",
+    "CommentCompare",
+    "CommentPublic",
     "CompletionTokensDetails",
     "CountValueStatPublic",
     "DataPointNumberPublic",
@@ -273,6 +298,7 @@ __all__ = [
     "ErrorInfoWrite",
     "ErrorMessage",
     "ErrorMessageDetail",
+    "ErrorMessageDetailed",
     "ErrorMessagePublic",
     "Experiment",
     "ExperimentItem",
@@ -293,6 +319,7 @@ __all__ = [
     "FeedbackPublic_Numerical",
     "FeedbackScore",
     "FeedbackScoreAverage",
+    "FeedbackScoreAverageDetailed",
     "FeedbackScoreAveragePublic",
     "FeedbackScoreBatch",
     "FeedbackScoreBatchItem",
@@ -336,6 +363,9 @@ __all__ = [
     "LlmAsJudgeOutputSchemaType",
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
+    "LogItem",
+    "LogItemLevel",
+    "LogPage",
     "Message",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
@@ -348,8 +378,10 @@ __all__ = [
     "PageColumns",
     "PercentageValueStatPublic",
     "PercentageValues",
+    "PercentageValuesDetailed",
     "PercentageValuesPublic",
     "Project",
+    "ProjectDetailed",
     "ProjectMetricResponsePublic",
     "ProjectMetricResponsePublicInterval",
     "ProjectMetricResponsePublicMetricType",
@@ -360,17 +392,23 @@ __all__ = [
     "ProjectStatItemObjectPublic_Count",
     "ProjectStatItemObjectPublic_Percentage",
     "ProjectStatsPublic",
+    "ProjectStatsSummary",
+    "ProjectStatsSummaryItem",
     "Prompt",
     "PromptDetail",
     "PromptPagePublic",
     "PromptPublic",
+    "PromptType",
     "PromptVersion",
     "PromptVersionDetail",
+    "PromptVersionDetailType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
+    "PromptVersionPublicType",
+    "PromptVersionType",
     "ProviderApiKey",
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
@@ -381,6 +419,8 @@ __all__ = [
     "ScoreName",
     "Span",
     "SpanBatch",
+    "SpanFilterPublic",
+    "SpanFilterPublicOperator",
     "SpanPagePublic",
     "SpanPublic",
     "SpanPublicType",

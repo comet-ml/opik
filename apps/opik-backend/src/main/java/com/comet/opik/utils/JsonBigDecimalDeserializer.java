@@ -20,7 +20,7 @@ public class JsonBigDecimalDeserializer extends NumberDeserializers.BigDecimalDe
         return Optional.ofNullable(super.deserialize(p, context))
                 .map(value -> {
 
-                    if (value.scale() > 9) {
+                    if (value.scale() > 12) {
                         return value.setScale(SCALE, RoundingMode.HALF_EVEN);
                     }
 

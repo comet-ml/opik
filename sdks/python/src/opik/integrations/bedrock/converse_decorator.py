@@ -1,23 +1,14 @@
 import logging
-from typing import List, Any, Dict, Optional, Callable, Tuple, Union, TypedDict, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+
 from opik import dict_utils
-from opik.decorator import base_track_decorator, arguments_helpers
-
-from . import stream_wrappers
-
-from botocore import eventstream
+from opik.decorator import arguments_helpers, base_track_decorator
+from . import helpers, stream_wrappers
 
 LOGGER = logging.getLogger(__name__)
 
 KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "system", "toolConfig", "guardrailConfig"]
 RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["output"]
-
-BedrockResponseWithStream = Dict[str, Any]
-
-
-class ConverseStreamOutput(TypedDict):
-    stream: eventstream.EventStream
-    ResponseMetadata: Dict[str, Any]
 
 
 class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
@@ -85,7 +76,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
-        ConverseStreamOutput,
+        helpers.ConverseStreamOutput,
         None,
     ]:
         DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
@@ -111,7 +102,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
             )
 
             output["stream"] = wrapped_stream
-            return cast(ConverseStreamOutput, output)
+            return cast(helpers.ConverseStreamOutput, output)
 
         STREAM_NOT_FOUND = None
 

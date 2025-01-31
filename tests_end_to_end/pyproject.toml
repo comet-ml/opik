@@ -6,3 +6,6 @@ disallow_untyped_calls = false
 disallow_untyped_defs = false
 check_untyped_defs = false
 disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+pythonpath = "."

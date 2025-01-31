@@ -2,12 +2,12 @@
 
 import typing
 from ..core.client_wrapper import SyncClientWrapper
-from ..types.feedback_score_source import FeedbackScoreSource
 import datetime as dt
 from ..core.request_options import RequestOptions
 from ..core.jsonable_encoder import jsonable_encoder
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from ..types.feedback_score_source import FeedbackScoreSource
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
 from ..types.span_page_public import SpanPagePublic
 from ..core.pydantic_utilities import parse_obj_as
@@ -24,9 +24,15 @@ from ..types.error_info import ErrorInfo
 from .types.find_feedback_score_names_1_request_type import (
     FindFeedbackScoreNames1RequestType,
 )
+from ..types.comment import Comment
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
+from .types.span_search_stream_request_public_type import (
+    SpanSearchStreamRequestPublicType,
+)
+from ..types.span_filter_public import SpanFilterPublic
+from ..errors.bad_request_error import BadRequestError
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -36,6 +42,79 @@ OMIT = typing.cast(typing.Any, ...)
 class SpansClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def add_span_comment(
+        self,
+        id_: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Add span comment
+
+        Parameters
+        ----------
+        id_ : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.spans.add_span_comment(
+            id_="id",
+            text="text",
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/spans/{jsonable_encoder(id_)}/comments",
+            method="POST",
+            json={
+                "id": id,
+                "text": text,
+                "created_at": created_at,
+                "last_updated_at": last_updated_at,
+                "created_by": created_by,
+                "last_updated_by": last_updated_by,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def add_span_feedback_score(
         self,
@@ -632,6 +711,55 @@ class SpansClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def delete_span_comments(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Delete span comments
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.spans.delete_span_comments(
+            ids=["ids"],
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/spans/comments/delete",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     def delete_span_feedback_score(
         self,
         id: str,
@@ -736,6 +864,72 @@ class SpansClient:
                         type_=typing.List[str],  # type: ignore
                         object_=_response.json(),
                     ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def get_span_comment(
+        self,
+        comment_id: str,
+        span_id: str,
+        *,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> Comment:
+        """
+        Get span comment
+
+        Parameters
+        ----------
+        comment_id : str
+
+        span_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        Comment
+            Comment resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.spans.get_span_comment(
+            comment_id="commentId",
+            span_id="spanId",
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/spans/{jsonable_encoder(span_id)}/comments/{jsonable_encoder(comment_id)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    Comment,
+                    parse_obj_as(
+                        type_=Comment,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
                 )
             _response_json = _response.json()
         except JSONDecodeError:
@@ -871,10 +1065,266 @@ class SpansClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def search_spans(
+        self,
+        *,
+        trace_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanSearchStreamRequestPublicType] = OMIT,
+        filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[bytes]:
+        """
+        Search spans
+
+        Parameters
+        ----------
+        trace_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        type : typing.Optional[SpanSearchStreamRequestPublicType]
+
+        filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
+
+        limit : typing.Optional[int]
+
+        last_retrieved_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.Iterator[bytes]
+            Spans stream or error during process
+        """
+        with self._client_wrapper.httpx_client.stream(
+            "v1/private/spans/search",
+            method="POST",
+            json={
+                "trace_id": trace_id,
+                "project_name": project_name,
+                "project_id": project_id,
+                "type": type,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters,
+                    annotation=typing.Sequence[SpanFilterPublic],
+                    direction="write",
+                ),
+                "limit": limit,
+                "last_retrieved_id": last_retrieved_id,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    for _chunk in _response.iter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                _response.read()
+                if _response.status_code == 400:
+                    raise BadRequestError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def update_span_comment(
+        self,
+        comment_id: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update span comment by id
+
+        Parameters
+        ----------
+        comment_id : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.spans.update_span_comment(
+            comment_id="commentId",
+            text="text",
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/spans/comments/{jsonable_encoder(comment_id)}",
+            method="PATCH",
+            json={
+                "id": id,
+                "text": text,
+                "created_at": created_at,
+                "last_updated_at": last_updated_at,
+                "created_by": created_by,
+                "last_updated_by": last_updated_by,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
 
 class AsyncSpansClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def add_span_comment(
+        self,
+        id_: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Add span comment
+
+        Parameters
+        ----------
+        id_ : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.spans.add_span_comment(
+                id_="id",
+                text="text",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/spans/{jsonable_encoder(id_)}/comments",
+            method="POST",
+            json={
+                "id": id,
+                "text": text,
+                "created_at": created_at,
+                "last_updated_at": last_updated_at,
+                "created_by": created_by,
+                "last_updated_by": last_updated_by,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def add_span_feedback_score(
         self,
@@ -1525,6 +1975,63 @@ class AsyncSpansClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    async def delete_span_comments(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Delete span comments
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.spans.delete_span_comments(
+                ids=["ids"],
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/spans/comments/delete",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     async def delete_span_feedback_score(
         self,
         id: str,
@@ -1645,6 +2152,80 @@ class AsyncSpansClient:
                         type_=typing.List[str],  # type: ignore
                         object_=_response.json(),
                     ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_span_comment(
+        self,
+        comment_id: str,
+        span_id: str,
+        *,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> Comment:
+        """
+        Get span comment
+
+        Parameters
+        ----------
+        comment_id : str
+
+        span_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        Comment
+            Comment resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.spans.get_span_comment(
+                comment_id="commentId",
+                span_id="spanId",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/spans/{jsonable_encoder(span_id)}/comments/{jsonable_encoder(comment_id)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    Comment,
+                    parse_obj_as(
+                        type_=Comment,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
                 )
             _response_json = _response.json()
         except JSONDecodeError:
@@ -1791,6 +2372,189 @@ class AsyncSpansClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def search_spans(
+        self,
+        *,
+        trace_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanSearchStreamRequestPublicType] = OMIT,
+        filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Search spans
+
+        Parameters
+        ----------
+        trace_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        type : typing.Optional[SpanSearchStreamRequestPublicType]
+
+        filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
+
+        limit : typing.Optional[int]
+
+        last_retrieved_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.AsyncIterator[bytes]
+            Spans stream or error during process
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            "v1/private/spans/search",
+            method="POST",
+            json={
+                "trace_id": trace_id,
+                "project_name": project_name,
+                "project_id": project_id,
+                "type": type,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters,
+                    annotation=typing.Sequence[SpanFilterPublic],
+                    direction="write",
+                ),
+                "limit": limit,
+                "last_retrieved_id": last_retrieved_id,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                await _response.aread()
+                if _response.status_code == 400:
+                    raise BadRequestError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def update_span_comment(
+        self,
+        comment_id: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update span comment by id
+
+        Parameters
+        ----------
+        comment_id : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.spans.update_span_comment(
+                comment_id="commentId",
+                text="text",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/spans/comments/{jsonable_encoder(comment_id)}",
+            method="PATCH",
+            json={
+                "id": id,
+                "text": text,
+                "created_at": created_at,
+                "last_updated_at": last_updated_at,
+                "created_by": created_by,
+                "last_updated_by": last_updated_by,
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
