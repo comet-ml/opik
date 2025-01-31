@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNodeDetail } from "./JsonNodeDetail";
+import { PromptVersionDetailType } from "./PromptVersionDetailType";
 
 export const PromptVersionDetail: core.serialization.ObjectSchema<
     serializers.PromptVersionDetail.Raw,
@@ -16,6 +17,7 @@ export const PromptVersionDetail: core.serialization.ObjectSchema<
     commit: core.serialization.string().optional(),
     template: core.serialization.string(),
     metadata: JsonNodeDetail.optional(),
+    type: PromptVersionDetailType.optional(),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     variables: core.serialization.list(core.serialization.string()).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -29,6 +31,7 @@ export declare namespace PromptVersionDetail {
         commit?: string | null;
         template: string;
         metadata?: JsonNodeDetail.Raw | null;
+        type?: PromptVersionDetailType.Raw | null;
         change_description?: string | null;
         variables?: string[] | null;
         created_at?: string | null;
