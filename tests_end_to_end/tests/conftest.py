@@ -17,21 +17,48 @@ from tests.sdk_helpers import (
     client_get_prompt_retries,
 )
 from utils import TEST_ITEMS
+<<<<<<< HEAD
+=======
+import time
+import re
+import json
 
 
-@pytest.fixture
-def browser_clipboard_permissions(browser: Browser):
+def pytest_configure(config):
+    config.addinivalue_line("markers", "sanity: mark test as a sanity test")
+>>>>>>> 59b35378 (it works and logs in now)
+
+
+@pytest.fixture(scope="session")
+def browser_context(browser: Browser, env_config: EnvConfig):
+    """Create a browser context with required permissions and authentication"""
     context = browser.new_context()
     context.grant_permissions(["clipboard-read", "clipboard-write"])
+
+    # Handle cloud environment authentication
+    if not env_config.api_url.startswith('http://localhost'):
+        page = context.new_page()
+        # Extract base URL for authentication (remove /opik/api from the end)
+        base_url = re.sub(r'(/opik)?/api$', '', env_config.api_url)
+        auth_url = f"{base_url}/api/auth/login"
+
+        # Perform login
+        response = page.request.post(
+            auth_url,
+            data=json.dumps({
+                "email": env_config.test_user_email,
+                "plainTextPassword": env_config.test_user_password
+            }),
+            headers={"Content-Type": "application/json"}
+        )
+
+        if response.status != 200:
+            raise Exception(f"Login failed with status {response.status}: {response.text()}")
+
+        page.close()
+
     yield context
     context.close()
-
-
-@pytest.fixture
-def page_with_clipboard_perms(browser_clipboard_permissions):
-    page = browser_clipboard_permissions.new_page()
-    yield page
-    page.close()
 
 
 @pytest.fixture(scope="session")
@@ -60,9 +87,15 @@ def env_config(env_name) -> EnvConfig:
 @pytest.fixture(scope="session", autouse=True)
 def configure_env(env_config: EnvConfig):
     """Configure environment variables for the test session"""
+    # Set URLs from config
     os.environ["OPIK_URL_OVERRIDE"] = env_config.api_url
+    os.environ["OPIK_WEB_URL"] = env_config.web_url
+    
+    # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
     os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
+    
+    # Set API key if available
     if env_config.api_key:
         os.environ["OPIK_API_KEY"] = env_config.api_key
 
@@ -80,14 +113,22 @@ def client(env_config: EnvConfig) -> opik.Opik:
 
 
 @pytest.fixture(scope="function")
-def projects_page(page: Page):
+def page(browser_context):
+    """Create a new page with authentication already handled"""
+    page = browser_context.new_page()
+    yield page
+    page.close()
+
+
+@pytest.fixture(scope="function")
+def projects_page(page):
     projects_page = ProjectsPage(page)
     projects_page.go_to_page()
     return projects_page
 
 
 @pytest.fixture(scope="function")
-def projects_page_timeout(page: Page) -> ProjectsPage:
+def projects_page_timeout(page) -> ProjectsPage:
     projects_page = ProjectsPage(page)
     projects_page.go_to_page()
     projects_page.page.wait_for_timeout(10000)
@@ -95,21 +136,21 @@ def projects_page_timeout(page: Page) -> ProjectsPage:
 
 
 @pytest.fixture(scope="function")
-def traces_page(page: Page, projects_page, config):
+def traces_page(page, projects_page, config):
     projects_page.click_project(config["project"]["name"])
     traces_page = TracesPage(page)
     return traces_page
 
 
 @pytest.fixture(scope="function")
-def datasets_page(page: Page):
+def datasets_page(page):
     datasets_page = DatasetsPage(page)
     datasets_page.go_to_page()
     return datasets_page
 
 
 @pytest.fixture(scope="function")
-def experiments_page(page: Page):
+def experiments_page(page):
     experiments_page = ExperimentsPage(page)
     experiments_page.go_to_page()
     return experiments_page

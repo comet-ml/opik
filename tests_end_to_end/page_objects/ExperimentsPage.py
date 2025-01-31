@@ -1,14 +1,11 @@
 from playwright.sync_api import Page, expect
+from .BasePage import BasePage
 
 
-class ExperimentsPage:
+class ExperimentsPage(BasePage):
     def __init__(self, page: Page):
-        self.page = page
-        self.url = "/default/experiments"
+        super().__init__(page, "experiments")
         self.search_bar = self.page.get_by_test_id("search-input")
-
-    def go_to_page(self):
-        self.page.goto(self.url)
 
     def search_experiment_by_name(self, exp_name: str):
         self.search_bar.click()
