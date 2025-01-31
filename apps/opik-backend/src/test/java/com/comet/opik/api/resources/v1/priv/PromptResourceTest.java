@@ -838,14 +838,16 @@ class PromptResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreatePrompt {
 
-        @Test
+        @ParameterizedTest
+        @NullSource
+        @EnumSource(PromptType.class)
         @DisplayName("Success: should create prompt")
-        void shouldCreatePrompt() {
+        void shouldCreatePrompt(PromptType type) {
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
-                    .template(null)
+                    .type(type)
                     .build();
 
             var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1359,14 +1361,17 @@ class PromptResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetPromptById {
 
-        @Test
+        @ParameterizedTest
+        @NullSource
+        @EnumSource(PromptType.class)
         @DisplayName("Success: should get prompt by id")
-        void shouldGetPromptById() {
+        void shouldGetPromptById(PromptType type) {
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .versionCount(1L)
+                    .type(type)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);

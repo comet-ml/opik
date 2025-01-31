@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.api.PromptType.MUSTACHE;
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
@@ -74,5 +75,10 @@ public record Prompt(
         public static Prompt.PromptPage empty(int page) {
             return new Prompt.PromptPage(page, 0, 0, List.of());
         }
+    }
+
+    @Override
+    public PromptType type() {
+        return type == null ? MUSTACHE : type;
     }
 }
