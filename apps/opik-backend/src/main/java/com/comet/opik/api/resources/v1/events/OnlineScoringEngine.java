@@ -1,9 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
-import com.comet.opik.utils.MustacheUtils;
+import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -108,7 +109,8 @@ public class OnlineScoringEngine {
         return templateMessages.stream()
                 .map(templateMessage -> {
                     // will convert all '{{key}}' into 'value'
-                    var renderedMessage = MustacheUtils.render(templateMessage.content(), replacements);
+                    var renderedMessage = TemplateParseUtils.render(templateMessage.content(), replacements,
+                            PromptType.MUSTACHE);
 
                     return switch (templateMessage.role()) {
                         case USER -> UserMessage.from(renderedMessage);

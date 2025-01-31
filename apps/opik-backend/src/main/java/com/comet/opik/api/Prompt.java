@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.api.PromptType.MUSTACHE;
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
@@ -33,6 +34,7 @@ public record Prompt(
                 Prompt.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Nullable String template,
         @JsonView({Prompt.View.Write.class}) @Nullable JsonNode metadata,
         @JsonView({Prompt.View.Write.class}) @Nullable String changeDescription,
+        @JsonView({Prompt.View.Write.class}) @Nullable PromptType type,
         @JsonView({Prompt.View.Public.class,
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Prompt.View.Public.class,
@@ -73,5 +75,10 @@ public record Prompt(
         public static Prompt.PromptPage empty(int page) {
             return new Prompt.PromptPage(page, 0, 0, List.of());
         }
+    }
+
+    @Override
+    public PromptType type() {
+        return type == null ? MUSTACHE : type;
     }
 }

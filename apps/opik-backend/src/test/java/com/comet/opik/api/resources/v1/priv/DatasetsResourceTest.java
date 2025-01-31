@@ -466,6 +466,8 @@ class DatasetsResourceTest {
         @DisplayName("Update dataset: when api key is present, then return proper response")
         void updateDataset__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
 
+            mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .build();

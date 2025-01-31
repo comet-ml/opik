@@ -1,11 +1,10 @@
-package com.comet.opik.utils;
+package com.comet.opik.domain.template;
 
 import com.github.mustachejava.Code;
 import com.github.mustachejava.DefaultMustacheFactory;
 import com.github.mustachejava.Mustache;
 import com.github.mustachejava.MustacheFactory;
 import com.github.mustachejava.codes.ValueCode;
-import lombok.experimental.UtilityClass;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -18,12 +17,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-@UtilityClass
-public class MustacheUtils {
+public class MustacheParser implements TemplateParser {
 
     public static final MustacheFactory MF = new DefaultMustacheFactory();
 
-    public static Set<String> extractVariables(String template) {
+    @Override
+    public Set<String> extractVariables(String template) {
         Set<String> variables = new HashSet<>();
 
         // Initialize Mustache Factory
@@ -36,7 +35,8 @@ public class MustacheUtils {
         return variables;
     }
 
-    public static String render(String template, Map<String, ?> context) {
+    @Override
+    public String render(String template, Map<String, ?> context) {
 
         Mustache mustache = MF.compile(new StringReader(template), "template");
 

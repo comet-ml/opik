@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.PromptType.MUSTACHE;
+
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -35,6 +37,8 @@ public record PromptVersion(
                 PromptVersion.View.Detail.class}) @NotBlank String template,
         @Json @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) JsonNode metadata,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+                PromptVersion.View.Detail.class}) PromptType type,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
         @JsonView({Prompt.View.Detail.class,
@@ -67,5 +71,10 @@ public record PromptVersion(
         public static PromptVersion.PromptVersionPage empty(int page) {
             return new PromptVersion.PromptVersionPage(page, 0, 0, List.of());
         }
+    }
+
+    @Override
+    public PromptType type() {
+        return type == null ? MUSTACHE : type;
     }
 }
