@@ -1,13 +1,12 @@
-import logging
 import functools
+import logging
 from typing import List, Optional
 
+from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
-from opik.message_processing.batching import sequence_splitter
-
-from . import experiment_item
-from .. import helpers, constants
+from . import experiment_item, helpers
+from .. import constants, helpers
 from ...api_objects.prompt import Prompt
 
 LOGGER = logging.getLogger(__name__)
@@ -20,13 +19,13 @@ class Experiment:
         name: Optional[str],
         dataset_name: str,
         rest_client: rest_api_client.OpikApi,
-        prompt: Optional[Prompt] = None,
+        prompts: Optional[List[Prompt]] = None,
     ) -> None:
         self._id = id
         self._name = name
         self._dataset_name = dataset_name
         self._rest_client = rest_client
-        self._prompt = prompt
+        self._prompts = prompts
 
     @property
     def id(self) -> str:
