@@ -97,6 +97,7 @@ const sidebars: SidebarsConfig = {
             "evaluation/metrics/answer_relevance",
             "evaluation/metrics/context_precision",
             "evaluation/metrics/context_recall",
+            "evaluation/metrics/usefulness",
             "evaluation/metrics/custom_model",
             "evaluation/metrics/custom_metric",
           ],
