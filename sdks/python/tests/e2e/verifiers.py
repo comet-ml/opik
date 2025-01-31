@@ -215,7 +215,7 @@ def verify_experiment(
     experiment_metadata: Optional[Dict[str, Any]],
     feedback_scores_amount: int,
     traces_amount: int,
-    prompt: Optional[Prompt] = None,
+    prompts: Optional[List[Prompt]] = None,
 ):
     rest_client = (
         opik_client._rest_client
@@ -253,7 +253,7 @@ def verify_experiment(
         actual_trace_count == traces_amount
     ), f"{actual_trace_count} != {traces_amount}"
 
-    verify_experiment_prompt(experiment_content, prompt)
+    verify_experiment_prompts(experiment_content, prompts)
 
 
 def verify_experiment_metadata(
@@ -264,31 +264,37 @@ def verify_experiment_metadata(
     if experiment_content.metadata is not None:
         experiment_metadata = {**experiment_content.metadata}
         experiment_metadata.pop("prompt", None)
+        experiment_metadata.pop("prompts", None)
 
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
 
 
-def verify_experiment_prompt(
+def verify_experiment_prompts(
     experiment_content: ExperimentPublic,
-    prompt: Optional[Prompt],
+    prompts: Optional[List[Prompt]],
 ):
-    if prompt is None:
+    if prompts is None:
         return
 
     # asserting Prompt vs Experiment.prompt_version
-    assert (
-        experiment_content.prompt_version.id == prompt.__internal_api__version_id__
-    ), f"{experiment_content.prompt_version.id} != {prompt.__internal_api__version_id__}"
+    experiment_content_prompt_versions = sorted(
+        experiment_content.prompt_versions, key=lambda x: x.id
+    )
+    prompts = sorted(prompts, key=lambda x: x.__internal_api__version_id__)
 
-    assert (
-        experiment_content.prompt_version.prompt_id
-        == prompt.__internal_api__prompt_id__
-    ), f"{experiment_content.prompt_version.prompt_id} != {prompt.__internal_api__prompt_id__}"
-
-    assert (
-        experiment_content.prompt_version.commit == prompt.commit
-    ), f"{experiment_content.prompt_version.commit} != {prompt.commit}"
+    for i, prompt in enumerate(prompts):
+        assert (
+            experiment_content_prompt_versions[i].id
+            == prompt.__internal_api__version_id__
+        )
+        assert (
+            experiment_content_prompt_versions[i].prompt_id
+            == prompt.__internal_api__prompt_id__
+        )
+        assert experiment_content_prompt_versions[i].commit == prompt.commit
 
     # check that experiment config/metadata contains Prompt's template
-    experiment_prompt = experiment_content.metadata["prompt"]
-    assert experiment_prompt == prompt.prompt, f"{experiment_prompt} != {prompt.prompt}"
+    experiment_prompts = experiment_content.metadata["prompts"]
+
+    for i, prompt in enumerate(prompts):
+        assert experiment_prompts[i] == prompt.prompt
