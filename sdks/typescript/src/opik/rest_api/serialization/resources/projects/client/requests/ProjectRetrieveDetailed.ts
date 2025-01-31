@@ -6,14 +6,14 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 
-export const ProjectRetrievePublic: core.serialization.Schema<
-    serializers.ProjectRetrievePublic.Raw,
-    OpikApi.ProjectRetrievePublic
+export const ProjectRetrieveDetailed: core.serialization.Schema<
+    serializers.ProjectRetrieveDetailed.Raw,
+    OpikApi.ProjectRetrieveDetailed
 > = core.serialization.object({
     name: core.serialization.string(),
 });
 
-export declare namespace ProjectRetrievePublic {
+export declare namespace ProjectRetrieveDetailed {
     interface Raw {
         name: string;
     }

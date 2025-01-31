@@ -11,6 +11,7 @@ export interface Prompt {
     template?: string;
     metadata?: OpikApi.JsonNode;
     changeDescription?: string;
+    type?: OpikApi.PromptType;
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

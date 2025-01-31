@@ -12,6 +12,7 @@ export interface PromptVersion {
     commit?: string;
     template: string;
     metadata?: OpikApi.JsonNode;
+    type?: OpikApi.PromptVersionType;
     changeDescription?: string;
     variables?: string[];
     createdAt?: Date;

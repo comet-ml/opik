@@ -28,6 +28,11 @@ from ..types.comment import Comment
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from ..types.project_stats_public import ProjectStatsPublic
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
+from .types.span_search_stream_request_public_type import (
+    SpanSearchStreamRequestPublicType,
+)
+from ..types.span_filter_public import SpanFilterPublic
+from ..errors.bad_request_error import BadRequestError
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -1059,6 +1064,98 @@ class SpansClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def search_spans(
+        self,
+        *,
+        trace_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanSearchStreamRequestPublicType] = OMIT,
+        filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[bytes]:
+        """
+        Search spans
+
+        Parameters
+        ----------
+        trace_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        type : typing.Optional[SpanSearchStreamRequestPublicType]
+
+        filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
+
+        limit : typing.Optional[int]
+
+        last_retrieved_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.Iterator[bytes]
+            Spans stream or error during process
+        """
+        with self._client_wrapper.httpx_client.stream(
+            "v1/private/spans/search",
+            method="POST",
+            json={
+                "trace_id": trace_id,
+                "project_name": project_name,
+                "project_id": project_id,
+                "type": type,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters,
+                    annotation=typing.Sequence[SpanFilterPublic],
+                    direction="write",
+                ),
+                "limit": limit,
+                "last_retrieved_id": last_retrieved_id,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    for _chunk in _response.iter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                _response.read()
+                if _response.status_code == 400:
+                    raise BadRequestError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def update_span_comment(
         self,
@@ -2279,6 +2376,98 @@ class AsyncSpansClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def search_spans(
+        self,
+        *,
+        trace_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanSearchStreamRequestPublicType] = OMIT,
+        filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Search spans
+
+        Parameters
+        ----------
+        trace_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        type : typing.Optional[SpanSearchStreamRequestPublicType]
+
+        filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
+
+        limit : typing.Optional[int]
+
+        last_retrieved_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.AsyncIterator[bytes]
+            Spans stream or error during process
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            "v1/private/spans/search",
+            method="POST",
+            json={
+                "trace_id": trace_id,
+                "project_name": project_name,
+                "project_id": project_id,
+                "type": type,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters,
+                    annotation=typing.Sequence[SpanFilterPublic],
+                    direction="write",
+                ),
+                "limit": limit,
+                "last_retrieved_id": last_retrieved_id,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                await _response.aread()
+                if _response.status_code == 400:
+                    raise BadRequestError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def update_span_comment(
         self,

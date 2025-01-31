@@ -80,7 +80,7 @@ class DatasetItemResultMapper {
                 .entrySet()
                 .stream()
                 .map(columnArray -> Column.builder().name(columnArray.getKey())
-                        .types(Set.of(mapColumnType(columnArray.getValue())))
+                        .types(Arrays.stream(mapColumnType(columnArray.getValue())).collect(Collectors.toSet()))
                         .filterFieldPrefix(filterField)
                         .build())
                 .collect(Collectors.toSet());

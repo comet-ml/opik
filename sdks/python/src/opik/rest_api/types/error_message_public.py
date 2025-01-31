@@ -7,7 +7,9 @@ import pydantic
 
 
 class ErrorMessagePublic(UniversalBaseModel):
-    errors: typing.Optional[typing.List[str]] = None
+    code: typing.Optional[int] = None
+    message: typing.Optional[str] = None
+    details: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
