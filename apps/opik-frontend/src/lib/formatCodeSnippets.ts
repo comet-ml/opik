@@ -2,32 +2,57 @@ import { maskAPIKey } from "./utils";
 import { BASE_API_URL } from "@/api/api";
 
 export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
+export const OPIK_HIGHLIGHT_LINE_TEMPLATE = " # HIGHLIGHTED_LINE";
 
-export const OPIK_URL_OVERRIDE_CONFIG = `os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
-  BASE_API_URL,
-  window.location.origin,
-).toString()}"`;
-export const buildApiKeyConfig = (apiKey: string, masked = false) =>
-  `os.environ["OPIK_API_KEY"] = "${masked ? maskAPIKey(apiKey) : apiKey}"`;
-export const buildWorkspaceNameConfig = (workspaceName: string) =>
-  `os.environ["OPIK_WORKSPACE"] = "${workspaceName}"`;
+// TODO lala workspace name
+export const buildApiKeyConfig = (
+  apiKey: string,
+  masked = false,
+  withHighlight = false,
+) =>
+  `os.environ["OPIK_API_KEY"] = "${masked ? maskAPIKey(apiKey) : apiKey}"${
+    withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""
+  }`;
+
+export const buildWorkspaceNameConfig = (
+  workspaceName: string,
+  withHighlight = false,
+) =>
+  `os.environ["OPIK_WORKSPACE"] = "${workspaceName}"${
+    withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""
+  }`;
+
+export const buildOpikUrlOverrideConfig = (withHighlight = false) =>
+  `os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
+    BASE_API_URL,
+    window.location.origin,
+  ).toString()}${withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""}"`;
 
 type PutConfigInCodeArgs = {
   code: string;
   workspaceName: string;
   apiKey?: string;
   shouldMaskApiKey?: boolean;
+  withHighlight?: boolean;
 };
 
 export const getConfigCode = (
   workspaceName: string,
   apiKey?: string,
   shouldMaskApiKey = false,
+  withHighlight = false,
 ) => {
-  if (!apiKey) return OPIK_URL_OVERRIDE_CONFIG;
+  if (!apiKey) return buildOpikUrlOverrideConfig(withHighlight);
 
-  const apiKeyConfig = buildApiKeyConfig(apiKey, shouldMaskApiKey);
-  const workspaceConfig = buildWorkspaceNameConfig(workspaceName);
+  const apiKeyConfig = buildApiKeyConfig(
+    apiKey,
+    shouldMaskApiKey,
+    withHighlight,
+  );
+  const workspaceConfig = buildWorkspaceNameConfig(
+    workspaceName,
+    withHighlight,
+  );
 
   return `${apiKeyConfig} \n${workspaceConfig}`;
 };
@@ -37,12 +62,34 @@ export const putConfigInCode = ({
   workspaceName,
   apiKey,
   shouldMaskApiKey,
-}: PutConfigInCodeArgs): string => {
-  if (apiKey) {
-    const configCode = getConfigCode(workspaceName, apiKey, shouldMaskApiKey);
+  withHighlight = false,
+}: PutConfigInCodeArgs): { code: string; lines: number[] } => {
+  let patchedCode = "";
 
-    return code.replace(OPIK_API_KEY_TEMPLATE, configCode);
+  if (apiKey) {
+    const configCode = getConfigCode(
+      workspaceName,
+      apiKey,
+      shouldMaskApiKey,
+      withHighlight,
+    );
+
+    patchedCode = code.replace(OPIK_API_KEY_TEMPLATE, configCode);
+  } else {
+    patchedCode = code.replace(
+      OPIK_API_KEY_TEMPLATE,
+      buildOpikUrlOverrideConfig(withHighlight),
+    );
   }
 
-  return code.replace(OPIK_API_KEY_TEMPLATE, OPIK_URL_OVERRIDE_CONFIG);
+  return {
+    code: patchedCode.replaceAll(OPIK_HIGHLIGHT_LINE_TEMPLATE, ""),
+    lines: patchedCode.split("\n").reduce<number[]>((acc, line, idx) => {
+      if (line.includes(OPIK_HIGHLIGHT_LINE_TEMPLATE)) {
+        acc.push(idx + 1);
+      }
+
+      return acc;
+    }, []),
+  };
 };
