@@ -189,13 +189,17 @@ from .prompt import Prompt
 from .prompt_detail import PromptDetail
 from .prompt_page_public import PromptPagePublic
 from .prompt_public import PromptPublic
+from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
+from .prompt_version_detail_type import PromptVersionDetailType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
+from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
@@ -394,13 +398,17 @@ __all__ = [
     "PromptDetail",
     "PromptPagePublic",
     "PromptPublic",
+    "PromptType",
     "PromptVersion",
     "PromptVersionDetail",
+    "PromptVersionDetailType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
+    "PromptVersionPublicType",
+    "PromptVersionType",
     "ProviderApiKey",
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",

@@ -5280,6 +5280,11 @@ components:
           $ref: '#/components/schemas/JsonNode'
         change_description:
           type: string
+        type:
+          type: string
+          enum:
+          - mustache
+          - jinja2
         created_at:
           type: string
           format: date-time
@@ -5322,6 +5327,11 @@ components:
           type: string
         metadata:
           $ref: '#/components/schemas/JsonNode'
+        type:
+          type: string
+          enum:
+          - mustache
+          - jinja2
         change_description:
           type: string
         variables:
@@ -5359,6 +5369,11 @@ components:
           $ref: '#/components/schemas/JsonNode_Write'
         change_description:
           type: string
+        type:
+          type: string
+          enum:
+          - mustache
+          - jinja2
     JsonNode_Detail:
       type: object
     PromptVersion_Detail:
@@ -5383,6 +5398,11 @@ components:
           type: string
         metadata:
           $ref: '#/components/schemas/JsonNode_Detail'
+        type:
+          type: string
+          enum:
+          - mustache
+          - jinja2
         change_description:
           type: string
         variables:
@@ -5490,6 +5510,11 @@ components:
           type: string
         metadata:
           $ref: '#/components/schemas/JsonNode_Public'
+        type:
+          type: string
+          enum:
+          - mustache
+          - jinja2
         change_description:
           type: string
         created_at:

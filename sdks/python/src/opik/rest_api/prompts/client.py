@@ -8,6 +8,7 @@ from ..core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from ..types.json_node_write import JsonNodeWrite
+from .types.prompt_write_type import PromptWriteType
 from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
@@ -97,6 +98,7 @@ class PromptsClient:
         template: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
+        type: typing.Optional[PromptWriteType] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -115,6 +117,8 @@ class PromptsClient:
         metadata : typing.Optional[JsonNodeWrite]
 
         change_description : typing.Optional[str]
+
+        type : typing.Optional[PromptWriteType]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -145,6 +149,7 @@ class PromptsClient:
                 "template": template,
                 "metadata": metadata,
                 "change_description": change_description,
+                "type": type,
             },
             headers={
                 "content-type": "application/json",
@@ -838,6 +843,7 @@ class AsyncPromptsClient:
         template: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
+        type: typing.Optional[PromptWriteType] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -856,6 +862,8 @@ class AsyncPromptsClient:
         metadata : typing.Optional[JsonNodeWrite]
 
         change_description : typing.Optional[str]
+
+        type : typing.Optional[PromptWriteType]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -894,6 +902,7 @@ class AsyncPromptsClient:
                 "template": template,
                 "metadata": metadata,
                 "change_description": change_description,
+                "type": type,
             },
             headers={
                 "content-type": "application/json",
