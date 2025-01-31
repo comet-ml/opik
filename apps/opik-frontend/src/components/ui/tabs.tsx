@@ -11,7 +11,7 @@ const TabsListVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-muted gap-2 rounded-lg p-1",
+        default: "gap-2 rounded-lg bg-muted p-1",
         underline: "gap-8 border-b px-1",
       },
     },
@@ -27,9 +27,9 @@ const TabsTriggerVariants = cva(
     variants: {
       variant: {
         default:
-          "comet-body-s-accented hover:text-foreground-secondary data-[state=active]:text-primary-foreground data-[state=active]:hover:text-primary-foreground data-[state=active]:hover:bg-primary-hover data-[state=active]:bg-primary ring-offset-background focus-visible:ring-ring justify-center rounded-md bg-transparent p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          "comet-body-s-accented justify-center rounded-md bg-transparent p-2 ring-offset-background hover:text-foreground-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:hover:bg-primary-hover data-[state=active]:hover:text-primary-foreground",
         underline:
-          "comet-body-s-accented hover:text-foreground-secondary data-[state=active]:border-primary data-[state=active]:text-primary hover:data-[state=active]:text-primary-hover border-b-2 border-transparent py-2",
+          "comet-body-s-accented border-b-2 border-transparent py-2 hover:text-foreground-secondary data-[state=active]:border-primary data-[state=active]:text-primary hover:data-[state=active]:text-primary-hover",
       },
       size: {
         default: "",

@@ -18,13 +18,13 @@ const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
       <div className="flex w-full min-w-fit flex-col pb-12">
         <div className="pb-8">
           <SheetTitle>Quickstart guide</SheetTitle>
-          <div className="comet-body-s text-muted-slate m-auto mt-4 w-[468px] self-center text-center">
+          <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
             Select the framework and follow the instructions to integrate Opik
             with your own code or use our ready-to-run examples on the right.
           </div>
         </div>
 
-        <Tabs defaultValue="logLLM" className="flex flex-col items-center">
+        <Tabs defaultValue="logLLM" className="flex w-full flex-1 flex-col">
           <TabsList className="mb-8 w-auto self-center">
             <TabsTrigger className="w-[200px]" value="logLLM">
               Log LLM calls
