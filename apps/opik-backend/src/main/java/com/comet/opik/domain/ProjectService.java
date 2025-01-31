@@ -5,6 +5,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
+import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -44,6 +45,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.ProjectStats.ProjectStatItem;
+import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.Collections.reverseOrder;
@@ -82,6 +84,9 @@ public interface ProjectService {
     Project retrieveByName(String projectName);
 
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
+
+    ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull List<SortingField> sortingFields);
 }
 
 @Slf4j
@@ -203,14 +208,36 @@ class ProjectServiceImpl implements ProjectService {
                 .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(Set.of(id), workspaceId, connection))
                 .block();
 
-        Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(id), workspaceId);
-
-        return enhanceProject(project, lastUpdatedTraceAt.get(project.id()), projectStats.get(project.id()));
+        return project.toBuilder()
+                .lastUpdatedTraceAt(lastUpdatedTraceAt.get(project.id()))
+                .build();
     }
 
-    private Project enhanceProject(Project project, Instant lastUpdatedTraceAt, Map<String, Object> projectStats) {
-        return project.toBuilder()
-                .lastUpdatedTraceAt(lastUpdatedTraceAt)
+    @Override
+    public ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
+            @NonNull List<SortingField> sortingFields) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        List<UUID> projectIds = find(page, size, criteria, sortingFields)
+                .content()
+                .stream()
+                .map(Project::id)
+                .toList();
+
+        Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId);
+
+        return ProjectStatsSummary.builder()
+                .content(
+                        projectIds.stream()
+                                .map(projectId -> getStats(projectId, projectStats.get(projectId)))
+                                .toList())
+                .build();
+    }
+
+    private ProjectStatsSummaryItem getStats(UUID projectId, Map<String, Object> projectStats) {
+        return ProjectStatsSummaryItem.builder()
+                .projectId(projectId)
                 .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats))
                 .duration(StatsMapper.getStatsDuration(projectStats))
                 .totalEstimatedCost(StatsMapper.getStatsTotalEstimatedCost(projectStats))
@@ -285,14 +312,14 @@ class ProjectServiceImpl implements ProjectService {
             return traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection);
         }).block();
 
-        List<UUID> projectIds = projectRecordSet.content.stream().map(Project::id).toList();
-
-        Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId);
-
         List<Project> projects = projectRecordSet.content()
                 .stream()
-                .map(project -> enhanceProject(project, projectLastUpdatedTraceAtMap.get(project.id()),
-                        projectStats.get(project.id())))
+                .map(project -> {
+                    Instant lastUpdatedTraceAt = projectLastUpdatedTraceAtMap.get(project.id());
+                    return project.toBuilder()
+                            .lastUpdatedTraceAt(lastUpdatedTraceAt)
+                            .build();
+                })
                 .toList();
 
         return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects,
@@ -303,8 +330,7 @@ class ProjectServiceImpl implements ProjectService {
         return traceDAO.getStatsByProjectIds(projectIds, workspaceId)
                 .map(stats -> stats.entrySet().stream()
                         .map(entry -> {
-                            Map<String, Object> statsMap = entry.getValue()
-                                    .stats()
+                            Map<String, Object> statsMap = entry.getValue().stats()
                                     .stream()
                                     .collect(toMap(ProjectStatItem::getName, ProjectStatItem::getValue));
 
@@ -342,9 +368,11 @@ class ProjectServiceImpl implements ProjectService {
         // get last trace for each project id
         Set<UUID> allProjectIds = allProjectIdsLastUpdated.stream().map(ProjectIdLastUpdated::id)
                 .collect(toUnmodifiableSet());
+
         Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
                 .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(allProjectIds, workspaceId, connection))
                 .block();
+
         if (projectLastUpdatedTraceAtMap == null) {
             return ProjectPage.empty(page);
         }
@@ -365,12 +393,12 @@ class ProjectServiceImpl implements ProjectService {
             return repository.findByIds(new HashSet<>(finalIds), workspaceId);
         }).stream().collect(Collectors.toMap(Project::id, Function.identity()));
 
-        Map<UUID, Map<String, Object>> projectStats = getProjectStats(finalIds, workspaceId);
-
         // compose the final projects list by the correct order and add last trace to it
-        List<Project> projects = finalIds.stream().map(projectsById::get)
-                .map(project -> enhanceProject(project, projectLastUpdatedTraceAtMap.get(project.id()),
-                        projectStats.get(project.id())))
+        List<Project> projects = finalIds.stream()
+                .map(projectsById::get)
+                .map(project -> project.toBuilder()
+                        .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
+                        .build())
                 .toList();
 
         return new ProjectPage(page, projects.size(), allProjectIdsLastUpdated.size(), projects,
@@ -389,7 +417,9 @@ class ProjectServiceImpl implements ProjectService {
                 ? reverseOrder(Map.Entry.comparingByValue())
                 : Map.Entry.comparingByValue();
 
-        return projectLastUpdatedTraceAtMap.entrySet().stream().sorted(comparator)
+        return projectLastUpdatedTraceAtMap.entrySet()
+                .stream()
+                .sorted(comparator)
                 .map(Map.Entry::getKey)
                 .toList();
     }
@@ -453,8 +483,14 @@ class ProjectServiceImpl implements ProjectService {
                         Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
                                 workspaceId);
 
-                        return enhanceProject(project, projectLastUpdatedTraceAtMap.get(project.id()),
-                                projectStats.get(project.id()));
+                        return project.toBuilder()
+                                .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
+                                .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats.get(project.id())))
+                                .usage(StatsMapper.getStatsUsage(projectStats.get(project.id())))
+                                .duration(StatsMapper.getStatsDuration(projectStats.get(project.id())))
+                                .totalEstimatedCost(
+                                        StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
+                                .build();
                     })
                     .orElseThrow(this::createNotFoundError);
         });

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, { PROJECTS_REST_ENDPOINT } from "@/api/api";
+import api, { PROJECTS_KEY, PROJECTS_REST_ENDPOINT } from "@/api/api";
 import { Project } from "@/types/projects";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -37,7 +37,7 @@ const useProjectUpdateMutation = () => {
     },
     onSettled: () => {
       return queryClient.invalidateQueries({
-        queryKey: ["projects"],
+        queryKey: [PROJECTS_KEY],
       });
     },
   });
