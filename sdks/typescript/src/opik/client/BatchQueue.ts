@@ -93,28 +93,34 @@ export abstract class BatchQueue<EntityData = {}> {
     this.deleteTimerId = setTimeout(() => this.flushDelete(), this.delay);
   };
 
-  protected flushCreate = async () => {
-    if (this.createQueue.size === 0) {
+  protected flushCreate = async (createQueue = this.createQueue) => {
+    if (createQueue.size === 0) {
       return;
     }
 
-    const entities = Array.from(this.createQueue.values());
+    const entities = Array.from(createQueue.values());
+    createQueue.clear();
     await this.createEntities(entities);
-    this.createQueue.clear();
   };
 
-  protected flushDelete = async () => {
-    if (this.deleteQueue.size === 0) {
+  protected flushDelete = async (deleteQueue = this.deleteQueue) => {
+    if (deleteQueue.size === 0) {
       return;
     }
 
-    const ids = Array.from(this.deleteQueue);
+    const ids = Array.from(deleteQueue);
+    deleteQueue.clear();
     await this.deleteEntities(ids);
-    this.deleteQueue.clear();
   };
 
   public flush = async () => {
-    await this.flushCreate();
-    await this.flushDelete();
+    const createQueue = new Map(this.createQueue);
+    const deleteQueue = new Set(this.deleteQueue);
+
+    this.createQueue.clear();
+    this.deleteQueue.clear();
+
+    await this.flushCreate(createQueue);
+    await this.flushDelete(deleteQueue);
   };
 }
