@@ -4,25 +4,25 @@ import { BatchQueue } from "./BatchQueue";
 
 export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   constructor(
-    private readonly apiClient: OpikApiClient,
+    private readonly api: OpikApiClient,
     delay?: number
   ) {
     super({ delay, name: "TraceBatchQueue" });
   }
 
   protected async createEntities(traces: SavedTrace[]) {
-    await this.apiClient.traces.createTraces({ traces });
+    await this.api.traces.createTraces({ traces });
   }
 
   protected async getEntity(id: string) {
-    return (await this.apiClient.traces.getTraceById(id)) as SavedTrace;
+    return (await this.api.traces.getTraceById(id)) as SavedTrace;
   }
 
   protected async updateEntity(id: string, updates: Partial<SavedTrace>) {
-    await this.apiClient.traces.updateTrace(id, updates);
+    await this.api.traces.updateTrace(id, updates);
   }
 
   protected async deleteEntities(ids: string[]) {
-    await this.apiClient.traces.deleteTraces({ ids });
+    await this.api.traces.deleteTraces({ ids });
   }
 }

@@ -1,11 +1,6 @@
 import { Opik } from "@opik";
-import { MockInstance, vi } from "vitest";
-
-const waitForDelay = (ms: number) => {
-  const promise = new Promise((resolve) => setTimeout(resolve, ms));
-  vi.advanceTimersByTime(ms);
-  return promise;
-};
+import { MockInstance } from "vitest";
+import { advanceToDelay } from "./utils";
 
 const logTraceAndSpan = async ({
   client,
@@ -30,7 +25,7 @@ const logTraceAndSpan = async ({
       });
 
       if (delay) {
-        await waitForDelay(delay);
+        await advanceToDelay(delay);
       }
 
       someSpan.end();
@@ -40,7 +35,7 @@ const logTraceAndSpan = async ({
   }
 
   if (delay) {
-    await waitForDelay(delay);
+    await advanceToDelay(delay);
   }
 
   await client.flush();
@@ -50,14 +45,12 @@ async function mockAPIPromise<T>() {
   return {} as T;
 }
 
-describe("OpikApiClient", () => {
+describe("Opik client batching", () => {
   let client: Opik;
-  let createSpansSpy: MockInstance<typeof client.apiClient.spans.createSpans>;
-  let updateSpansSpy: MockInstance<typeof client.apiClient.spans.updateSpan>;
-  let createTracesSpy: MockInstance<
-    typeof client.apiClient.traces.createTraces
-  >;
-  let updateTracesSpy: MockInstance<typeof client.apiClient.traces.updateTrace>;
+  let createSpansSpy: MockInstance<typeof client.api.spans.createSpans>;
+  let updateSpansSpy: MockInstance<typeof client.api.spans.updateSpan>;
+  let createTracesSpy: MockInstance<typeof client.api.traces.createTraces>;
+  let updateTracesSpy: MockInstance<typeof client.api.traces.updateTrace>;
 
   beforeEach(() => {
     client = new Opik({
@@ -65,19 +58,19 @@ describe("OpikApiClient", () => {
     });
 
     createSpansSpy = vi
-      .spyOn(client.apiClient.spans, "createSpans")
+      .spyOn(client.api.spans, "createSpans")
       .mockImplementation(mockAPIPromise);
 
     updateSpansSpy = vi
-      .spyOn(client.apiClient.spans, "updateSpan")
+      .spyOn(client.api.spans, "updateSpan")
       .mockImplementation(mockAPIPromise);
 
     createTracesSpy = vi
-      .spyOn(client.apiClient.traces, "createTraces")
+      .spyOn(client.api.traces, "createTraces")
       .mockImplementation(mockAPIPromise);
 
     updateTracesSpy = vi
-      .spyOn(client.apiClient.traces, "updateTrace")
+      .spyOn(client.api.traces, "updateTrace")
       .mockImplementation(mockAPIPromise);
 
     vi.useFakeTimers();
