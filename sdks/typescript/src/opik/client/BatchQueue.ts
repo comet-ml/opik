@@ -7,20 +7,26 @@ export abstract class BatchQueue<EntityData = {}> {
   private createTimerId: NodeJS.Timeout | null = null;
   private deleteQueue = new Set<string>();
   private deleteTimerId: NodeJS.Timeout | null = null;
+  private createFlushChain = Promise.resolve();
+  private deleteFlushChain = Promise.resolve();
+  private updateFlushChain = Promise.resolve();
   private readonly delay: number;
   private readonly enableCreateBatch: boolean;
   private readonly enableDeleteBatch: boolean;
-
+  private readonly name: string;
   constructor({
     delay = DEFAULT_DEBOUNCE_BATCH_DELAY,
+    name = "",
     enableCreateBatch = true,
     enableDeleteBatch = true,
   }: {
     delay?: number;
+    name?: string;
     enableCreateBatch?: boolean;
     enableDeleteBatch?: boolean;
   }) {
     this.delay = delay;
+    this.name = name;
     this.enableCreateBatch = enableCreateBatch;
     this.enableDeleteBatch = enableDeleteBatch;
   }
@@ -32,6 +38,20 @@ export abstract class BatchQueue<EntityData = {}> {
     updates: Partial<EntityData>
   ): Promise<void>;
   protected abstract deleteEntities(ids: string[]): Promise<void>;
+
+  private resetCreateFlushTimer = () => {
+    if (this.createTimerId) {
+      clearTimeout(this.createTimerId);
+    }
+    this.createTimerId = setTimeout(() => this.flushCreate(), this.delay);
+  };
+
+  private resetDeleteFlushTimer = () => {
+    if (this.deleteTimerId) {
+      clearTimeout(this.deleteTimerId);
+    }
+    this.deleteTimerId = setTimeout(() => this.flushDelete(), this.delay);
+  };
 
   public create = (entity: CreateEntity & EntityData) => {
     if (!this.enableCreateBatch) {
@@ -45,11 +65,7 @@ export abstract class BatchQueue<EntityData = {}> {
     }
 
     this.createQueue.set(entity.id, entity);
-
-    if (this.createTimerId) {
-      clearTimeout(this.createTimerId);
-    }
-    this.createTimerId = setTimeout(() => this.flushCreate(), this.delay);
+    this.resetCreateFlushTimer();
   };
 
   public get = async (id: string) => {
@@ -67,10 +83,13 @@ export abstract class BatchQueue<EntityData = {}> {
 
     if (entity) {
       this.createQueue.set(id, { ...entity, ...updates });
+      this.resetCreateFlushTimer();
       return;
     }
 
-    this.updateEntity(id, updates);
+    this.updateFlushChain = this.updateFlushChain.finally(() =>
+      this.updateEntity(id, updates)
+    );
   };
 
   public delete = (id: string) => {
@@ -86,31 +105,35 @@ export abstract class BatchQueue<EntityData = {}> {
     }
 
     this.deleteQueue.add(id);
-
-    if (this.deleteTimerId) {
-      clearTimeout(this.deleteTimerId);
-    }
-    this.deleteTimerId = setTimeout(() => this.flushDelete(), this.delay);
+    this.resetDeleteFlushTimer();
   };
 
   protected flushCreate = async (createQueue = this.createQueue) => {
     if (createQueue.size === 0) {
-      return;
+      return this.createFlushChain;
     }
 
     const entities = Array.from(createQueue.values());
     createQueue.clear();
-    await this.createEntities(entities);
+    this.createFlushChain = this.createFlushChain.finally(() => {
+      return this.createEntities(entities);
+    });
+
+    return this.createFlushChain;
   };
 
   protected flushDelete = async (deleteQueue = this.deleteQueue) => {
     if (deleteQueue.size === 0) {
-      return;
+      return this.deleteFlushChain;
     }
 
     const ids = Array.from(deleteQueue);
     deleteQueue.clear();
-    await this.deleteEntities(ids);
+    this.deleteFlushChain = this.deleteFlushChain.finally(() => {
+      return this.deleteEntities(ids);
+    });
+
+    return this.deleteFlushChain;
   };
 
   public flush = async () => {
@@ -122,5 +145,6 @@ export abstract class BatchQueue<EntityData = {}> {
 
     await this.flushCreate(createQueue);
     await this.flushDelete(deleteQueue);
+    await this.updateFlushChain;
   };
 }

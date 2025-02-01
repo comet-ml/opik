@@ -9,7 +9,7 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
     private readonly apiClient: OpikApiClient,
     delay?: number
   ) {
-    super({ delay, enableDeleteBatch: false });
+    super({ delay, enableDeleteBatch: false, name: "SpanBatchQueue" });
   }
 
   protected async createEntities(spans: SavedSpan[]) {

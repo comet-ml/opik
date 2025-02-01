@@ -7,7 +7,7 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
     private readonly apiClient: OpikApiClient,
     delay?: number
   ) {
-    super({ delay });
+    super({ delay, name: "TraceBatchQueue" });
   }
 
   protected async createEntities(traces: SavedTrace[]) {
