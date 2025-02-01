@@ -3,7 +3,6 @@
  */
 
 export type SpanWriteType = "general" | "tool" | "llm";
-
 export const SpanWriteType = {
     General: "general",
     Tool: "tool",

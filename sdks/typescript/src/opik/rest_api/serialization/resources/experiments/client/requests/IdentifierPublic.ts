@@ -12,7 +12,7 @@ export const IdentifierPublic: core.serialization.Schema<serializers.IdentifierP
     });
 
 export declare namespace IdentifierPublic {
-    interface Raw {
+    export interface Raw {
         name: string;
     }
 }

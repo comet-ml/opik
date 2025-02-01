@@ -15,7 +15,7 @@ export const ProjectStatsSummaryItem: core.serialization.ObjectSchema<
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     feedbackScores: core.serialization.property(
         "feedback_scores",
-        core.serialization.list(FeedbackScoreAverage).optional()
+        core.serialization.list(FeedbackScoreAverage).optional(),
     ),
     duration: PercentageValues.optional(),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
@@ -23,7 +23,7 @@ export const ProjectStatsSummaryItem: core.serialization.ObjectSchema<
 });
 
 export declare namespace ProjectStatsSummaryItem {
-    interface Raw {
+    export interface Raw {
         project_id?: string | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
         duration?: PercentageValues.Raw | null;

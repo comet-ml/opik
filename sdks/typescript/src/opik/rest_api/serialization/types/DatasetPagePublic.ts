@@ -18,7 +18,7 @@ export const DatasetPagePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace DatasetPagePublic {
-    interface Raw {
+    export interface Raw {
         content?: DatasetPublic.Raw[] | null;
         page?: number | null;
         size?: number | null;

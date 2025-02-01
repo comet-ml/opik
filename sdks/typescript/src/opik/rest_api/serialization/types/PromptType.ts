@@ -10,5 +10,5 @@ export const PromptType: core.serialization.Schema<serializers.PromptType.Raw, O
     core.serialization.enum_(["mustache", "jinja2"]);
 
 export declare namespace PromptType {
-    type Raw = "mustache" | "jinja2";
+    export type Raw = "mustache" | "jinja2";
 }

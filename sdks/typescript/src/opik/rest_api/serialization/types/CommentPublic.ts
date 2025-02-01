@@ -17,7 +17,7 @@ export const CommentPublic: core.serialization.ObjectSchema<serializers.CommentP
     });
 
 export declare namespace CommentPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         text: string;
         created_at?: string | null;

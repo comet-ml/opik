@@ -13,7 +13,7 @@ export const PageColumns: core.serialization.ObjectSchema<serializers.PageColumn
     });
 
 export declare namespace PageColumns {
-    interface Raw {
+    export interface Raw {
         columns?: Column.Raw[] | null;
     }
 }

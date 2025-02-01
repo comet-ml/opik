@@ -12,5 +12,5 @@ export const AuthDetailsHolder: core.serialization.Schema<
 > = core.serialization.record(core.serialization.string(), core.serialization.unknown());
 
 export declare namespace AuthDetailsHolder {
-    type Raw = Record<string, unknown>;
+    export type Raw = Record<string, unknown>;
 }

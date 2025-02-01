@@ -3,7 +3,6 @@
  */
 
 export type FeedbackScoreBatchItemSource = "ui" | "sdk" | "online_scoring";
-
 export const FeedbackScoreBatchItemSource = {
     Ui: "ui",
     Sdk: "sdk",

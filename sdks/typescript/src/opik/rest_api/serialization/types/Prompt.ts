@@ -27,7 +27,7 @@ export const Prompt: core.serialization.ObjectSchema<serializers.Prompt.Raw, Opi
     });
 
 export declare namespace Prompt {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;

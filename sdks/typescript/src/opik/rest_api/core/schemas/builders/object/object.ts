@@ -11,12 +11,12 @@ import { getSchemaUtils } from "../schema-utils";
 import { isProperty } from "./property";
 import {
     BaseObjectSchema,
-    inferObjectSchemaFromPropertySchemas,
-    inferParsedObjectFromPropertySchemas,
-    inferRawObjectFromPropertySchemas,
     ObjectSchema,
     ObjectUtils,
     PropertySchemas,
+    inferObjectSchemaFromPropertySchemas,
+    inferParsedObjectFromPropertySchemas,
+    inferRawObjectFromPropertySchemas,
 } from "./types";
 
 interface ObjectPropertyWithRawKey {
@@ -26,7 +26,7 @@ interface ObjectPropertyWithRawKey {
 }
 
 export function object<ParsedKeys extends string, T extends PropertySchemas<ParsedKeys>>(
-    schemas: T
+    schemas: T,
 ): inferObjectSchemaFromPropertySchemas<T> {
     const baseSchema: BaseObjectSchema<
         inferRawObjectFromPropertySchemas<T>,
@@ -34,7 +34,7 @@ export function object<ParsedKeys extends string, T extends PropertySchemas<Pars
     > = {
         _getRawProperties: () =>
             Object.entries(schemas).map(([parsedKey, propertySchema]) =>
-                isProperty(propertySchema) ? propertySchema.rawKey : parsedKey
+                isProperty(propertySchema) ? propertySchema.rawKey : parsedKey,
             ) as unknown as (keyof inferRawObjectFromPropertySchemas<T>)[],
         _getParsedProperties: () => keys(schemas) as unknown as (keyof inferParsedObjectFromPropertySchemas<T>)[],
 
@@ -102,8 +102,8 @@ export function object<ParsedKeys extends string, T extends PropertySchemas<Pars
                 value: parsed,
                 requiredKeys,
                 getProperty: (
-                    parsedKey
-                ): { transformedKey: string; transform: (propertyValue: unknown) => MaybeValid<any> } | undefined => {
+                    parsedKey,
+                ): { transformedKey: string; transform: (propertyValue: object) => MaybeValid<any> } | undefined => {
                     const property = schemas[parsedKey as keyof T];
 
                     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -160,8 +160,8 @@ function validateAndTransformObject<Transformed>({
     value: unknown;
     requiredKeys: string[];
     getProperty: (
-        preTransformedKey: string
-    ) => { transformedKey: string; transform: (propertyValue: unknown) => MaybeValid<any> } | undefined;
+        preTransformedKey: string,
+    ) => { transformedKey: string; transform: (propertyValue: object) => MaybeValid<any> } | undefined;
     unrecognizedObjectKeys: "fail" | "passthrough" | "strip" | undefined;
     skipValidation: boolean | undefined;
     breadcrumbsPrefix: string[] | undefined;
@@ -189,7 +189,7 @@ function validateAndTransformObject<Transformed>({
         if (property != null) {
             missingRequiredKeys.delete(preTransformedKey);
 
-            const value = property.transform(preTransformedItemValue);
+            const value = property.transform(preTransformedItemValue as object);
             if (value.ok) {
                 transformed[property.transformedKey] = value.value;
             } else {
@@ -219,7 +219,7 @@ function validateAndTransformObject<Transformed>({
             .map((key) => ({
                 path: breadcrumbsPrefix,
                 message: `Missing required key "${key}"`,
-            }))
+            })),
     );
 
     if (errors.length === 0 || skipValidation) {
@@ -244,7 +244,7 @@ export function getObjectUtils<Raw, Parsed>(schema: BaseObjectSchema<Raw, Parsed
                 parse: (raw, opts) => {
                     return validateAndTransformExtendedObject({
                         extensionKeys: extension._getRawProperties(),
-                        value: raw,
+                        value: raw as object,
                         transformBase: (rawBase) => schema.parse(rawBase, opts),
                         transformExtension: (rawExtension) => extension.parse(rawExtension, opts),
                     });
@@ -252,13 +252,54 @@ export function getObjectUtils<Raw, Parsed>(schema: BaseObjectSchema<Raw, Parsed
                 json: (parsed, opts) => {
                     return validateAndTransformExtendedObject({
                         extensionKeys: extension._getParsedProperties(),
-                        value: parsed,
+                        value: parsed as object,
                         transformBase: (parsedBase) => schema.json(parsedBase, opts),
                         transformExtension: (parsedExtension) => extension.json(parsedExtension, opts),
                     });
                 },
                 getType: () => SchemaType.OBJECT,
             };
+
+            return {
+                ...baseSchema,
+                ...getSchemaUtils(baseSchema),
+                ...getObjectLikeUtils(baseSchema),
+                ...getObjectUtils(baseSchema),
+            };
+        },
+        passthrough: () => {
+            const baseSchema: BaseObjectSchema<Raw & { [key: string]: unknown }, Parsed & { [key: string]: unknown }> =
+                {
+                    _getParsedProperties: () => schema._getParsedProperties(),
+                    _getRawProperties: () => schema._getRawProperties(),
+                    parse: (raw, opts) => {
+                        const transformed = schema.parse(raw, { ...opts, unrecognizedObjectKeys: "passthrough" });
+                        if (!transformed.ok) {
+                            return transformed;
+                        }
+                        return {
+                            ok: true,
+                            value: {
+                                ...(raw as any),
+                                ...transformed.value,
+                            },
+                        };
+                    },
+                    json: (parsed, opts) => {
+                        const transformed = schema.json(parsed, { ...opts, unrecognizedObjectKeys: "passthrough" });
+                        if (!transformed.ok) {
+                            return transformed;
+                        }
+                        return {
+                            ok: true,
+                            value: {
+                                ...(parsed as any),
+                                ...transformed.value,
+                            },
+                        };
+                    },
+                    getType: () => SchemaType.OBJECT,
+                };
 
             return {
                 ...baseSchema,
@@ -277,13 +318,13 @@ function validateAndTransformExtendedObject<PreTransformedExtension, Transformed
     transformExtension,
 }: {
     extensionKeys: (keyof PreTransformedExtension)[];
-    value: unknown;
-    transformBase: (value: unknown) => MaybeValid<TransformedBase>;
-    transformExtension: (value: unknown) => MaybeValid<TransformedExtension>;
+    value: object;
+    transformBase: (value: object) => MaybeValid<TransformedBase>;
+    transformExtension: (value: object) => MaybeValid<TransformedExtension>;
 }): MaybeValid<TransformedBase & TransformedExtension> {
     const extensionPropertiesSet = new Set(extensionKeys);
     const [extensionProperties, baseProperties] = partition(keys(value), (key) =>
-        extensionPropertiesSet.has(key as keyof PreTransformedExtension)
+        extensionPropertiesSet.has(key as keyof PreTransformedExtension),
     );
 
     const transformedBase = transformBase(filterObject(value, baseProperties));
@@ -317,6 +358,7 @@ function isSchemaOptional(schema: Schema<any, any>): boolean {
         case SchemaType.ANY:
         case SchemaType.UNKNOWN:
         case SchemaType.OPTIONAL:
+        case SchemaType.OPTIONAL_NULLABLE:
             return true;
         default:
             return false;

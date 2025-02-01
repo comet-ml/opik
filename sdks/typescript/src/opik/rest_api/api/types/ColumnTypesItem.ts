@@ -3,7 +3,6 @@
  */
 
 export type ColumnTypesItem = "string" | "number" | "object" | "boolean" | "array" | "null";
-
 export const ColumnTypesItem = {
     String: "string",
     Number: "number",

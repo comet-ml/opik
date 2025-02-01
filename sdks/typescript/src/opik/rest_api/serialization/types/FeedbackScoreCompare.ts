@@ -23,7 +23,7 @@ export const FeedbackScoreCompare: core.serialization.ObjectSchema<
 });
 
 export declare namespace FeedbackScoreCompare {
-    interface Raw {
+    export interface Raw {
         name: string;
         category_name?: string | null;
         value: number;
