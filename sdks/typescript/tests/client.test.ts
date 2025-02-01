@@ -92,6 +92,25 @@ describe("OpikApiClient", () => {
     updateTracesSpy.mockRestore();
   });
 
+  it("basic create and update with flush flow - merge entity locally", async () => {
+    const trace = client.trace({ name: "test" });
+    trace.end();
+    await client.flush();
+
+    expect(createTracesSpy).toHaveBeenCalledTimes(1);
+    expect(updateTracesSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("basic create and update with flush flow", async () => {
+    const trace = client.trace({ name: "test" });
+    await client.flush();
+    trace.end();
+    await client.flush();
+
+    expect(createTracesSpy).toHaveBeenCalledTimes(1);
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("should log traces and spans in batches", async () => {
     await logTraceAndSpan({ client });
 
@@ -102,7 +121,7 @@ describe("OpikApiClient", () => {
   });
 
   it("should log traces and spans - one call per trace, batch per span (<300ms)", async () => {
-    await logTraceAndSpan({ client, delay: 100 });
+    await logTraceAndSpan({ client, delay: 200 });
 
     expect(createTracesSpy).toHaveBeenCalledTimes(5);
     expect(createSpansSpy).toHaveBeenCalledTimes(1);
