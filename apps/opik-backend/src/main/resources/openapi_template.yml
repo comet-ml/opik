@@ -19,6 +19,15 @@ info :
       }
       ```
 
+      The full payload would therefore look like:
+      
+      ```
+      curl -X GET 'https://www.comet.com/opik/api/v1/private/projects' \
+      -H 'Accept: application/json' \
+      -H 'Comet-Workspace: <your-workspace-name>' \
+      -H 'authorization: <your-api-key>'
+      ```
+
       Do take note here that the authorization header value does not include the `Bearer ` prefix. To switch to using the Opik Cloud in the documentation, you can
       click on the edit button displayed when hovering over the `Base URL` displayed on the right hand side of the docs.
 
