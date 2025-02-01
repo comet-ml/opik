@@ -19,7 +19,7 @@ export const ChatCompletionChoice: core.serialization.ObjectSchema<
 });
 
 export declare namespace ChatCompletionChoice {
-    interface Raw {
+    export interface Raw {
         index?: number | null;
         message?: AssistantMessage.Raw | null;
         delta?: Delta.Raw | null;

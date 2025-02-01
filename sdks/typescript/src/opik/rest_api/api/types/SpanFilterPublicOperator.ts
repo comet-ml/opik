@@ -13,7 +13,6 @@ export type SpanFilterPublicOperator =
     | ">="
     | "<"
     | "<=";
-
 export const SpanFilterPublicOperator = {
     Contains: "contains",
     NotContains: "not_contains",

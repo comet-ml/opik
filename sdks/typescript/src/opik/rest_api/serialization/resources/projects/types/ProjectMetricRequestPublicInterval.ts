@@ -12,5 +12,5 @@ export const ProjectMetricRequestPublicInterval: core.serialization.Schema<
 > = core.serialization.enum_(["HOURLY", "DAILY", "WEEKLY"]);
 
 export declare namespace ProjectMetricRequestPublicInterval {
-    type Raw = "HOURLY" | "DAILY" | "WEEKLY";
+    export type Raw = "HOURLY" | "DAILY" | "WEEKLY";
 }

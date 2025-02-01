@@ -34,7 +34,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
 });
 
 export declare namespace Trace {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         project_name?: string | null;
         project_id?: string | null;

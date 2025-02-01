@@ -12,7 +12,7 @@ export function lazy<Raw, Parsed>(getter: SchemaGetter<Schema<Raw, Parsed>>): Sc
 }
 
 export function constructLazyBaseSchema<Raw, Parsed>(
-    getter: SchemaGetter<Schema<Raw, Parsed>>
+    getter: SchemaGetter<Schema<Raw, Parsed>>,
 ): BaseSchema<Raw, Parsed> {
     return {
         parse: (raw, opts) => getMemoizedSchema(getter).parse(raw, opts),

@@ -12,5 +12,5 @@ export const ColumnCompareTypesItem: core.serialization.Schema<
 > = core.serialization.enum_(["string", "number", "object", "boolean", "array", "null"]);
 
 export declare namespace ColumnCompareTypesItem {
-    type Raw = "string" | "number" | "object" | "boolean" | "array" | "null";
+    export type Raw = "string" | "number" | "object" | "boolean" | "array" | "null";
 }

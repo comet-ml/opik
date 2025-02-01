@@ -3,7 +3,6 @@
  */
 
 export type FeedbackScoreCompareSource = "ui" | "sdk" | "online_scoring";
-
 export const FeedbackScoreCompareSource = {
     Ui: "ui",
     Sdk: "sdk",

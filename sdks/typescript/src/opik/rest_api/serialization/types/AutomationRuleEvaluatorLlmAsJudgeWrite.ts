@@ -15,7 +15,7 @@ export const AutomationRuleEvaluatorLlmAsJudgeWrite: core.serialization.ObjectSc
 });
 
 export declare namespace AutomationRuleEvaluatorLlmAsJudgeWrite {
-    interface Raw {
+    export interface Raw {
         code?: LlmAsJudgeCodeWrite.Raw | null;
     }
 }

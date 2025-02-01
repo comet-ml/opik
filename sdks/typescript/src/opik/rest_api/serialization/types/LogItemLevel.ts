@@ -10,5 +10,5 @@ export const LogItemLevel: core.serialization.Schema<serializers.LogItemLevel.Ra
     core.serialization.enum_(["INFO", "WARN", "ERROR", "DEBUG", "TRACE"]);
 
 export declare namespace LogItemLevel {
-    type Raw = "INFO" | "WARN" | "ERROR" | "DEBUG" | "TRACE";
+    export type Raw = "INFO" | "WARN" | "ERROR" | "DEBUG" | "TRACE";
 }

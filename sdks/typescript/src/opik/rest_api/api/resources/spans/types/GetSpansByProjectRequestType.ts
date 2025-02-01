@@ -3,7 +3,6 @@
  */
 
 export type GetSpansByProjectRequestType = "general" | "tool" | "llm";
-
 export const GetSpansByProjectRequestType = {
     General: "general",
     Tool: "tool",

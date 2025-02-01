@@ -3,7 +3,6 @@
  */
 
 export type FindFeedbackDefinitionsRequestType = "numerical" | "categorical";
-
 export const FindFeedbackDefinitionsRequestType = {
     Numerical: "numerical",
     Categorical: "categorical",

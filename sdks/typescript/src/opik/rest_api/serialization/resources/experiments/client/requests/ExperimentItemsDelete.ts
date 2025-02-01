@@ -14,7 +14,7 @@ export const ExperimentItemsDelete: core.serialization.Schema<
 });
 
 export declare namespace ExperimentItemsDelete {
-    interface Raw {
+    export interface Raw {
         ids: string[];
     }
 }
