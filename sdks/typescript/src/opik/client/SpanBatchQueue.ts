@@ -13,22 +13,20 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 
   protected async createEntities(spans: SavedSpan[]) {
-    await this.apiClient.spans.createSpans({ spans }).asRaw();
+    await this.apiClient.spans.createSpans({ spans });
   }
 
   protected async getEntity(id: string) {
-    const { data } = await this.apiClient.spans.getSpanById(id).asRaw();
-
-    return data as SavedSpan;
+    return (await this.apiClient.spans.getSpanById(id)) as SavedSpan;
   }
 
   protected async updateEntity(id: string, updates: SpanUpdate) {
-    await this.apiClient.spans.updateSpan(id, updates).asRaw();
+    await this.apiClient.spans.updateSpan(id, updates);
   }
 
   protected async deleteEntities(ids: string[]) {
     for (const id of ids) {
-      await this.apiClient.spans.deleteSpanById(id).asRaw();
+      await this.apiClient.spans.deleteSpanById(id);
     }
   }
 }

@@ -1,12 +1,5 @@
-import { APIPromise } from "@/rest_api/core/api-promise/APIPromise";
 import { Opik } from "@opik";
 import { MockInstance, vi } from "vitest";
-
-// Override the species property so that chained promises become native Promises.
-Object.defineProperty(APIPromise, Symbol.species, {
-  value: Promise,
-  configurable: true,
-});
 
 const waitForDelay = (ms: number) => {
   const promise = new Promise((resolve) => setTimeout(resolve, ms));
@@ -53,13 +46,8 @@ const logTraceAndSpan = async ({
   await client.flush();
 };
 
-function mockAPIPromise<T>(): APIPromise<T> {
-  return APIPromise.from(
-    Promise.resolve({
-      ok: true,
-      body: {} as T,
-    })
-  );
+async function mockAPIPromise<T>() {
+  return {} as T;
 }
 
 describe("OpikApiClient", () => {
