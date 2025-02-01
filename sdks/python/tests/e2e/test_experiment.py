@@ -395,7 +395,9 @@ def test_experiment__get_experiment_by_name__experiment_not_found__ExperimentNot
         opik_client.get_experiment_by_id("not-existing-name")
 
 
-def test_experiment__get_experiment_items__no_feedback_scores(opik_client: opik.Opik, dataset_name: str, experiment_name: str):
+def test_experiment__get_experiment_items__no_feedback_scores(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
     dataset = opik_client.create_dataset(dataset_name)
 
     dataset.insert(
@@ -412,7 +414,7 @@ def test_experiment__get_experiment_items__no_feedback_scores(opik_client: opik.
             "output": "Paris",
         }
 
-    evaluation_result = opik.evaluate(
+    opik.evaluate(
         dataset=dataset,
         task=task,
         scoring_metrics=[],
@@ -423,6 +425,6 @@ def test_experiment__get_experiment_items__no_feedback_scores(opik_client: opik.
 
     experiment = opik_client.get_experiment_by_name(experiment_name)
     items = experiment.get_items()
-    
+
     assert len(items) == 1
     assert items[0].feedback_scores == []

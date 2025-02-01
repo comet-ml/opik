@@ -471,17 +471,15 @@ class Opik:
         datasets: List[dataset.Dataset] = []
         for dataset_fern in datasets_fern:
             dataset_ = dataset.Dataset(
-                    name=dataset_fern.name,
-                    description=dataset_fern.description,
-                    rest_client=self._rest_client,
-                )
-            
+                name=dataset_fern.name,
+                description=dataset_fern.description,
+                rest_client=self._rest_client,
+            )
+
             if sync_items:
                 dataset_.__internal_api__sync_hashes__()
-            
-            datasets.append(
-                dataset_    
-            )
+
+            datasets.append(dataset_)
 
         return datasets
 
@@ -535,7 +533,7 @@ class Opik:
                         # TODO: add prompt if exists
                     )
                 )
-            
+
             page += 1
 
         return experiments

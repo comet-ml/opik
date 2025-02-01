@@ -26,9 +26,9 @@ class ExperimentItemContent:
         value: experiment_item_compare.ExperimentItemCompare,
     ) -> "ExperimentItemContent":
         if value.feedback_scores is None:
-            feedback_scores = []
+            feedback_scores: List[FeedbackScoreDict] = []
         else:
-            feedback_scores: List[FeedbackScoreDict] = [
+            feedback_scores = [
                 {
                     "category_name": rest_feedback_score.category_name,
                     "name": rest_feedback_score.name,
