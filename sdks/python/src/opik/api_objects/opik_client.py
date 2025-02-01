@@ -437,6 +437,109 @@ class Opik:
 
         return dataset_
 
+    def get_datasets(
+        self,
+        max_results: int = 100,
+        sync_items: bool = True,
+    ) -> List[dataset.Dataset]:
+        """
+        Returns all datasets up to the specified limit.
+
+        Args:
+            max_results: The maximum number of datasets to return.
+            sync_items: Whether to sync the hashes of the dataset items. This is used to deduplicate items when fetching the dataset but it can be an expensive operation.
+
+        Returns:
+            List[dataset.Dataset]: A list of dataset objects that match the filter string.
+        """
+        page_size = 100
+        datasets_fern: List[dataset_public.DatasetPublic] = []
+
+        page = 1
+        while len(datasets_fern) < max_results:
+            page_datasets = self._rest_client.datasets.find_datasets(
+                page=page,
+                size=page_size,
+            )
+
+            if len(page_datasets.content) == 0:
+                break
+
+            datasets_fern.extend(page_datasets.content)
+            page += 1
+
+        datasets: List[dataset.Dataset] = []
+        for dataset_fern in datasets_fern:
+            dataset_ = dataset.Dataset(
+                    name=dataset_fern.name,
+                    description=dataset_fern.description,
+                    rest_client=self._rest_client,
+                )
+            
+            if sync_items:
+                dataset_.__internal_api__sync_hashes__()
+            
+            datasets.append(
+                dataset_    
+            )
+
+        return datasets
+
+    def get_dataset_experiments(
+        self,
+        dataset_name: str,
+        max_results: int = 100,
+    ) -> List[experiment.Experiment]:
+        """
+        Returns all experiments up to the specified limit.
+
+        Args:
+            dataset_name: The name of the dataset
+            max_results: The maximum number of experiments to return.
+
+        Returns:
+            List[experiment.Experiment]: A list of experiment objects.
+        """
+        try:
+            dataset_id = self._rest_client.datasets.get_dataset_by_identifier(
+                dataset_name=dataset_name
+            ).id
+        except ApiError as e:
+            if e.status_code == 404:
+                raise exceptions.DatasetNotFound(
+                    f"Dataset with the name {dataset_name} not found."
+                ) from e
+            raise
+
+        page_size = 100
+        experiments: List[experiment.Experiment] = []
+
+        page = 1
+        while len(experiments) < max_results:
+            page_experiments = self._rest_client.experiments.find_experiments(
+                page=page,
+                size=page_size,
+                dataset_id=dataset_id,
+            )
+
+            if len(page_experiments.content) == 0:
+                break
+
+            for experiment_ in page_experiments.content:
+                experiments.append(
+                    experiment.Experiment(
+                        id=experiment_.id,
+                        name=experiment_.name,
+                        dataset_name=experiment_.dataset_name,
+                        rest_client=self._rest_client,
+                        # TODO: add prompt if exists
+                    )
+                )
+            
+            page += 1
+
+        return experiments
+
     def delete_dataset(self, name: str) -> None:
         """
         Delete dataset by name

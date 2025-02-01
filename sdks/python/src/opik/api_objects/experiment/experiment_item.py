@@ -25,15 +25,19 @@ class ExperimentItemContent:
         cls,
         value: experiment_item_compare.ExperimentItemCompare,
     ) -> "ExperimentItemContent":
-        feedback_scores: List[FeedbackScoreDict] = [
-            {
-                "category_name": rest_feedback_score.category_name,
-                "name": rest_feedback_score.name,
-                "reason": rest_feedback_score.reason,
-                "value": rest_feedback_score.value,
-            }
-            for rest_feedback_score in value.feedback_scores
-        ]
+        if value.feedback_scores is None:
+            feedback_scores = []
+        else:
+            feedback_scores: List[FeedbackScoreDict] = [
+                {
+                    "category_name": rest_feedback_score.category_name,
+                    "name": rest_feedback_score.name,
+                    "reason": rest_feedback_score.reason,
+                    "value": rest_feedback_score.value,
+                }
+                for rest_feedback_score in value.feedback_scores
+            ]
+
         return ExperimentItemContent(
             id=value.id,
             trace_id=value.trace_id,

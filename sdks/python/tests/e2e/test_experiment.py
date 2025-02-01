@@ -393,3 +393,36 @@ def test_experiment__get_experiment_by_name__experiment_not_found__ExperimentNot
 ):
     with pytest.raises(exceptions.ExperimentNotFound):
         opik_client.get_experiment_by_id("not-existing-name")
+
+
+def test_experiment__get_experiment_items__no_feedback_scores(opik_client: opik.Opik, dataset_name: str, experiment_name: str):
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+        ]
+    )
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "output": "Paris",
+        }
+
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[],
+        experiment_name=experiment_name,
+    )
+
+    opik.flush_tracker()
+
+    experiment = opik_client.get_experiment_by_name(experiment_name)
+    items = experiment.get_items()
+    
+    assert len(items) == 1
+    assert items[0].feedback_scores == []
