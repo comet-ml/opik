@@ -1,28 +1,33 @@
 type CreateEntity = { id: string };
 
 const DEFAULT_DEBOUNCE_BATCH_DELAY = 300;
+const DEFAULT_BATCH_SIZE = 100;
 
 class ActionQueue<EntityData = {}> {
   private action: (map: Map<string, EntityData>) => Promise<void>;
+  public batchSize: number;
   private delay: number;
   private enableBatch: boolean;
+  public name: string;
   private timerId: NodeJS.Timeout | null = null;
   private promise: Promise<void> = Promise.resolve();
   public queue = new Map<string, EntityData>();
-  public name: string;
 
   constructor({
     action,
+    batchSize = DEFAULT_BATCH_SIZE,
     delay,
     enableBatch,
     name = "ActionQueue",
   }: {
     action: (map: Map<string, EntityData>) => Promise<void>;
+    batchSize?: number;
     delay: number;
     enableBatch: boolean;
     name?: string;
   }) {
     this.action = action;
+    this.batchSize = batchSize;
     this.delay = delay;
     this.enableBatch = enableBatch;
     this.name = name;
@@ -40,6 +45,12 @@ class ActionQueue<EntityData = {}> {
     this.queue.set(id, entity);
 
     if (!this.enableBatch) {
+      this.flush();
+      return;
+    }
+
+    // @todo: change to check payload size instead of batch size
+    if (this.queue.size >= this.batchSize) {
       this.flush();
       return;
     }

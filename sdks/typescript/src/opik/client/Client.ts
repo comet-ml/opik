@@ -11,22 +11,21 @@ interface TraceData extends Omit<ITrace, "startTime"> {
 }
 
 export class OpikClient {
-  public apiClient: OpikApiClient;
+  public api: OpikApiClient;
   public config: OpikConfig;
   public spanBatchQueue: SpanBatchQueue;
   public traceBatchQueue: TraceBatchQueue;
 
   constructor(explicitConfig?: Partial<OpikConfig>) {
     this.config = loadConfig(explicitConfig);
-
-    this.apiClient = new OpikApiClient({
+    this.api = new OpikApiClient({
       apiKey: this.config.apiKey,
       environment: this.config.host,
       workspaceName: this.config.workspaceName,
     });
 
-    this.spanBatchQueue = new SpanBatchQueue(this.apiClient);
-    this.traceBatchQueue = new TraceBatchQueue(this.apiClient);
+    this.spanBatchQueue = new SpanBatchQueue(this.api);
+    this.traceBatchQueue = new TraceBatchQueue(this.api);
   }
 
   public trace = (traceData: TraceData) => {
