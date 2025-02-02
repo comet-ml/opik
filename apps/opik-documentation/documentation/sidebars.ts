@@ -57,6 +57,7 @@ const sidebars: SidebarsConfig = {
             "tracing/integrations/anthropic",
             "tracing/integrations/bedrock",
             "tracing/integrations/crewai",
+            "tracing/integrations/deepseek",
             "tracing/integrations/dify",
             "tracing/integrations/dspy",
             "tracing/integrations/gemini",
