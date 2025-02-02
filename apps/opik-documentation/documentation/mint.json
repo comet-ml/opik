@@ -39,7 +39,7 @@
     {
       "name": "API Reference",
       "openapi": "/rest_api/patched_opik.yaml",
-      "url": "docs/api-reference/endpoints",
+      "url": "docs/api-reference",
       "icon": "square-terminal"
     },
     {
