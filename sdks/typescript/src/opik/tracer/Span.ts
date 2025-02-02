@@ -7,7 +7,7 @@ export interface SavedSpan extends ISpan {
 
 export class Span {
   constructor(
-    private data: SavedSpan,
+    public data: SavedSpan,
     private opik: OpikClient
   ) {}
 
