@@ -1,7 +1,7 @@
 import { trackOpikClient } from "@/decorators/track";
-import { Opik, track } from "@opik";
+import { Opik, track, wrapTrack } from "@opik";
 import { MockInstance } from "vitest";
-import { delay } from "./utils";
+import { advanceToDelay, delay } from "./utils";
 
 async function mockAPIPromise<T>() {
   return {} as T;
@@ -30,9 +30,13 @@ describe("Track decorator", () => {
     updateTracesSpy = vi
       .spyOn(trackOpikClient.api.traces, "updateTrace")
       .mockImplementation(mockAPIPromise);
+
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+
     createSpansSpy.mockRestore();
     createTracesSpy.mockRestore();
     updateSpansSpy.mockRestore();
@@ -40,25 +44,25 @@ describe("Track decorator", () => {
   });
 
   it("should maintain correct span hierarchy for mixed async/sync functions", async () => {
-    const f111 = track()(function innerf111() {
+    const f111 = wrapTrack()(function innerf111() {
       return "f111";
     });
 
-    const f11 = track()(async function innerf11(a: number, b: number) {
-      await delay(10);
+    const f11 = wrapTrack()(async function innerf11(a: number, b: number) {
+      await advanceToDelay(10);
       const result = f111();
       return a + b;
     });
 
-    const f12 = track()(function innerf12() {
+    const f12 = wrapTrack()(function innerf12() {
       return "f12";
     });
 
-    const f13 = track()(function innerf13(obj: any) {
+    const f13 = wrapTrack()(function innerf13(obj: any) {
       return { hello: "world" };
     });
 
-    const f1 = track()(async function innerf1(message: string) {
+    const f1 = wrapTrack()(async function innerf1(message: string) {
       const promise = f11(1, 2);
       f12();
       f13({ a: "b" });
@@ -98,11 +102,13 @@ describe("Track decorator", () => {
     class TestClass {
       @track({ type: "llm" })
       async llmCall() {
+        await advanceToDelay(5000);
         return "llm result";
       }
 
       @track({ name: "translate" })
       async translate(text: string) {
+        await advanceToDelay(1000);
         return `translated: ${text}`;
       }
 
@@ -118,9 +124,12 @@ describe("Track decorator", () => {
     await trackOpikClient.flush();
 
     expect(createTracesSpy).toHaveBeenCalledTimes(1);
-    expect(createSpansSpy).toHaveBeenCalledTimes(1);
+    expect(createSpansSpy).toHaveBeenCalledTimes(2);
 
-    const { spans } = createSpansSpy.mock.calls[0][0];
+    const spans = createSpansSpy.mock.calls
+      .map((call) => call?.[0]?.spans ?? [])
+      .flat();
+
     expect(spans[0]).toMatchObject({
       name: "initial",
       parentSpanId: undefined,

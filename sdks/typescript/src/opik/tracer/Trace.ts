@@ -28,7 +28,10 @@ export class Trace {
   };
 
   public span = (spanData: SpanData) => {
-    const projectName = spanData.projectName ?? this.opik.config.projectName;
+    const projectName =
+      this.data.projectName ??
+      spanData.projectName ??
+      this.opik.config.projectName;
     const spanWithId: SavedSpan = {
       id: uuid(),
       startTime: new Date(),

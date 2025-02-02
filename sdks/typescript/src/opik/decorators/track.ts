@@ -21,7 +21,7 @@ function isPromise(obj: any): obj is Promise<any> {
   );
 }
 
-export function track({
+export function wrapTrack({
   name,
   projectName,
   type,
@@ -85,6 +85,20 @@ export function track({
     };
 
     return wrappedFn as T;
+  };
+}
+
+export function track({
+  name,
+  projectName,
+  type,
+}: {
+  name?: string;
+  projectName?: string;
+  type?: SpanType;
+} = {}) {
+  return function (value: any): any {
+    return wrapTrack({ name, projectName, type })(value);
   };
 }
 
