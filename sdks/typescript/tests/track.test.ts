@@ -7,7 +7,7 @@ async function mockAPIPromise<T>() {
   return {} as T;
 }
 
-describe.only("Track decorator", () => {
+describe("Track decorator", () => {
   let client: Opik;
   let createSpansSpy: MockInstance<typeof client.api.spans.createSpans>;
   let updateSpansSpy: MockInstance<typeof client.api.spans.updateSpan>;
@@ -91,6 +91,47 @@ describe.only("Track decorator", () => {
     expect(spans[4]).toMatchObject({
       name: "innerf111",
       parentSpanId: spans[1]?.id,
+    });
+  });
+
+  it("track decorator", async () => {
+    class TestClass {
+      @track({ type: "llm" })
+      async llmCall() {
+        return "llm result";
+      }
+
+      @track({ name: "translate" })
+      async translate(text: string) {
+        return `translated: ${text}`;
+      }
+
+      @track({ name: "initial", projectName: "track-decorator-test" })
+      async execute() {
+        const result = await this.llmCall();
+        return this.translate(result);
+      }
+    }
+
+    const test = new TestClass();
+    await test.execute();
+    await trackOpikClient.flush();
+
+    expect(createTracesSpy).toHaveBeenCalledTimes(1);
+    expect(createSpansSpy).toHaveBeenCalledTimes(1);
+
+    const { spans } = createSpansSpy.mock.calls[0][0];
+    expect(spans[0]).toMatchObject({
+      name: "initial",
+      parentSpanId: undefined,
+    });
+    expect(spans[1]).toMatchObject({
+      name: "llmCall",
+      parentSpanId: spans[0]?.id,
+    });
+    expect(spans[2]).toMatchObject({
+      name: "translate",
+      parentSpanId: spans[0]?.id,
     });
   });
 });

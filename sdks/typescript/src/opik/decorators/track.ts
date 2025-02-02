@@ -43,10 +43,12 @@ export function track({
         type,
       });
       const isRootSpan = !context;
+      // @ts-ignore
+      const fnThis = this;
 
       return trackStorage.run({ span, trace }, () => {
         try {
-          const result = originalFn(...args);
+          const result = originalFn.call(fnThis, args);
 
           if (isPromise(result)) {
             return result.then(
