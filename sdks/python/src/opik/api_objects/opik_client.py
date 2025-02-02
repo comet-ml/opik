@@ -68,6 +68,7 @@ class Opik:
             api_key=api_key,
         )
         config.check_for_misconfiguration(config_)
+        self._config = config_
 
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name

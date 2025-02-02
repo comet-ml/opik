@@ -4,6 +4,7 @@ import pytest
 from langchain.llms import fake
 from langchain.prompts import PromptTemplate
 
+import os
 import opik
 from opik import context_storage
 from opik.api_objects import opik_client, span, trace
@@ -750,3 +751,27 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
     assert len(fake_backend.span_trees) == 1
     assert len(callback.created_traces()) == 0
     assert_equal(EXPECTED_SPANS_TREE, fake_backend.span_trees[0])
+
+
+def test_langchain_callback__disabled_tracking(fake_backend):
+    os.environ["OPIK_TRACK_DISABLE"] = "true"
+
+    llm = fake.FakeListLLM(
+        responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"]
+    )
+
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
+
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    synopsis_chain = prompt_template | llm
+    test_prompts = {"title": "Documentary about Bigfoot in Paris"}
+
+    callback = OpikTracer()
+    synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
+
+    callback.flush()
+    os.environ["OPIK_TRACK_DISABLE"] = "false"
+
+    assert len(fake_backend.trace_trees) == 0
+    assert len(callback.created_traces()) == 0
