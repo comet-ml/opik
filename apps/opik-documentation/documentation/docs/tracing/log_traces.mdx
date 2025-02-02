@@ -1,0 +1,456 @@
+---
+sidebar_label: Log Traces
+description: Describes how to log LLM calls to the Opik platform using function decorators, integrations or the low level client.
+toc_min_heading_level: 2
+toc_max_heading_level: 4
+---
+
+<Tip>
+  If you are just getting started with Opik, we recommend first checking out the [Quickstart](/docs/quickstart) guide
+  that will walk you through the process of logging your first LLM call.
+</Tip>
+
+LLM applications are complex systems that do more than just call an LLM API, they will often involve retrieval, pre-processing and post-processing steps.
+Tracing is a tool that helps you understand the flow of your application and identify specific points in your application that may be causing issues.
+
+Opik's tracing functionality allows you to track not just all the LLM calls made by your application but also any of the other steps involved.
+
+<Frame>
+  <img src="/static/img/tracing/introduction.png" />
+</Frame>
+
+Opik provides different ways to log your LLM calls and traces to the platform:
+
+1. **Using one of our [integrations](/docs/tracing/integrations/overview):** This is the easiest way to get started.
+2. **Using the `@track` decorator:** This allows you to track not just LLM calls but any function call in your application, it is often used in conjunction with the integrations.
+3. **Using the Python SDK:** This allows for the most flexibility and customizability and is recommended if you want to have full control over the logging process.
+4. **Using the Opik REST API:** If you are not using Python, you can use the REST API to log traces to the platform. The REST API is currently in beta and subject to change.
+
+## Logging with the Python SDK
+
+In order to use the Opik Python SDK, you will need to install it and configure it:
+
+<Tabs>
+    <Tab value="Command Line" title="Command Line">
+
+```bash
+# Install the SDK
+pip install opik
+
+# Configure the SDK
+opik configure
+```
+
+    </Tab>
+    <Tab value="Jupyter Notebook" title="Jupyter Notebook">
+
+```python pytest_codeblocks_skip=true
+%pip install --quiet --upgrade opik
+
+# Configure the SDK
+import opik
+opik.configure(use_local=False)
+```
+
+    </Tab>
+
+</Tabs>
+
+<Tip>
+  Opik is open-source and can be hosted locally using Docker, please refer to the [self-hosting
+  guide](/docs/self-host/overview) to get started. Alternatively, you can use our hosted platform by creating an account
+  on [Comet](https://www.comet.com/signup?from=llm).
+</Tip>
+
+### Using an integration
+
+When using one of Opik's integration you will simply need to add a couple of lines of code to your existing application to track your LLM calls and traces. There are
+integrations available for [many of the most popular LLM frameworks and libraries](/docs/tracing/integrations/overview).
+
+Here is a short overview of our most popular integrations:
+
+<Tabs>
+    <Tab value="OpenAI" title="OpenAI">
+First let's install the required dependencies:
+
+```bash
+pip install opik openai
+```
+
+By wrapping the OpenAI client in the `track_openai` function, all calls to the OpenAI API will be logged to the Opik platform:
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = OpenAI()
+client = track_openai(client)
+
+# Every call to the OpenAI API will be logged to the platform
+response = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[
+      {"role":"user", "content": "Hello, world!"}
+    ]
+)
+```
+
+    </Tab>
+    <Tab value="LangChain" title="LangChain">
+
+First let's install the required dependencies:
+
+```bash
+pip install opik langchain langchain_openai
+```
+
+We can then use the `OpikTracer` callback to log all the traces to the platform:
+
+```python
+from langchain_openai import OpenAI
+from langchain.prompts import PromptTemplate
+from opik.integrations.langchain import OpikTracer
+
+# Initialize the tracer
+opik_tracer = OpikTracer()
+
+# Create the LLM Chain using LangChain
+llm = OpenAI(temperature=0)
+
+prompt_template = PromptTemplate(
+    input_variables=["input"],
+    template="Translate the following text to French: {input}"
+)
+
+# Use pipe operator to create LLM chain
+llm_chain = prompt_template | llm
+
+# Generate the translations
+llm_chain.invoke({"input": "Hello, how are you?"}, callbacks=[opik_tracer])
+```
+
+    </Tab>
+    <Tab value="LlamaIndex" title="LlamaIndex">
+
+First let's install the required dependencies:
+
+```bash
+pip install opik llama-index llama-index-callbacks-opik
+```
+
+```python
+from llama_index.core import Document, VectorStoreIndex
+from llama_index.core import global_handler, set_global_handler
+
+# Configure the Opik integration
+set_global_handler("opik")
+
+# Generate the response
+documents = [
+    Document(text="LlamaIndex is a tool for creating indices over your documents to query them using LLMs."),
+    Document(text="It supports various types of indices, including vector-based indices for efficient querying."),
+    Document(text="You can query the index to extract relevant information from large datasets of text.")
+]
+
+index = VectorStoreIndex(documents)
+query_engine = index.as_query_engine()
+
+query_engine.query("What is LlamaIndex used for?")
+```
+
+    </Tab>
+
+</Tabs>
+
+<Tip>
+  If you are using a framework that Opik does not integrate with, you can raise a feature request on our
+  [Github](https://github.com/comet-ml/opik) repository.
+</Tip>
+
+If you are using a framework that Opik does not integrate with, we recommed you use the `opik.track` function decorator.
+
+### Using function decorators
+
+Using the `opik.track` decorator is a great way to add Opik logging to your existing LLM application. We recommend using this
+method in conjunction with one of our [integrations](/docs/tracing/integrations/overview) for the most seamless experience.
+
+When you add the `@track` decorator to a function, Opik will create a span for that function call and log the input parameters and function output
+for that function. If we detect that a decorated function is being called within another decorated function, we will create a nested span for the
+inner function.
+
+#### Decorating your code
+
+You can add the `@track` decorator to any function in your application and track not just LLM calls but also any other steps in your application:
+
+```python
+import opik
+import openai
+
+client = openai.OpenAI()
+
+@opik.track
+def retrieve_context(input_text):
+    # Your retrieval logic here, here we are just returning a hardcoded list of strings
+    context =[
+        "What specific information are you looking for?",
+        "How can I assist you with your interests today?",
+        "Are there any topics you'd like to explore or learn more about?",
+    ]
+    return context
+
+@opik.track
+def generate_response(input_text, context):
+    full_prompt = (
+        f" If the user asks a question that is not specific, use the context to provide a relevant response.\n"
+        f"Context: {', '.join(context)}\n"
+        f"User: {input_text}\n"
+        f"AI:"
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": full_prompt}]
+    )
+    return response.choices[0].message.content
+
+@opik.track(name="my_llm_application")
+def llm_chain(input_text):
+    context = retrieve_context(input_text)
+    response = generate_response(input_text, context)
+
+    return response
+
+# Use the LLM chain
+result = llm_chain("Hello, how are you?")
+print(result)
+```
+
+<Info>
+The `@track` decorator will only track the input and output of the decorated function. If you are using OpenAI, we recommend you also use the `track_openai` function to track the LLM
+call as well as token usage:
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = OpenAI()
+client = track_openai(client)
+```
+
+</Info>
+
+#### Scoring traces
+
+You can log feedback scores for traces using the `opik_context.update_current_trace` function. This can be useful if
+there are some metrics that are already reported as part of your chain or agent:
+
+```python
+from opik import track, opik_context
+
+@track
+def llm_chain(input_text):
+    # LLM chain code
+    # ...
+
+    # Update the trace
+    opik_context.update_current_trace(
+        feedback_scores=[
+            {"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}
+        ]
+    )
+```
+
+<Tip>
+You don't have to manually log feedback scores, you can also define LLM as a Judge metrics in Opik that will score traces automatically for you.
+
+You can learn more about this feature in the [Online evaluation](/docs/production/rules) guide.
+
+</Tip>
+
+#### Logging additional data
+
+As mentioned above, the `@track` decorator only logs the input and output of the decorated function. If you want to log additional data, you can use the
+`update_current_span` function and `update_current_trace` function to manually update the span and trace:
+
+```python
+from opik import track, opik_context
+
+@track
+def llm_chain(input_text):
+    # LLM chain code
+    # ...
+
+    # Update the trace
+    opik_context.update_current_trace(
+        tags=["llm_chatbot"],
+    )
+
+    # Update the span
+    opik_context.update_current_span(
+        name="llm_chain"
+    )
+```
+
+You can learn more about the `opik_context` module in the [opik_context reference docs](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html).
+
+#### Configuring the project name
+
+You can configure the project you want the trace to be logged to using the `project_name` parameter of the `@track` decorator:
+
+```python pytest_codeblocks_skip=true
+import opik
+
+@opik.track(project_name="my_project")
+def my_function(input):
+    # Function code
+    return input
+```
+
+If you want to configure this globally for all traces, you can also use the environment variable:
+
+```python
+import os
+
+os.environ["OPIK_PROJECT_NAME"] = "my_project"
+```
+
+This will block the processing until the data is finished being logged.
+
+#### Flushing the trace
+
+You can ensure all data is logged by setting the `flush` parameter of the `@track` decorator to `True`:
+
+```python
+import opik
+
+@opik.track(flush=True)
+def my_function(input):
+    # Function code
+    return input
+```
+
+#### Disabling automatic logging of function input and output
+
+You can use the `capture_input` and `capture_output` parameters of the [`@track`](https://www.comet.com/docs/opik/python-sdk-reference/track.html) decorator to disable the automatic logging of the function input and output:
+
+```python
+import opik
+
+@opik.track(capture_input=False, capture_output=False)
+def llm_chain(input_text):
+    # LLM chain code
+    return input_text
+```
+
+You can then use the `opik_context` module to manually log the trace and span attributes.
+
+#### Disable all tracing
+
+You can disable the logging of traces and spans using the enviornment variable `OPIK_TRACK_DISABLE`, this will turn off the logging for all function decorators:
+
+```python
+import os
+
+os.environ["OPIK_TRACK_DISABLE"] = "true"
+```
+
+### Using the low-level Opik client
+
+If you want full control over the data logged to Opik, you can use the [`Opik`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html) client to log traces, spans, feedback scores and more.
+
+#### Logging traces and spans
+
+Logging traces and spans can be achieved by first creating a trace using [`Opik.trace`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.trace)
+and then adding spans to the trace using the [`Trace.span`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.span) method:
+
+```python
+from opik import Opik
+
+client = Opik(project_name="Opik client demo")
+
+# Create a trace
+trace = client.trace(
+    name="my_trace",
+    input={"user_question": "Hello, how are you?"},
+    output={"response": "Comment ça va?"}
+)
+
+# Add a span
+trace.span(
+    name="Add prompt template",
+    input={"text": "Hello, how are you?", "prompt_template": "Translate the following text to French: {text}"},
+    output={"text": "Translate the following text to French: hello, how are you?"}
+)
+
+# Add an LLM call
+trace.span(
+    name="llm_call",
+    type="llm",
+    input={"prompt": "Translate the following text to French: hello, how are you?"},
+    output={"response": "Comment ça va?"}
+)
+
+# End the trace
+trace.end()
+```
+
+:::note
+It is recommended to call `trace.end()` and `span.end()` when you are finished with the trace and span to ensure that the end time is logged correctly.
+:::
+
+#### Logging feedback scores
+
+You can log scores to traces and spans using the [`log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores)
+and [`log_spans_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_spans_feedback_scores) methods:
+
+```python
+from opik import Opik
+
+client = Opik()
+
+trace = client.trace(name="my_trace")
+
+client.log_traces_feedback_scores(
+    scores=[
+        {"id": trace.id, "name": "overall_quality", "value": 0.85, "reason": "The response was helpful and accurate."},
+        {"id": trace.id, "name": "coherence", "value": 0.75}
+    ]
+)
+
+span = trace.span(name="my_span")
+client.log_spans_feedback_scores(
+    scores=[
+        {"id": span.id, "name": "overall_quality", "value": 0.85, "reason": "The response was helpful and accurate."},
+        {"id": span.id, "name": "coherence", "value": 0.75}
+    ]
+)
+```
+
+<Tip>
+  If you want to log scores to traces or spans from within a decorated function, you can use the `update_current_trace`
+  and `update_current_span` methods instead.
+</Tip>
+
+#### Ensuring all traces are logged
+
+Opik's logging functionality is designed with production environments in mind. To optimize performance, all logging operations are executed in a background thread.
+
+If you want to ensure all traces are logged to Opik before exiting your program, you can use the `opik.Opik.flush` method:
+
+```python
+from opik import Opik
+
+client = Opik()
+
+# Log some traces
+client.flush()
+```
+
+## Logging traces with the REST API
+
+<Warning>
+  The Opik REST API is currently in beta and subject to change, if you encounter any issues please report them to the
+  [Github](https://github.com/comet-ml/opik).
+</Warning>
+
+The documentation for the Opik REST API is available [here](/docs/api-reference).
