@@ -1,20 +1,6 @@
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
-import { OPIK_URL_OVERRIDE_CONFIG } from "@/constants/shared";
-import { buildApiKeyConfig, buildWorkspaceNameConfig } from "@/lib/utils";
+import { getConfigCode } from "@/lib/formatCodeSnippets";
 import useAppStore from "@/store/AppStore";
-
-const getConfigCode = (
-  workspaceName: string,
-  apiKey?: string,
-  shouldMaskApiKey = false,
-) => {
-  if (!apiKey) return OPIK_URL_OVERRIDE_CONFIG;
-
-  const apiKeyConfig = buildApiKeyConfig(apiKey, shouldMaskApiKey);
-  const workspaceConfig = buildWorkspaceNameConfig(workspaceName);
-
-  return `${apiKeyConfig} \n${workspaceConfig}`;
-};
 
 export type ConfigureEnvCodeCoreProps = {
   apiKey?: string;

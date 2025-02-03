@@ -2,6 +2,8 @@ import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import React from "react";
 import FrameworkIntegrations from "../FrameworkIntegrations/FrameworkIntegrations";
 import { SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import EvaluationExamples from "../EvaluationExamples/EvaluationExamples";
 
 type QuickstartDialogProps = {
   open: boolean;
@@ -21,7 +23,24 @@ const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
             with your own code or use our ready-to-run examples on the right.
           </div>
         </div>
-        <FrameworkIntegrations />
+
+        <Tabs defaultValue="logLLM" className="flex w-full flex-1 flex-col">
+          <TabsList className="mb-8 w-auto self-center">
+            <TabsTrigger className="w-[200px]" value="logLLM">
+              Log LLM calls
+            </TabsTrigger>
+            <TabsTrigger className="w-[200px]" value="runEvaluations">
+              Run evaluations
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="logLLM">
+            <FrameworkIntegrations />
+          </TabsContent>
+          <TabsContent value="runEvaluations">
+            <EvaluationExamples />
+          </TabsContent>
+        </Tabs>
       </div>
     </SideDialog>
   );

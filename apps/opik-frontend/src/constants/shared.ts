@@ -1,4 +1,3 @@
-import { BASE_API_URL } from "@/api/api";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
@@ -33,8 +32,3 @@ export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
   [COLUMN_TYPE.dictionary]: "justify-start",
   [COLUMN_TYPE.numberDictionary]: "justify-start",
 };
-
-export const OPIK_URL_OVERRIDE_CONFIG = `os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
-  BASE_API_URL,
-  window.location.origin,
-).toString()}"`;

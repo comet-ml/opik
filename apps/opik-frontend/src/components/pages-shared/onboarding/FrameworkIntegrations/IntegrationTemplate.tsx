@@ -2,63 +2,38 @@ import React from "react";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import useAppStore from "@/store/AppStore";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
-import { buildApiKeyConfig, buildWorkspaceNameConfig } from "@/lib/utils";
 import CodeExecutor from "../CodeExecutor/CodeExecutor";
-import { OPIK_URL_OVERRIDE_CONFIG } from "@/constants/shared";
+import { putConfigInCode } from "@/lib/formatCodeSnippets";
 
 const CODE_BLOCK_1 = "pip install opik";
-
-export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
-
-type PutConfigInCodeArgs = {
-  code: string;
-  workspaceName: string;
-  apiKey?: string;
-  maskApiKey?: boolean;
-};
-const putConfigInCode = ({
-  code,
-  workspaceName,
-  apiKey,
-  maskApiKey,
-}: PutConfigInCodeArgs): string => {
-  if (apiKey) {
-    const apiKeyConfig = buildApiKeyConfig(apiKey, maskApiKey);
-    const workspaceConfig = buildWorkspaceNameConfig(workspaceName);
-
-    return code.replace(
-      OPIK_API_KEY_TEMPLATE,
-      `${apiKeyConfig}\n${workspaceConfig}`,
-    );
-  }
-
-  return code.replace(OPIK_API_KEY_TEMPLATE, OPIK_URL_OVERRIDE_CONFIG);
-};
 
 type IntegrationTemplateProps = {
   apiKey?: string;
   code: string;
   executionUrl?: string;
-  executionLogs: string[];
+  executionLogs?: string[];
 };
 
 const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   apiKey,
   code,
   executionUrl,
-  executionLogs,
+  executionLogs = [],
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const codeWithConfig = putConfigInCode({
     code,
     workspaceName,
     apiKey,
-    maskApiKey: true,
+    shouldMaskApiKey: true,
   });
   const codeWithConfigToCopy = putConfigInCode({ code, workspaceName, apiKey });
 
   const canExecuteCode =
-    executionUrl && apiKey && Boolean(CODE_EXECUTOR_SERVICE_URL);
+    executionUrl &&
+    executionLogs.length &&
+    apiKey &&
+    Boolean(CODE_EXECUTOR_SERVICE_URL);
 
   return (
     <div className="flex flex-col gap-6 rounded-md border bg-white p-6">
