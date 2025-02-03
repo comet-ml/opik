@@ -17,7 +17,7 @@ export const DatasetItemBatch: core.serialization.ObjectSchema<
 });
 
 export declare namespace DatasetItemBatch {
-    interface Raw {
+    export interface Raw {
         dataset_name?: string | null;
         dataset_id?: string | null;
         items: DatasetItem.Raw[];

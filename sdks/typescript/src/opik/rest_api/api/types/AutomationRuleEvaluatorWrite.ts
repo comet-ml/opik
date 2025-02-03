@@ -6,12 +6,12 @@ import * as OpikApi from "../index";
 
 export type AutomationRuleEvaluatorWrite = OpikApi.AutomationRuleEvaluatorWrite.LlmAsJudge;
 
-export declare namespace AutomationRuleEvaluatorWrite {
-    interface LlmAsJudge extends OpikApi.AutomationRuleEvaluatorLlmAsJudgeWrite, _Base {
+export namespace AutomationRuleEvaluatorWrite {
+    export interface LlmAsJudge extends OpikApi.AutomationRuleEvaluatorLlmAsJudgeWrite, _Base {
         type: "llm_as_judge";
     }
 
-    interface _Base {
+    export interface _Base {
         name: string;
         samplingRate?: number;
         action?: "evaluator";

@@ -21,7 +21,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     metadata: JsonNodePublic.optional(),
     feedbackScores: core.serialization.property(
         "feedback_scores",
-        core.serialization.list(FeedbackScoreAveragePublic).optional()
+        core.serialization.list(FeedbackScoreAveragePublic).optional(),
     ),
     comments: core.serialization.list(CommentPublic).optional(),
     traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
@@ -32,12 +32,12 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     promptVersion: core.serialization.property("prompt_version", PromptVersionLinkPublic.optional()),
     promptVersions: core.serialization.property(
         "prompt_versions",
-        core.serialization.list(PromptVersionLinkPublic).optional()
+        core.serialization.list(PromptVersionLinkPublic).optional(),
     ),
 });
 
 export declare namespace ExperimentPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         dataset_name: string;
         dataset_id?: string | null;

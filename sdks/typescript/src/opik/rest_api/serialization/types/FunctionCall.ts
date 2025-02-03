@@ -13,7 +13,7 @@ export const FunctionCall: core.serialization.ObjectSchema<serializers.FunctionC
     });
 
 export declare namespace FunctionCall {
-    interface Raw {
+    export interface Raw {
         name?: string | null;
         arguments?: string | null;
     }

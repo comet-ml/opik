@@ -14,7 +14,7 @@ export const CategoricalFeedbackDetailUpdate: core.serialization.ObjectSchema<
 });
 
 export declare namespace CategoricalFeedbackDetailUpdate {
-    interface Raw {
+    export interface Raw {
         categories: Record<string, number>;
     }
 }

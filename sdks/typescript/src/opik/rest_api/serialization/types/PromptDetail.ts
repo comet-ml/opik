@@ -21,7 +21,7 @@ export const PromptDetail: core.serialization.ObjectSchema<serializers.PromptDet
     });
 
 export declare namespace PromptDetail {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;

@@ -27,7 +27,7 @@ export const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, O
     });
 
 export declare namespace SpanUpdate {
-    interface Raw {
+    export interface Raw {
         project_name?: string | null;
         project_id?: string | null;
         trace_id: string;

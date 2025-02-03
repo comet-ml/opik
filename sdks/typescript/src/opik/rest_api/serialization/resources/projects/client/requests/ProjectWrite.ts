@@ -13,7 +13,7 @@ export const ProjectWrite: core.serialization.Schema<serializers.ProjectWrite.Ra
     });
 
 export declare namespace ProjectWrite {
-    interface Raw {
+    export interface Raw {
         name: string;
         description?: string | null;
     }

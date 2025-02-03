@@ -13,7 +13,7 @@ export const ProjectUpdate: core.serialization.Schema<serializers.ProjectUpdate.
     });
 
 export declare namespace ProjectUpdate {
-    interface Raw {
+    export interface Raw {
         name?: string | null;
         description?: string | null;
     }

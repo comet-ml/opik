@@ -3,7 +3,6 @@
  */
 
 export type LogItemLevel = "INFO" | "WARN" | "ERROR" | "DEBUG" | "TRACE";
-
 export const LogItemLevel = {
     Info: "INFO",
     Warn: "WARN",

@@ -15,7 +15,7 @@ export const CategoricalFeedbackDefinitionCreate: core.serialization.ObjectSchem
 });
 
 export declare namespace CategoricalFeedbackDefinitionCreate {
-    interface Raw {
+    export interface Raw {
         details?: CategoricalFeedbackDetailCreate.Raw | null;
     }
 }

@@ -14,7 +14,7 @@ export const PromptVersionLinkWrite: core.serialization.ObjectSchema<
 });
 
 export declare namespace PromptVersionLinkWrite {
-    interface Raw {
+    export interface Raw {
         id: string;
     }
 }

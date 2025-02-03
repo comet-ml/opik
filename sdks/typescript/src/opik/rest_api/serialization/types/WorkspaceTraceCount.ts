@@ -15,7 +15,7 @@ export const WorkspaceTraceCount: core.serialization.ObjectSchema<
 });
 
 export declare namespace WorkspaceTraceCount {
-    interface Raw {
+    export interface Raw {
         workspace?: string | null;
         trace_count?: number | null;
     }
