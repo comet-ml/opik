@@ -12,6 +12,7 @@ COPY . .
 
 ARG OPIK_VERSION
 ENV VITE_APP_VERSION=${OPIK_VERSION}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
