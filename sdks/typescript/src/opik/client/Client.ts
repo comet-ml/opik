@@ -10,6 +10,8 @@ interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
 }
 
+export const clients: OpikClient[] = [];
+
 export class OpikClient {
   public api: OpikApiClient;
   public config: OpikConfig;
@@ -26,6 +28,8 @@ export class OpikClient {
 
     this.spanBatchQueue = new SpanBatchQueue(this.api);
     this.traceBatchQueue = new TraceBatchQueue(this.api);
+
+    clients.push(this);
   }
 
   public trace = (traceData: TraceData) => {

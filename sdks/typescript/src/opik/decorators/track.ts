@@ -21,6 +21,37 @@ function isPromise(obj: any): obj is Promise<any> {
   );
 }
 
+function logSpan({
+  name,
+  parentSpan,
+  projectName,
+  trace,
+  type = "llm",
+}: {
+  name: string;
+  parentSpan?: Span;
+  projectName?: string;
+  trace?: Trace;
+  type?: SpanType;
+}) {
+  let spanTrace = trace;
+  if (!spanTrace) {
+    spanTrace = trackOpikClient.trace({
+      name,
+      projectName,
+    });
+  }
+
+  const span = spanTrace.span({
+    name,
+    parentSpanId: parentSpan?.data.id,
+    projectName,
+    type,
+  });
+
+  return { span, trace: spanTrace };
+}
+
 export function withTrack({
   name,
   projectName,
@@ -48,7 +79,7 @@ export function withTrack({
 
       return trackStorage.run({ span, trace }, () => {
         try {
-          const result = originalFn.call(fnThis, args);
+          const result = originalFn.apply(fnThis, args);
 
           if (isPromise(result)) {
             return result.then(
@@ -88,54 +119,48 @@ export function withTrack({
   };
 }
 
-export function track({
-  name,
-  projectName,
-  type,
-}: {
-  name?: string;
-  projectName?: string;
-  type?: SpanType;
-} = {}) {
-  return function (
-    target: any,
-    propertyKey: string,
-    descriptor: PropertyDescriptor
-  ) {
+export function track(
+  options: {
+    name?: string;
+    projectName?: string;
+    type?: SpanType;
+  } = {}
+) {
+  return function (...args: any[]): any {
+    // New decorator API: ([value, context])
+    if (
+      args.length === 2 &&
+      typeof args[1] === "object" &&
+      args[1] !== null &&
+      "kind" in args[1]
+    ) {
+      const [originalMethod, context] = args as [
+        (...args: any[]) => any,
+        { kind: string; name: string | symbol },
+      ];
+
+      if (context.kind !== "method") {
+        throw new Error("track decorator is only applicable to methods");
+      }
+
+      return withTrack(options)(originalMethod);
+    }
+
+    // Legacy decorator API: (target, propertyKey, descriptor)
+    const [target, propertyKey, descriptor] = args as [
+      object,
+      string | symbol,
+      PropertyDescriptor,
+    ];
+
+    if (!descriptor || typeof descriptor.value !== "function") {
+      throw new Error("track decorator can only be applied to methods");
+    }
+
     const originalMethod = descriptor.value;
-    descriptor.value = withTrack({ name, projectName, type })(descriptor.value);
+    descriptor.value = withTrack(options)(originalMethod);
+    return descriptor;
   };
-}
-
-function logSpan({
-  name,
-  parentSpan,
-  projectName,
-  trace,
-  type = "llm",
-}: {
-  name: string;
-  parentSpan?: Span;
-  projectName?: string;
-  trace?: Trace;
-  type?: SpanType;
-}) {
-  let spanTrace = trace;
-  if (!spanTrace) {
-    spanTrace = trackOpikClient.trace({
-      name,
-      projectName,
-    });
-  }
-
-  const span = spanTrace.span({
-    name,
-    parentSpanId: parentSpan?.data.id,
-    projectName,
-    type,
-  });
-
-  return { span, trace: spanTrace };
 }
 
 export const trackOpikClient = new OpikClient();

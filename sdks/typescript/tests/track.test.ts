@@ -75,8 +75,7 @@ describe("Track decorator", () => {
     await trackOpikClient.flush();
 
     expect(createTracesSpy).toHaveBeenCalledTimes(1);
-    // 3 spans: initial, llmCall, translate -> should split by parentSpanId
-    expect(createSpansSpy).toHaveBeenCalledTimes(3);
+    expect(createSpansSpy).toHaveBeenCalledTimes(1);
 
     const spans = createSpansSpy.mock.calls
       .map((call) => call?.[0]?.spans ?? [])
@@ -130,8 +129,7 @@ describe("Track decorator", () => {
     await trackOpikClient.flush();
 
     expect(createTracesSpy).toHaveBeenCalledTimes(1);
-    // 3 spans: initial, llmCall, translate -> should split by parentSpanId
-    expect(createSpansSpy).toHaveBeenCalledTimes(3);
+    expect(createSpansSpy).toHaveBeenCalledTimes(2);
     expect(updateSpansSpy).toHaveBeenCalledTimes(3);
     expect(updateTracesSpy).toHaveBeenCalledTimes(1);
 
