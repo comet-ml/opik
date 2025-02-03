@@ -31,6 +31,7 @@ import {
   generateGroupedCellDef,
   getIsCustomRow,
   getRowId,
+  getSharedShiftCheckboxClickHandler,
   GROUPING_CONFIG,
   renderCustomRow,
 } from "@/components/pages/ExperimentsShared/table";
@@ -100,8 +101,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [datasetId, setDatasetId] = useState("");
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const { checkboxClickHandler } = useMemo(() => {
+    return {
+      checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
+    };
+  }, []);
 
   const { data, isPending } = useGroupedExperimentsList({
     workspaceName,
@@ -202,18 +208,21 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>(),
-      generateGroupedCellDef<GroupedExperiment, unknown>({
-        id: GROUPING_COLUMN,
-        label: "Dataset",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "dataset_name",
-          idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
+      generateExperimentNameColumDef<GroupedExperiment>(checkboxClickHandler),
+      generateGroupedCellDef<GroupedExperiment, unknown>(
+        {
+          id: GROUPING_COLUMN,
+          label: "Dataset",
+          type: COLUMN_TYPE.string,
+          cell: ResourceCell as never,
+          customMeta: {
+            nameKey: "dataset_name",
+            idKey: "dataset_id",
+            resource: RESOURCE_TYPE.dataset,
+          },
         },
-      }),
+        checkboxClickHandler,
+      ),
       ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
         DEFAULT_COLUMNS,
         {
@@ -229,7 +238,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         },
       ),
     ];
-  }, [selectedColumns, columnsOrder, scoresColumnsOrder, scoresColumnsData]);
+  }, [
+    selectedColumns,
+    columnsOrder,
+    checkboxClickHandler,
+    scoresColumnsOrder,
+    scoresColumnsData,
+  ]);
 
   const resizeConfig = useMemo(
     () => ({
