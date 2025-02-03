@@ -1,67 +1,56 @@
 import { loadConfig, OpikConfig } from "@/config/Config";
 import { OpikApiClient } from "@/rest_api";
-import type { Trace as ITrace, ProjectPublic } from "@/rest_api/api";
-import { SavedTrace, Trace } from "@/tracer/Trace";
+import type { Trace as ITrace } from "@/rest_api/api";
+import { Trace } from "@/tracer/Trace";
 import { v7 as uuid } from "uuid";
+import { SpanBatchQueue } from "./SpanBatchQueue";
+import { TraceBatchQueue } from "./TraceBatchQueue";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
 }
 
+export const clients: OpikClient[] = [];
+
 export class OpikClient {
-  public apiClient: OpikApiClient;
+  public api: OpikApiClient;
   public config: OpikConfig;
-  private existingProjects: Map<string, ProjectPublic> = new Map();
+  public spanBatchQueue: SpanBatchQueue;
+  public traceBatchQueue: TraceBatchQueue;
 
   constructor(explicitConfig?: Partial<OpikConfig>) {
     this.config = loadConfig(explicitConfig);
-
-    this.apiClient = new OpikApiClient({
+    this.api = new OpikApiClient({
       apiKey: this.config.apiKey,
       environment: this.config.host,
       workspaceName: this.config.workspaceName,
     });
+
+    this.spanBatchQueue = new SpanBatchQueue(this.api);
+    this.traceBatchQueue = new TraceBatchQueue(this.api);
+
+    clients.push(this);
   }
-  public loadProject = async (projectName: string): Promise<ProjectPublic> => {
-    if (this.existingProjects.has(projectName)) {
-      return this.existingProjects.get(projectName)!;
-    }
 
-    const { data: projectsPage } = await this.apiClient.projects
-      .findProjects({ name: projectName })
-      .asRaw();
-
-    const project = projectsPage.content?.find(
-      (p) => p.name.toLowerCase() === projectName.toLowerCase()
+  public trace = (traceData: TraceData) => {
+    const projectName = traceData.projectName ?? this.config.projectName;
+    const trace = new Trace(
+      {
+        id: uuid(),
+        startTime: new Date(),
+        ...traceData,
+        projectName,
+      },
+      this
     );
 
-    if (project) {
-      this.existingProjects.set(projectName, project);
-      return project;
-    }
+    this.traceBatchQueue.create(trace.data);
 
-    // Create the project if it doesn't exist
-    await this.apiClient.projects
-      .createProject({
-        name: projectName,
-      })
-      .asRaw();
-
-    return this.loadProject(projectName);
+    return trace;
   };
 
-  public trace = async (trace: TraceData) => {
-    const projectName = trace.projectName ?? this.config.projectName;
-    const traceWithId: SavedTrace = {
-      id: uuid(),
-      startTime: new Date(),
-      ...trace,
-      projectName,
-    };
-
-    await this.loadProject(projectName);
-    await this.apiClient.traces.createTrace(traceWithId).asRaw();
-
-    return new Trace(traceWithId, this);
+  public flush = async () => {
+    await this.traceBatchQueue.flush();
+    await this.spanBatchQueue.flush();
   };
 }

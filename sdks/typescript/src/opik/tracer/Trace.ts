@@ -19,16 +19,20 @@ export class Trace {
   private spans: Span[] = [];
 
   constructor(
-    private data: SavedTrace,
+    public data: SavedTrace,
     private opik: OpikClient
   ) {}
 
-  public end = async () => {
-    await this.update({ endTime: new Date() });
+  public end = () => {
+    return this.update({ endTime: new Date() });
   };
 
-  public span = async (spanData: SpanData) => {
-    const projectName = spanData.projectName ?? this.opik.config.projectName;
+  public span = (spanData: SpanData) => {
+    const projectName =
+      this.data.projectName ??
+      spanData.projectName ??
+      this.opik.config.projectName;
+
     const spanWithId: SavedSpan = {
       id: uuid(),
       startTime: new Date(),
@@ -37,25 +41,22 @@ export class Trace {
       traceId: this.data.id,
     };
 
-    await this.opik.loadProject(projectName);
-    await this.opik.apiClient.spans
-      .createSpans({ spans: [spanWithId] })
-      .asRaw();
+    this.opik.spanBatchQueue.create(spanWithId);
 
     const span = new Span(spanWithId, this.opik);
     this.spans.push(span);
     return span;
   };
 
-  public update = async (
-    updates: Omit<TraceUpdate, "projectId" | "projectName">
-  ) => {
-    await this.opik.apiClient.traces
-      .updateTrace(this.data.id, {
-        projectName: this.data.projectName ?? this.opik.config.projectName,
-        ...updates,
-      })
-      .asRaw();
-    this.data = { ...this.data, ...updates };
+  public update = (updates: Omit<TraceUpdate, "projectId">) => {
+    const traceUpdates = {
+      projectName: this.data.projectName ?? this.opik.config.projectName,
+      ...updates,
+    };
+
+    this.opik.traceBatchQueue.update(this.data.id, traceUpdates);
+    this.data = { ...this.data, ...traceUpdates };
+
+    return this;
   };
 }
