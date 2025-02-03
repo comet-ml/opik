@@ -1,8 +1,8 @@
 from .experiment import Experiment
-from .helpers import build_metadata_and_prompt_versions, check_prompt_args
+from .helpers import build_metadata_and_prompt_versions, handle_prompt_args
 
 __all__ = [
     "Experiment",
     "build_metadata_and_prompt_versions",
-    "check_prompt_args",
+    "handle_prompt_args",
 ]

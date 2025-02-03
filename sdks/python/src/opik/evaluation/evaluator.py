@@ -9,7 +9,7 @@ from .types import LLMTask
 from .. import Prompt
 from ..api_objects import opik_client
 from ..api_objects.dataset import dataset
-from ..api_objects.experiment.helpers import check_prompt_args
+from ..api_objects.experiment.helpers import handle_prompt_args
 from ..api_objects.prompt import prompt_template
 
 LOGGER = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ def evaluate(
     if scoring_metrics is None:
         scoring_metrics = []
 
-    checked_prompts = check_prompt_args(
+    checked_prompts = handle_prompt_args(
         prompt=prompt,
         prompts=prompts,
     )

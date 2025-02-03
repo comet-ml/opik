@@ -67,7 +67,7 @@ def get_experiment_data_by_name(
                 return experiment
 
 
-def check_prompt_args(
+def handle_prompt_args(
     prompt: Optional[prompt.Prompt] = None,
     prompts: Optional[List[prompt.Prompt]] = None,
 ) -> Optional[List[prompt.Prompt]]:

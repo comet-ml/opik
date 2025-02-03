@@ -72,18 +72,18 @@ def test_experiment_build_metadata_from_prompt_versions(input_kwargs, expected):
 
 
 def test_check_prompt_args_with_none_arguments():
-    result = experiment.check_prompt_args(prompt=None, prompts=None)
+    result = experiment.handle_prompt_args(prompt=None, prompts=None)
     assert result is None
 
 
 def test_check_prompt_args_with_none_and_empty_list():
-    result = experiment.check_prompt_args(prompt=None, prompts=[])
+    result = experiment.handle_prompt_args(prompt=None, prompts=[])
     assert result is None
 
 
 def test_check_prompt_args_with_single_prompt():
     mock_prompt = fake_prompt(with_postfix=True)
-    result = experiment.check_prompt_args(prompt=mock_prompt, prompts=None)
+    result = experiment.handle_prompt_args(prompt=mock_prompt, prompts=None)
     assert isinstance(result, list)
     assert len(result) == 1
     assert result[0] == mock_prompt
@@ -93,7 +93,7 @@ def test_check_prompt_args_with_prompts_list():
     mock_prompt_1 = fake_prompt(with_postfix=True)
     mock_prompt_2 = fake_prompt(with_postfix=True)
     prompts = [mock_prompt_1, mock_prompt_2]
-    result = experiment.check_prompt_args(prompt=None, prompts=prompts)
+    result = experiment.handle_prompt_args(prompt=None, prompts=prompts)
     assert result == prompts
 
 
@@ -103,6 +103,6 @@ def test_check_prompt_args_with_both_prompt_and_prompts():
         fake_prompt(with_postfix=True),
         fake_prompt(with_postfix=True),
     ]
-    result = experiment.check_prompt_args(prompt=mock_prompt, prompts=mock_prompt_list)
+    result = experiment.handle_prompt_args(prompt=mock_prompt, prompts=mock_prompt_list)
     assert isinstance(result, list)
     assert result == mock_prompt_list

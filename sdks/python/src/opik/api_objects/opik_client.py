@@ -514,7 +514,7 @@ class Opik:
         """
         id = helpers.generate_id()
 
-        checked_prompts = experiment_helpers.check_prompt_args(
+        checked_prompts = experiment_helpers.handle_prompt_args(
             prompt=prompt,
             prompts=prompts,
         )
