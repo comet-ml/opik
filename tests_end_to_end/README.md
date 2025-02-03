@@ -20,6 +20,17 @@ The following environment variables are used to configure the test environment:
 
 ### Running Tests
 
+#### Prerequisites
+
+Before running any tests, make sure you're in the `tests_end_to_end` directory and set the PYTHONPATH:
+
+```bash
+cd tests_end_to_end
+export PYTHONPATH='.'
+```
+
+This ensures that Python can find all the test modules and utilities correctly.
+
 #### Local Environment (Default)
 
 To run tests against your local development environment:
@@ -56,15 +67,81 @@ This will use the staging configuration:
 - API URL: https://staging.dev.comet.com/opik/api
 - Web URL: https://staging.dev.comet.com/opik
 
-### CI/CD Configuration
+### Test Suites
 
-For CI/CD environments, make sure to set up the required environment variables as secrets in your CI/CD system. The environment variables should be added to your workflow configuration and passed to the test environment.
+The tests are organized into different suites that can be run independently:
 
-Example GitHub Actions workflow configuration:
+#### Running Specific Test Suites
 
-```yaml
-env:
-  OPIK_TEST_ENV: staging
-  OPIK_API_KEY: ${{ secrets.OPIK_API_KEY }}
-  OPIK_TEST_USER_EMAIL: ${{ secrets.OPIK_TEST_USER_EMAIL }}
-  OPIK_TEST_USER_PASSWORD: ${{ secrets.OPIK_TEST_USER_PASSWORD }}
+```bash
+# Run all tests
+pytest
+
+# Run only projects tests
+pytest tests/Projects/test_projects_crud_operations.py
+
+# Run all dataset tests
+pytest tests/Datasets/
+
+# Run traces tests
+pytest tests/Traces/test_traces_crud_operations.py
+
+# Run experiments tests
+pytest tests/Experiments/test_experiments_crud_operations.py
+
+# Run prompts tests
+pytest tests/Prompts/test_prompts_crud_operations.py
+
+# Run feedback definitions tests
+pytest tests/FeedbackDefinitions/test_feedback_definitions_crud.py
+```
+
+#### Running Sanity Tests
+
+To run only the sanity tests (marked with @pytest.mark.sanity):
+
+```bash
+pytest -m sanity
+```
+
+### Additional Options
+
+You can combine different options when running tests:
+
+```bash
+# Run tests with verbose output
+pytest -v
+
+# Run tests with live logs
+pytest -s
+
+# Run specific test file with setup information
+pytest tests/Projects/test_projects_crud_operations.py --setup-show
+
+# Run tests with specific browser
+pytest --browser chromium  # default
+pytest --browser firefox
+pytest --browser webkit
+
+# Combine multiple options
+pytest -v -s tests/Datasets/ --browser firefox --setup-show
+```
+
+### Running in Different Environments
+
+You can combine environment configuration with specific test suites:
+
+```bash
+# Run sanity tests in staging
+OPIK_TEST_ENV=staging \
+OPIK_API_KEY=your_api_key \
+OPIK_TEST_USER_EMAIL=test_user@example.com \
+OPIK_TEST_USER_PASSWORD=test_password \
+pytest -m sanity
+
+# Run specific suite in staging
+OPIK_TEST_ENV=staging \
+OPIK_API_KEY=your_api_key \
+OPIK_TEST_USER_EMAIL=test_user@example.com \
+OPIK_TEST_USER_PASSWORD=test_password \
+pytest tests/Projects/test_projects_crud_operations.py
