@@ -13,10 +13,9 @@ from ..testlib import assert_equal, ANY_BUT_NONE
 import pytest
 
 
-def test_experiment_creation_via_evaluate_function__prompt_arg_used__happyflow(
+def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happyflow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    # TODO: this test is not finished, it does not check experiment items content
     dataset = opik_client.create_dataset(dataset_name)
 
     dataset.insert(
@@ -149,10 +148,9 @@ def test_experiment_creation_via_evaluate_function__prompt_arg_used__happyflow(
     )
 
 
-def test_experiment_creation_via_evaluate_function__prompts_arg_used__happyflow(
+def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__happyflow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    # TODO: this test is not finished, it does not check experiment items content
     dataset = opik_client.create_dataset(dataset_name)
 
     dataset.insert(
