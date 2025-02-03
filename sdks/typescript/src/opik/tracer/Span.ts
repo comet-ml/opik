@@ -22,6 +22,7 @@ export class Span {
     >
   ) => {
     const spanUpdates = {
+      parentSpanId: this.data.parentSpanId,
       projectName: this.data.projectName ?? this.opik.config.projectName,
       traceId: this.data.traceId,
       ...updates,
