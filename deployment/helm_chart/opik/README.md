@@ -117,7 +117,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_PORT | string | `"8123"` |  |
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
-| component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true"` |  |
+| component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |

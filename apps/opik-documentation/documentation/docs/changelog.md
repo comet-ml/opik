@@ -6,6 +6,19 @@ pytest_codeblocks_skip: true
 
 # Weekly Changelog
 
+## Week of 2025-01-27
+
+**Opik Dashboard**:
+
+- Performance improvements for workspaces with 100th of millions of traces
+- Added support for cost tracking when using Gemini models
+- Allow users to diff prompt
+
+**SDK**:
+
+- Fixed the `evaluate` and `evaluate_*` functions to better support event loops, particularly useful when using Ragas metrics
+- Added support for Bedrock `invoke_agent` API
+
 ## Week of 2025-01-20
 
 **Opik Dashboard**:
