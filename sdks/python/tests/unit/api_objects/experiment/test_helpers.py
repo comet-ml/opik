@@ -3,11 +3,11 @@ import types
 import pytest
 
 from opik.api_objects import experiment
-from tests.testlib.util_helpers import random_string
+from tests.conftest import random_chars
 
 
 def fake_prompt(with_postfix: bool = False):
-    postfix = random_string()
+    postfix = random_chars()
 
     fake_prompt_obj = types.SimpleNamespace(
         __internal_api__version_id__="some-prompt-version-id",

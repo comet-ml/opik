@@ -7,7 +7,7 @@ from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from opik.api_objects.experiment import experiment_item
 from . import verifiers
-from .conftest import _random_chars
+from ..conftest import random_chars
 from ..testlib import assert_equal, ANY_BUT_NONE
 
 import pytest
@@ -49,8 +49,8 @@ def test_experiment_creation_via_evaluate_function__prompt_arg_used__happyflow(
         )
 
     prompt = Prompt(
-        name=f"test-experiment-prompt-{_random_chars()}",
-        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
     )
 
     equals_metric = metrics.Equals()
@@ -185,12 +185,12 @@ def test_experiment_creation_via_evaluate_function__prompts_arg_used__happyflow(
         )
 
     prompt1 = Prompt(
-        name=f"test-experiment-prompt-{_random_chars()}",
-        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
     )
     prompt2 = Prompt(
-        name=f"test-experiment-prompt-{_random_chars()}",
-        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
     )
 
     equals_metric = metrics.Equals()
@@ -468,8 +468,8 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         )
 
     prompt = Prompt(
-        name=f"test-experiment-prompt-{_random_chars()}",
-        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
     )
 
     # Create the experiment first
