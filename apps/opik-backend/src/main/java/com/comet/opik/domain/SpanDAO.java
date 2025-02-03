@@ -100,7 +100,7 @@ class SpanDAO {
                         :metadata<item.index>,
                         :model<item.index>,
                         :provider<item.index>,
-                        toDecimal64(:total_estimated_cost<item.index>, 8),
+                        toDecimal128(:total_estimated_cost<item.index>, 12),
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
@@ -247,7 +247,7 @@ class SpanDAO {
                     :metadata as metadata,
                     :model as model,
                     :provider as provider,
-                    toDecimal64(:total_estimated_cost, 8) as total_estimated_cost,
+                    toDecimal128(:total_estimated_cost, 12) as total_estimated_cost,
                     :total_estimated_cost_version as total_estimated_cost_version,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
@@ -311,7 +311,7 @@ class SpanDAO {
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
             	<if(model)> :model <else> model <endif> as model,
             	<if(provider)> :provider <else> provider <endif> as provider,
-            	<if(total_estimated_cost)> toDecimal64(:total_estimated_cost, 8) <else> total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
@@ -457,7 +457,7 @@ class SpanDAO {
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
                     <if(model)> :model <else> '' <endif> as model,
                     <if(provider)> :provider <else> '' <endif> as provider,
-                    <if(total_estimated_cost)> toDecimal64(:total_estimated_cost, 8) <else> toDecimal64(0, 8) <endif> as total_estimated_cost,
+                    <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
@@ -517,15 +517,19 @@ class SpanDAO {
 
     private static final String SELECT_BY_PROJECT_ID = """
             WITH span_ids AS (
-                  SELECT
-                      id
-                  FROM (
+              SELECT
+                  id
+              FROM (
+                    SELECT
+                        *
+                    FROM (
                       SELECT
                           id,
                           if(end_time IS NOT NULL AND start_time IS NOT NULL
                                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                               NULL) AS duration_millis
+                               NULL) AS duration_millis,
+                           row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
                       FROM spans
                       WHERE project_id = :project_id
                       AND workspace_id = :workspace_id
@@ -549,10 +553,10 @@ class SpanDAO {
                           HAVING <feedback_scores_filters>
                       )
                       <endif>
-                      ORDER BY id DESC, last_updated_at DESC
-                      LIMIT 1 BY id
-                      LIMIT :limit
-                      <if(offset)>OFFSET :offset <endif>
+                    ) WHERE latest = 1
+                    ORDER BY id DESC
+                    LIMIT :limit
+                    <if(offset)>OFFSET :offset <endif>
                 )
             ), comments_final AS (
               SELECT
@@ -597,13 +601,20 @@ class SpanDAO {
                         (dateDiff('microsecond', s.start_time, s.end_time) / 1000.0),
                         NULL) AS duration_millis,
                groupArray(tuple(c.*)) AS comments
-            FROM spans s
+            FROM (
+            	SELECT
+            		*,
+            		row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+            	FROM spans
+            	WHERE id IN (SELECT id FROM span_ids)
+            ) AS s
             LEFT JOIN comments_final AS c ON s.id = c.entity_id
-            WHERE s.id IN (SELECT id FROM span_ids)
+            WHERE s.latest = 1
             GROUP BY
               s.*,
               duration_millis
             ORDER BY s.id DESC
+            SETTINGS join_algorithm='auto'
             ;
             """;
 
@@ -617,7 +628,8 @@ class SpanDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                                          AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                      (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration_millis
+                                     NULL) AS duration_millis,
+                    row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
                 FROM spans
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -626,23 +638,22 @@ class SpanDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
-                SELECT
-                    entity_id
-                FROM (
-                    SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                    AND project_id = :project_id
-                    ORDER BY entity_id DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                )
-                GROUP BY entity_id
-                HAVING <feedback_scores_filters>
+                    SELECT
+                        entity_id
+                    FROM (
+                        SELECT *
+                        FROM feedback_scores
+                        WHERE entity_type = 'span'
+                        AND project_id = :project_id
+                        ORDER BY entity_id DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    )
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
                 )
                 <endif>
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY id
             ) AS latest_rows
+            WHERE latest = 1
             ;
             """;
 
@@ -685,7 +696,7 @@ class SpanDAO {
                     avgMap(usage) as usage,
                     avgMap(feedback_scores) AS feedback_scores,
                     avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                    toDecimal64(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 8) AS total_estimated_cost_avg
+                    toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
                 FROM (
                     SELECT
                         s.workspace_id as workspace_id,
@@ -701,44 +712,47 @@ class SpanDAO {
                         s.total_estimated_cost as total_estimated_cost
                     FROM (
                         SELECT
-                             workspace_id,
-                             project_id,
-                             id,
-                             if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                         AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                     (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration_millis,
-                             if(length(input) > 0, 1, 0) as input_count,
-                             if(length(output) > 0, 1, 0) as output_count,
-                             if(length(metadata) > 0, 1, 0) as metadata_count,
-                             length(tags) as tags_count,
-                             usage,
-                             total_estimated_cost
-                        FROM spans
-                        WHERE project_id = :project_id
-                        AND workspace_id = :workspace_id
-                        <if(trace_id)> AND trace_id = :trace_id <endif>
-                        <if(type)> AND type = :type <endif>
-                        <if(filters)> AND <filters> <endif>
-                        <if(feedback_scores_filters)>
-                        AND id in (
+                            *
+                        FROM (
                             SELECT
-                                entity_id
-                            FROM (
-                                SELECT *
-                                FROM feedback_scores
-                                WHERE entity_type = 'span'
-                                AND project_id = :project_id
-                                AND workspace_id = :workspace_id
-                                ORDER BY entity_id DESC, last_updated_at DESC
-                                LIMIT 1 BY entity_id, name
+                                 workspace_id,
+                                 project_id,
+                                 id,
+                                 if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                         NULL) AS duration_millis,
+                                 if(length(input) > 0, 1, 0) as input_count,
+                                 if(length(output) > 0, 1, 0) as output_count,
+                                 if(length(metadata) > 0, 1, 0) as metadata_count,
+                                 length(tags) as tags_count,
+                                 usage,
+                                 total_estimated_cost,
+                                 row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                            FROM spans
+                            WHERE project_id = :project_id
+                            AND workspace_id = :workspace_id
+                            <if(trace_id)> AND trace_id = :trace_id <endif>
+                            <if(type)> AND type = :type <endif>
+                            <if(filters)> AND <filters> <endif>
+                            <if(feedback_scores_filters)>
+                            AND id in (
+                                SELECT
+                                    entity_id
+                                FROM (
+                                    SELECT *
+                                    FROM feedback_scores
+                                    WHERE entity_type = 'span'
+                                    AND project_id = :project_id
+                                    AND workspace_id = :workspace_id
+                                    ORDER BY entity_id DESC, last_updated_at DESC
+                                    LIMIT 1 BY entity_id, name
+                                )
+                                GROUP BY entity_id
+                                HAVING <feedback_scores_filters>
                             )
-                            GROUP BY entity_id
-                            HAVING <feedback_scores_filters>
-                        )
-                        <endif>
-                        ORDER BY id DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                            <endif>
+                        ) WHERE latest = 1
                     ) AS s
                     LEFT JOIN (
                         SELECT
@@ -765,6 +779,7 @@ class SpanDAO {
                 )
                 GROUP BY project_id
             ) AS stats
+            SETTINGS join_algorithm='auto'
             ;
             """;
 

@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
@@ -18,6 +19,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.TemplateParseUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
@@ -41,7 +43,9 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -93,7 +97,8 @@ class PromptResourceTest {
     private static final TestDropwizardAppExtension app;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
-    private static final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription"};
+    private static final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription",
+            "type"};
 
     static {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
@@ -833,14 +838,16 @@ class PromptResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreatePrompt {
 
-        @Test
+        @ParameterizedTest
+        @NullSource
+        @EnumSource(PromptType.class)
         @DisplayName("Success: should create prompt")
-        void shouldCreatePrompt() {
+        void shouldCreatePrompt(PromptType type) {
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
-                    .template(null)
+                    .type(type)
                     .build();
 
             var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1354,14 +1361,17 @@ class PromptResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetPromptById {
 
-        @Test
+        @ParameterizedTest
+        @NullSource
+        @EnumSource(PromptType.class)
         @DisplayName("Success: should get prompt by id")
-        void shouldGetPromptById() {
+        void shouldGetPromptById(PromptType type) {
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .versionCount(1L)
+                    .type(type)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1393,6 +1403,7 @@ class PromptResourceTest {
                     .template(promptVersion.template())
                     .metadata(promptVersion.metadata())
                     .changeDescription(promptVersion.changeDescription())
+                    .type(promptVersion.type())
                     .versionCount(2L)
                     .build();
 
@@ -1456,6 +1467,7 @@ class PromptResourceTest {
         assertThat(promptVersion.template()).isEqualTo(expectedPrompt.template());
         assertThat(promptVersion.metadata()).isEqualTo(expectedPrompt.metadata());
         assertThat(promptVersion.changeDescription()).isEqualTo(expectedPrompt.changeDescription());
+        assertThat(promptVersion.type()).isEqualTo(expectedPrompt.type());
         assertThat(promptVersion.variables()).isEqualTo(expectedVariables);
         assertThat(promptVersion.createdBy()).isEqualTo(USER);
         assertThat(promptVersion.createdAt()).isBetween(expectedPrompt.createdAt(), Instant.now());
@@ -1824,9 +1836,11 @@ class PromptResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetPromptVersionById {
 
-        @Test
+        @ParameterizedTest
+        @NullSource
+        @EnumSource(PromptType.class)
         @DisplayName("Success: should get prompt version by id")
-        void shouldGetPromptVersionById() {
+        void shouldGetPromptVersionById(PromptType type) {
 
             var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER)
@@ -1839,6 +1853,7 @@ class PromptResourceTest {
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .promptId(promptId)
+                    .type(type)
                     .build();
 
             var request = new CreatePromptVersion(prompt.name(), promptVersion);
@@ -2172,7 +2187,8 @@ class PromptResourceTest {
 
         assertThat(createdPromptVersion.promptId()).isEqualTo(promptId);
         assertThat(createdPromptVersion.template()).isEqualTo(promptVersion.template());
-        assertThat(createdPromptVersion.variables()).isEqualTo(promptVersion.variables());
+        assertThat(createdPromptVersion.variables())
+                .isEqualTo(TemplateParseUtils.extractVariables(promptVersion.template(), promptVersion.type()));
         assertThat(createdPromptVersion.createdAt()).isBetween(promptVersion.createdAt(), Instant.now());
         assertThat(createdPromptVersion.createdBy()).isEqualTo(USER);
     }

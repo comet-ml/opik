@@ -9,20 +9,23 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import useProjectsList from "@/api/projects/useProjectsList";
+import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import { COLUMN_NAME_ID, COLUMN_SELECT_ID, COLUMN_TYPE } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { Project } from "@/types/projects";
+import { ProjectWithStatistic } from "@/types/projects";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn } from "@/lib/table";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
-export const COLUMNS = convertColumnDataToColumn<Project, Project>(
+export const COLUMNS = convertColumnDataToColumn<
+  ProjectWithStatistic,
+  ProjectWithStatistic
+>(
   [
     {
       id: COLUMN_NAME_ID,
@@ -72,7 +75,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
-  const { data, isPending } = useProjectsList(
+  const { data, isPending } = useProjectWithStatisticsList(
     {
       workspaceName,
       sorting: [
