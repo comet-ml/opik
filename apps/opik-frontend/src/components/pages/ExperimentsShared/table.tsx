@@ -38,6 +38,9 @@ export const getRowId = (e: GroupedExperiment) => e.id;
 export const getIsMoreRow = (row: Row<GroupedExperiment>) =>
   checkIsMoreRowId(row?.original?.id || "");
 
+// The goal to use shared handler between two different helpers to draw cells in Experiments table,
+// to share in closure the previousSelectedRowID between two helpers
+// generateExperimentNameColumDef and generateGroupedCellDef
 export const getSharedShiftCheckboxClickHandler = () => {
   let previousSelectedRowID = "";
 
