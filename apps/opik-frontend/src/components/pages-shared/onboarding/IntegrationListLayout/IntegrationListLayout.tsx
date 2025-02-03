@@ -11,7 +11,7 @@ const IntegrationListLayout: React.FC<IntegrationListLayoutProps> = ({
   children,
 }) => {
   return (
-    <div className="m-auto flex w-full max-w-[1250px] gap-6">
+    <div className="m-auto flex w-full max-w-[1440px] gap-6">
       <div className="sticky top-0 flex w-[250px] shrink-0 flex-col gap-4 self-start">
         {leftSidebar}
       </div>
