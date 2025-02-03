@@ -18,7 +18,7 @@ export const PromptPagePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace PromptPagePublic {
-    interface Raw {
+    export interface Raw {
         page?: number | null;
         size?: number | null;
         total?: number | null;

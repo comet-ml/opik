@@ -14,7 +14,7 @@ export const DatasetIdentifier: core.serialization.Schema<
 });
 
 export declare namespace DatasetIdentifier {
-    interface Raw {
+    export interface Raw {
         dataset_name: string;
     }
 }

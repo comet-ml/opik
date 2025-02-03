@@ -12,5 +12,5 @@ export const PromptVersionType: core.serialization.Schema<
 > = core.serialization.enum_(["mustache", "jinja2"]);
 
 export declare namespace PromptVersionType {
-    type Raw = "mustache" | "jinja2";
+    export type Raw = "mustache" | "jinja2";
 }

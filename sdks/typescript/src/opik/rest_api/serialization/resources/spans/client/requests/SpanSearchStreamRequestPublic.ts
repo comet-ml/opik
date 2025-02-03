@@ -23,7 +23,7 @@ export const SpanSearchStreamRequestPublic: core.serialization.Schema<
 });
 
 export declare namespace SpanSearchStreamRequestPublic {
-    interface Raw {
+    export interface Raw {
         trace_id?: string | null;
         project_name?: string | null;
         project_id?: string | null;

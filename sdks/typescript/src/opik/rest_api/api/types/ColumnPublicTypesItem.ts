@@ -3,7 +3,6 @@
  */
 
 export type ColumnPublicTypesItem = "string" | "number" | "object" | "boolean" | "array" | "null";
-
 export const ColumnPublicTypesItem = {
     String: "string",
     Number: "number",

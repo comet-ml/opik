@@ -12,5 +12,5 @@ export const GetSpanStatsRequestType: core.serialization.Schema<
 > = core.serialization.enum_(["general", "tool", "llm"]);
 
 export declare namespace GetSpanStatsRequestType {
-    type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm";
 }

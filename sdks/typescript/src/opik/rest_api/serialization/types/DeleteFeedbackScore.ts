@@ -14,7 +14,7 @@ export const DeleteFeedbackScore: core.serialization.ObjectSchema<
 });
 
 export declare namespace DeleteFeedbackScore {
-    interface Raw {
+    export interface Raw {
         name: string;
     }
 }

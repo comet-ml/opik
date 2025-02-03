@@ -13,7 +13,7 @@ export const SpanBatch: core.serialization.ObjectSchema<serializers.SpanBatch.Ra
     });
 
 export declare namespace SpanBatch {
-    interface Raw {
+    export interface Raw {
         spans: Span.Raw[];
     }
 }

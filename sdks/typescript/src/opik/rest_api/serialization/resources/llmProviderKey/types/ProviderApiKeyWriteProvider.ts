@@ -12,5 +12,5 @@ export const ProviderApiKeyWriteProvider: core.serialization.Schema<
 > = core.serialization.enum_(["openai", "anthropic", "gemini"]);
 
 export declare namespace ProviderApiKeyWriteProvider {
-    type Raw = "openai" | "anthropic" | "gemini";
+    export type Raw = "openai" | "anthropic" | "gemini";
 }

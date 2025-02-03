@@ -12,7 +12,7 @@ export const BatchDelete: core.serialization.ObjectSchema<serializers.BatchDelet
     });
 
 export declare namespace BatchDelete {
-    interface Raw {
+    export interface Raw {
         ids: string[];
     }
 }

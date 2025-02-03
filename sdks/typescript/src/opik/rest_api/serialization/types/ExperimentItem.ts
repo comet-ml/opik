@@ -19,7 +19,7 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
         output: JsonNode.optional(),
         feedbackScores: core.serialization.property(
             "feedback_scores",
-            core.serialization.list(FeedbackScore).optional()
+            core.serialization.list(FeedbackScore).optional(),
         ),
         comments: core.serialization.list(Comment).optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -29,7 +29,7 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
     });
 
 export declare namespace ExperimentItem {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         experiment_id: string;
         dataset_item_id: string;

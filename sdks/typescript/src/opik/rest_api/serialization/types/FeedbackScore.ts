@@ -21,7 +21,7 @@ export const FeedbackScore: core.serialization.ObjectSchema<serializers.Feedback
     });
 
 export declare namespace FeedbackScore {
-    interface Raw {
+    export interface Raw {
         name: string;
         category_name?: string | null;
         value: number;

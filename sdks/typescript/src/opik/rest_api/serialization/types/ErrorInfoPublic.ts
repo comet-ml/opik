@@ -16,7 +16,7 @@ export const ErrorInfoPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace ErrorInfoPublic {
-    interface Raw {
+    export interface Raw {
         exception_type: string;
         message?: string | null;
         traceback: string;

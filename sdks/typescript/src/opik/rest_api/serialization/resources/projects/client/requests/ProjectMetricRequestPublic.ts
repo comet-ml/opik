@@ -19,7 +19,7 @@ export const ProjectMetricRequestPublic: core.serialization.Schema<
 });
 
 export declare namespace ProjectMetricRequestPublic {
-    interface Raw {
+    export interface Raw {
         metric_type?: ProjectMetricRequestPublicMetricType.Raw | null;
         interval?: ProjectMetricRequestPublicInterval.Raw | null;
         interval_start?: string | null;

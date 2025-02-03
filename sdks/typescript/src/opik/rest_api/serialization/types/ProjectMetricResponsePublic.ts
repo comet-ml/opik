@@ -20,7 +20,7 @@ export const ProjectMetricResponsePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace ProjectMetricResponsePublic {
-    interface Raw {
+    export interface Raw {
         project_id?: string | null;
         metric_type?: ProjectMetricResponsePublicMetricType.Raw | null;
         interval?: ProjectMetricResponsePublicInterval.Raw | null;

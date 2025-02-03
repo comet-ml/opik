@@ -29,7 +29,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         feedbackScores: core.serialization.property(
             "feedback_scores",
-            core.serialization.list(FeedbackScorePublic).optional()
+            core.serialization.list(FeedbackScorePublic).optional(),
         ),
         comments: core.serialization.list(CommentPublic).optional(),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
@@ -37,7 +37,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
     });
 
 export declare namespace TracePublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         project_id?: string | null;
         name: string;

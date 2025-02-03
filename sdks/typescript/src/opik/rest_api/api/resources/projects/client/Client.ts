@@ -10,15 +10,17 @@ import * as serializers from "../../../../serialization/index";
 import * as errors from "../../../../errors/index";
 
 export declare namespace Projects {
-    interface Options {
+    export interface Options {
         environment?: core.Supplier<environments.OpikApiEnvironment | string>;
+        /** Specify a custom URL to connect the client to. */
+        baseUrl?: core.Supplier<string>;
         /** Override the Authorization header */
         apiKey?: core.Supplier<string | undefined>;
         /** Override the Comet-Workspace header */
         workspaceName?: core.Supplier<string | undefined>;
     }
 
-    interface RequestOptions {
+    export interface RequestOptions {
         /** The maximum time to wait for a response in seconds. */
         timeoutInSeconds?: number;
         /** The number of times to retry the request. Defaults to 2. */
@@ -49,85 +51,84 @@ export class Projects {
      * @example
      *     await client.projects.findProjects()
      */
-    public findProjects(
+    public async findProjects(
         request: OpikApi.FindProjectsRequest = {},
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<OpikApi.ProjectPagePublic> {
-        return core.APIPromise.from(
-            (async () => {
-                const { page, size, name, sorting } = request;
-                const _queryParams: Record<string, string | string[] | object | object[]> = {};
-                if (page != null) {
-                    _queryParams["page"] = page.toString();
-                }
-                if (size != null) {
-                    _queryParams["size"] = size.toString();
-                }
-                if (name != null) {
-                    _queryParams["name"] = name;
-                }
-                if (sorting != null) {
-                    _queryParams["sorting"] = sorting;
-                }
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/projects"
-                    ),
-                    method: "GET",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    queryParameters: _queryParams,
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<OpikApi.ProjectPagePublic> {
+        const { page, size, name, sorting } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (page != null) {
+            _queryParams["page"] = page.toString();
+        }
+
+        if (size != null) {
+            _queryParams["size"] = size.toString();
+        }
+
+        if (name != null) {
+            _queryParams["name"] = name;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/projects",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.ProjectPagePublic.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: serializers.ProjectPagePublic.parseOrThrow(_response.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/projects.");
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/projects.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -144,75 +145,65 @@ export class Projects {
      *         name: "name"
      *     })
      */
-    public createProject(
-        request: OpikApi.ProjectWrite,
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<void> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/projects"
-                    ),
-                    method: "POST",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    body: serializers.ProjectWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+    public async createProject(request: OpikApi.ProjectWrite, requestOptions?: Projects.RequestOptions): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/projects",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.ProjectWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body);
+                case 422:
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: undefined,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    switch (_response.error.statusCode) {
-                        case 400:
-                            throw new OpikApi.BadRequestError(_response.error.body);
-                        case 422:
-                            throw new OpikApi.UnprocessableEntityError(_response.error.body);
-                        default:
-                            throw new errors.OpikApiError({
-                                statusCode: _response.error.statusCode,
-                                body: _response.error.body,
-                            });
-                    }
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling POST /v1/private/projects."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/projects.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -224,72 +215,62 @@ export class Projects {
      * @example
      *     await client.projects.getProjectById("id")
      */
-    public getProjectById(
-        id: string,
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<OpikApi.ProjectPublic> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        `v1/private/projects/${encodeURIComponent(id)}`
-                    ),
-                    method: "GET",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+    public async getProjectById(id: string, requestOptions?: Projects.RequestOptions): Promise<OpikApi.ProjectPublic> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${encodeURIComponent(id)}`,
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.ProjectPublic.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: serializers.ProjectPublic.parseOrThrow(_response.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling GET /v1/private/projects/{id}."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/projects/{id}.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -303,69 +284,62 @@ export class Projects {
      * @example
      *     await client.projects.deleteProjectById("id")
      */
-    public deleteProjectById(id: string, requestOptions?: Projects.RequestOptions): core.APIPromise<void> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        `v1/private/projects/${encodeURIComponent(id)}`
-                    ),
-                    method: "DELETE",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+    public async deleteProjectById(id: string, requestOptions?: Projects.RequestOptions): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${encodeURIComponent(id)}`,
+            ),
+            method: "DELETE",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: undefined,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    switch (_response.error.statusCode) {
-                        case 409:
-                            throw new OpikApi.ConflictError(_response.error.body);
-                        default:
-                            throw new errors.OpikApiError({
-                                statusCode: _response.error.statusCode,
-                                body: _response.error.body,
-                            });
-                    }
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling DELETE /v1/private/projects/{id}."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling DELETE /v1/private/projects/{id}.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -381,76 +355,69 @@ export class Projects {
      * @example
      *     await client.projects.updateProject("id")
      */
-    public updateProject(
+    public async updateProject(
         id: string,
         request: OpikApi.ProjectUpdate = {},
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<void> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        `v1/private/projects/${encodeURIComponent(id)}`
-                    ),
-                    method: "PATCH",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    body: serializers.ProjectUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${encodeURIComponent(id)}`,
+            ),
+            method: "PATCH",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.ProjectUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body);
+                case 422:
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: undefined,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    switch (_response.error.statusCode) {
-                        case 400:
-                            throw new OpikApi.BadRequestError(_response.error.body);
-                        case 422:
-                            throw new OpikApi.UnprocessableEntityError(_response.error.body);
-                        default:
-                            throw new errors.OpikApiError({
-                                statusCode: _response.error.statusCode,
-                                body: _response.error.body,
-                            });
-                    }
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling PATCH /v1/private/projects/{id}."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PATCH /v1/private/projects/{id}.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -464,68 +431,61 @@ export class Projects {
      *         ids: ["ids"]
      *     })
      */
-    public deleteProjectsBatch(
+    public async deleteProjectsBatch(
         request: OpikApi.BatchDelete,
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<void> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/projects/delete"
-                    ),
-                    method: "POST",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    body: serializers.BatchDelete.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/projects/delete",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.BatchDelete.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: undefined,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling POST /v1/private/projects/delete."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/projects/delete.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -537,78 +497,74 @@ export class Projects {
      * @example
      *     await client.projects.findFeedbackScoreNamesByProjectIds()
      */
-    public findFeedbackScoreNamesByProjectIds(
+    public async findFeedbackScoreNamesByProjectIds(
         request: OpikApi.FindFeedbackScoreNamesByProjectIdsRequest = {},
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<OpikApi.FeedbackScoreNames> {
-        return core.APIPromise.from(
-            (async () => {
-                const { projectIds } = request;
-                const _queryParams: Record<string, string | string[] | object | object[]> = {};
-                if (projectIds != null) {
-                    _queryParams["project_ids"] = projectIds;
-                }
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/projects/feedback-scores/names"
-                    ),
-                    method: "GET",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    queryParameters: _queryParams,
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<OpikApi.FeedbackScoreNames> {
+        const { projectIds } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (projectIds != null) {
+            _queryParams["project_ids"] = projectIds;
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/projects/feedback-scores/names",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.FeedbackScoreNames.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: serializers.FeedbackScoreNames.parseOrThrow(_response.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling GET /v1/private/projects/feedback-scores/names."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/projects/feedback-scores/names.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -624,83 +580,76 @@ export class Projects {
      * @example
      *     await client.projects.getProjectMetrics("id")
      */
-    public getProjectMetrics(
+    public async getProjectMetrics(
         id: string,
         request: OpikApi.ProjectMetricRequestPublic = {},
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<OpikApi.ProjectMetricResponsePublic> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        `v1/private/projects/${encodeURIComponent(id)}/metrics`
-                    ),
-                    method: "POST",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    body: serializers.ProjectMetricRequestPublic.jsonOrThrow(request, {
-                        unrecognizedObjectKeys: "strip",
-                    }),
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<OpikApi.ProjectMetricResponsePublic> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/projects/${encodeURIComponent(id)}/metrics`,
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.ProjectMetricRequestPublic.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.ProjectMetricResponsePublic.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: serializers.ProjectMetricResponsePublic.parseOrThrow(_response.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    switch (_response.error.statusCode) {
-                        case 400:
-                            throw new OpikApi.BadRequestError(_response.error.body);
-                        case 404:
-                            throw new OpikApi.NotFoundError(_response.error.body);
-                        default:
-                            throw new errors.OpikApiError({
-                                statusCode: _response.error.statusCode,
-                                body: _response.error.body,
-                            });
-                    }
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling POST /v1/private/projects/{id}/metrics."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/projects/{id}/metrics.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -712,87 +661,84 @@ export class Projects {
      * @example
      *     await client.projects.getProjectStats()
      */
-    public getProjectStats(
+    public async getProjectStats(
         request: OpikApi.GetProjectStatsRequest = {},
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<OpikApi.ProjectStatsSummary> {
-        return core.APIPromise.from(
-            (async () => {
-                const { page, size, name, sorting } = request;
-                const _queryParams: Record<string, string | string[] | object | object[]> = {};
-                if (page != null) {
-                    _queryParams["page"] = page.toString();
-                }
-                if (size != null) {
-                    _queryParams["size"] = size.toString();
-                }
-                if (name != null) {
-                    _queryParams["name"] = name;
-                }
-                if (sorting != null) {
-                    _queryParams["sorting"] = sorting;
-                }
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/projects/stats"
-                    ),
-                    method: "GET",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    queryParameters: _queryParams,
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<OpikApi.ProjectStatsSummary> {
+        const { page, size, name, sorting } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (page != null) {
+            _queryParams["page"] = page.toString();
+        }
+
+        if (size != null) {
+            _queryParams["size"] = size.toString();
+        }
+
+        if (name != null) {
+            _queryParams["name"] = name;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/projects/stats",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.ProjectStatsSummary.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: serializers.ProjectStatsSummary.parseOrThrow(_response.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling GET /v1/private/projects/stats."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/projects/stats.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -810,82 +756,77 @@ export class Projects {
      *         name: "name"
      *     })
      */
-    public retrieveProject(
+    public async retrieveProject(
         request: OpikApi.ProjectRetrieveDetailed,
-        requestOptions?: Projects.RequestOptions
-    ): core.APIPromise<OpikApi.ProjectDetailed> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/projects/retrieve"
-                    ),
-                    method: "POST",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    body: serializers.ProjectRetrieveDetailed.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<OpikApi.ProjectDetailed> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/projects/retrieve",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.ProjectRetrieveDetailed.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.ProjectDetailed.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body);
+                case 422:
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: serializers.ProjectDetailed.parseOrThrow(_response.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    switch (_response.error.statusCode) {
-                        case 400:
-                            throw new OpikApi.BadRequestError(_response.error.body);
-                        case 404:
-                            throw new OpikApi.NotFoundError(_response.error.body);
-                        case 422:
-                            throw new OpikApi.UnprocessableEntityError(_response.error.body);
-                        default:
-                            throw new errors.OpikApiError({
-                                statusCode: _response.error.statusCode,
-                                body: _response.error.body,
-                            });
-                    }
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling POST /v1/private/projects/retrieve."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/projects/retrieve.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     protected async _getCustomAuthorizationHeaders() {

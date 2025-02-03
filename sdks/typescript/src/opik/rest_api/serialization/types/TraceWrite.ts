@@ -23,7 +23,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
     });
 
 export declare namespace TraceWrite {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         project_name?: string | null;
         name: string;

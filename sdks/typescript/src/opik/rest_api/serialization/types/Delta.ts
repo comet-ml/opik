@@ -17,7 +17,7 @@ export const Delta: core.serialization.ObjectSchema<serializers.Delta.Raw, OpikA
 });
 
 export declare namespace Delta {
-    interface Raw {
+    export interface Raw {
         role?: DeltaRole.Raw | null;
         content?: string | null;
         tool_calls?: ToolCall.Raw[] | null;

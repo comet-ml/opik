@@ -9,20 +9,20 @@ export type ProjectStatItemObjectPublic =
     | OpikApi.ProjectStatItemObjectPublic.Count
     | OpikApi.ProjectStatItemObjectPublic.Avg;
 
-export declare namespace ProjectStatItemObjectPublic {
-    interface Percentage extends OpikApi.PercentageValueStatPublic, _Base {
+export namespace ProjectStatItemObjectPublic {
+    export interface Percentage extends OpikApi.PercentageValueStatPublic, _Base {
         type: "PERCENTAGE";
     }
 
-    interface Count extends OpikApi.CountValueStatPublic, _Base {
+    export interface Count extends OpikApi.CountValueStatPublic, _Base {
         type: "COUNT";
     }
 
-    interface Avg extends OpikApi.AvgValueStatPublic, _Base {
+    export interface Avg extends OpikApi.AvgValueStatPublic, _Base {
         type: "AVG";
     }
 
-    interface _Base {
+    export interface _Base {
         name?: string;
     }
 }

@@ -17,7 +17,7 @@ export const LogItem: core.serialization.ObjectSchema<serializers.LogItem.Raw, O
     });
 
 export declare namespace LogItem {
-    interface Raw {
+    export interface Raw {
         timestamp?: string | null;
         rule_id?: string | null;
         level?: LogItemLevel.Raw | null;

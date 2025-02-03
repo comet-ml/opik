@@ -27,24 +27,24 @@ export const ProjectStatItemObjectPublic: core.serialization.Schema<
     });
 
 export declare namespace ProjectStatItemObjectPublic {
-    type Raw =
+    export type Raw =
         | ProjectStatItemObjectPublic.Percentage
         | ProjectStatItemObjectPublic.Count
         | ProjectStatItemObjectPublic.Avg;
 
-    interface Percentage extends _Base, PercentageValueStatPublic.Raw {
+    export interface Percentage extends _Base, PercentageValueStatPublic.Raw {
         type: "PERCENTAGE";
     }
 
-    interface Count extends _Base, CountValueStatPublic.Raw {
+    export interface Count extends _Base, CountValueStatPublic.Raw {
         type: "COUNT";
     }
 
-    interface Avg extends _Base, AvgValueStatPublic.Raw {
+    export interface Avg extends _Base, AvgValueStatPublic.Raw {
         type: "AVG";
     }
 
-    interface _Base {
+    export interface _Base {
         name?: string | null;
     }
 }

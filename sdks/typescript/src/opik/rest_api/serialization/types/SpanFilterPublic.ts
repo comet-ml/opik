@@ -18,7 +18,7 @@ export const SpanFilterPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace SpanFilterPublic {
-    interface Raw {
+    export interface Raw {
         field?: string | null;
         operator?: SpanFilterPublicOperator.Raw | null;
         key?: string | null;

@@ -19,7 +19,7 @@ export const CategoricalFeedbackDefinitionPublic: core.serialization.ObjectSchem
 });
 
 export declare namespace CategoricalFeedbackDefinitionPublic {
-    interface Raw {
+    export interface Raw {
         details?: CategoricalFeedbackDetailPublic.Raw | null;
         created_at?: string | null;
         created_by?: string | null;

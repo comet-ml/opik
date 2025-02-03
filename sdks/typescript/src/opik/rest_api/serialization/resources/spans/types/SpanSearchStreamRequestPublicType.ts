@@ -12,5 +12,5 @@ export const SpanSearchStreamRequestPublicType: core.serialization.Schema<
 > = core.serialization.enum_(["general", "tool", "llm"]);
 
 export declare namespace SpanSearchStreamRequestPublicType {
-    type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm";
 }

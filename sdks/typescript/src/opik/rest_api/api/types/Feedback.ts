@@ -6,16 +6,16 @@ import * as OpikApi from "../index";
 
 export type Feedback = OpikApi.Feedback.Numerical | OpikApi.Feedback.Categorical;
 
-export declare namespace Feedback {
-    interface Numerical extends OpikApi.NumericalFeedbackDefinition, _Base {
+export namespace Feedback {
+    export interface Numerical extends OpikApi.NumericalFeedbackDefinition, _Base {
         type: "numerical";
     }
 
-    interface Categorical extends OpikApi.CategoricalFeedbackDefinition, _Base {
+    export interface Categorical extends OpikApi.CategoricalFeedbackDefinition, _Base {
         type: "categorical";
     }
 
-    interface _Base {
+    export interface _Base {
         id?: string;
         name: string;
         createdAt?: Date;

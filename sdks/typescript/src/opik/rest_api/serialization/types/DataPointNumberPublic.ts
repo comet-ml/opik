@@ -15,7 +15,7 @@ export const DataPointNumberPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace DataPointNumberPublic {
-    interface Raw {
+    export interface Raw {
         time: string;
         value?: number | null;
     }

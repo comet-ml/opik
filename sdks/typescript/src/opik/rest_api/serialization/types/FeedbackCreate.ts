@@ -24,17 +24,17 @@ export const FeedbackCreate: core.serialization.Schema<serializers.FeedbackCreat
         });
 
 export declare namespace FeedbackCreate {
-    type Raw = FeedbackCreate.Numerical | FeedbackCreate.Categorical;
+    export type Raw = FeedbackCreate.Numerical | FeedbackCreate.Categorical;
 
-    interface Numerical extends _Base, NumericalFeedbackDefinitionCreate.Raw {
+    export interface Numerical extends _Base, NumericalFeedbackDefinitionCreate.Raw {
         type: "numerical";
     }
 
-    interface Categorical extends _Base, CategoricalFeedbackDefinitionCreate.Raw {
+    export interface Categorical extends _Base, CategoricalFeedbackDefinitionCreate.Raw {
         type: "categorical";
     }
 
-    interface _Base {
+    export interface _Base {
         id?: string | null;
         name: string;
     }

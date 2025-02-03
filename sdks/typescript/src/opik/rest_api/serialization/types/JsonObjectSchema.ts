@@ -18,12 +18,12 @@ export const JsonObjectSchema: core.serialization.ObjectSchema<
     additionalProperties: core.serialization.boolean().optional(),
     defs: core.serialization.property(
         "$defs",
-        core.serialization.record(core.serialization.string(), JsonSchemaElement).optional()
+        core.serialization.record(core.serialization.string(), JsonSchemaElement).optional(),
     ),
 });
 
 export declare namespace JsonObjectSchema {
-    interface Raw {
+    export interface Raw {
         type?: string | null;
         description?: string | null;
         properties?: Record<string, JsonSchemaElement.Raw> | null;

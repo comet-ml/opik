@@ -16,7 +16,7 @@ export const DatasetItemStreamRequest: core.serialization.Schema<
 });
 
 export declare namespace DatasetItemStreamRequest {
-    interface Raw {
+    export interface Raw {
         dataset_name: string;
         last_retrieved_id?: string | null;
         steam_limit?: number | null;

@@ -15,7 +15,7 @@ export const FeedbackScoreAverageDetailed: core.serialization.ObjectSchema<
 });
 
 export declare namespace FeedbackScoreAverageDetailed {
-    interface Raw {
+    export interface Raw {
         name: string;
         value: number;
     }

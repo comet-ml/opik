@@ -3,7 +3,6 @@
  */
 
 export type LlmAsJudgeOutputSchemaPublicType = "BOOLEAN" | "INTEGER" | "DOUBLE";
-
 export const LlmAsJudgeOutputSchemaPublicType = {
     Boolean: "BOOLEAN",
     Integer: "INTEGER",

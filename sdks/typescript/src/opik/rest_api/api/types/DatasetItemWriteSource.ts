@@ -3,7 +3,6 @@
  */
 
 export type DatasetItemWriteSource = "manual" | "trace" | "span" | "sdk";
-
 export const DatasetItemWriteSource = {
     Manual: "manual",
     Trace: "trace",

@@ -38,7 +38,7 @@ export class UndiciStreamWrapper<ReadFormat extends Uint8Array | Uint16Array | U
     }
 
     public pipe(
-        dest: UndiciStreamWrapper<ReadFormat> | WritableStream<ReadFormat>
+        dest: UndiciStreamWrapper<ReadFormat> | WritableStream<ReadFormat>,
     ): UndiciStreamWrapper<ReadFormat> | WritableStream<ReadFormat> {
         this.on("data", (chunk) => {
             if (dest instanceof UndiciStreamWrapper) {
@@ -73,7 +73,7 @@ export class UndiciStreamWrapper<ReadFormat extends Uint8Array | Uint16Array | U
     }
 
     public pipeTo(
-        dest: UndiciStreamWrapper<ReadFormat> | WritableStream<ReadFormat>
+        dest: UndiciStreamWrapper<ReadFormat> | WritableStream<ReadFormat>,
     ): UndiciStreamWrapper<ReadFormat> | WritableStream<ReadFormat> {
         return this.pipe(dest);
     }

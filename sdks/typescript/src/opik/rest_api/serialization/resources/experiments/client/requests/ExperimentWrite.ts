@@ -17,12 +17,12 @@ export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWr
         promptVersion: core.serialization.property("prompt_version", PromptVersionLinkWrite.optional()),
         promptVersions: core.serialization.property(
             "prompt_versions",
-            core.serialization.list(PromptVersionLinkWrite).optional()
+            core.serialization.list(PromptVersionLinkWrite).optional(),
         ),
     });
 
 export declare namespace ExperimentWrite {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         dataset_name: string;
         name?: string | null;

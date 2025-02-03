@@ -19,16 +19,16 @@ export const DatasetPublic: core.serialization.ObjectSchema<serializers.DatasetP
         datasetItemsCount: core.serialization.property("dataset_items_count", core.serialization.number().optional()),
         mostRecentExperimentAt: core.serialization.property(
             "most_recent_experiment_at",
-            core.serialization.date().optional()
+            core.serialization.date().optional(),
         ),
         lastCreatedExperimentAt: core.serialization.property(
             "last_created_experiment_at",
-            core.serialization.date().optional()
+            core.serialization.date().optional(),
         ),
     });
 
 export declare namespace DatasetPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;

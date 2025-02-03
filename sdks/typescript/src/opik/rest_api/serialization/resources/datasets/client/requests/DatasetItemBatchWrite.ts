@@ -17,7 +17,7 @@ export const DatasetItemBatchWrite: core.serialization.Schema<
 });
 
 export declare namespace DatasetItemBatchWrite {
-    interface Raw {
+    export interface Raw {
         dataset_name?: string | null;
         dataset_id?: string | null;
         items: DatasetItemWrite.Raw[];

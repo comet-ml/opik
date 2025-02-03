@@ -12,7 +12,7 @@ export const StreamOptions: core.serialization.ObjectSchema<serializers.StreamOp
     });
 
 export declare namespace StreamOptions {
-    interface Raw {
+    export interface Raw {
         include_usage?: boolean | null;
     }
 }

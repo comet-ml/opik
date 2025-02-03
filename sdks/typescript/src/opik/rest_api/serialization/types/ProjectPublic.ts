@@ -19,7 +19,7 @@ export const ProjectPublic: core.serialization.ObjectSchema<serializers.ProjectP
     });
 
 export declare namespace ProjectPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;

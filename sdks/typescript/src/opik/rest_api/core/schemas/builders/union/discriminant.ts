@@ -1,6 +1,6 @@
 export function discriminant<RawDiscriminant extends string, ParsedDiscriminant extends string>(
     parsedDiscriminant: ParsedDiscriminant,
-    rawDiscriminant: RawDiscriminant
+    rawDiscriminant: RawDiscriminant,
 ): Discriminant<RawDiscriminant, ParsedDiscriminant> {
     return {
         parsedDiscriminant,

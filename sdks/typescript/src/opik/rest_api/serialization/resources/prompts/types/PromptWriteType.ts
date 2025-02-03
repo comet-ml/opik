@@ -10,5 +10,5 @@ export const PromptWriteType: core.serialization.Schema<serializers.PromptWriteT
     core.serialization.enum_(["mustache", "jinja2"]);
 
 export declare namespace PromptWriteType {
-    type Raw = "mustache" | "jinja2";
+    export type Raw = "mustache" | "jinja2";
 }

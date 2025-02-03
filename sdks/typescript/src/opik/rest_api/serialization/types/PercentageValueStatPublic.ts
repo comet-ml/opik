@@ -15,7 +15,7 @@ export const PercentageValueStatPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace PercentageValueStatPublic {
-    interface Raw {
+    export interface Raw {
         value?: PercentageValuesPublic.Raw | null;
     }
 }

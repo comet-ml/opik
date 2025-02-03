@@ -16,7 +16,7 @@ export const ColumnCompare: core.serialization.ObjectSchema<serializers.ColumnCo
     });
 
 export declare namespace ColumnCompare {
-    interface Raw {
+    export interface Raw {
         name?: string | null;
         types?: ColumnCompareTypesItem.Raw[] | null;
         filter_field_prefix?: string | null;

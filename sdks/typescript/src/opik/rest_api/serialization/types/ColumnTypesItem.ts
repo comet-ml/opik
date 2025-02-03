@@ -10,5 +10,5 @@ export const ColumnTypesItem: core.serialization.Schema<serializers.ColumnTypesI
     core.serialization.enum_(["string", "number", "object", "boolean", "array", "null"]);
 
 export declare namespace ColumnTypesItem {
-    type Raw = "string" | "number" | "object" | "boolean" | "array" | "null";
+    export type Raw = "string" | "number" | "object" | "boolean" | "array" | "null";
 }

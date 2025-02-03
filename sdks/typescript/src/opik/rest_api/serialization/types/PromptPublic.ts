@@ -19,7 +19,7 @@ export const PromptPublic: core.serialization.ObjectSchema<serializers.PromptPub
     });
 
 export declare namespace PromptPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;

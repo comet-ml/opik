@@ -3,7 +3,6 @@
  */
 
 export type ProjectMetricResponsePublicInterval = "HOURLY" | "DAILY" | "WEEKLY";
-
 export const ProjectMetricResponsePublicInterval = {
     Hourly: "HOURLY",
     Daily: "DAILY",

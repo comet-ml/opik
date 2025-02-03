@@ -21,7 +21,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
     output: JsonNodeCompare.optional(),
     feedbackScores: core.serialization.property(
         "feedback_scores",
-        core.serialization.list(FeedbackScoreCompare).optional()
+        core.serialization.list(FeedbackScoreCompare).optional(),
     ),
     comments: core.serialization.list(CommentCompare).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -31,7 +31,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
 });
 
 export declare namespace ExperimentItemCompare {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         experiment_id: string;
         dataset_item_id: string;

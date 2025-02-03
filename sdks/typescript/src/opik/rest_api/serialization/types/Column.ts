@@ -16,7 +16,7 @@ export const Column: core.serialization.ObjectSchema<serializers.Column.Raw, Opi
     });
 
 export declare namespace Column {
-    interface Raw {
+    export interface Raw {
         name?: string | null;
         types?: ColumnTypesItem.Raw[] | null;
         filter_field_prefix?: string | null;

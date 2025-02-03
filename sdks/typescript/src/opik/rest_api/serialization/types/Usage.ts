@@ -13,12 +13,12 @@ export const Usage: core.serialization.ObjectSchema<serializers.Usage.Raw, OpikA
     completionTokens: core.serialization.property("completion_tokens", core.serialization.number().optional()),
     completionTokensDetails: core.serialization.property(
         "completion_tokens_details",
-        CompletionTokensDetails.optional()
+        CompletionTokensDetails.optional(),
     ),
 });
 
 export declare namespace Usage {
-    interface Raw {
+    export interface Raw {
         total_tokens?: number | null;
         prompt_tokens?: number | null;
         completion_tokens?: number | null;

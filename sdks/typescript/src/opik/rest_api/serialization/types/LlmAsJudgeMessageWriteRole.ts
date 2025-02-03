@@ -12,5 +12,5 @@ export const LlmAsJudgeMessageWriteRole: core.serialization.Schema<
 > = core.serialization.enum_(["SYSTEM", "USER", "AI", "TOOL_EXECUTION_RESULT"]);
 
 export declare namespace LlmAsJudgeMessageWriteRole {
-    type Raw = "SYSTEM" | "USER" | "AI" | "TOOL_EXECUTION_RESULT";
+    export type Raw = "SYSTEM" | "USER" | "AI" | "TOOL_EXECUTION_RESULT";
 }

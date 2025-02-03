@@ -12,5 +12,5 @@ export const FindFeedbackDefinitionsRequestType: core.serialization.Schema<
 > = core.serialization.enum_(["numerical", "categorical"]);
 
 export declare namespace FindFeedbackDefinitionsRequestType {
-    type Raw = "numerical" | "categorical";
+    export type Raw = "numerical" | "categorical";
 }

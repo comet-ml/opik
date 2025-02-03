@@ -12,5 +12,5 @@ export const ProjectMetricRequestPublicMetricType: core.serialization.Schema<
 > = core.serialization.enum_(["FEEDBACK_SCORES", "TRACE_COUNT", "TOKEN_USAGE", "DURATION", "COST"]);
 
 export declare namespace ProjectMetricRequestPublicMetricType {
-    type Raw = "FEEDBACK_SCORES" | "TRACE_COUNT" | "TOKEN_USAGE" | "DURATION" | "COST";
+    export type Raw = "FEEDBACK_SCORES" | "TRACE_COUNT" | "TOKEN_USAGE" | "DURATION" | "COST";
 }

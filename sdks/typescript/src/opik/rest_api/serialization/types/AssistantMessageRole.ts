@@ -12,5 +12,5 @@ export const AssistantMessageRole: core.serialization.Schema<
 > = core.serialization.enum_(["system", "user", "assistant", "tool", "function"]);
 
 export declare namespace AssistantMessageRole {
-    type Raw = "system" | "user" | "assistant" | "tool" | "function";
+    export type Raw = "system" | "user" | "assistant" | "tool" | "function";
 }

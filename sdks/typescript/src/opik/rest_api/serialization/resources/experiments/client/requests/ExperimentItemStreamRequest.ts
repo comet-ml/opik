@@ -17,7 +17,7 @@ export const ExperimentItemStreamRequest: core.serialization.Schema<
 });
 
 export declare namespace ExperimentItemStreamRequest {
-    interface Raw {
+    export interface Raw {
         experiment_name: string;
         limit?: number | null;
         last_retrieved_id?: string | null;

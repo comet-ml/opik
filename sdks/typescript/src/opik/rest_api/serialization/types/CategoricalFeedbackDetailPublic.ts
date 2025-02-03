@@ -14,7 +14,7 @@ export const CategoricalFeedbackDetailPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace CategoricalFeedbackDetailPublic {
-    interface Raw {
+    export interface Raw {
         categories: Record<string, number>;
     }
 }

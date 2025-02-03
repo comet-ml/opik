@@ -3,7 +3,6 @@
  */
 
 export type DeltaRole = "system" | "user" | "assistant" | "tool" | "function";
-
 export const DeltaRole = {
     System: "system",
     User: "user",

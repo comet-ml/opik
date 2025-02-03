@@ -21,7 +21,7 @@ export const ExperimentItemPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace ExperimentItemPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         experiment_id: string;
         dataset_item_id: string;

@@ -16,7 +16,7 @@ export const LlmAsJudgeMessage: core.serialization.ObjectSchema<
 });
 
 export declare namespace LlmAsJudgeMessage {
-    interface Raw {
+    export interface Raw {
         role: LlmAsJudgeMessageRole.Raw;
         content: string;
     }

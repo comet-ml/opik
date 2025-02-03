@@ -15,7 +15,7 @@ export const FeedbackScoreNames: core.serialization.ObjectSchema<
 });
 
 export declare namespace FeedbackScoreNames {
-    interface Raw {
+    export interface Raw {
         scores?: ScoreName.Raw[] | null;
     }
 }

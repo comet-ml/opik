@@ -10,5 +10,5 @@ export const SpanWriteType: core.serialization.Schema<serializers.SpanWriteType.
     core.serialization.enum_(["general", "tool", "llm"]);
 
 export declare namespace SpanWriteType {
-    type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm";
 }

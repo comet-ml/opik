@@ -14,7 +14,7 @@ export const CountValueStatPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace CountValueStatPublic {
-    interface Raw {
+    export interface Raw {
         value?: number | null;
     }
 }

@@ -16,7 +16,7 @@ export const ColumnPublic: core.serialization.ObjectSchema<serializers.ColumnPub
     });
 
 export declare namespace ColumnPublic {
-    interface Raw {
+    export interface Raw {
         name?: string | null;
         types?: ColumnPublicTypesItem.Raw[] | null;
         filter_field_prefix?: string | null;

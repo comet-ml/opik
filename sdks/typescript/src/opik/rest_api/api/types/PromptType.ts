@@ -3,7 +3,6 @@
  */
 
 export type PromptType = "mustache" | "jinja2";
-
 export const PromptType = {
     Mustache: "mustache",
     Jinja2: "jinja2",

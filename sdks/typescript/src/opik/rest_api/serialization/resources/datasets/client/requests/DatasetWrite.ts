@@ -14,7 +14,7 @@ export const DatasetWrite: core.serialization.Schema<serializers.DatasetWrite.Ra
     });
 
 export declare namespace DatasetWrite {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;

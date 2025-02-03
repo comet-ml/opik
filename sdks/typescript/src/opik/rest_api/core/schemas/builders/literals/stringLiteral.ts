@@ -22,7 +22,7 @@ export function stringLiteral<V extends string>(literal: V): Schema<V, V> {
                     ],
                 };
             }
-        }
+        },
     );
 
     return schemaCreator();

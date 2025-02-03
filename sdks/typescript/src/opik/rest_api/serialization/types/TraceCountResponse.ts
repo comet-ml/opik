@@ -13,12 +13,12 @@ export const TraceCountResponse: core.serialization.ObjectSchema<
 > = core.serialization.object({
     workspacesTracesCount: core.serialization.property(
         "workspaces_traces_count",
-        core.serialization.list(WorkspaceTraceCount).optional()
+        core.serialization.list(WorkspaceTraceCount).optional(),
     ),
 });
 
 export declare namespace TraceCountResponse {
-    interface Raw {
+    export interface Raw {
         workspaces_traces_count?: WorkspaceTraceCount.Raw[] | null;
     }
 }

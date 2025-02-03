@@ -10,5 +10,5 @@ export const DeltaRole: core.serialization.Schema<serializers.DeltaRole.Raw, Opi
     core.serialization.enum_(["system", "user", "assistant", "tool", "function"]);
 
 export declare namespace DeltaRole {
-    type Raw = "system" | "user" | "assistant" | "tool" | "function";
+    export type Raw = "system" | "user" | "assistant" | "tool" | "function";
 }

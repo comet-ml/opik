@@ -12,5 +12,5 @@ export const FeedbackScoreBatchItemSource: core.serialization.Schema<
 > = core.serialization.enum_(["ui", "sdk", "online_scoring"]);
 
 export declare namespace FeedbackScoreBatchItemSource {
-    type Raw = "ui" | "sdk" | "online_scoring";
+    export type Raw = "ui" | "sdk" | "online_scoring";
 }

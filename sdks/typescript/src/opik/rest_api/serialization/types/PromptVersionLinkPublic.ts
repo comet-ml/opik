@@ -16,7 +16,7 @@ export const PromptVersionLinkPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace PromptVersionLinkPublic {
-    interface Raw {
+    export interface Raw {
         id: string;
         commit?: string | null;
         prompt_id?: string | null;

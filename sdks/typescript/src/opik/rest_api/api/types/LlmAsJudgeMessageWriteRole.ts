@@ -3,7 +3,6 @@
  */
 
 export type LlmAsJudgeMessageWriteRole = "SYSTEM" | "USER" | "AI" | "TOOL_EXECUTION_RESULT";
-
 export const LlmAsJudgeMessageWriteRole = {
     System: "SYSTEM",
     User: "USER",

@@ -23,7 +23,7 @@ export const PromptVersion: core.serialization.ObjectSchema<serializers.PromptVe
     });
 
 export declare namespace PromptVersion {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         prompt_id?: string | null;
         commit?: string | null;

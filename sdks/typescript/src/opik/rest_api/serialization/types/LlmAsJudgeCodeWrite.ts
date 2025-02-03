@@ -20,7 +20,7 @@ export const LlmAsJudgeCodeWrite: core.serialization.ObjectSchema<
 });
 
 export declare namespace LlmAsJudgeCodeWrite {
-    interface Raw {
+    export interface Raw {
         model: LlmAsJudgeModelParametersWrite.Raw;
         messages: LlmAsJudgeMessageWrite.Raw[];
         variables: Record<string, string>;

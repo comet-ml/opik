@@ -17,7 +17,7 @@ export const LlmAsJudgeOutputSchema: core.serialization.ObjectSchema<
 });
 
 export declare namespace LlmAsJudgeOutputSchema {
-    interface Raw {
+    export interface Raw {
         name: string;
         type: LlmAsJudgeOutputSchemaType.Raw;
         description: string;

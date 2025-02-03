@@ -15,7 +15,7 @@ export const NumericalFeedbackDetailCreate: core.serialization.ObjectSchema<
 });
 
 export declare namespace NumericalFeedbackDetailCreate {
-    interface Raw {
+    export interface Raw {
         max: number;
         min: number;
     }

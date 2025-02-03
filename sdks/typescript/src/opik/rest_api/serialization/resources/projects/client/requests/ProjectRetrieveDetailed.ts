@@ -14,7 +14,7 @@ export const ProjectRetrieveDetailed: core.serialization.Schema<
 });
 
 export declare namespace ProjectRetrieveDetailed {
-    interface Raw {
+    export interface Raw {
         name: string;
     }
 }

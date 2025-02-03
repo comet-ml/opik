@@ -20,7 +20,7 @@ export const PromptWrite: core.serialization.Schema<serializers.PromptWrite.Raw,
     });
 
 export declare namespace PromptWrite {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;

@@ -18,7 +18,7 @@ export const AutomationRuleEvaluatorPagePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace AutomationRuleEvaluatorPagePublic {
-    interface Raw {
+    export interface Raw {
         page?: number | null;
         size?: number | null;
         total?: number | null;

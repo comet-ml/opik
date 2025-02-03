@@ -25,13 +25,13 @@ export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluatorWrite {
-    type Raw = AutomationRuleEvaluatorWrite.LlmAsJudge;
+    export type Raw = AutomationRuleEvaluatorWrite.LlmAsJudge;
 
-    interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgeWrite.Raw {
+    export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgeWrite.Raw {
         type: "llm_as_judge";
     }
 
-    interface _Base {
+    export interface _Base {
         name: string;
         sampling_rate?: number | null;
         action?: "evaluator" | null;

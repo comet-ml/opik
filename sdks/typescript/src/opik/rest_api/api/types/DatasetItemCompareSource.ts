@@ -3,7 +3,6 @@
  */
 
 export type DatasetItemCompareSource = "manual" | "trace" | "span" | "sdk";
-
 export const DatasetItemCompareSource = {
     Manual: "manual",
     Trace: "trace",

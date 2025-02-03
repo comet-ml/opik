@@ -15,7 +15,7 @@ export const ProviderApiKeyUpdate: core.serialization.Schema<
 });
 
 export declare namespace ProviderApiKeyUpdate {
-    interface Raw {
+    export interface Raw {
         api_key: string;
         name?: string | null;
     }

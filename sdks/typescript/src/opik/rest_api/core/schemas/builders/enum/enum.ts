@@ -36,7 +36,7 @@ export function enum_<U extends string, E extends U[]>(values: E): Schema<E[numb
                 ok: true,
                 value: value as U,
             };
-        }
+        },
     );
 
     return schemaCreator();

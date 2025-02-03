@@ -18,7 +18,7 @@ export const DatasetItem: core.serialization.ObjectSchema<serializers.DatasetIte
         data: JsonNode,
         experimentItems: core.serialization.property(
             "experiment_items",
-            core.serialization.list(ExperimentItem).optional()
+            core.serialization.list(ExperimentItem).optional(),
         ),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -27,7 +27,7 @@ export const DatasetItem: core.serialization.ObjectSchema<serializers.DatasetIte
     });
 
 export declare namespace DatasetItem {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         trace_id?: string | null;
         span_id?: string | null;

@@ -12,5 +12,5 @@ export const LlmAsJudgeOutputSchemaType: core.serialization.Schema<
 > = core.serialization.enum_(["BOOLEAN", "INTEGER", "DOUBLE"]);
 
 export declare namespace LlmAsJudgeOutputSchemaType {
-    type Raw = "BOOLEAN" | "INTEGER" | "DOUBLE";
+    export type Raw = "BOOLEAN" | "INTEGER" | "DOUBLE";
 }

@@ -3,7 +3,6 @@
  */
 
 export type SpanSearchStreamRequestPublicType = "general" | "tool" | "llm";
-
 export const SpanSearchStreamRequestPublicType = {
     General: "general",
     Tool: "tool",

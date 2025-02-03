@@ -12,5 +12,5 @@ export const FindFeedbackScoreNames1RequestType: core.serialization.Schema<
 > = core.serialization.enum_(["general", "tool", "llm"]);
 
 export declare namespace FindFeedbackScoreNames1RequestType {
-    type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm";
 }

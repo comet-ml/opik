@@ -22,7 +22,7 @@ export const ProviderApiKeyPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace ProviderApiKeyPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         provider: ProviderApiKeyPublicProvider.Raw;
         api_key: string;

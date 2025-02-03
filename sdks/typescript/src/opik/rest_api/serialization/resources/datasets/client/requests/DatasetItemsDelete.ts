@@ -14,7 +14,7 @@ export const DatasetItemsDelete: core.serialization.Schema<
 });
 
 export declare namespace DatasetItemsDelete {
-    interface Raw {
+    export interface Raw {
         item_ids: string[];
     }
 }

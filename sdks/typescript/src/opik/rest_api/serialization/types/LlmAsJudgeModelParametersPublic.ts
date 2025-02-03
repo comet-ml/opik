@@ -15,7 +15,7 @@ export const LlmAsJudgeModelParametersPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace LlmAsJudgeModelParametersPublic {
-    interface Raw {
+    export interface Raw {
         name: string;
         temperature: number;
     }

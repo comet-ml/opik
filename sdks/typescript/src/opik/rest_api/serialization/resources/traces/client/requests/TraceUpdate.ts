@@ -21,7 +21,7 @@ export const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw,
     });
 
 export declare namespace TraceUpdate {
-    interface Raw {
+    export interface Raw {
         project_name?: string | null;
         project_id?: string | null;
         end_time?: string | null;

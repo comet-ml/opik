@@ -21,7 +21,7 @@ export const FeedbackScoreBatchItem: core.serialization.ObjectSchema<
 });
 
 export declare namespace FeedbackScoreBatchItem {
-    interface Raw {
+    export interface Raw {
         id: string;
         project_name?: string | null;
         name: string;

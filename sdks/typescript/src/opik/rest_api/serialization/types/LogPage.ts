@@ -16,7 +16,7 @@ export const LogPage: core.serialization.ObjectSchema<serializers.LogPage.Raw, O
     });
 
 export declare namespace LogPage {
-    interface Raw {
+    export interface Raw {
         content?: LogItem.Raw[] | null;
         page?: number | null;
         size?: number | null;

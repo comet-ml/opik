@@ -20,7 +20,7 @@ export const LlmAsJudgeCodePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace LlmAsJudgeCodePublic {
-    interface Raw {
+    export interface Raw {
         model: LlmAsJudgeModelParametersPublic.Raw;
         messages: LlmAsJudgeMessagePublic.Raw[];
         variables: Record<string, string>;

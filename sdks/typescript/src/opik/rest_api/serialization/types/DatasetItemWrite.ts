@@ -20,7 +20,7 @@ export const DatasetItemWrite: core.serialization.ObjectSchema<
 });
 
 export declare namespace DatasetItemWrite {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         trace_id?: string | null;
         span_id?: string | null;

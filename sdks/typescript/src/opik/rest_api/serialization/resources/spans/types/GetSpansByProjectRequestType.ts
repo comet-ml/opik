@@ -12,5 +12,5 @@ export const GetSpansByProjectRequestType: core.serialization.Schema<
 > = core.serialization.enum_(["general", "tool", "llm"]);
 
 export declare namespace GetSpansByProjectRequestType {
-    type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm";
 }

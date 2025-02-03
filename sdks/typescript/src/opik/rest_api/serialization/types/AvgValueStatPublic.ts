@@ -14,7 +14,7 @@ export const AvgValueStatPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace AvgValueStatPublic {
-    interface Raw {
+    export interface Raw {
         value?: number | null;
     }
 }

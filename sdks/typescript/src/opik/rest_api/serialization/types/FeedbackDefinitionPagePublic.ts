@@ -18,7 +18,7 @@ export const FeedbackDefinitionPagePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace FeedbackDefinitionPagePublic {
-    interface Raw {
+    export interface Raw {
         page?: number | null;
         size?: number | null;
         total?: number | null;

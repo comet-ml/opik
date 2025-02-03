@@ -1,3 +1,4 @@
+import { toJson } from "../json";
 import { APIResponse } from "./APIResponse";
 import { createRequestUrl } from "./createRequestUrl";
 import { getFetchFn } from "./getFetchFn";
@@ -14,7 +15,7 @@ export declare namespace Fetcher {
         method: string;
         contentType?: string;
         headers?: Record<string, string | undefined>;
-        queryParameters?: Record<string, string | string[] | object | object[]>;
+        queryParameters?: Record<string, string | string[] | object | object[] | null>;
         body?: unknown;
         timeoutMs?: number;
         maxRetries?: number;
@@ -64,7 +65,7 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
     }
 
     const url = createRequestUrl(args.url, args.queryParameters);
-    let requestBody: BodyInit | undefined = await getRequestBody({
+    const requestBody: BodyInit | undefined = await getRequestBody({
         body: args.body,
         type: args.requestType === "json" ? "json" : "other",
     });
@@ -82,11 +83,11 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
                     args.timeoutMs,
                     args.abortSignal,
                     args.withCredentials,
-                    args.duplex
+                    args.duplex,
                 ),
-            args.maxRetries
+            args.maxRetries,
         );
-        let responseBody = await getResponseBody(response, args.responseType);
+        const responseBody = await getResponseBody(response, args.responseType);
 
         if (response.status >= 200 && response.status < 400) {
             return {
@@ -134,7 +135,7 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
             ok: false,
             error: {
                 reason: "unknown",
-                errorMessage: JSON.stringify(error),
+                errorMessage: toJson(error),
             },
         };
     }

@@ -13,7 +13,7 @@ export const Tool: core.serialization.ObjectSchema<serializers.Tool.Raw, OpikApi
 });
 
 export declare namespace Tool {
-    interface Raw {
+    export interface Raw {
         type?: "function" | null;
         function?: Function.Raw | null;
     }

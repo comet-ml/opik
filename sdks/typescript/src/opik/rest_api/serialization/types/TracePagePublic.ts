@@ -18,7 +18,7 @@ export const TracePagePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace TracePagePublic {
-    interface Raw {
+    export interface Raw {
         page?: number | null;
         size?: number | null;
         total?: number | null;

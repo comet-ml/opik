@@ -12,5 +12,5 @@ export const DatasetItemSource: core.serialization.Schema<
 > = core.serialization.enum_(["manual", "trace", "span", "sdk"]);
 
 export declare namespace DatasetItemSource {
-    type Raw = "manual" | "trace" | "span" | "sdk";
+    export type Raw = "manual" | "trace" | "span" | "sdk";
 }

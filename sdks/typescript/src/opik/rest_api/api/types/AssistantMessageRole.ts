@@ -3,7 +3,6 @@
  */
 
 export type AssistantMessageRole = "system" | "user" | "assistant" | "tool" | "function";
-
 export const AssistantMessageRole = {
     System: "system",
     User: "user",

@@ -30,17 +30,17 @@ export const FeedbackObjectPublic: core.serialization.Schema<
     });
 
 export declare namespace FeedbackObjectPublic {
-    type Raw = FeedbackObjectPublic.Numerical | FeedbackObjectPublic.Categorical;
+    export type Raw = FeedbackObjectPublic.Numerical | FeedbackObjectPublic.Categorical;
 
-    interface Numerical extends _Base, NumericalFeedbackDefinitionPublic.Raw {
+    export interface Numerical extends _Base, NumericalFeedbackDefinitionPublic.Raw {
         type: "numerical";
     }
 
-    interface Categorical extends _Base, CategoricalFeedbackDefinitionPublic.Raw {
+    export interface Categorical extends _Base, CategoricalFeedbackDefinitionPublic.Raw {
         type: "categorical";
     }
 
-    interface _Base {
+    export interface _Base {
         id?: string | null;
         name: string;
         createdAt?: string | null;

@@ -16,7 +16,7 @@ export const ResultsNumberPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace ResultsNumberPublic {
-    interface Raw {
+    export interface Raw {
         name?: string | null;
         data?: DataPointNumberPublic.Raw[] | null;
     }

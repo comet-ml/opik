@@ -5,20 +5,22 @@
 import * as environments from "../../../../environments";
 import * as core from "../../../../core";
 import * as OpikApi from "../../../index";
-import urlJoin from "url-join";
 import * as serializers from "../../../../serialization/index";
+import urlJoin from "url-join";
 import * as errors from "../../../../errors/index";
 
 export declare namespace FeedbackDefinitions {
-    interface Options {
+    export interface Options {
         environment?: core.Supplier<environments.OpikApiEnvironment | string>;
+        /** Specify a custom URL to connect the client to. */
+        baseUrl?: core.Supplier<string>;
         /** Override the Authorization header */
         apiKey?: core.Supplier<string | undefined>;
         /** Override the Comet-Workspace header */
         workspaceName?: core.Supplier<string | undefined>;
     }
 
-    interface RequestOptions {
+    export interface RequestOptions {
         /** The maximum time to wait for a response in seconds. */
         timeoutInSeconds?: number;
         /** The number of times to retry the request. Defaults to 2. */
@@ -49,87 +51,88 @@ export class FeedbackDefinitions {
      * @example
      *     await client.feedbackDefinitions.findFeedbackDefinitions()
      */
-    public findFeedbackDefinitions(
+    public async findFeedbackDefinitions(
         request: OpikApi.FindFeedbackDefinitionsRequest = {},
-        requestOptions?: FeedbackDefinitions.RequestOptions
-    ): core.APIPromise<OpikApi.FeedbackDefinitionPagePublic> {
-        return core.APIPromise.from(
-            (async () => {
-                const { page, size, name, type: type_ } = request;
-                const _queryParams: Record<string, string | string[] | object | object[]> = {};
-                if (page != null) {
-                    _queryParams["page"] = page.toString();
-                }
-                if (size != null) {
-                    _queryParams["size"] = size.toString();
-                }
-                if (name != null) {
-                    _queryParams["name"] = name;
-                }
-                if (type_ != null) {
-                    _queryParams["type"] = type_;
-                }
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/feedback-definitions"
-                    ),
-                    method: "GET",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    queryParameters: _queryParams,
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<OpikApi.FeedbackDefinitionPagePublic> {
+        const { page, size, name, type: type_ } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (page != null) {
+            _queryParams["page"] = page.toString();
+        }
+
+        if (size != null) {
+            _queryParams["size"] = size.toString();
+        }
+
+        if (name != null) {
+            _queryParams["name"] = name;
+        }
+
+        if (type_ != null) {
+            _queryParams["type"] = serializers.FindFeedbackDefinitionsRequestType.jsonOrThrow(type_, {
+                unrecognizedObjectKeys: "strip",
+            });
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/feedback-definitions",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.FeedbackDefinitionPagePublic.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: serializers.FeedbackDefinitionPagePublic.parseOrThrow(_response.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling GET /v1/private/feedback-definitions."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/feedback-definitions.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -143,68 +146,63 @@ export class FeedbackDefinitions {
      *         type: "categorical"
      *     })
      */
-    public createFeedbackDefinition(
+    public async createFeedbackDefinition(
         request: OpikApi.FeedbackCreate,
-        requestOptions?: FeedbackDefinitions.RequestOptions
-    ): core.APIPromise<void> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/feedback-definitions"
-                    ),
-                    method: "POST",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    body: serializers.FeedbackCreate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/feedback-definitions",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.FeedbackCreate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: undefined,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling POST /v1/private/feedback-definitions."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/feedback-definitions.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -216,72 +214,67 @@ export class FeedbackDefinitions {
      * @example
      *     await client.feedbackDefinitions.getFeedbackDefinitionById("id")
      */
-    public getFeedbackDefinitionById(
+    public async getFeedbackDefinitionById(
         id: string,
-        requestOptions?: FeedbackDefinitions.RequestOptions
-    ): core.APIPromise<OpikApi.FeedbackPublic> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        `v1/private/feedback-definitions/${encodeURIComponent(id)}`
-                    ),
-                    method: "GET",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<OpikApi.FeedbackPublic> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/feedback-definitions/${encodeURIComponent(id)}`,
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.FeedbackPublic.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: serializers.FeedbackPublic.parseOrThrow(_response.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling GET /v1/private/feedback-definitions/{id}."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/feedback-definitions/{id}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -296,69 +289,64 @@ export class FeedbackDefinitions {
      *         type: "categorical"
      *     })
      */
-    public updateFeedbackDefinition(
+    public async updateFeedbackDefinition(
         id: string,
         request: OpikApi.FeedbackUpdate,
-        requestOptions?: FeedbackDefinitions.RequestOptions
-    ): core.APIPromise<void> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        `v1/private/feedback-definitions/${encodeURIComponent(id)}`
-                    ),
-                    method: "PUT",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    body: serializers.FeedbackUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/feedback-definitions/${encodeURIComponent(id)}`,
+            ),
+            method: "PUT",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.FeedbackUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: undefined,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling PUT /v1/private/feedback-definitions/{id}."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PUT /v1/private/feedback-definitions/{id}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -370,67 +358,62 @@ export class FeedbackDefinitions {
      * @example
      *     await client.feedbackDefinitions.deleteFeedbackDefinitionById("id")
      */
-    public deleteFeedbackDefinitionById(
+    public async deleteFeedbackDefinitionById(
         id: string,
-        requestOptions?: FeedbackDefinitions.RequestOptions
-    ): core.APIPromise<void> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        `v1/private/feedback-definitions/${encodeURIComponent(id)}`
-                    ),
-                    method: "DELETE",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/feedback-definitions/${encodeURIComponent(id)}`,
+            ),
+            method: "DELETE",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: undefined,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling DELETE /v1/private/feedback-definitions/{id}."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling DELETE /v1/private/feedback-definitions/{id}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -444,68 +427,63 @@ export class FeedbackDefinitions {
      *         ids: ["ids"]
      *     })
      */
-    public deleteFeedbackDefinitionsBatch(
+    public async deleteFeedbackDefinitionsBatch(
         request: OpikApi.BatchDelete,
-        requestOptions?: FeedbackDefinitions.RequestOptions
-    ): core.APIPromise<void> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "v1/private/feedback-definitions/delete"
-                    ),
-                    method: "POST",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    body: serializers.BatchDelete.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/feedback-definitions/delete",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.BatchDelete.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: undefined,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError(
-                            "Timeout exceeded when calling POST /v1/private/feedback-definitions/delete."
-                        );
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/feedback-definitions/delete.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     protected async _getCustomAuthorizationHeaders() {

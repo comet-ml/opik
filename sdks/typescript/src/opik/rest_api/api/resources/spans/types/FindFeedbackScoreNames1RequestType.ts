@@ -3,7 +3,6 @@
  */
 
 export type FindFeedbackScoreNames1RequestType = "general" | "tool" | "llm";
-
 export const FindFeedbackScoreNames1RequestType = {
     General: "general",
     Tool: "tool",

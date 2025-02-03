@@ -9,7 +9,7 @@ export const makeRequest = async (
     timeoutMs?: number,
     abortSignal?: AbortSignal,
     withCredentials?: boolean,
-    duplex?: "half"
+    duplex?: "half",
 ): Promise<Response> => {
     const signals: AbortSignal[] = [];
 

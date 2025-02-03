@@ -27,17 +27,17 @@ export const Feedback: core.serialization.Schema<serializers.Feedback.Raw, OpikA
     });
 
 export declare namespace Feedback {
-    type Raw = Feedback.Numerical | Feedback.Categorical;
+    export type Raw = Feedback.Numerical | Feedback.Categorical;
 
-    interface Numerical extends _Base, NumericalFeedbackDefinition.Raw {
+    export interface Numerical extends _Base, NumericalFeedbackDefinition.Raw {
         type: "numerical";
     }
 
-    interface Categorical extends _Base, CategoricalFeedbackDefinition.Raw {
+    export interface Categorical extends _Base, CategoricalFeedbackDefinition.Raw {
         type: "categorical";
     }
 
-    interface _Base {
+    export interface _Base {
         id?: string | null;
         name: string;
         createdAt?: string | null;

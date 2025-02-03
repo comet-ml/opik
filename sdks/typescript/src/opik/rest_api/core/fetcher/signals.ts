@@ -15,7 +15,7 @@ export function getTimeoutSignal(timeoutMs: number): { signal: AbortSignal; abor
 export function anySignal(...args: AbortSignal[] | [AbortSignal[]]): AbortSignal {
     // Allowing signals to be passed either as array
     // of signals or as multiple arguments.
-    const signals = <AbortSignal[]>(args.length === 1 && Array.isArray(args[0]) ? args[0] : args);
+    const signals = (args.length === 1 && Array.isArray(args[0]) ? args[0] : args) as AbortSignal[];
 
     const controller = new AbortController();
 

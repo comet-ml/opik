@@ -20,7 +20,7 @@ export const DatasetItemPagePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace DatasetItemPagePublic {
-    interface Raw {
+    export interface Raw {
         content?: DatasetItemPublic.Raw[] | null;
         page?: number | null;
         size?: number | null;

@@ -21,5 +21,5 @@ export const string = createIdentitySchemaCreator<string>(
                 ],
             };
         }
-    }
+    },
 );

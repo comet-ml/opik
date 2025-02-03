@@ -3,7 +3,6 @@
  */
 
 export type ColumnCompareTypesItem = "string" | "number" | "object" | "boolean" | "array" | "null";
-
 export const ColumnCompareTypesItem = {
     String: "string",
     Number: "number",

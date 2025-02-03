@@ -17,7 +17,7 @@ export const CommentCompare: core.serialization.ObjectSchema<serializers.Comment
     });
 
 export declare namespace CommentCompare {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         text: string;
         created_at?: string | null;

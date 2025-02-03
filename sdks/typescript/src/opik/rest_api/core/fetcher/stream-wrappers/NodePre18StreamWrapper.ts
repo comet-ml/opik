@@ -1,4 +1,5 @@
 import type { Readable, Writable } from "readable-stream";
+
 import { EventCallback, StreamWrapper } from "./chooseStreamWrapper";
 
 export class NodePre18StreamWrapper implements StreamWrapper<Writable, Buffer> {

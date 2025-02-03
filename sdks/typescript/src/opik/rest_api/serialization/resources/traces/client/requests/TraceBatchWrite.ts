@@ -13,7 +13,7 @@ export const TraceBatchWrite: core.serialization.Schema<serializers.TraceBatchWr
     });
 
 export declare namespace TraceBatchWrite {
-    interface Raw {
+    export interface Raw {
         traces: TraceWrite.Raw[];
     }
 }

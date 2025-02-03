@@ -15,7 +15,7 @@ export const AutomationRuleEvaluatorLlmAsJudgePublic: core.serialization.ObjectS
 });
 
 export declare namespace AutomationRuleEvaluatorLlmAsJudgePublic {
-    interface Raw {
+    export interface Raw {
         code?: LlmAsJudgeCodePublic.Raw | null;
     }
 }
