@@ -13,7 +13,12 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 
   protected async createEntities(spans: SavedSpan[]) {
-    await this.api.spans.createSpans({ spans });
+    const groupedSpans = groupSpansByParentSpanId(spans);
+    for (const spansGroup of Object.values(groupedSpans)) {
+      await this.api.spans.createSpans({
+        spans: spansGroup,
+      });
+    }
   }
 
   protected async getEntity(id: string) {
@@ -29,4 +34,17 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
       await this.api.spans.deleteSpanById(id);
     }
   }
+}
+
+function groupSpansByParentSpanId(spans: SavedSpan[]) {
+  return spans.reduce(
+    (acc, span) => {
+      if (!acc[span.parentSpanId || "root"]) {
+        acc[span.parentSpanId || "root"] = [];
+      }
+      acc[span.parentSpanId || "root"].push(span);
+      return acc;
+    },
+    {} as Record<string, SavedSpan[]>
+  );
 }
