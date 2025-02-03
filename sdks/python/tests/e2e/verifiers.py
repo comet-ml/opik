@@ -286,15 +286,20 @@ def verify_experiment_prompts(
         assert (
             experiment_content_prompt_versions[i].id
             == prompt.__internal_api__version_id__
-        )
+        ), f"{experiment_content_prompt_versions[i].id} != {prompt.__internal_api__version_id__}"
         assert (
             experiment_content_prompt_versions[i].prompt_id
             == prompt.__internal_api__prompt_id__
-        )
-        assert experiment_content_prompt_versions[i].commit == prompt.commit
+        ), f"{experiment_content_prompt_versions[i].prompt_id} != {prompt.__internal_api__prompt_id__}"
+
+        assert (
+            experiment_content_prompt_versions[i].commit == prompt.commit
+        ), f"{experiment_content_prompt_versions[i].commit} != {prompt.commit}"
 
     # check that experiment config/metadata contains Prompt's template
     experiment_prompts = experiment_content.metadata["prompts"]
 
     for i, prompt in enumerate(prompts):
-        assert experiment_prompts[i] == prompt.prompt
+        assert (
+            experiment_prompts[i] == prompt.prompt
+        ), f"{experiment_prompts[i]} != {prompt.prompt}"
