@@ -17,8 +17,10 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.auth.RemoteAuthService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
@@ -66,6 +68,8 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -154,9 +158,9 @@ class PromptResourceTest {
 
         Stream<Arguments> credentials() {
             return Stream.of(
-                    arguments(okApikey, true),
-                    arguments(fakeApikey, false),
-                    arguments("", false));
+                    arguments(okApikey, true, null),
+                    arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
+                    arguments("", false, NO_API_KEY_RESPONSE));
         }
 
         @BeforeEach
@@ -166,19 +170,16 @@ class PromptResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
-
-            wireMock.server().stubFor(
-                    post(urlPathEqualTo("/opik/auth"))
-                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(""))
-                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create prompt: when api key is present, then return proper response")
-        void createPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void createPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var prompt = factory.manufacturePojo(Prompt.class);
 
@@ -200,7 +201,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -208,7 +209,8 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("find prompt: when api key is present, then return proper response")
-        void findPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void findPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
 
@@ -228,7 +230,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -236,7 +238,8 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("update prompt: when api key is present, then return proper response")
-        void updatePrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void updatePrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -264,7 +267,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -272,7 +275,8 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("delete prompt: when api key is present, then return proper response")
-        void deletePrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void deletePrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -300,7 +304,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -308,7 +312,8 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("get prompt by id: when api key is present, then return proper response")
-        void getPromptById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void getPromptById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -336,7 +341,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -344,7 +349,8 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Create prompt versions: when api key is present, then return proper response")
-        void createPromptVersions__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void createPromptVersions__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -365,7 +371,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -374,7 +380,7 @@ class PromptResourceTest {
         @MethodSource("credentials")
         @DisplayName("Get prompt versions by prompt id: when api key is present, then return proper response")
         void getPromptVersionsByPromptId__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean success) {
+                boolean success, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -403,7 +409,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -411,7 +417,8 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Get prompt versions by id: when api key is present, then return proper response")
-        void getPromptVersionsById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void getPromptVersionsById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -448,7 +455,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -457,7 +464,7 @@ class PromptResourceTest {
         @MethodSource("credentials")
         @DisplayName("Retrieve prompt versions by name and commit: when api key is present, then return proper response")
         void retrievePromptVersionsByNameAndCommit__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean success) {
+                boolean success, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -487,7 +494,7 @@ class PromptResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -519,7 +526,9 @@ class PromptResourceTest {
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
         }
 
         @ParameterizedTest

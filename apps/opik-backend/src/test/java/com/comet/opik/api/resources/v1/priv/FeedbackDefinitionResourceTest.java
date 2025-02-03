@@ -11,7 +11,9 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.infrastructure.auth.RemoteAuthService;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -53,6 +55,8 @@ import static com.comet.opik.api.FeedbackDefinition.CategoricalFeedbackDefinitio
 import static com.comet.opik.api.FeedbackDefinition.CategoricalFeedbackDefinition.CategoricalFeedbackDetail;
 import static com.comet.opik.api.FeedbackDefinition.FeedbackDefinitionPage;
 import static com.comet.opik.api.FeedbackDefinition.NumericalFeedbackDefinition;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.FeedbackDefinitionModel.FeedbackType;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -151,9 +155,9 @@ class FeedbackDefinitionResourceTest {
 
         Stream<Arguments> credentials() {
             return Stream.of(
-                    arguments(okApikey, true),
-                    arguments(fakeApikey, false),
-                    arguments("", false));
+                    arguments(okApikey, true, null),
+                    arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
+                    arguments("", false, NO_API_KEY_RESPONSE));
         }
 
         @BeforeEach
@@ -163,20 +167,16 @@ class FeedbackDefinitionResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
-
-            wireMock.server().stubFor(
-                    post(urlPathEqualTo("/opik/auth"))
-                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(""))
-                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create feedback definition: when api key is present, then return proper response")
         void createFeedbackDefinition__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean isAuthorized) {
+                boolean isAuthorized, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var feedbackDefinition = factory.manufacturePojo(NumericalFeedbackDefinition.class);
 
@@ -195,7 +195,7 @@ class FeedbackDefinitionResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -203,7 +203,8 @@ class FeedbackDefinitionResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("get feedback definition: when api key is present, then return proper response")
-        void getFeedbackDefinition__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean isAuthorized) {
+        void getFeedbackDefinition__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean isAuthorized,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -238,7 +239,7 @@ class FeedbackDefinitionResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -247,7 +248,7 @@ class FeedbackDefinitionResourceTest {
         @MethodSource("credentials")
         @DisplayName("get feedback definition by id: when api key is present, then return proper response")
         void getFeedbackDefinitionById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean isAuthorized) {
+                boolean isAuthorized, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var feedback = factory.manufacturePojo(FeedbackDefinition.NumericalFeedbackDefinition.class);
 
@@ -276,7 +277,7 @@ class FeedbackDefinitionResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -285,7 +286,7 @@ class FeedbackDefinitionResourceTest {
         @MethodSource("credentials")
         @DisplayName("update feedback definition: when api key is present, then return proper response")
         void updateFeedbackDefinition__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean isAuthorized) {
+                boolean isAuthorized, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var feedback = factory.manufacturePojo(FeedbackDefinition.NumericalFeedbackDefinition.class);
 
@@ -314,7 +315,7 @@ class FeedbackDefinitionResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -323,7 +324,7 @@ class FeedbackDefinitionResourceTest {
         @MethodSource("credentials")
         @DisplayName("delete feedback definition: when api key is present, then return proper response")
         void deleteFeedbackDefinition__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean isAuthorized) {
+                boolean isAuthorized, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var feedback = factory.manufacturePojo(FeedbackDefinition.NumericalFeedbackDefinition.class);
 
@@ -348,7 +349,7 @@ class FeedbackDefinitionResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -380,7 +381,9 @@ class FeedbackDefinitionResourceTest {
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
         }
 
         @ParameterizedTest

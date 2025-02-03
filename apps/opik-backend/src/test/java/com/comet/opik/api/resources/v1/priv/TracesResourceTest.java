@@ -38,6 +38,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.infrastructure.auth.RemoteAuthService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -104,6 +105,8 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpd
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectTraceStatItems;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
@@ -217,9 +220,9 @@ class TracesResourceTest {
 
         Stream<Arguments> credentials() {
             return Stream.of(
-                    arguments(okApikey, true),
-                    arguments(fakeApikey, false),
-                    arguments("", false));
+                    arguments(okApikey, true, null),
+                    arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
+                    arguments("", false, NO_API_KEY_RESPONSE));
         }
 
         @BeforeEach
@@ -229,19 +232,16 @@ class TracesResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
-
-            wireMock.server().stubFor(
-                    post(urlPathEqualTo("/opik/auth"))
-                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(""))
-                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create trace, when api key is present, then return proper response")
-        void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -267,7 +267,7 @@ class TracesResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -275,7 +275,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("update trace, when api key is present, then return proper response")
-        void update__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void update__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -304,14 +305,15 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .method(HttpMethod.PATCH, Entity.json(update))) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("delete trace, when api key is present, then return proper response")
-        void delete__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void delete__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
 
@@ -333,14 +335,15 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .delete()) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("get traces, when api key is present, then return proper response")
-        void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -363,7 +366,7 @@ class TracesResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -371,7 +374,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Trace feedback, when api key is present, then return proper response")
-        void feedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void feedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -402,14 +406,15 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedback))) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("delete feedback, when api key is present, then return proper response")
-        void deleteFeedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void deleteFeedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var trace = factory.manufacturePojo(Trace.class);
 
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
@@ -436,7 +441,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(DeleteFeedbackScore.builder().name("name").build()))) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, errorMessage);
             }
 
         }
@@ -444,7 +449,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Trace feedback batch, when api key is present, then return proper response")
-        void feedbackBatch__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void feedbackBatch__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var trace = factory.manufacturePojo(Trace.class);
             var workspaceName = RandomStringUtils.randomAlphanumeric(10);
@@ -474,7 +480,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(batch))) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, errorMessage);
             }
 
         }
@@ -506,7 +512,9 @@ class TracesResourceTest {
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
         }
 
         @ParameterizedTest
@@ -571,7 +579,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .method(HttpMethod.PATCH, Entity.json(update))) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -599,7 +607,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .delete()) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -679,7 +687,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedback))) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -712,7 +720,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(DeleteFeedbackScore.builder().name("name").build()))) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, UNAUTHORIZED_RESPONSE);
             }
 
         }
@@ -750,20 +758,21 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(batch))) {
 
-                assertExpectedResponseWithoutABody(expected, actualResponse);
+                assertExpectedResponseWithoutABody(expected, actualResponse, UNAUTHORIZED_RESPONSE);
             }
 
         }
     }
 
-    private void assertExpectedResponseWithoutABody(boolean expected, Response actualResponse) {
+    private void assertExpectedResponseWithoutABody(boolean expected, Response actualResponse,
+            io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
         if (expected) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         } else {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
             assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                    .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    .isEqualTo(errorMessage);
         }
     }
 
