@@ -13,8 +13,8 @@ class Environment(Enum):
 class EnvConfig:
     api_url: str
     web_url: str
-    workspace: str = "default"
-    project_name: str = "automated_tests_project"
+    workspace: Optional[str] = "default"
+    project_name: Optional[str] = "automated_tests_project"
     api_key: Optional[str] = None
     test_user_email: Optional[str] = None
     test_user_name: Optional[str] = None
@@ -38,7 +38,7 @@ def get_environment_config(env: Environment = Environment.LOCAL) -> EnvConfig:
             test_user_email=os.getenv("OPIK_TEST_USER_EMAIL"),
             test_user_name=os.getenv("OPIK_TEST_USER_NAME"),
             test_user_password=os.getenv("OPIK_TEST_USER_PASSWORD"),
-            workspace=os.getenv("OPIK_TEST_USER_NAME")
+            workspace=os.getenv("OPIK_TEST_USER_NAME"),
         ),
     }
 
@@ -55,7 +55,7 @@ def get_environment_config(env: Environment = Environment.LOCAL) -> EnvConfig:
             missing_vars.append("OPIK_TEST_USER_NAME")
         if not config.test_user_password:
             missing_vars.append("OPIK_TEST_USER_PASSWORD")
-        
+
         if missing_vars:
             raise ValueError(
                 f"Missing required environment variables for {env.value} environment: {', '.join(missing_vars)}"

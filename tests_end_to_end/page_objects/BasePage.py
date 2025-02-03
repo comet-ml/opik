@@ -6,7 +6,7 @@ class BasePage:
     def __init__(self, page: Page, path: str, query_params: str = ""):
         """
         Base page class that handles workspace configuration for all pages.
-        
+
         Args:
             page: Playwright page object
             path: The path part of the URL (e.g., 'projects', 'traces', etc.)
@@ -15,13 +15,13 @@ class BasePage:
         self.page = page
         self.workspace = os.environ.get("OPIK_WORKSPACE", "default")
         self.web_url = os.environ.get("OPIK_WEB_URL", "http://localhost:5173")
-        
+
         # Remove leading/trailing slashes and combine path components
-        clean_path = path.strip('/')
+        clean_path = path.strip("/")
         self.path = f"{self.workspace}/{clean_path}"
         if query_params:
             # Ensure query params start with '?' if provided
-            if not query_params.startswith('?'):
+            if not query_params.startswith("?"):
                 query_params = f"?{query_params}"
             self.path = f"{self.path}{query_params}"
 

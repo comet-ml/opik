@@ -36,24 +36,28 @@ def browser_context(browser: Browser, env_config: EnvConfig):
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
     # Handle cloud environment authentication
-    if not env_config.api_url.startswith('http://localhost'):
+    if not env_config.api_url.startswith("http://localhost"):
         page = context.new_page()
         # Extract base URL for authentication (remove /opik/api from the end)
-        base_url = re.sub(r'(/opik)?/api$', '', env_config.api_url)
+        base_url = re.sub(r"(/opik)?/api$", "", env_config.api_url)
         auth_url = f"{base_url}/api/auth/login"
 
         # Perform login
         response = page.request.post(
             auth_url,
-            data=json.dumps({
-                "email": env_config.test_user_email,
-                "plainTextPassword": env_config.test_user_password
-            }),
-            headers={"Content-Type": "application/json"}
+            data=json.dumps(
+                {
+                    "email": env_config.test_user_email,
+                    "plainTextPassword": env_config.test_user_password,
+                }
+            ),
+            headers={"Content-Type": "application/json"},
         )
 
         if response.status != 200:
-            raise Exception(f"Login failed with status {response.status}: {response.text()}")
+            raise Exception(
+                f"Login failed with status {response.status}: {response.text()}"
+            )
 
         page.close()
 
@@ -90,11 +94,11 @@ def configure_env(env_config: EnvConfig):
     # Set URLs from config
     os.environ["OPIK_URL_OVERRIDE"] = env_config.api_url
     os.environ["OPIK_WEB_URL"] = env_config.web_url
-    
+
     # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
     os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
-    
+
     # Set API key if available
     if env_config.api_key:
         os.environ["OPIK_API_KEY"] = env_config.api_key
