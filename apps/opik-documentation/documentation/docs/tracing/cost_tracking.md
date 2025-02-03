@@ -62,9 +62,27 @@ trace = client.get_trace_content("<TRACE_ID>")
 print(trace.total_estimated_cost)
 ```
 
+## Manually Setting Span Costs
+
+For cases where you need to set a custom cost or when using an unsupported model, you can manually set the cost of a span using `update_current_span`. Note that manually setting a cost will override any automatically computed cost by Opik:
+
+```python
+from opik.opik_context import update_current_span
+
+# Inside a span context
+update_current_span(total_cost=0.05)  # Cost in USD will override any automatic cost calculation
+```
+
+This is particularly useful when:
+- Using models or providers not yet supported by automatic cost tracking
+- You have a custom pricing agreement with your provider
+- You want to track additional costs beyond model usage
+
 ## Supported Models and Integrations
 
-Opik currently calculates costs automatically when you use the [OpenAI Integration](./integrations/openai.md) with a Text Models hosted on openai.com.
+Opik currently calculates costs automatically for:
+- [OpenAI Integration](./integrations/openai.md) with Text Models hosted on openai.com
+- [Langchain Integration](./integrations/langchain.md) with Vertex AI Gemini text generation models
 
 :::tip
 We are actively expanding our cost tracking support. Need support for additional models or providers? Please [open a feature request](https://github.com/comet-ml/opik/issues) to help us prioritize development.
