@@ -22,6 +22,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
@@ -33,12 +34,20 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
+import static com.comet.opik.api.Experiment.ExperimentPage;
+import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -59,7 +68,8 @@ class ExperimentDAO {
                 created_by,
                 last_updated_by,
                 prompt_version_id,
-                prompt_id
+                prompt_id,
+                prompt_versions
             )
             SELECT
                 if(
@@ -74,7 +84,8 @@ class ExperimentDAO {
                 new.created_by,
                 new.last_updated_by,
                 new.prompt_version_id,
-                new.prompt_id
+                new.prompt_id,
+                new.prompt_versions
             FROM (
                 SELECT
                 :id AS id,
@@ -85,7 +96,8 @@ class ExperimentDAO {
                 :created_by AS created_by,
                 :last_updated_by AS last_updated_by,
                 :prompt_version_id AS prompt_version_id,
-                :prompt_id AS prompt_id
+                :prompt_id AS prompt_id,
+                mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -112,6 +124,7 @@ class ExperimentDAO {
                 e.last_updated_by as last_updated_by,
                 e.prompt_version_id as prompt_version_id,
                 e.prompt_id as prompt_id,
+                e.prompt_versions as prompt_versions,
                 if(
                      notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
                      arrayMap(
@@ -157,7 +170,8 @@ class ExperimentDAO {
                     ),
                     []
                  ) as feedback_scores,
-                count (DISTINCT ei.trace_id) as trace_count
+                count (DISTINCT ei.trace_id) as trace_count,
+                groupUniqArrayArray(tc.comments_array) as comments_array_agg
             FROM (
                 SELECT
                     *
@@ -206,6 +220,26 @@ class ExperimentDAO {
                     t.id,
                     fs.name
             ) AS tfs ON ei.trace_id = tfs.id
+            LEFT JOIN (
+                SELECT
+                    entity_id,
+                    groupArray(tuple(*)) AS comments_array
+                FROM (
+                    SELECT
+                        id,
+                        text,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by,
+                        entity_id
+                    FROM comments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                GROUP BY entity_id
+            ) AS tc ON ei.trace_id = tc.entity_id
             GROUP BY
                 e.workspace_id,
                 e.dataset_id,
@@ -217,7 +251,8 @@ class ExperimentDAO {
                 e.created_by,
                 e.last_updated_by,
                 e.prompt_version_id,
-                e.prompt_id
+                e.prompt_id,
+                e.prompt_versions
             ORDER BY e.id DESC
             ;
             """;
@@ -235,6 +270,7 @@ class ExperimentDAO {
                 e.last_updated_by as last_updated_by,
                 e.prompt_version_id as prompt_version_id,
                 e.prompt_id as prompt_id,
+                e.prompt_versions as prompt_versions,
                 if(
                      notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
                      arrayMap(
@@ -280,7 +316,8 @@ class ExperimentDAO {
                     ),
                     []
                 ) as feedback_scores,
-                count (DISTINCT ei.trace_id) as trace_count
+                count (DISTINCT ei.trace_id) as trace_count,
+                groupUniqArrayArray(tc.comments_array) as comments_array_agg
             FROM (
                 SELECT
                     *
@@ -289,7 +326,7 @@ class ExperimentDAO {
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
-                <if(prompt_ids)> AND prompt_id IN :prompt_ids <endif>
+                <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
@@ -331,6 +368,26 @@ class ExperimentDAO {
                     t.id,
                     fs.name
             ) AS tfs ON ei.trace_id = tfs.id
+            LEFT JOIN (
+                SELECT
+                    entity_id,
+                    groupArray(tuple(*)) AS comments_array
+                FROM (
+                    SELECT
+                        id,
+                        text,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by,
+                        entity_id
+                    FROM comments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                GROUP BY entity_id
+            ) AS tc ON ei.trace_id = tc.entity_id
             GROUP BY
                 e.workspace_id,
                 e.dataset_id,
@@ -342,7 +399,8 @@ class ExperimentDAO {
                 e.created_by,
                 e.last_updated_by,
                 e.prompt_version_id,
-                e.prompt_id
+                e.prompt_id,
+                e.prompt_versions
             ORDER BY e.id DESC
             LIMIT :limit OFFSET :offset
             ;
@@ -358,7 +416,7 @@ class ExperimentDAO {
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
-                <if(prompt_ids)> AND prompt_id IN :prompt_ids <endif>
+                <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
@@ -369,7 +427,8 @@ class ExperimentDAO {
             SELECT
                 *,
                 null AS feedback_scores,
-                null AS trace_count
+                null AS trace_count,
+                null AS comments_array_agg
             FROM experiments
             WHERE workspace_id = :workspace_id
             AND ilike(name, CONCAT('%', :name, '%'))
@@ -418,7 +477,7 @@ class ExperimentDAO {
             FROM experiments
             WHERE workspace_id = :workspace_id
             <if(experiment_ids)> AND id IN :experiment_ids <endif>
-            <if(prompt_ids)>AND prompt_id IN :prompt_ids<endif>
+            <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             ;
@@ -457,6 +516,24 @@ class ExperimentDAO {
         } else {
             statement.bindNull("prompt_version_id", UUID.class);
             statement.bindNull("prompt_id", UUID.class);
+        }
+
+        if (experiment.promptVersions() != null) {
+
+            var versionMap = experiment.promptVersions()
+                    .stream()
+                    .collect(groupingBy(PromptVersionLink::promptId, mapping(PromptVersionLink::id, toList())));
+
+            UUID[][] values = versionMap.keySet().stream()
+                    .map(versionMap::get)
+                    .map(ids -> ids.toArray(UUID[]::new))
+                    .toArray(UUID[][]::new);
+
+            statement.bind("prompt_ids", versionMap.keySet().toArray(UUID[]::new));
+            statement.bind("prompt_version_ids", values);
+        } else {
+            statement.bind("prompt_ids", new UUID[]{});
+            statement.bind("prompt_version_ids", new UUID[]{});
         }
 
         return makeFluxContextAware((userName, workspaceId) -> {
@@ -503,22 +580,47 @@ class ExperimentDAO {
     }
 
     private Publisher<Experiment> mapToDto(Result result) {
-        return result.map((row, rowMetadata) -> Experiment.builder()
-                .id(row.get("id", UUID.class))
-                .datasetId(row.get("dataset_id", UUID.class))
-                .name(row.get("name", String.class))
-                .metadata(getOrDefault(row.get("metadata", String.class)))
-                .createdAt(row.get("created_at", Instant.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .feedbackScores(getFeedbackScores(row))
-                .traceCount(row.get("trace_count", Long.class))
-                .promptVersion(row.get("prompt_version_id", UUID.class) != null
-                        ? new Experiment.PromptVersionLink(row.get("prompt_version_id", UUID.class), null,
-                                row.get("prompt_id", UUID.class))
-                        : null)
-                .build());
+        return result.map((row, rowMetadata) -> {
+            List<PromptVersionLink> promptVersions = getPromptVersions(row);
+            return Experiment.builder()
+                    .id(row.get("id", UUID.class))
+                    .datasetId(row.get("dataset_id", UUID.class))
+                    .name(row.get("name", String.class))
+                    .metadata(getOrDefault(row.get("metadata", String.class)))
+                    .createdAt(row.get("created_at", Instant.class))
+                    .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                    .createdBy(row.get("created_by", String.class))
+                    .lastUpdatedBy(row.get("last_updated_by", String.class))
+                    .feedbackScores(getFeedbackScores(row))
+                    .comments(getComments(row.get("comments_array_agg", List[].class)))
+                    .traceCount(row.get("trace_count", Long.class))
+                    .promptVersion(promptVersions.stream().findFirst().orElse(null))
+                    .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
+                    .build();
+        });
+    }
+
+    private List<PromptVersionLink> getPromptVersions(Row row) {
+        Map<String, String[]> promptVersions = row.get("prompt_versions", Map.class);
+        Optional<PromptVersionLink> promptVersion = Optional.ofNullable(row.get("prompt_version_id", UUID.class))
+                .map(id -> PromptVersionLink.builder().promptId(row.get("prompt_id", UUID.class)).id(id).build());
+
+        if (MapUtils.isEmpty(promptVersions)) {
+            return promptVersion.stream().toList();
+        }
+
+        return Stream.concat(
+                promptVersion.stream(),
+                promptVersions.entrySet()
+                        .stream()
+                        .flatMap(entry -> Arrays.stream(entry.getValue())
+                                .map(UUID::fromString)
+                                .map(promptVersionId -> PromptVersionLink.builder()
+                                        .promptId(UUID.fromString(entry.getKey()))
+                                        .id(promptVersionId)
+                                        .build())))
+                .distinct()
+                .toList();
     }
 
     private JsonNode getOrDefault(String field) {
@@ -541,18 +643,18 @@ class ExperimentDAO {
     }
 
     @WithSpan
-    Mono<Experiment.ExperimentPage> find(
+    Mono<ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         return countTotal(experimentSearchCriteria).flatMap(total -> find(page, size, experimentSearchCriteria, total));
     }
 
-    private Mono<Experiment.ExperimentPage> find(
+    private Mono<ExperimentPage> find(
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria, Long total) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> find(page, size, experimentSearchCriteria, connection))
                 .flatMap(this::mapToDto)
                 .collectList()
-                .map(experiments -> new Experiment.ExperimentPage(page, experiments.size(), total, experiments));
+                .map(experiments -> new ExperimentPage(page, experiments.size(), total, experiments));
     }
 
     private Publisher<? extends Result> find(

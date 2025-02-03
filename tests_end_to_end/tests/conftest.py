@@ -17,8 +17,6 @@ from tests.sdk_helpers import (
     client_get_prompt_retries,
 )
 from utils import TEST_ITEMS
-<<<<<<< HEAD
-=======
 import time
 import re
 import json
@@ -26,7 +24,6 @@ import json
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "sanity: mark test as a sanity test")
->>>>>>> 59b35378 (it works and logs in now)
 
 
 @pytest.fixture(scope="session")
@@ -179,11 +176,130 @@ def create_project_ui_no_cleanup(page: Page):
 
 
 @pytest.fixture(scope="function")
+def log_traces_with_spans_low_level(client: opik.Opik):
+    """
+    Log 5 traces with spans and subspans using the low level Opik client
+    Each should have their own names, tags, metadata and feedback scores to test integrity of data transmitted
+    """
+
+    trace_config = {
+        "count": 5,
+        "prefix": "client-trace-",
+        "tags": ["c-tag1", "c-tag2"],
+        "metadata": {"c-md1": "val1", "c-md2": "val2"},
+        "feedback_scores": [
+            {"name": "c-score1", "value": 0.1},
+            {"name": "c-score2", "value": 7},
+        ],
+    }
+
+    span_config = {
+        "count": 2,
+        "prefix": "client-span-",
+        "tags": ["d-span1", "d-span2"],
+        "metadata": {"d-md1": "val1", "d-md2": "val2"},
+        "feedback_scores": [
+            {"name": "s-score1", "value": 0.93},
+            {"name": "s-score2", "value": 2},
+        ],
+    }
+
+    for trace_index in range(trace_config["count"]):  # type: ignore
+        client_trace = client.trace(
+            name=trace_config["prefix"] + str(trace_index),  # type: ignore
+            input={"input": f"input-{trace_index}"},
+            output={"output": f"output-{trace_index}"},
+            tags=trace_config["tags"],
+            metadata=trace_config["metadata"],
+            feedback_scores=trace_config["feedback_scores"],
+            project_name=os.environ["OPIK_PROJECT_NAME"],
+        )
+        for span_index in range(span_config["count"]):  # type: ignore
+            client_span = client_trace.span(
+                name=span_config["prefix"] + str(span_index),  # type: ignore
+                input={"input": f"input-{span_index}"},
+                output={"output": f"output-{span_index}"},
+                tags=span_config["tags"],
+                metadata=span_config["metadata"],
+            )
+            for score in span_config["feedback_scores"]:  # type: ignore
+                client_span.log_feedback_score(name=score["name"], value=score["value"])
+
+    wait_for_number_of_traces_to_be_visible(
+        project_name=os.environ["OPIK_PROJECT_NAME"], number_of_traces=5
+    )
+    yield trace_config, span_config
+
+
+@pytest.fixture(scope="function")
+def log_traces_with_spans_decorator():
+    """
+    Log 5 traces with spans and subspans using the low level Opik client
+    Each should have their own names, tags, metadata and feedback scores to test integrity of data transmitted
+    """
+
+    trace_config = {
+        "count": 5,
+        "prefix": "decorator-trace-",
+        "tags": ["d-tag1", "d-tag2"],
+        "metadata": {"d-md1": "val1", "d-md2": "val2"},
+        "feedback_scores": [
+            {"name": "d-score1", "value": 0.1},
+            {"name": "d-score2", "value": 7},
+        ],
+    }
+
+    span_config = {
+        "count": 2,
+        "prefix": "decorator-span-",
+        "tags": ["d-span1", "d-span2"],
+        "metadata": {"d-md1": "val1", "d-md2": "val2"},
+        "feedback_scores": [
+            {"name": "s-score1", "value": 0.93},
+            {"name": "s-score2", "value": 2},
+        ],
+    }
+
+    @track(project_name=os.environ["OPIK_PROJECT_NAME"])
+    def make_span(x):
+        opik_context.update_current_span(
+            name=span_config["prefix"] + str(x),
+            input={"input": f"input-{x}"},
+            metadata=span_config["metadata"],
+            tags=span_config["tags"],
+            feedback_scores=span_config["feedback_scores"],
+        )
+        return {"output": f"output-{x}"}
+
+    @track(project_name=os.environ["OPIK_PROJECT_NAME"])
+    def make_trace(x):
+        for spans_no in range(span_config["count"]):
+            make_span(spans_no)
+
+        opik_context.update_current_trace(
+            name=trace_config["prefix"] + str(x),
+            input={"input": f"input-{x}"},
+            metadata=trace_config["metadata"],
+            tags=trace_config["tags"],
+            feedback_scores=trace_config["feedback_scores"],
+        )
+        return {"output": f"output-{x}"}
+
+    for x in range(trace_config["count"]):
+        make_trace(x)
+
+    wait_for_number_of_traces_to_be_visible(
+        project_name=os.environ["OPIK_PROJECT_NAME"], number_of_traces=5
+    )
+    yield trace_config, span_config
+
+
+@pytest.fixture(scope="function")
 def create_delete_project_sdk():
     proj_name = "automated_tests_project"
-
-    create_project_sdk(name=proj_name)
     os.environ["OPIK_PROJECT_NAME"] = proj_name
+    time.sleep(1)
+    create_project_sdk(name=proj_name)
     yield proj_name
     delete_project_by_name_sdk(name=proj_name)
 

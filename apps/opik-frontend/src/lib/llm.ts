@@ -1,4 +1,4 @@
-import { LLM_MESSAGE_ROLE, LLMMessage, ProviderMessageType } from "@/types/llm";
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDER_MODELS } from "@/constants/llm";
@@ -44,9 +44,3 @@ export const getNextMessageType = (
 
   return LLM_MESSAGE_ROLE.user;
 };
-
-export const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
-  messages.map((m) => ({ content: m.content, role: m.role }));
-
-export const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
-  messages.map((m) => ({ ...m, id: generateRandomString() }));

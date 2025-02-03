@@ -11,10 +11,12 @@ export interface Experiment {
     name?: string;
     metadata?: OpikApi.JsonNode;
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
+    comments?: OpikApi.Comment[];
     traceCount?: number;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;
     promptVersion?: OpikApi.PromptVersionLink;
+    promptVersions?: OpikApi.PromptVersionLink[];
 }

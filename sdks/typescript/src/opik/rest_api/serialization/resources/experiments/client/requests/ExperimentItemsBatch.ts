@@ -15,7 +15,7 @@ export const ExperimentItemsBatch: core.serialization.Schema<
 });
 
 export declare namespace ExperimentItemsBatch {
-    interface Raw {
+    export interface Raw {
         experiment_items: ExperimentItem.Raw[];
     }
 }

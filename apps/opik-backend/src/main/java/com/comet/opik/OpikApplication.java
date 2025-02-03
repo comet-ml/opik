@@ -1,7 +1,6 @@
 package com.comet.opik;
 
-import com.comet.opik.api.error.JsonInvalidFormatExceptionMapper;
-import com.comet.opik.domain.llmproviders.LlmProviderClientModule;
+import com.comet.opik.api.error.JsonProcessingExceptionMapper;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -16,6 +15,10 @@ import com.comet.opik.infrastructure.db.NameGeneratorModule;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.job.JobGuiceyInstaller;
+import com.comet.opik.infrastructure.llm.LlmModule;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
+import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
@@ -74,7 +77,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
-                        new ConfigurationModule(), new BiModule(), new CacheModule(), new LlmProviderClientModule())
+                        new ConfigurationModule(), new BiModule(), new CacheModule(), new AnthropicModule(),
+                        new GeminiModule(), new OpenAIModule(), new LlmModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()
@@ -100,6 +104,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 
-        jersey.register(JsonInvalidFormatExceptionMapper.class);
+        jersey.register(JsonProcessingExceptionMapper.class);
     }
 }

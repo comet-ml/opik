@@ -5,8 +5,6 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic";
-import { PercentageValuesPublic } from "./PercentageValuesPublic";
 
 export const ProjectPublic: core.serialization.ObjectSchema<serializers.ProjectPublic.Raw, OpikApi.ProjectPublic> =
     core.serialization.object({
@@ -18,17 +16,10 @@ export const ProjectPublic: core.serialization.ObjectSchema<serializers.ProjectP
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         lastUpdatedTraceAt: core.serialization.property("last_updated_trace_at", core.serialization.date().optional()),
-        feedbackScores: core.serialization.property(
-            "feedback_scores",
-            core.serialization.list(FeedbackScoreAveragePublic).optional()
-        ),
-        duration: PercentageValuesPublic.optional(),
-        totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
-        usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
     });
 
 export declare namespace ProjectPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;
@@ -37,9 +28,5 @@ export declare namespace ProjectPublic {
         last_updated_at?: string | null;
         last_updated_by?: string | null;
         last_updated_trace_at?: string | null;
-        feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
-        duration?: PercentageValuesPublic.Raw | null;
-        total_estimated_cost?: number | null;
-        usage?: Record<string, number> | null;
     }
 }

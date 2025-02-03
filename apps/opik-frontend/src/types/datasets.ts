@@ -1,5 +1,5 @@
 import { TraceFeedbackScore } from "@/types/traces";
-import { DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { AverageFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 
 export interface Dataset {
   id: string;
@@ -40,11 +40,6 @@ export interface ExperimentOutputColumn {
   types: DYNAMIC_COLUMN_TYPE[];
 }
 
-export interface AverageFeedbackScore {
-  name: string;
-  value: number;
-}
-
 export interface ExperimentPromptVersion {
   id: string;
   commit: string;
@@ -58,7 +53,9 @@ export interface Experiment {
   metadata?: object;
   name: string;
   feedback_scores?: AverageFeedbackScore[];
+  // @deprecated
   prompt_version?: ExperimentPromptVersion;
+  prompt_versions?: ExperimentPromptVersion[];
   trace_count: number;
   created_at: string;
   last_updated_at: string;

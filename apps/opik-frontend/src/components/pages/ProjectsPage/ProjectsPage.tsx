@@ -1,12 +1,17 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import isNumber from "lodash/isNumber";
+
+import { formatNumericData } from "@/lib/utils";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
+import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import useProjectsList from "@/api/projects/useProjectsList";
-import { Project } from "@/types/projects";
+import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
+import { ProjectWithStatistic } from "@/types/projects";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
 import ProjectsActionsPanel from "@/components/pages/ProjectsPage/ProjectsActionsPanel";
@@ -36,20 +41,74 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
-export const getRowId = (p: Project) => p.id;
+export const getRowId = (p: ProjectWithStatistic) => p.id;
 
 const SELECTED_COLUMNS_KEY = "projects-selected-columns";
 const COLUMNS_WIDTH_KEY = "projects-columns-width";
 const COLUMNS_ORDER_KEY = "projects-columns-order";
 const COLUMNS_SORT_KEY = "projects-columns-sort";
 
-export const DEFAULT_COLUMNS: ColumnData<Project>[] = [
+export const DEFAULT_COLUMNS: ColumnData<ProjectWithStatistic>[] = [
   {
     id: "id",
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
     sortable: true,
+  },
+  {
+    id: "duration.p50",
+    label: "Duration (p50)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p50,
+    cell: DurationCell as never,
+  },
+  {
+    id: "duration.p90",
+    label: "Duration (p90)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p90,
+    cell: DurationCell as never,
+  },
+  {
+    id: "duration.p99",
+    label: "Duration (p99)",
+    type: COLUMN_TYPE.duration,
+    accessorFn: (row) => row.duration?.p99,
+    cell: DurationCell as never,
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Total cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+  },
+  {
+    id: "usage.total_tokens",
+    label: "Total tokens (average)",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.total_tokens)
+        ? formatNumericData(row.usage.total_tokens)
+        : "-",
+  },
+  {
+    id: "usage.prompt_tokens",
+    label: "Input tokens (average)",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.prompt_tokens)
+        ? formatNumericData(row.usage.prompt_tokens)
+        : "-",
+  },
+  {
+    id: "usage.completion_tokens",
+    label: "Output tokens (average)",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.completion_tokens)
+        ? formatNumericData(row.usage.completion_tokens)
+        : "-",
   },
   {
     id: "last_updated_at",
@@ -84,6 +143,8 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "total_estimated_cost",
+  "duration.p50",
   "last_updated_at",
   "created_at",
   "description",
@@ -115,7 +176,7 @@ const ProjectsPage: React.FunctionComponent = () => {
     },
   );
 
-  const { data, isPending } = useProjectsList(
+  const { data, isPending } = useProjectWithStatisticsList(
     {
       workspaceName,
       search,
@@ -161,14 +222,14 @@ const ProjectsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
-  const selectedRows: Project[] = useMemo(() => {
+  const selectedRows: ProjectWithStatistic[] = useMemo(() => {
     return projects.filter((row) => rowSelection[row.id]);
   }, [rowSelection, projects]);
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Project>(),
-      mapColumnDataFields<Project, Project>({
+      generateSelectColumDef<ProjectWithStatistic>(),
+      mapColumnDataFields<ProjectWithStatistic, ProjectWithStatistic>({
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
@@ -180,10 +241,13 @@ const ProjectsPage: React.FunctionComponent = () => {
           resource: RESOURCE_TYPE.project,
         },
       }),
-      ...convertColumnDataToColumn<Project, Project>(DEFAULT_COLUMNS, {
-        columnsOrder,
-        selectedColumns,
-      }),
+      ...convertColumnDataToColumn<ProjectWithStatistic, ProjectWithStatistic>(
+        DEFAULT_COLUMNS,
+        {
+          columnsOrder,
+          selectedColumns,
+        },
+      ),
       generateActionsColumDef({
         cell: ProjectRowActionsCell,
       }),

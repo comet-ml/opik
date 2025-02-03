@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNodePublic } from "./JsonNodePublic";
 import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic";
+import { CommentPublic } from "./CommentPublic";
 import { PromptVersionLinkPublic } from "./PromptVersionLinkPublic";
 
 export const ExperimentPublic: core.serialization.ObjectSchema<
@@ -20,29 +21,36 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     metadata: JsonNodePublic.optional(),
     feedbackScores: core.serialization.property(
         "feedback_scores",
-        core.serialization.list(FeedbackScoreAveragePublic).optional()
+        core.serialization.list(FeedbackScoreAveragePublic).optional(),
     ),
+    comments: core.serialization.list(CommentPublic).optional(),
     traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     promptVersion: core.serialization.property("prompt_version", PromptVersionLinkPublic.optional()),
+    promptVersions: core.serialization.property(
+        "prompt_versions",
+        core.serialization.list(PromptVersionLinkPublic).optional(),
+    ),
 });
 
 export declare namespace ExperimentPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         dataset_name: string;
         dataset_id?: string | null;
         name?: string | null;
         metadata?: JsonNodePublic.Raw | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
+        comments?: CommentPublic.Raw[] | null;
         trace_count?: number | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
         prompt_version?: PromptVersionLinkPublic.Raw | null;
+        prompt_versions?: PromptVersionLinkPublic.Raw[] | null;
     }
 }

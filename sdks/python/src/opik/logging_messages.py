@@ -14,6 +14,10 @@ FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN = (
     "Failed to extract token usage from presumably OpenAI LLM langchain run."
 )
 
+FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_GOOGLE_LLM_RUN = (
+    "Failed to extract token usage from presumably Google LLM langchain run."
+)
+
 UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION = "Unexpected exception happened when tried to create a span for function %s.\nInputs: %s\nError message: %s"
 
 UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION = "Unexpected exception happened when tried to finalize span.\nOutput: %s\nError message: %s"

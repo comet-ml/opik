@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { RowSelectionState } from "@tanstack/react-table";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
 
@@ -16,13 +17,18 @@ import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import CommitsActionsPanel from "@/components/pages/PromptPage/CommitsTab/CommitsActionsPanel";
+
+export const getRowId = (p: PromptVersion) => p.id;
 
 interface CommitsTabInterface {
   prompt?: PromptWithLatestVersion;
 }
 
 export const COMMITS_DEFAULT_COLUMNS = [
+  generateSelectColumDef<PromptVersion>(),
   mapColumnDataFields<PromptVersion, PromptVersion>({
     id: "commit",
     label: "Prompt commit",
@@ -56,6 +62,11 @@ export const COMMITS_DEFAULT_COLUMNS = [
         cell: CodeCell as never,
       },
       {
+        id: "change_description",
+        label: "Commit message",
+        type: COLUMN_TYPE.string,
+      },
+      {
         id: "created_at",
         label: "Created at",
         type: COLUMN_TYPE.time,
@@ -75,6 +86,8 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
 
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
   const { data, isPending } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
@@ -88,9 +101,13 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     },
   );
 
-  const versions = data?.content ?? [];
+  const versions = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const noDataText = "There are no commits yet";
+
+  const selectedRows: PromptVersion[] = useMemo(() => {
+    return versions.filter((row) => rowSelection[row.id]);
+  }, [rowSelection, versions]);
 
   if (isPending) {
     return <Loader />;
@@ -98,9 +115,19 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
 
   return (
     <div>
+      <div className="mb-4 flex items-center justify-end">
+        <div className="flex items-center gap-2">
+          <CommitsActionsPanel versions={selectedRows} />
+        </div>
+      </div>
       <DataTable
         columns={COMMITS_DEFAULT_COLUMNS}
         data={versions}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
+        getRowId={getRowId}
         noData={<DataTableNoData title={noDataText} />}
       />
       <div className="py-4">

@@ -190,12 +190,12 @@ export const LLM_PROMPT_TEMPLATES: LLMPromptTemplate[] = [
           "Guidelines:\n" +
           "1. The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.\n" +
           "2. The OUTPUT must not contradict any information given in the CONTEXT.\n" +
-          "2. The OUTPUT should not contradict well-established facts or general knowledge.\n" +
-          "3. Ignore the INPUT when evaluating faithfulness; it's provided for context only.\n" +
-          "4. Consider partial hallucinations where some information is correct but other parts are not.\n" +
-          "5. Pay close attention to the subject of statements. Ensure that attributes, actions, or dates are correctly associated with the right entities (e.g., a person vs. a TV show they star in).\n" +
-          "6. Be vigilant for subtle misattributions or conflations of information, even if the date or other details are correct.\n" +
-          "7. Check that the OUTPUT doesn't oversimplify or generalize information in a way that changes its meaning or accuracy.\n" +
+          "3. The OUTPUT should not contradict well-established facts or general knowledge.\n" +
+          "4. Ignore the INPUT when evaluating faithfulness; it's provided for context only.\n" +
+          "5. Consider partial hallucinations where some information is correct but other parts are not.\n" +
+          "6. Pay close attention to the subject of statements. Ensure that attributes, actions, or dates are correctly associated with the right entities (e.g., a person vs. a TV show they star in).\n" +
+          "7. Be vigilant for subtle misattributions or conflations of information, even if the date or other details are correct.\n" +
+          "8. Check that the OUTPUT doesn't oversimplify or generalize information in a way that changes its meaning or accuracy.\n" +
           "\n" +
           "Analyze the text thoroughly and assign a hallucination score between 0 and 1, where:\n" +
           "- 0.0: The OUTPUT is entirely faithful to the CONTEXT\n" +

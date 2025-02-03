@@ -14,5 +14,6 @@ public record SpanSearchCriteria(
         UUID traceId,
         SpanType type,
         List<? extends Filter> filters,
-        boolean truncate) {
+        boolean truncate,
+        UUID lastReceivedSpanId) {
 }

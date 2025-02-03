@@ -10,6 +10,7 @@ type CopyButtonProps = {
   message?: string;
   tooltipText?: string;
   successIconTimeout?: number;
+  className?: string;
 };
 
 const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
@@ -17,6 +18,7 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
   message = "Copied",
   tooltipText = "Copy",
   successIconTimeout = 3000,
+  className,
 }) => {
   const { toast } = useToast();
   const [showSuccessIcon, setShowSuccessIcon] = useState(false);
@@ -50,7 +52,12 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
   if (tooltipText) {
     return (
       <TooltipWrapper content={tooltipText}>
-        <Button size="icon-sm" variant="ghost" onClick={copyClickHandler}>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className={className}
+          onClick={copyClickHandler}
+        >
           <Copy className="size-4" />
         </Button>
       </TooltipWrapper>

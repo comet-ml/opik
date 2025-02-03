@@ -106,6 +106,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
+| component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
 | component.backend.env.ANALYTICS_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.ANALYTICS_DB_HOST | string | `"clickhouse-opik-clickhouse"` |  |
@@ -116,7 +117,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_PORT | string | `"8123"` |  |
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
-| component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true"` |  |
+| component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |
@@ -152,6 +153,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.serviceAccount.create | bool | `true` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
+| component.frontend.backendConfigMap.enabled | bool | `false` |  |
 | component.frontend.enabled | bool | `true` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
@@ -175,6 +177,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.volumes[0].configMap.name | string | `"opik-frontend-nginx"` |  |
 | component.frontend.volumes[0].name | string | `"opik-frontend-nginx"` |  |
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
+| component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |

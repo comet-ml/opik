@@ -15,7 +15,7 @@ export const PromptVersionRetrieveDetail: core.serialization.Schema<
 });
 
 export declare namespace PromptVersionRetrieveDetail {
-    interface Raw {
+    export interface Raw {
         name: string;
         commit?: string | null;
     }

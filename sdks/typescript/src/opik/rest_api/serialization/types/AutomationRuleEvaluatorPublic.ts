@@ -9,13 +9,13 @@ import { AutomationRuleEvaluatorLlmAsJudgePublic } from "./AutomationRuleEvaluat
 
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
-    projectId: core.serialization.string().optional(),
+    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     name: core.serialization.string(),
-    samplingRate: core.serialization.number().optional(),
-    createdAt: core.serialization.date().optional(),
-    createdBy: core.serialization.string().optional(),
-    lastUpdatedAt: core.serialization.date().optional(),
-    lastUpdatedBy: core.serialization.string().optional(),
+    samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
+    createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
+    createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
+    lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+    lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     action: core.serialization.stringLiteral("evaluator").optional(),
 });
 export const AutomationRuleEvaluatorPublic: core.serialization.Schema<
@@ -31,21 +31,21 @@ export const AutomationRuleEvaluatorPublic: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluatorPublic {
-    type Raw = AutomationRuleEvaluatorPublic.LlmAsJudge;
+    export type Raw = AutomationRuleEvaluatorPublic.LlmAsJudge;
 
-    interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgePublic.Raw {
+    export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgePublic.Raw {
         type: "llm_as_judge";
     }
 
-    interface _Base {
+    export interface _Base {
         id?: string | null;
-        projectId?: string | null;
+        project_id?: string | null;
         name: string;
-        samplingRate?: number | null;
-        createdAt?: string | null;
-        createdBy?: string | null;
-        lastUpdatedAt?: string | null;
-        lastUpdatedBy?: string | null;
+        sampling_rate?: number | null;
+        created_at?: string | null;
+        created_by?: string | null;
+        last_updated_at?: string | null;
+        last_updated_by?: string | null;
         action?: "evaluator" | null;
     }
 }

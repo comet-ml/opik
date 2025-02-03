@@ -52,10 +52,13 @@ class TraceServiceImplTest {
     private TraceDAO traceDao;
 
     @Mock
-    private SpanDAO spanDAO;
+    private SpanService spanService;
 
     @Mock
     private FeedbackScoreDAO feedbackScoreDAO;
+
+    @Mock
+    private CommentDAO commentDAO;
 
     @Mock
     private TransactionTemplateAsync template;
@@ -72,8 +75,9 @@ class TraceServiceImplTest {
     void setUp() {
         traceService = new TraceServiceImpl(
                 traceDao,
-                spanDAO,
+                spanService,
                 feedbackScoreDAO,
+                commentDAO,
                 template,
                 projectService,
                 () -> Generators.timeBasedEpochGenerator().generate(),

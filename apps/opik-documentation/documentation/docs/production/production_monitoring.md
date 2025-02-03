@@ -19,7 +19,7 @@ To monitor the performance of your LLM application, you can log feedback scores 
 
 ### Defining online evaluation metrics
 
-You can define LLM as a Judge metrics in the Opik platform that will automatically score all, or a subset, of your production traces. You can find more information about how to define LLM as a Judge metrics in the [Online evaluation](/production/online_evaluation.md) section.
+You can define LLM as a Judge metrics in the Opik platform that will automatically score all, or a subset, of your production traces. You can find more information about how to define LLM as a Judge metrics in the [Online evaluation](/production/rules.md) section.
 
 <!-- Add gif of the online evaluation feature -->
 

@@ -1,16 +1,14 @@
 import React from "react";
-import ApiKeyInput from "@/components/shared/ApiKeyInput/ApiKeyInput";
+import usePluginsStore from "@/store/PluginsStore";
 
-type ApiKeyCardProps = {
-  apiKey: string;
-};
-const ApiKeyCard: React.FC<ApiKeyCardProps> = ({ apiKey }) => {
-  return (
-    <div className="flex flex-1 flex-col justify-between gap-4 rounded-md border bg-white p-6">
-      <div className="comet-title-xs text-foreground-secondary">API key</div>
-      <ApiKeyInput apiKey={apiKey} />
-    </div>
-  );
+const ApiKeyCard = () => {
+  const ApiKeyCard = usePluginsStore((state) => state.ApiKeyCard);
+
+  if (ApiKeyCard) {
+    return <ApiKeyCard />;
+  }
+
+  return null;
 };
 
 export default ApiKeyCard;

@@ -2,13 +2,21 @@ import functools
 from typing import Any, Dict
 
 import litellm
-from litellm.integrations.opik import opik as litellm_opik_logger
+
+try:
+    from litellm.integrations.opik import opik as litellm_opik_logger
+except ImportError:
+    litellm_opik_logger = None
+
 
 from opik import opik_context
 from opik import config
 
 
-def add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
+def try_add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    if litellm_opik_logger is None:
+        return params
+
     already_decorated = hasattr(litellm.completion, "opik_tracked")
     if already_decorated:
         return params
@@ -70,5 +78,5 @@ def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @functools.lru_cache
-def _callback_instance() -> litellm_opik_logger.OpikLogger:
+def _callback_instance() -> "litellm_opik_logger.OpikLogger":  # type: ignore
     return litellm_opik_logger.OpikLogger()

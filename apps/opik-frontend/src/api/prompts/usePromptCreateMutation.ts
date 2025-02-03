@@ -5,6 +5,7 @@ import get from "lodash/get";
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 import { Prompt } from "@/types/prompts";
+import { extractIdFromLocation } from "@/lib/utils";
 
 interface CreatePromptTemplate {
   template: string;
@@ -21,11 +22,16 @@ const usePromptCreateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ prompt }: UsePromptCreateMutationParams) => {
-      const { data } = await api.post(PROMPTS_REST_ENDPOINT, {
+      const { data, headers } = await api.post(PROMPTS_REST_ENDPOINT, {
         ...prompt,
       });
 
-      return data;
+      return data
+        ? data
+        : {
+            ...prompt,
+            id: extractIdFromLocation(headers?.location),
+          };
     },
 
     onError: (error: AxiosError) => {

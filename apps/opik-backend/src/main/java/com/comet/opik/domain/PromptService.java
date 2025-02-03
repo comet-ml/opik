@@ -2,11 +2,12 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.MustacheUtils;
+import com.comet.opik.utils.TemplateParseUtils;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -53,7 +54,7 @@ public interface PromptService {
 
     PromptVersion getVersionById(UUID id);
 
-    Mono<PromptVersion> findVersionById(UUID id);
+    Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
     PromptVersion retrievePromptVersion(String name, String commit);
 
@@ -119,6 +120,7 @@ class PromptServiceImpl implements PromptService {
                     .template(promptRequest.template())
                     .metadata(promptRequest.metadata())
                     .changeDescription(promptRequest.changeDescription())
+                    .type(promptRequest.type())
                     .createdBy(createdPrompt.createdBy())
                     .build();
 
@@ -126,7 +128,7 @@ class PromptServiceImpl implements PromptService {
 
             promptVersionDAO.save(workspaceId, promptVersion);
 
-            return promptVersionDAO.findById(versionId, workspaceId);
+            return promptVersionDAO.findByIds(List.of(versionId), workspaceId).getFirst();
         });
 
         log.info("Created Prompt version for prompt id '{}'", createdPrompt.id());
@@ -343,11 +345,11 @@ class PromptServiceImpl implements PromptService {
         PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            return promptVersionDAO.findById(id, workspaceId);
+            return promptVersionDAO.findByIds(List.of(id), workspaceId).getFirst();
         });
 
         return promptVersion.toBuilder()
-                .variables(getVariables(promptVersion.template()))
+                .variables(getVariables(promptVersion.template(), promptVersion.type()))
                 .build();
     }
 
@@ -368,18 +370,44 @@ class PromptServiceImpl implements PromptService {
                     .latestVersion(
                             Optional.ofNullable(prompt.latestVersion())
                                     .map(promptVersion -> promptVersion.toBuilder()
-                                            .variables(getVariables(promptVersion.template()))
+                                            .variables(getVariables(promptVersion.template(), promptVersion.type()))
                                             .build())
                                     .orElse(null))
                     .build();
         });
     }
 
+    @Override
+    public Mono<Map<UUID, PromptVersion>> findVersionByIds(@NonNull Set<UUID> ids) {
+
+        if (ids.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> {
+            return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+                return promptVersionDAO.findByIds(ids, workspaceId).stream()
+                        .collect(toMap(PromptVersion::id, promptVersion -> promptVersion.toBuilder()
+                                .variables(getVariables(promptVersion.template(), promptVersion.type()))
+                                .build()));
+            });
+        })
+                .flatMap(versions -> {
+                    if (versions.size() != ids.size()) {
+                        return Mono.error(new NotFoundException(PROMPT_VERSION_NOT_FOUND));
+                    }
+                    return Mono.just(versions);
+                })
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
     public PromptVersion getVersionById(@NonNull String workspaceId, @NonNull UUID id) {
         PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            return promptVersionDAO.findById(id, workspaceId);
+            return promptVersionDAO.findByIds(List.of(id), workspaceId).stream().findFirst().orElse(null);
         });
 
         if (promptVersion == null) {
@@ -387,16 +415,16 @@ class PromptServiceImpl implements PromptService {
         }
 
         return promptVersion.toBuilder()
-                .variables(getVariables(promptVersion.template()))
+                .variables(getVariables(promptVersion.template(), promptVersion.type()))
                 .build();
     }
 
-    private Set<String> getVariables(String template) {
+    private Set<String> getVariables(String template, PromptType type) {
         if (template == null) {
             return null;
         }
 
-        return MustacheUtils.extractVariables(template);
+        return TemplateParseUtils.extractVariables(template, type);
     }
 
     private EntityAlreadyExistsException newConflict(String alreadyExists) {
@@ -441,12 +469,6 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Mono<PromptVersion> findVersionById(UUID id) {
-        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> getVersionById(workspaceId, id))
-                .subscribeOn(Schedulers.boundedElastic()));
-    }
-
-    @Override
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -471,7 +493,7 @@ class PromptServiceImpl implements PromptService {
             }
 
             return promptVersion.toBuilder()
-                    .variables(getVariables(promptVersion.template()))
+                    .variables(getVariables(promptVersion.template(), promptVersion.type()))
                     .build();
         });
     }

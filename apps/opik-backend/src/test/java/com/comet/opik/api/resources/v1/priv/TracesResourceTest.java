@@ -37,7 +37,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -71,6 +71,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -96,8 +97,11 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.resources.utils.AssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTraceComment;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectTraceStatItems;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -124,10 +128,8 @@ class TracesResourceTest {
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
             "comments"};
-    private static final String[] IGNORED_FIELDS_SPANS = SpansResourceTest.IGNORED_FIELDS;
+    private static final String[] IGNORED_FIELDS_SPANS = SpanResourceClient.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
-    private static final String[] IGNORED_FIELDS_COMMENTS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -788,7 +790,7 @@ class TracesResourceTest {
         }
 
         @Test
-        void findWithUsage() {
+        void findWithUsageAndComments() {
             var projectName = RandomStringUtils.randomAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
@@ -810,12 +812,21 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(
                     traceIdToSpansMap.values().stream().flatMap(List::stream).toList(), API_KEY, TEST_WORKSPACE);
 
+            var traceIdToCommentsMap = traces.stream()
+                    .map(trace -> Pair.of(trace.id(),
+                            IntStream.range(0, 5)
+                                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(trace.id(), API_KEY,
+                                            TEST_WORKSPACE, 201))
+                                    .toList()))
+                    .collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
+
             traces = traces.stream().map(trace -> trace.toBuilder()
                     .usage(traceIdToSpansMap.get(trace.id()).stream()
                             .map(Span::usage)
                             .flatMap(usage -> usage.entrySet().stream())
                             .collect(Collectors.groupingBy(
                                     Map.Entry::getKey, Collectors.summingLong(Map.Entry::getValue))))
+                    .comments(traceIdToCommentsMap.get(trace.id()))
                     .build()).toList();
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), traces, traces.reversed(), List.of(), API_KEY);
         }
@@ -3386,6 +3397,17 @@ class TracesResourceTest {
                 assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
             });
         }
+
+        if (actualTrace.comments() != null) {
+            assertComments(expectedTrace.comments(), actualTrace.comments());
+
+            actualTrace.comments().forEach(comment -> {
+                assertThat(comment.createdAt()).isAfter(actualTrace.createdAt());
+                assertThat(comment.lastUpdatedAt()).isAfter(actualTrace.lastUpdatedAt());
+                assertThat(comment.createdBy()).isEqualTo(USER);
+                assertThat(comment.lastUpdatedBy()).isEqualTo(USER);
+            });
+        }
     }
 
     private void assertIgnoredFieldsSpans(List<Span> actualSpans, List<Span> expectedSpans) {
@@ -3521,8 +3543,13 @@ class TracesResourceTest {
 
             batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
 
+            // Create some comments, might affect cost/usage query
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(id, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
-            trace = trace.toBuilder().id(id).usage(usage).build();
+            trace = trace.toBuilder().id(id).usage(usage).comments(expectedComments).build();
             Trace createdTrace = getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
 
             assertThat(createdTrace.totalEstimatedCost())
@@ -4673,9 +4700,12 @@ class TracesResourceTest {
     class TraceComment {
 
         @Test
-        void createAndGetComment() {
-            // Create comment for not existing trace, should fail
+        void createCommentForNonExistingTraceFail() {
             traceResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
+        }
+
+        @Test
+        void createAndGetComment() {
 
             // Create comment for existing trace
             UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
@@ -4703,7 +4733,7 @@ class TracesResourceTest {
 
             // Update existing comment
             String updatedText = factory.manufacturePojo(String.class);
-            traceResourceClient.updateComment(updatedText, expectedComment.id(), traceId, API_KEY,
+            traceResourceClient.updateComment(updatedText, expectedComment.id(), API_KEY,
                     TEST_WORKSPACE, 204);
 
             // Get comment by id and assert it was updated
@@ -4713,53 +4743,155 @@ class TracesResourceTest {
         }
 
         @Test
-        void deleteComment() {
+        void deleteComments() {
             // Create comment for existing trace
             UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
                     TEST_WORKSPACE);
-            Comment expectedComment = traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE,
-                    201);
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList().reversed();
 
             // Check it was created
-            traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
-                    TEST_WORKSPACE, 200);
+            expectedComments.forEach(
+                    comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE, 200));
 
             // Delete comment
-            BatchDelete request = BatchDelete.builder().ids(Set.of(expectedComment.id())).build();
+            BatchDelete request = BatchDelete.builder()
+                    .ids(expectedComments.stream().map(Comment::id).collect(Collectors.toSet())).build();
             traceResourceClient.deleteComments(request, API_KEY, TEST_WORKSPACE);
 
-            // Verify comment was actually deleted via get and update endpoints
-            traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY, TEST_WORKSPACE, 404);
-            traceResourceClient.updateComment(factory.manufacturePojo(String.class), expectedComment.id(), traceId,
-                    API_KEY, TEST_WORKSPACE, 404);
+            // Verify comments were actually deleted via get and update endpoints
+            expectedComments.forEach(
+                    comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE, 404));
+            expectedComments.forEach(comment -> traceResourceClient.updateComment(factory.manufacturePojo(String.class),
+                    comment.id(), API_KEY, TEST_WORKSPACE, 404));
         }
-    }
 
-    private void assertTraceComment(Comment expected, Comment actual) {
-        assertThat(actual)
-                .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_COMMENTS)
-                .isEqualTo(expected);
+        @Test
+        void getTraceWithComments() {
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+                    TEST_WORKSPACE);
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
 
-        assertThat(actual.createdAt()).isNotNull();
-        assertThat(actual.lastUpdatedAt()).isNotNull();
-        assertThat(actual.createdBy()).isNotNull();
-        assertThat(actual.lastUpdatedBy()).isNotNull();
-    }
+            Trace expectedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertComments(expectedComments, expectedTrace.comments());
+        }
 
-    private void assertUpdatedComment(Comment initial, Comment updated, String expectedText) {
-        assertThat(initial.text()).isNotEqualTo(expectedText);
-        initial = initial.toBuilder().text(expectedText).build();
+        @Test
+        void getTracePageWithComments() {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            var traceId = traces.getFirst().id();
 
-        assertThat(updated)
-                .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_COMMENTS)
-                .isEqualTo(initial);
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
-        assertThat(updated.createdAt()).isEqualTo(initial.createdAt());
-        assertThat(updated.lastUpdatedAt()).isNotEqualTo(initial.lastUpdatedAt());
-        assertThat(updated.createdBy()).isEqualTo(initial.createdBy());
-        assertThat(updated.lastUpdatedBy()).isEqualTo(initial.lastUpdatedBy());
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            traces = traces.stream()
+                    .map(trace -> trace.id() != traceId ? trace : trace.toBuilder().comments(expectedComments).build())
+                    .toList();
+
+            getAndAssertPage(1, traces.size(), projectName, List.of(), traces.reversed(), List.of(), TEST_WORKSPACE,
+                    API_KEY);
+        }
+
+        @Test
+        void deleteTraceDeletesTraceAndSpanComments() {
+            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+                    TEST_WORKSPACE);
+            List<Comment> expectedTraceComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            // Check that comments were created
+            Trace expectedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertComments(expectedTraceComments, expectedTrace.comments());
+
+            // Create span for the trace and span comments
+            var spanWithComments = createSpanWithCommentsAndAssert(traceId);
+
+            traceResourceClient.deleteTrace(traceId, TEST_WORKSPACE, API_KEY);
+
+            // Verify trace comments were actually deleted via get endpoint
+            expectedTraceComments.forEach(
+                    comment -> traceResourceClient.getCommentById(comment.id(), traceId, API_KEY, TEST_WORKSPACE, 404));
+
+            // Verify span comments were actually deleted via get endpoint
+            spanWithComments.getRight().forEach(
+                    comment -> spanResourceClient.getCommentById(comment.id(), spanWithComments.getLeft(), API_KEY,
+                            TEST_WORKSPACE, 404));
+        }
+
+        @Test
+        void batchDeleteTracesDeletesTraceAndSpanComments() {
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), traces, traces.reversed(), List.of(), API_KEY);
+
+            List<Comment> expectedTraceComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traces.getFirst().id(), API_KEY,
+                            TEST_WORKSPACE, 201))
+                    .toList();
+
+            // Check that comments were created
+            Trace expectedTrace = traceResourceClient.getById(traces.getFirst().id(), TEST_WORKSPACE, API_KEY);
+            assertComments(expectedTraceComments, expectedTrace.comments());
+
+            // Create span for the trace and span comments
+            var spanWithComments = createSpanWithCommentsAndAssert(traces.getFirst().id());
+
+            var request = BatchDelete.builder()
+                    .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
+                    .build();
+
+            traceResourceClient.deleteTraces(request, TEST_WORKSPACE, API_KEY);
+
+            // Verify comments were actually deleted via get endpoint
+            expectedTraceComments
+                    .forEach(comment -> traceResourceClient.getCommentById(comment.id(), traces.getFirst().id(),
+                            API_KEY, TEST_WORKSPACE, 404));
+
+            // Verify span comments were actually deleted via get endpoint
+            spanWithComments.getRight().forEach(
+                    comment -> spanResourceClient.getCommentById(comment.id(), spanWithComments.getLeft(), API_KEY,
+                            TEST_WORKSPACE, 404));
+        }
+
+        private Pair<UUID, List<Comment>> createSpanWithCommentsAndAssert(UUID traceId) {
+            // Create span for the trace and span comments
+            UUID spanId = spanResourceClient.createSpan(
+                    factory.manufacturePojo(Span.class).toBuilder().traceId(traceId).build(), API_KEY,
+                    TEST_WORKSPACE);
+            List<Comment> expectedSpanComments = IntStream.range(0, 5)
+                    .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
+                    .toList();
+
+            // Check that span comments were created
+            Span actualSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+            assertComments(expectedSpanComments, actualSpan.comments());
+
+            return Pair.of(spanId, expectedSpanComments);
+        }
     }
 
     @Nested
@@ -5506,7 +5638,7 @@ class TracesResourceTest {
                 List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
                         .map(span -> span.toBuilder()
                                 .usage(spanResourceClient.getTokenUsage())
-                                .model(spanResourceClient.randomModelPrice().getName())
+                                .model(spanResourceClient.randomModel().toString())
                                 .traceId(trace.id())
                                 .projectName(projectName)
                                 .feedbackScores(null)
@@ -5517,7 +5649,7 @@ class TracesResourceTest {
                 batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
                 BigDecimal totalCost = spans.stream()
-                        .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                        .map(span -> CostService.calculateCost(span.model(), span.usage()))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
 
                 Trace expectedTrace = trace.toBuilder()
@@ -8028,7 +8160,7 @@ class TracesResourceTest {
 
     private BigDecimal aggregateSpansCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> ModelPrice.fromString(span.model()).calculateCost(span.usage()))
+                .map(span -> CostService.calculateCost(span.model(), span.usage()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

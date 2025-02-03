@@ -16,7 +16,7 @@ export const SpanPagePublic: core.serialization.ObjectSchema<serializers.SpanPag
     });
 
 export declare namespace SpanPagePublic {
-    interface Raw {
+    export interface Raw {
         page?: number | null;
         size?: number | null;
         total?: number | null;

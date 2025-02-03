@@ -210,10 +210,9 @@ class DailyUsageReportJobTest {
 
         List<Experiment> experiments = datasets
                 .stream()
-                .map(dataset -> factory.manufacturePojo(Experiment.class).toBuilder()
+                .map(dataset -> experimentResourceClient.createPartialExperiment()
                         .datasetId(dataset.id())
                         .datasetName(dataset.name())
-                        .promptVersion(null)
                         .build())
                 .toList();
 

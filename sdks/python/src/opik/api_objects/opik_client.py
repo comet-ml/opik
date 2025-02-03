@@ -226,6 +226,7 @@ class Opik:
         model: Optional[str] = None,
         provider: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -249,6 +250,7 @@ class Opik:
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM.
             error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             span.Span: The created span object.
@@ -300,10 +302,13 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=parsed_usage.supported_usage,
+            usage=parsed_usage.full_usage
+            if provider == "google_vertexai"
+            else parsed_usage.supported_usage,
             model=model,
             provider=provider,
             error_info=error_info,
+            total_cost=total_cost,
         )
         self._streamer.put(create_span_message)
 
@@ -611,6 +616,7 @@ class Opik:
         project_name: Optional[str] = None,
         filter_string: Optional[str] = None,
         max_results: int = 1000,
+        truncate: bool = True,
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project.
@@ -619,9 +625,10 @@ class Opik:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
             filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
+            truncate: Whether to truncate image data stored in input, output or metadata
         """
 
-        page_size = 200
+        page_size = 100
         traces: List[trace_public.TracePublic] = []
 
         filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
@@ -633,6 +640,7 @@ class Opik:
                 filters=filters,
                 page=page,
                 size=page_size,
+                truncate=truncate,
             )
 
             if len(page_traces.content) == 0:
@@ -649,6 +657,7 @@ class Opik:
         trace_id: Optional[str] = None,
         filter_string: Optional[str] = None,
         max_results: int = 1000,
+        truncate: bool = True,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
@@ -659,8 +668,9 @@ class Opik:
             trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
             filter_string: A filter string to narrow down the search.
             max_results: The maximum number of spans to return.
+            truncate: Whether to truncate image data stored in input, output or metadata
         """
-        page_size = 200
+        page_size = 100
         spans: List[span_public.SpanPublic] = []
 
         filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
@@ -673,6 +683,7 @@ class Opik:
                 filters=filters,
                 page=page,
                 size=page_size,
+                truncate=truncate,
             )
 
             if len(page_spans.content) == 0:

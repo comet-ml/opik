@@ -6,6 +6,7 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { JsonNodeWrite } from "../../../../types/JsonNodeWrite";
+import { PromptWriteType } from "../../types/PromptWriteType";
 
 export const PromptWrite: core.serialization.Schema<serializers.PromptWrite.Raw, OpikApi.PromptWrite> =
     core.serialization.object({
@@ -15,15 +16,17 @@ export const PromptWrite: core.serialization.Schema<serializers.PromptWrite.Raw,
         template: core.serialization.string().optional(),
         metadata: JsonNodeWrite.optional(),
         changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
+        type: PromptWriteType.optional(),
     });
 
 export declare namespace PromptWrite {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;
         template?: string | null;
         metadata?: JsonNodeWrite.Raw | null;
         change_description?: string | null;
+        type?: PromptWriteType.Raw | null;
     }
 }

@@ -10,7 +10,6 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
@@ -32,7 +31,6 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.UUID;
@@ -65,7 +63,7 @@ class AuthenticationResourceTest {
     private static final String UNAUTHORISED_WORKSPACE_NAME = UUID.randomUUID().toString();
 
     @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    private static final TestDropwizardAppExtension APP;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
 
@@ -77,11 +75,9 @@ class AuthenticationResourceTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
-
-    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
     private ClientSupport client;

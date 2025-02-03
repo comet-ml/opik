@@ -4,7 +4,7 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
-import com.comet.opik.domain.cost.ModelPrice;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.stats.StatsMapper;
@@ -26,6 +26,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -45,6 +46,7 @@ import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -98,7 +100,7 @@ class SpanDAO {
                         :metadata<item.index>,
                         :model<item.index>,
                         :provider<item.index>,
-                        toDecimal64(:total_estimated_cost<item.index>, 8),
+                        toDecimal128(:total_estimated_cost<item.index>, 12),
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
@@ -245,7 +247,7 @@ class SpanDAO {
                     :metadata as metadata,
                     :model as model,
                     :provider as provider,
-                    toDecimal64(:total_estimated_cost, 8) as total_estimated_cost,
+                    toDecimal128(:total_estimated_cost, 12) as total_estimated_cost,
                     :total_estimated_cost_version as total_estimated_cost_version,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
@@ -309,7 +311,7 @@ class SpanDAO {
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
             	<if(model)> :model <else> model <endif> as model,
             	<if(provider)> :provider <else> provider <endif> as provider,
-            	<if(total_estimated_cost)> toDecimal64(:total_estimated_cost, 8) <else> total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
@@ -455,7 +457,7 @@ class SpanDAO {
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
                     <if(model)> :model <else> '' <endif> as model,
                     <if(provider)> :provider <else> '' <endif> as provider,
-                    <if(total_estimated_cost)> toDecimal64(:total_estimated_cost, 8) <else> toDecimal64(0, 8) <endif> as total_estimated_cost,
+                    <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
@@ -478,73 +480,141 @@ class SpanDAO {
 
     private static final String SELECT_BY_ID = """
             SELECT
-            *,
-            if(end_time IS NOT NULL AND start_time IS NOT NULL
-                        AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                    (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                    NULL) AS duration_millis
-            FROM
-            spans
-            WHERE id = :id
-            AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
-            LIMIT 1
+                s.*,
+                groupArray(tuple(c.*)) AS comments
+            FROM (
+                SELECT
+                    *,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) AS duration_millis
+                FROM spans
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS s
+            LEFT JOIN (
+                SELECT
+                    id AS comment_id,
+                    text,
+                    created_at AS comment_created_at,
+                    last_updated_at AS comment_last_updated_at,
+                    created_by AS comment_created_by,
+                    last_updated_by AS comment_last_updated_by,
+                    entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND entity_id = :id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS c ON s.id = c.entity_id
+            GROUP BY
+                s.*
             ;
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            SELECT
-                 id,
-                 workspace_id,
-                 project_id,
-                 trace_id,
-                 parent_span_id,
-                 name,
-                 type,
-                 start_time,
-                 end_time,
-                 <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                 <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
-                 <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
-                 model,
-                 provider,
-                 total_estimated_cost,
-                 tags,
-                 usage,
-                 error_info,
-                 created_at,
-                 last_updated_at,
-                 created_by,
-                 last_updated_by,
-                 if(end_time IS NOT NULL AND start_time IS NOT NULL
-                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration_millis
-             FROM spans
-             WHERE project_id = :project_id
-             AND workspace_id = :workspace_id
-             <if(trace_id)> AND trace_id = :trace_id <endif>
-             <if(type)> AND type = :type <endif>
-             <if(filters)> AND <filters> <endif>
-             <if(feedback_scores_filters)>
-             AND id in (
-                SELECT
-                    entity_id
-                FROM (
-                    SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                    AND project_id = :project_id
-                    ORDER BY entity_id DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
+            WITH span_ids AS (
+              SELECT
+                  id
+              FROM (
+                    SELECT
+                        *
+                    FROM (
+                      SELECT
+                          id,
+                          if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                   AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                               (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                               NULL) AS duration_millis,
+                           row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                      FROM spans
+                      WHERE project_id = :project_id
+                      AND workspace_id = :workspace_id
+                      <if(last_received_span_id)> AND id > :last_received_span_id <endif>
+                      <if(trace_id)> AND trace_id = :trace_id <endif>
+                      <if(type)> AND type = :type <endif>
+                      <if(filters)> AND <filters> <endif>
+                      <if(feedback_scores_filters)>
+                      AND id in (
+                          SELECT
+                              entity_id
+                          FROM (
+                              SELECT *
+                              FROM feedback_scores
+                              WHERE entity_type = 'span'
+                              AND project_id = :project_id
+                              ORDER BY entity_id DESC, last_updated_at DESC
+                              LIMIT 1 BY entity_id, name
+                          )
+                          GROUP BY entity_id
+                          HAVING <feedback_scores_filters>
+                      )
+                      <endif>
+                    ) WHERE latest = 1
+                    ORDER BY id DESC
+                    LIMIT :limit
+                    <if(offset)>OFFSET :offset <endif>
                 )
-                GROUP BY entity_id
-                HAVING <feedback_scores_filters>
-             )
-             <endif>
-             ORDER BY id DESC, last_updated_at DESC
-             LIMIT 1 BY id
-             LIMIT :limit OFFSET :offset
+            ), comments_final AS (
+              SELECT
+                   id AS comment_id,
+                   text,
+                   created_at AS comment_created_at,
+                   last_updated_at AS comment_last_updated_at,
+                   created_by AS comment_created_by,
+                   last_updated_by AS comment_last_updated_by,
+                   entity_id
+              FROM comments
+              WHERE workspace_id = :workspace_id
+              AND project_id = :project_id
+              ORDER BY id DESC, last_updated_at DESC
+              LIMIT 1 BY id
+            )
+            SELECT
+                s.id as id,
+                s.workspace_id as workspace_id,
+                s.project_id as project_id,
+                s.trace_id as trace_id,
+                s.parent_span_id as parent_span_id,
+                s.name as name,
+                s.type as type,
+                s.start_time as start_time,
+                s.end_time as end_time,
+                <if(truncate)> replaceRegexpAll(s.input, '<truncate>', '"[image]"') as input <else> s.input as input<endif>,
+                <if(truncate)> replaceRegexpAll(s.output, '<truncate>', '"[image]"') as output <else> s.output as output<endif>,
+                <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif>,
+                s.model as model,
+                s.provider as provider,
+                s.total_estimated_cost as total_estimated_cost,
+                s.tags as tags,
+                s.usage as usage,
+                s.error_info as error_info,
+                s.created_at as created_at,
+                s.last_updated_at as last_updated_at,
+                s.created_by as created_by,
+                s.last_updated_by as last_updated_by,
+                if(s.end_time IS NOT NULL AND s.start_time IS NOT NULL
+                            AND notEquals(s.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                        (dateDiff('microsecond', s.start_time, s.end_time) / 1000.0),
+                        NULL) AS duration_millis,
+               groupArray(tuple(c.*)) AS comments
+            FROM (
+            	SELECT
+            		*,
+            		row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+            	FROM spans
+            	WHERE id IN (SELECT id FROM span_ids)
+            ) AS s
+            LEFT JOIN comments_final AS c ON s.id = c.entity_id
+            WHERE s.latest = 1
+            GROUP BY
+              s.*,
+              duration_millis
+            ORDER BY s.id DESC
+            SETTINGS join_algorithm='auto'
             ;
             """;
 
@@ -558,7 +628,8 @@ class SpanDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                                          AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                      (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration_millis
+                                     NULL) AS duration_millis,
+                    row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
                 FROM spans
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -567,23 +638,22 @@ class SpanDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
-                SELECT
-                    entity_id
-                FROM (
-                    SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                    AND project_id = :project_id
-                    ORDER BY entity_id DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                )
-                GROUP BY entity_id
-                HAVING <feedback_scores_filters>
+                    SELECT
+                        entity_id
+                    FROM (
+                        SELECT *
+                        FROM feedback_scores
+                        WHERE entity_type = 'span'
+                        AND project_id = :project_id
+                        ORDER BY entity_id DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    )
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
                 )
                 <endif>
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY id
             ) AS latest_rows
+            WHERE latest = 1
             ;
             """;
 
@@ -601,7 +671,7 @@ class SpanDAO {
             ;
             """;
 
-    public static final String SELECT_PROJECT_ID_FROM_SPANS = """
+    public static final String SELECT_PROJECT_ID_FROM_SPAN = """
             SELECT
                   project_id
             FROM spans
@@ -626,7 +696,7 @@ class SpanDAO {
                     avgMap(usage) as usage,
                     avgMap(feedback_scores) AS feedback_scores,
                     avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                    toDecimal64(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 8) AS total_estimated_cost_avg
+                    toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
                 FROM (
                     SELECT
                         s.workspace_id as workspace_id,
@@ -642,44 +712,47 @@ class SpanDAO {
                         s.total_estimated_cost as total_estimated_cost
                     FROM (
                         SELECT
-                             workspace_id,
-                             project_id,
-                             id,
-                             if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                         AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                     (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration_millis,
-                             if(length(input) > 0, 1, 0) as input_count,
-                             if(length(output) > 0, 1, 0) as output_count,
-                             if(length(metadata) > 0, 1, 0) as metadata_count,
-                             length(tags) as tags_count,
-                             usage,
-                             total_estimated_cost
-                        FROM spans
-                        WHERE project_id = :project_id
-                        AND workspace_id = :workspace_id
-                        <if(trace_id)> AND trace_id = :trace_id <endif>
-                        <if(type)> AND type = :type <endif>
-                        <if(filters)> AND <filters> <endif>
-                        <if(feedback_scores_filters)>
-                        AND id in (
+                            *
+                        FROM (
                             SELECT
-                                entity_id
-                            FROM (
-                                SELECT *
-                                FROM feedback_scores
-                                WHERE entity_type = 'span'
-                                AND project_id = :project_id
-                                AND workspace_id = :workspace_id
-                                ORDER BY entity_id DESC, last_updated_at DESC
-                                LIMIT 1 BY entity_id, name
+                                 workspace_id,
+                                 project_id,
+                                 id,
+                                 if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                         NULL) AS duration_millis,
+                                 if(length(input) > 0, 1, 0) as input_count,
+                                 if(length(output) > 0, 1, 0) as output_count,
+                                 if(length(metadata) > 0, 1, 0) as metadata_count,
+                                 length(tags) as tags_count,
+                                 usage,
+                                 total_estimated_cost,
+                                 row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                            FROM spans
+                            WHERE project_id = :project_id
+                            AND workspace_id = :workspace_id
+                            <if(trace_id)> AND trace_id = :trace_id <endif>
+                            <if(type)> AND type = :type <endif>
+                            <if(filters)> AND <filters> <endif>
+                            <if(feedback_scores_filters)>
+                            AND id in (
+                                SELECT
+                                    entity_id
+                                FROM (
+                                    SELECT *
+                                    FROM feedback_scores
+                                    WHERE entity_type = 'span'
+                                    AND project_id = :project_id
+                                    AND workspace_id = :workspace_id
+                                    ORDER BY entity_id DESC, last_updated_at DESC
+                                    LIMIT 1 BY entity_id, name
+                                )
+                                GROUP BY entity_id
+                                HAVING <feedback_scores_filters>
                             )
-                            GROUP BY entity_id
-                            HAVING <feedback_scores_filters>
-                        )
-                        <endif>
-                        ORDER BY id DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                            <endif>
+                        ) WHERE latest = 1
                     ) AS s
                     LEFT JOIN (
                         SELECT
@@ -706,7 +779,16 @@ class SpanDAO {
                 )
                 GROUP BY project_id
             ) AS stats
+            SETTINGS join_algorithm='auto'
             ;
+            """;
+
+    public static final String SELECT_SPAN_IDS_BY_TRACE_ID = """
+            SELECT
+                  DISTINCT id
+            FROM spans
+            WHERE trace_id IN :trace_ids
+            AND workspace_id = :workspace_id
             """;
 
     private static final String ESTIMATED_COST_VERSION = "1.0";
@@ -987,7 +1069,7 @@ class SpanDAO {
                     && Objects.nonNull(spanUpdate.usage())) {
                         // Calculate estimated cost only in case Span doesn't have manually set cost
                         statement.bind("total_estimated_cost",
-                                ModelPrice.fromString(spanUpdate.model()).calculateCost(spanUpdate.usage()).toString());
+                                CostService.calculateCost(spanUpdate.model(), spanUpdate.usage()).toString());
                         statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
                     }
     }
@@ -1044,21 +1126,22 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Void> deleteByTraceId(@NonNull UUID traceId, @NonNull Connection connection) {
-        return deleteByTraceIds(Set.of(traceId), connection);
-    }
-
-    @WithSpan
-    public Mono<Void> deleteByTraceIds(Set<UUID> traceIds, @NonNull Connection connection) {
+    public Mono<Long> deleteByTraceIds(Set<UUID> traceIds) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
         log.info("Deleting spans by traceIds, count '{}'", traceIds.size());
-        var statement = connection.createStatement(DELETE_BY_TRACE_IDS)
-                .bind("trace_ids", traceIds);
         var segment = startSegment("spans", "Clickhouse", "delete_by_trace_id");
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .doFinally(signalType -> endSegment(segment))
-                .then();
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(DELETE_BY_TRACE_IDS)
+                            .bind("trace_ids", traceIds);
+
+                    return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+                })
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum)
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private Publisher<Span> mapToDto(Result result) {
@@ -1105,6 +1188,7 @@ class SpanDAO {
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
                     .usage(row.get("usage", Map.class))
+                    .comments(getComments(row.get("comments", List[].class)))
                     .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
                             .filter(str -> !str.isBlank())
                             .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
@@ -1133,6 +1217,18 @@ class SpanDAO {
                 .map(spans -> new Span.SpanPage(page, spans.size(), total, spans));
     }
 
+    @WithSpan
+    public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> findSpanStream(limit, criteria, connection))
+                .flatMap(this::mapToDto)
+                .buffer(limit > 100 ? limit / 2 : limit)
+                .concatWith(Mono.just(List.of()))
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(this::enhanceWithFeedbackScores)
+                .flatMap(Flux::fromIterable);
+    }
+
     private Mono<List<Span>> enhanceWithFeedbackScores(List<Span> spans) {
         List<UUID> spanIds = spans.stream().map(Span::id).toList();
 
@@ -1153,13 +1249,34 @@ class SpanDAO {
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
 
-        return ModelPrice.fromString(model).calculateCost(span.usage());
+        return CostService.calculateCost(model, span.usage());
     }
 
-    private Publisher<? extends Result> find(int page, int size, SpanSearchCriteria spanSearchCriteria,
+    private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
+        log.info("Searching spans by '{}'", criteria);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+
+        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", criteria.projectId())
+                .bind("limit", limit);
+        bindSearchCriteria(statement, criteria);
+
+        Segment segment = startSegment("spans", "Clickhouse", "findSpanStream");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> {
+                    log.info("Closing span search stream");
+                    endSegment(segment);
+                });
+    }
+
+    private Publisher<? extends Result> find(Integer page, int size, SpanSearchCriteria spanSearchCriteria,
             Connection connection) {
 
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria);
+        template.add("offset", (page - 1) * size);
+
         template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", spanSearchCriteria.projectId())
@@ -1207,6 +1324,8 @@ class SpanDAO {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
                 });
+        Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
+                .ifPresent(lastReceivedSpanId -> template.add("last_received_span_id", lastReceivedSpanId));
         return template;
     }
 
@@ -1221,6 +1340,8 @@ class SpanDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.DURATION);
                 });
+        Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
+                .ifPresent(lastReceivedSpanId -> statement.bind("last_received_span_id", lastReceivedSpanId));
     }
 
     @WithSpan
@@ -1249,7 +1370,7 @@ class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
-                    var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_SPANS)
+                    var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_SPAN)
                             .bind("id", spanId);
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
@@ -1277,6 +1398,23 @@ class SpanDAO {
                 })
                 .flatMap(result -> result.map(((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "span_count"))))
                 .singleOrEmpty();
+    }
+
+    @WithSpan
+    public Mono<List<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_SPAN_IDS_BY_TRACE_ID)
+                            .bind("trace_ids", traceIds);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
+                .collectList();
     }
 
     private boolean isManualCost(Span span) {

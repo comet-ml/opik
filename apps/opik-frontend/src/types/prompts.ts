@@ -18,6 +18,7 @@ export interface PromptVersion {
   template: string;
   metadata: object;
   commit: string;
+  change_description?: string;
   prompt_id: string;
   created_at: string;
 }

@@ -229,6 +229,10 @@
       border: 4px solid #fff;
     }
 
+    ::-webkit-scrollbar-thumb:hover {
+      background: #7d7d7d;
+    }
+
     ::-webkit-scrollbar-button {
       display: none;
     }
@@ -241,5 +245,16 @@
   .comet-no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+}
+
+// workaround to force firefox work correctly with cell height - https://stackoverflow.com/questions/36575846/how-to-make-div-fill-td-height-in-firefox
+.comet-fix-cell-height {
+  height: 1px;
+}
+
+@-moz-document url-prefix() {
+  .comet-fix-cell-height {
+    height: 100%;
   }
 }

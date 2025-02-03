@@ -7,6 +7,7 @@ export type DropdownOption<TDataType> = {
   value: TDataType;
   label: string;
   description?: string;
+  disabled?: boolean;
 };
 
 export const COLUMN_ID_ID = "id";
@@ -38,7 +39,7 @@ export type ColumnData<T> = {
   id: string;
   label: string;
   disabled?: boolean;
-  accessorFn?: (row: T) => string | object;
+  accessorFn?: (row: T) => string | number | object | undefined;
   size?: number;
   type?: COLUMN_TYPE;
   customMeta?: object;
@@ -117,3 +118,14 @@ export type JsonNode =
 export type UsageType = {
   [key: string]: number | UsageType;
 };
+
+export interface UsageData {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+export interface AverageFeedbackScore {
+  name: string;
+  value: number;
+}

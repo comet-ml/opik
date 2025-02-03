@@ -133,7 +133,7 @@ jobs:
                 elif [ "$SUITE" == "feedback_definitions" ]; then
                     pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium --base-url $BASE_URL --setup-show
                 elif [ "$SUITE" == "sanity" ]; then
-                    pytest -s sanity --browser chromium --base-url $BASE_URL --setup-show
+                    pytest -s -m sanity --browser chromium --base-url $BASE_URL --setup-show
                 elif [ "$SUITE" == "all_features" ]; then
                     pytest -s tests --browser chromium --base-url $BASE_URL --setup-show
                 fi

@@ -5,6 +5,7 @@ from sdk_helpers import get_experiment_by_id, delete_experiment_by_id
 
 
 class TestExperimentsCrud:
+    @pytest.mark.sanity
     def test_experiment_visibility(self, page: Page, mock_experiment):
         """
         Tests experiment creation and visibility of experiment in both UI and SDK

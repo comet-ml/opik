@@ -9,7 +9,7 @@ import { AutomationRuleEvaluatorLlmAsJudgeWrite } from "./AutomationRuleEvaluato
 
 const _Base = core.serialization.object({
     name: core.serialization.string(),
-    samplingRate: core.serialization.number().optional(),
+    samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
     action: core.serialization.stringLiteral("evaluator").optional(),
 });
 export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
@@ -25,15 +25,15 @@ export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluatorWrite {
-    type Raw = AutomationRuleEvaluatorWrite.LlmAsJudge;
+    export type Raw = AutomationRuleEvaluatorWrite.LlmAsJudge;
 
-    interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgeWrite.Raw {
+    export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgeWrite.Raw {
         type: "llm_as_judge";
     }
 
-    interface _Base {
+    export interface _Base {
         name: string;
-        samplingRate?: number | null;
+        sampling_rate?: number | null;
         action?: "evaluator" | null;
     }
 }

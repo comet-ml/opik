@@ -9,6 +9,7 @@ import { SpanType } from "./SpanType";
 import { JsonNode } from "./JsonNode";
 import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
+import { Comment } from "./Comment";
 
 export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi.Span> = core.serialization.object({
     id: core.serialization.string().optional(),
@@ -33,16 +34,17 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore).optional()),
+    comments: core.serialization.list(Comment).optional(),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
     totalEstimatedCostVersion: core.serialization.property(
         "total_estimated_cost_version",
-        core.serialization.string().optional()
+        core.serialization.string().optional(),
     ),
     duration: core.serialization.number().optional(),
 });
 
 export declare namespace Span {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         project_name?: string | null;
         project_id?: string | null;
@@ -65,6 +67,7 @@ export declare namespace Span {
         created_by?: string | null;
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
+        comments?: Comment.Raw[] | null;
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
         duration?: number | null;

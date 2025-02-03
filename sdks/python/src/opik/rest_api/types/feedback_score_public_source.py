@@ -2,4 +2,6 @@
 
 import typing
 
-FeedbackScorePublicSource = typing.Union[typing.Literal["ui", "sdk"], typing.Any]
+FeedbackScorePublicSource = typing.Union[
+    typing.Literal["ui", "sdk", "online_scoring"], typing.Any
+]

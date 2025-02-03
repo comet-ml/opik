@@ -9,7 +9,7 @@ import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
 } from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import UseThisPromptDialog from "@/components/pages/PromptPage/PromptTab/UseThisPromptDialog";
-import EditPromptDialog from "@/components/pages/PromptPage/PromptTab/EditPromptDialog";
+import EditPromptVersionDialog from "@/components/pages/PromptPage/PromptTab/EditPromptVersionDialog";
 import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
@@ -109,6 +109,17 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 />
               </>
             )}
+
+            {activeVersion?.change_description && (
+              <>
+                <p className="comet-body-s-accented mt-4 text-foreground">
+                  Commit message
+                </p>
+                <div className="comet-body-s flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
+                  {activeVersion.change_description}
+                </div>
+              </>
+            )}
           </div>
           <div className="min-w-[320px]">
             <p className="comet-body-s-accented mb-2 text-foreground">
@@ -130,7 +141,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
       />
 
-      <EditPromptDialog
+      <EditPromptVersionDialog
         key={editPromptResetKeyRef.current}
         open={openEditPrompt}
         setOpen={handleOpenEditPrompt}

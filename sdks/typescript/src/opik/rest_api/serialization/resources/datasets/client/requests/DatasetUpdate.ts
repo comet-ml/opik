@@ -13,7 +13,7 @@ export const DatasetUpdate: core.serialization.Schema<serializers.DatasetUpdate.
     });
 
 export declare namespace DatasetUpdate {
-    interface Raw {
+    export interface Raw {
         name: string;
         description?: string | null;
     }

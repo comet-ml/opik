@@ -3,7 +3,6 @@
  */
 
 export type SpanType = "general" | "tool" | "llm";
-
 export const SpanType = {
     General: "general",
     Tool: "tool",

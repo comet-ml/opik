@@ -14,7 +14,7 @@ export const CompletionTokensDetails: core.serialization.ObjectSchema<
 });
 
 export declare namespace CompletionTokensDetails {
-    interface Raw {
+    export interface Raw {
         reasoning_tokens?: number | null;
     }
 }

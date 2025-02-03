@@ -34,19 +34,22 @@ public record Project(
         @JsonView({
                 Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastUpdatedTraceAt,
         @JsonView({
-                Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<FeedbackScoreAverage> feedbackScores,
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<FeedbackScoreAverage> feedbackScores,
         @JsonView({
-                Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PercentageValues duration,
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PercentageValues duration,
         @JsonView({
-                Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Double totalEstimatedCost,
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Double totalEstimatedCost,
         @JsonView({
-                Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Map<String, Double> usage){
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Map<String, Double> usage){
 
     public static class View {
         public static class Write {
         }
 
         public static class Public {
+        }
+
+        public static class Detailed extends Public {
         }
     }
 

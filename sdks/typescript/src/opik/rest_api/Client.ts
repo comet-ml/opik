@@ -20,15 +20,17 @@ import { Spans } from "./api/resources/spans/client/Client";
 import { Traces } from "./api/resources/traces/client/Client";
 
 export declare namespace OpikApiClient {
-    interface Options {
+    export interface Options {
         environment?: core.Supplier<environments.OpikApiEnvironment | string>;
+        /** Specify a custom URL to connect the client to. */
+        baseUrl?: core.Supplier<string>;
         /** Override the Authorization header */
         apiKey?: core.Supplier<string | undefined>;
         /** Override the Comet-Workspace header */
         workspaceName?: core.Supplier<string | undefined>;
     }
 
-    interface RequestOptions {
+    export interface RequestOptions {
         /** The maximum time to wait for a response in seconds. */
         timeoutInSeconds?: number;
         /** The number of times to retry the request. Defaults to 2. */
@@ -45,7 +47,68 @@ export declare namespace OpikApiClient {
 }
 
 export class OpikApiClient {
+    protected _systemUsage: SystemUsage | undefined;
+    protected _check: Check | undefined;
+    protected _automationRuleEvaluators: AutomationRuleEvaluators | undefined;
+    protected _chatCompletions: ChatCompletions | undefined;
+    protected _datasets: Datasets | undefined;
+    protected _experiments: Experiments | undefined;
+    protected _feedbackDefinitions: FeedbackDefinitions | undefined;
+    protected _llmProviderKey: LlmProviderKey | undefined;
+    protected _projects: Projects | undefined;
+    protected _prompts: Prompts | undefined;
+    protected _spans: Spans | undefined;
+    protected _traces: Traces | undefined;
+
     constructor(protected readonly _options: OpikApiClient.Options = {}) {}
+
+    public get systemUsage(): SystemUsage {
+        return (this._systemUsage ??= new SystemUsage(this._options));
+    }
+
+    public get check(): Check {
+        return (this._check ??= new Check(this._options));
+    }
+
+    public get automationRuleEvaluators(): AutomationRuleEvaluators {
+        return (this._automationRuleEvaluators ??= new AutomationRuleEvaluators(this._options));
+    }
+
+    public get chatCompletions(): ChatCompletions {
+        return (this._chatCompletions ??= new ChatCompletions(this._options));
+    }
+
+    public get datasets(): Datasets {
+        return (this._datasets ??= new Datasets(this._options));
+    }
+
+    public get experiments(): Experiments {
+        return (this._experiments ??= new Experiments(this._options));
+    }
+
+    public get feedbackDefinitions(): FeedbackDefinitions {
+        return (this._feedbackDefinitions ??= new FeedbackDefinitions(this._options));
+    }
+
+    public get llmProviderKey(): LlmProviderKey {
+        return (this._llmProviderKey ??= new LlmProviderKey(this._options));
+    }
+
+    public get projects(): Projects {
+        return (this._projects ??= new Projects(this._options));
+    }
+
+    public get prompts(): Prompts {
+        return (this._prompts ??= new Prompts(this._options));
+    }
+
+    public get spans(): Spans {
+        return (this._spans ??= new Spans(this._options));
+    }
+
+    public get traces(): Traces {
+        return (this._traces ??= new Traces(this._options));
+    }
 
     /**
      * @param {OpikApiClient.RequestOptions} requestOptions - Request-specific configuration.
@@ -53,62 +116,57 @@ export class OpikApiClient {
      * @example
      *     await client.isAlive()
      */
-    public isAlive(requestOptions?: OpikApiClient.RequestOptions): core.APIPromise<unknown> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "is-alive/ping"
-                    ),
-                    method: "GET",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+    public async isAlive(requestOptions?: OpikApiClient.RequestOptions): Promise<unknown> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "is-alive/ping",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return _response.body;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: _response.body,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /is-alive/ping.");
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /is-alive/ping.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     /**
@@ -117,134 +175,57 @@ export class OpikApiClient {
      * @example
      *     await client.version()
      */
-    public version(requestOptions?: OpikApiClient.RequestOptions): core.APIPromise<unknown> {
-        return core.APIPromise.from(
-            (async () => {
-                const _response = await core.fetcher({
-                    url: urlJoin(
-                        (await core.Supplier.get(this._options.environment)) ?? environments.OpikApiEnvironment.Default,
-                        "is-alive/ver"
-                    ),
-                    method: "GET",
-                    headers: {
-                        "Comet-Workspace":
-                            (await core.Supplier.get(this._options.workspaceName)) != null
-                                ? await core.Supplier.get(this._options.workspaceName)
-                                : undefined,
-                        "X-Fern-Language": "JavaScript",
-                        "X-Fern-Runtime": core.RUNTIME.type,
-                        "X-Fern-Runtime-Version": core.RUNTIME.version,
-                        ...(await this._getCustomAuthorizationHeaders()),
-                        ...requestOptions?.headers,
-                    },
-                    contentType: "application/json",
-                    requestType: "json",
-                    timeoutMs:
-                        requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
-                    maxRetries: requestOptions?.maxRetries,
-                    withCredentials: true,
-                    abortSignal: requestOptions?.abortSignal,
+    public async version(requestOptions?: OpikApiClient.RequestOptions): Promise<unknown> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "is-alive/ver",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return _response.body;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
                 });
-                if (_response.ok) {
-                    return {
-                        ok: _response.ok,
-                        body: _response.body,
-                        headers: _response.headers,
-                    };
-                }
-                if (_response.error.reason === "status-code") {
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-                }
-                switch (_response.error.reason) {
-                    case "non-json":
-                        throw new errors.OpikApiError({
-                            statusCode: _response.error.statusCode,
-                            body: _response.error.rawBody,
-                        });
-                    case "timeout":
-                        throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /is-alive/ver.");
-                    case "unknown":
-                        throw new errors.OpikApiError({
-                            message: _response.error.errorMessage,
-                        });
-                }
-            })()
-        );
-    }
-
-    protected _systemUsage: SystemUsage | undefined;
-
-    public get systemUsage(): SystemUsage {
-        return (this._systemUsage ??= new SystemUsage(this._options));
-    }
-
-    protected _check: Check | undefined;
-
-    public get check(): Check {
-        return (this._check ??= new Check(this._options));
-    }
-
-    protected _automationRuleEvaluators: AutomationRuleEvaluators | undefined;
-
-    public get automationRuleEvaluators(): AutomationRuleEvaluators {
-        return (this._automationRuleEvaluators ??= new AutomationRuleEvaluators(this._options));
-    }
-
-    protected _chatCompletions: ChatCompletions | undefined;
-
-    public get chatCompletions(): ChatCompletions {
-        return (this._chatCompletions ??= new ChatCompletions(this._options));
-    }
-
-    protected _datasets: Datasets | undefined;
-
-    public get datasets(): Datasets {
-        return (this._datasets ??= new Datasets(this._options));
-    }
-
-    protected _experiments: Experiments | undefined;
-
-    public get experiments(): Experiments {
-        return (this._experiments ??= new Experiments(this._options));
-    }
-
-    protected _feedbackDefinitions: FeedbackDefinitions | undefined;
-
-    public get feedbackDefinitions(): FeedbackDefinitions {
-        return (this._feedbackDefinitions ??= new FeedbackDefinitions(this._options));
-    }
-
-    protected _llmProviderKey: LlmProviderKey | undefined;
-
-    public get llmProviderKey(): LlmProviderKey {
-        return (this._llmProviderKey ??= new LlmProviderKey(this._options));
-    }
-
-    protected _projects: Projects | undefined;
-
-    public get projects(): Projects {
-        return (this._projects ??= new Projects(this._options));
-    }
-
-    protected _prompts: Prompts | undefined;
-
-    public get prompts(): Prompts {
-        return (this._prompts ??= new Prompts(this._options));
-    }
-
-    protected _spans: Spans | undefined;
-
-    public get spans(): Spans {
-        return (this._spans ??= new Spans(this._options));
-    }
-
-    protected _traces: Traces | undefined;
-
-    public get traces(): Traces {
-        return (this._traces ??= new Traces(this._options));
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /is-alive/ver.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
     }
 
     protected async _getCustomAuthorizationHeaders() {

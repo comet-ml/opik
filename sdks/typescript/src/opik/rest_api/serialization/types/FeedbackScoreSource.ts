@@ -9,8 +9,8 @@ import * as core from "../../core";
 export const FeedbackScoreSource: core.serialization.Schema<
     serializers.FeedbackScoreSource.Raw,
     OpikApi.FeedbackScoreSource
-> = core.serialization.enum_(["ui", "sdk"]);
+> = core.serialization.enum_(["ui", "sdk", "online_scoring"]);
 
 export declare namespace FeedbackScoreSource {
-    type Raw = "ui" | "sdk";
+    export type Raw = "ui" | "sdk" | "online_scoring";
 }

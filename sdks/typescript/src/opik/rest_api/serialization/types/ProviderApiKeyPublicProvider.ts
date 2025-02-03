@@ -9,8 +9,8 @@ import * as core from "../../core";
 export const ProviderApiKeyPublicProvider: core.serialization.Schema<
     serializers.ProviderApiKeyPublicProvider.Raw,
     OpikApi.ProviderApiKeyPublicProvider
-> = core.serialization.enum_(["openai", "anthropic"]);
+> = core.serialization.enum_(["openai", "anthropic", "gemini"]);
 
 export declare namespace ProviderApiKeyPublicProvider {
-    type Raw = "openai" | "anthropic";
+    export type Raw = "openai" | "anthropic" | "gemini";
 }

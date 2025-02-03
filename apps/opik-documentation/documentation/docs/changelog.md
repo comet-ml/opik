@@ -6,6 +6,35 @@ pytest_codeblocks_skip: true
 
 # Weekly Changelog
 
+## Week of 2025-01-27
+
+**Opik Dashboard**:
+
+- Performance improvements for workspaces with 100th of millions of traces
+- Added support for cost tracking when using Gemini models
+- Allow users to diff prompt
+
+**SDK**:
+
+- Fixed the `evaluate` and `evaluate_*` functions to better support event loops, particularly useful when using Ragas metrics
+- Added support for Bedrock `invoke_agent` API
+
+## Week of 2025-01-20
+
+**Opik Dashboard**:
+
+- Added logs for online evaluation rules so that you can more easily ensure your online evaluation metrics are working as expected
+- Added auto-complete support in the variable mapping section of the online evaluation rules modal
+- Added support for Anthropic models in the playground
+- Experiments are now created when using datasets in the playground
+- Improved the Opik home page
+- Updated the code snippets in the quickstart to make them easier to understand
+
+**SDK**:
+
+- Improved support for litellm completion kwargs
+- LiteLLM required version is now relaxed to avoid conflicts with other Python packages
+
 ## Week of 2025-01-13
 
 **Opik Dashboard**:

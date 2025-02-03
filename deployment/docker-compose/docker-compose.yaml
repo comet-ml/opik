@@ -71,7 +71,7 @@ services:
       ANALYTICS_DB_PORT: 8123
       ANALYTICS_DB_USERNAME: opik
       ANALYTICS_DB_DATABASE_NAME: opik
-      JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true"
+      JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
       ANALYTICS_DB_PASS: opik
       OPIK_OTEL_SDK_ENABLED: false
@@ -89,6 +89,16 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+
+  python-backend:
+    image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
+    build:
+      context: ../../apps/opik-python-backend
+      dockerfile: Dockerfile
+    hostname: python-backend
+    privileged: true # Required for Docker-in-Docker, so it can launch containers
+    environment:
+      PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}

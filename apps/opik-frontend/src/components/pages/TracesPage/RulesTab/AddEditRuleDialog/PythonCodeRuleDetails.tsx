@@ -1,8 +1,9 @@
 import React from "react";
-import { PythonCodeObject } from "@/types/automations";
+import { UseFormReturn } from "react-hook-form";
+import { EvaluationRuleFormType } from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/schema";
 
 type PythonCodeRuleDetailsProps = {
-  data?: PythonCodeObject;
+  form?: UseFormReturn<EvaluationRuleFormType>;
 };
 
 const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = () => {

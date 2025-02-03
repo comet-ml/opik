@@ -14,9 +14,9 @@ import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
 import DatasetsPage from "@/components/pages/DatasetsPage/DatasetsPage";
 import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
-import QuickstartPage from "@/components/pages/QuickstartPage/QuickstartPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
+import EmptyPageLayout from "@/components/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
@@ -29,6 +29,7 @@ import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
+import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -62,6 +63,12 @@ const workspaceGuardPartialLayoutRoute = createRoute({
   component: () => <WorkspaceGuard Layout={PartialPageLayout} />,
 });
 
+const workspaceGuardEmptyLayoutRoute = createRoute({
+  id: "workspaceGuardEmptyLayout",
+  getParentRoute: () => rootRoute,
+  component: () => <WorkspaceGuard Layout={EmptyPageLayout} />,
+});
+
 const baseRoute = createRoute({
   path: "/",
   getParentRoute: () => workspaceGuardRoute,
@@ -83,7 +90,12 @@ const workspaceRoute = createRoute({
 const quickstartRoute = createRoute({
   path: "/$workspaceName/quickstart",
   getParentRoute: () => workspaceGuardPartialLayoutRoute,
-  component: QuickstartPage,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/home"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
 });
 
 // ----------- get started
@@ -261,7 +273,15 @@ const configurationRoute = createRoute({
   component: ConfigurationPage,
 });
 
+// ----------- Automation logs
+const automationLogsRoute = createRoute({
+  path: "/$workspaceName/automation-logs",
+  getParentRoute: () => workspaceGuardEmptyLayoutRoute,
+  component: AutomationLogsPage,
+});
+
 const routeTree = rootRoute.addChildren([
+  workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
     getStartedRoute,

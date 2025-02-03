@@ -15,14 +15,19 @@ export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWr
         name: core.serialization.string().optional(),
         metadata: JsonNodeWrite.optional(),
         promptVersion: core.serialization.property("prompt_version", PromptVersionLinkWrite.optional()),
+        promptVersions: core.serialization.property(
+            "prompt_versions",
+            core.serialization.list(PromptVersionLinkWrite).optional(),
+        ),
     });
 
 export declare namespace ExperimentWrite {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         dataset_name: string;
         name?: string | null;
         metadata?: JsonNodeWrite.Raw | null;
         prompt_version?: PromptVersionLinkWrite.Raw | null;
+        prompt_versions?: PromptVersionLinkWrite.Raw[] | null;
     }
 }

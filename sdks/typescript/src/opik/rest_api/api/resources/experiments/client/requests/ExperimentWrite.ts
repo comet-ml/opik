@@ -16,4 +16,5 @@ export interface ExperimentWrite {
     name?: string;
     metadata?: OpikApi.JsonNodeWrite;
     promptVersion?: OpikApi.PromptVersionLinkWrite;
+    promptVersions?: OpikApi.PromptVersionLinkWrite[];
 }
