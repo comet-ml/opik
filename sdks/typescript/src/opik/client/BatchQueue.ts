@@ -109,6 +109,8 @@ export abstract class BatchQueue<EntityData = {}> {
 
     this.updateQueue = new ActionQueue<Partial<EntityData>>({
       action: async (map) => {
+        await this.createQueue.flush();
+
         const entities = Array.from(map.entries());
         for (const [id, updates] of entities) {
           await this.updateEntity(id, updates);
@@ -121,6 +123,9 @@ export abstract class BatchQueue<EntityData = {}> {
 
     this.deleteQueue = new ActionQueue<void>({
       action: async (map) => {
+        await this.createQueue.flush();
+        await this.updateQueue.flush();
+
         await this.deleteEntities(Array.from(map.keys()));
       },
       delay,

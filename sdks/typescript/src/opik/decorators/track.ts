@@ -97,7 +97,6 @@ export function track({
   projectName?: string;
   type?: SpanType;
 } = {}) {
-  // track decorator
   return function (
     target: any,
     propertyKey: string,

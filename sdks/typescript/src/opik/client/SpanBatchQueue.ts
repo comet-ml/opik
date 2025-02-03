@@ -13,7 +13,7 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 
   protected async createEntities(spans: SavedSpan[]) {
-    const groupedSpans = groupSpansByParentSpanId(spans);
+    const groupedSpans = groupSpansByDependency(spans);
     for (const spansGroup of Object.values(groupedSpans)) {
       await this.api.spans.createSpans({
         spans: spansGroup,
@@ -36,16 +36,38 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 }
 
-// @todo: sort by dependencies
-function groupSpansByParentSpanId(spans: SavedSpan[]) {
-  return spans.reduce(
-    (acc, span) => {
-      if (!acc[span.parentSpanId || "root"]) {
-        acc[span.parentSpanId || "root"] = [];
+function groupSpansByDependency(spans: SavedSpan[]): SavedSpan[][] {
+  const groups: SavedSpan[][] = [];
+  const executed = new Set<string>();
+  let remaining = [...spans];
+
+  while (remaining.length > 0) {
+    const executable = remaining.filter((span) => {
+      if (!span.parentSpanId) {
+        return true;
       }
-      acc[span.parentSpanId || "root"].push(span);
-      return acc;
-    },
-    {} as Record<string, SavedSpan[]>
-  );
+
+      const parentExists = spans.some((s) => s.id === span.parentSpanId);
+      if (!parentExists) {
+        return true;
+      }
+
+      return executed.has(span.parentSpanId);
+    });
+
+    if (executable.length === 0) {
+      // throw new Error("Cycle detected or unsatisfied dependency among spans.");
+      break;
+    }
+
+    groups.push(executable);
+
+    for (const span of executable) {
+      executed.add(span.id);
+    }
+
+    remaining = remaining.filter((span) => !executed.has(span.id));
+  }
+
+  return groups;
 }
