@@ -36,6 +36,12 @@ const client = new Opik({
 for (let i = 0; i < 10; i++) {
   const someTrace = client.trace({
     name: `Trace ${i}`,
+    input: {
+      prompt: `Hello, world! ${i}`,
+    },
+    output: {
+      response: `Hello, world! ${i}`,
+    },
   });
 
   // For each trace, log 10 spans
@@ -43,7 +49,16 @@ for (let i = 0; i < 10; i++) {
     const someSpan = someTrace.span({
       name: `Span ${i}-${j}`,
       type: "llm",
+      input: {
+        prompt: `Hello, world! ${i}:${j}`,
+      },
+      output: {
+        response: `Hello, world! ${i}:${j}`,
+      },
     });
+
+    // Some LLM work
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Mark the span as ended
     someSpan.end();
