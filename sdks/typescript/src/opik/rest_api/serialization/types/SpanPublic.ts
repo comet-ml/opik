@@ -35,19 +35,19 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         feedbackScores: core.serialization.property(
             "feedback_scores",
-            core.serialization.list(FeedbackScorePublic).optional()
+            core.serialization.list(FeedbackScorePublic).optional(),
         ),
         comments: core.serialization.list(CommentPublic).optional(),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         totalEstimatedCostVersion: core.serialization.property(
             "total_estimated_cost_version",
-            core.serialization.string().optional()
+            core.serialization.string().optional(),
         ),
         duration: core.serialization.number().optional(),
     });
 
 export declare namespace SpanPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         project_id?: string | null;
         trace_id: string;

@@ -31,13 +31,13 @@ export const AutomationRuleEvaluatorPublic: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluatorPublic {
-    type Raw = AutomationRuleEvaluatorPublic.LlmAsJudge;
+    export type Raw = AutomationRuleEvaluatorPublic.LlmAsJudge;
 
-    interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgePublic.Raw {
+    export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgePublic.Raw {
         type: "llm_as_judge";
     }
 
-    interface _Base {
+    export interface _Base {
         id?: string | null;
         project_id?: string | null;
         name: string;

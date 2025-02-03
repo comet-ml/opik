@@ -13,7 +13,7 @@ export const PromptUpdatable: core.serialization.Schema<serializers.PromptUpdata
     });
 
 export declare namespace PromptUpdatable {
-    interface Raw {
+    export interface Raw {
         name: string;
         description?: string | null;
     }

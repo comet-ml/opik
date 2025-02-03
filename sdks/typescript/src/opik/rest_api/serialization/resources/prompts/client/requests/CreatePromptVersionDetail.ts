@@ -16,7 +16,7 @@ export const CreatePromptVersionDetail: core.serialization.Schema<
 });
 
 export declare namespace CreatePromptVersionDetail {
-    interface Raw {
+    export interface Raw {
         name: string;
         version: PromptVersionDetail.Raw;
     }

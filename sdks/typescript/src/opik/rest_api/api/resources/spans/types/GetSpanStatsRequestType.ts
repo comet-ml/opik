@@ -3,7 +3,6 @@
  */
 
 export type GetSpanStatsRequestType = "general" | "tool" | "llm";
-
 export const GetSpanStatsRequestType = {
     General: "general",
     Tool: "tool",

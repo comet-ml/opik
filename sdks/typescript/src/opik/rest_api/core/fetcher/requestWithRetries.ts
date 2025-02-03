@@ -11,12 +11,12 @@ function addJitter(delay: number): number {
 
 export async function requestWithRetries(
     requestFn: () => Promise<Response>,
-    maxRetries: number = DEFAULT_MAX_RETRIES
+    maxRetries: number = DEFAULT_MAX_RETRIES,
 ): Promise<Response> {
     let response: Response = await requestFn();
 
     for (let i = 0; i < maxRetries; ++i) {
-        if ([408, 409, 429].includes(response.status) || response.status >= 500) {
+        if ([408, 429].includes(response.status) || response.status >= 500) {
             // Calculate base delay using exponential backoff (in milliseconds)
             const baseDelay = Math.min(INITIAL_RETRY_DELAY * Math.pow(2, i), MAX_RETRY_DELAY);
 

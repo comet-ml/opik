@@ -10,5 +10,5 @@ export const JsonNodePublic: core.serialization.Schema<serializers.JsonNodePubli
     core.serialization.record(core.serialization.string(), core.serialization.unknown());
 
 export declare namespace JsonNodePublic {
-    type Raw = Record<string, unknown>;
+    export type Raw = Record<string, unknown>;
 }

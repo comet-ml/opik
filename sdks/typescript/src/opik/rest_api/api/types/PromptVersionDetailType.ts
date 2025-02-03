@@ -3,7 +3,6 @@
  */
 
 export type PromptVersionDetailType = "mustache" | "jinja2";
-
 export const PromptVersionDetailType = {
     Mustache: "mustache",
     Jinja2: "jinja2",

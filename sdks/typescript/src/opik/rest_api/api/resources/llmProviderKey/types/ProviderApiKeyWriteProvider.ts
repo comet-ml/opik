@@ -3,7 +3,6 @@
  */
 
 export type ProviderApiKeyWriteProvider = "openai" | "anthropic" | "gemini";
-
 export const ProviderApiKeyWriteProvider = {
     Openai: "openai",
     Anthropic: "anthropic",

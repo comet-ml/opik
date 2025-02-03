@@ -17,7 +17,7 @@ export const AutomationRuleEvaluatorUpdate: core.serialization.Schema<
 });
 
 export declare namespace AutomationRuleEvaluatorUpdate {
-    interface Raw {
+    export interface Raw {
         name: string;
         code: LlmAsJudgeCode.Raw;
         sampling_rate: number;

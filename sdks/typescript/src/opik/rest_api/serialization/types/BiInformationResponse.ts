@@ -15,7 +15,7 @@ export const BiInformationResponse: core.serialization.ObjectSchema<
 });
 
 export declare namespace BiInformationResponse {
-    interface Raw {
+    export interface Raw {
         bi_information?: BiInformation.Raw[] | null;
     }
 }

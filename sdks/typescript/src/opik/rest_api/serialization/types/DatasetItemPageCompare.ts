@@ -20,7 +20,7 @@ export const DatasetItemPageCompare: core.serialization.ObjectSchema<
 });
 
 export declare namespace DatasetItemPageCompare {
-    interface Raw {
+    export interface Raw {
         content?: DatasetItemCompare.Raw[] | null;
         page?: number | null;
         size?: number | null;

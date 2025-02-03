@@ -22,7 +22,7 @@ export const AssistantMessage: core.serialization.ObjectSchema<
 });
 
 export declare namespace AssistantMessage {
-    interface Raw {
+    export interface Raw {
         role?: AssistantMessageRole.Raw | null;
         content?: string | null;
         name?: string | null;

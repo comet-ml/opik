@@ -19,7 +19,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         metadata: JsonNode.optional(),
         feedbackScores: core.serialization.property(
             "feedback_scores",
-            core.serialization.list(FeedbackScoreAverage).optional()
+            core.serialization.list(FeedbackScoreAverage).optional(),
         ),
         comments: core.serialization.list(Comment).optional(),
         traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
@@ -30,12 +30,12 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         promptVersion: core.serialization.property("prompt_version", PromptVersionLink.optional()),
         promptVersions: core.serialization.property(
             "prompt_versions",
-            core.serialization.list(PromptVersionLink).optional()
+            core.serialization.list(PromptVersionLink).optional(),
         ),
     });
 
 export declare namespace Experiment {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         dataset_name: string;
         dataset_id?: string | null;

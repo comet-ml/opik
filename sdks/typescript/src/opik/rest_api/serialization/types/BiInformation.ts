@@ -14,7 +14,7 @@ export const BiInformation: core.serialization.ObjectSchema<serializers.BiInform
     });
 
 export declare namespace BiInformation {
-    interface Raw {
+    export interface Raw {
         workspace_id?: string | null;
         user?: string | null;
         count?: number | null;
