@@ -13,6 +13,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "experimentalDecorators": true,
     "types": ["vitest/globals"],
     "paths": {
       "@opik": ["./src/opik/index.ts"],

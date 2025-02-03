@@ -1,7 +1,7 @@
 import { trackOpikClient } from "@/decorators/track";
-import { Opik, track, wrapTrack } from "@opik";
+import { Opik, track, withTrack } from "@opik";
 import { MockInstance } from "vitest";
-import { advanceToDelay, delay } from "./utils";
+import { advanceToDelay } from "./utils";
 
 async function mockAPIPromise<T>() {
   return {} as T;
@@ -44,25 +44,27 @@ describe("Track decorator", () => {
   });
 
   it("should maintain correct span hierarchy for mixed async/sync functions", async () => {
-    const f111 = wrapTrack()(function innerf111() {
+    const f111 = withTrack()(function innerf111() {
       return "f111";
     });
 
-    const f11 = wrapTrack()(async function innerf11(a: number, b: number) {
+    const f11 = withTrack()(async function innerf11(a: number, b: number) {
       await advanceToDelay(10);
       const result = f111();
       return a + b;
     });
 
-    const f12 = wrapTrack()(function innerf12() {
+    const f12 = withTrack()(function innerf12() {
       return "f12";
     });
 
-    const f13 = wrapTrack()(function innerf13(obj: any) {
+    const f13 = withTrack()(function innerf13(obj: any) {
       return { hello: "world" };
     });
 
-    const f1 = wrapTrack()(async function innerf1(message: string) {
+    const f1 = withTrack({ projectName: "with-track" })(async function innerf1(
+      message: string
+    ) {
       const promise = f11(1, 2);
       f12();
       f13({ a: "b" });

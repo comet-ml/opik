@@ -1,14 +1,22 @@
 import { Opik } from "opik";
 
 const client = new Opik();
-const someTrace = await client.trace({
-  name: "test123",
-});
 
-const someSpan = await someTrace.span({
-  name: "test123 span",
-  type: "llm",
-});
+for (let i = 0; i < 10; i++) {
+  const someTrace = client.trace({
+    name: `Trace ${i}`,
+  });
 
-await someSpan.end();
-await someTrace.end();
+  for (let j = 0; j < 10; j++) {
+    const someSpan = someTrace.span({
+      name: `Span ${i}-${j}`,
+      type: "llm",
+    });
+
+    someSpan.end();
+  }
+
+  someTrace.end();
+}
+
+await client.flush();

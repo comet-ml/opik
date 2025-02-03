@@ -21,7 +21,7 @@ function isPromise(obj: any): obj is Promise<any> {
   );
 }
 
-export function wrapTrack({
+export function withTrack({
   name,
   projectName,
   type,
@@ -97,8 +97,14 @@ export function track({
   projectName?: string;
   type?: SpanType;
 } = {}) {
-  return function (value: any): any {
-    return wrapTrack({ name, projectName, type })(value);
+  // track decorator
+  return function (
+    target: any,
+    propertyKey: string,
+    descriptor: PropertyDescriptor
+  ) {
+    const originalMethod = descriptor.value;
+    descriptor.value = withTrack({ name, projectName, type })(descriptor.value);
   };
 }
 

@@ -36,6 +36,7 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 }
 
+// @todo: sort by dependencies
 function groupSpansByParentSpanId(spans: SavedSpan[]) {
   return spans.reduce(
     (acc, span) => {
