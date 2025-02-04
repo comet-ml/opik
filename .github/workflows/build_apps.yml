@@ -10,6 +10,12 @@ on:
       - 'sdks/**'
 
   workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: Version
+        default: ""
   workflow_call:
     inputs:
       version:
