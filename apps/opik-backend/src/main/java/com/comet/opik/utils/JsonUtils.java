@@ -12,6 +12,9 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import dev.ai4j.openai4j.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -21,6 +24,7 @@ import java.math.BigDecimal;
 import java.util.Collection;
 
 @UtilityClass
+@Slf4j
 public class JsonUtils {
 
     public static final ObjectMapper MAPPER = new ObjectMapper()
@@ -95,6 +99,15 @@ public class JsonUtils {
             MAPPER.writeValue(baos, value);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    public JsonNode readJsonFile(String fileName) {
+        try (InputStream inputStream = JsonUtils.class.getClassLoader().getResourceAsStream(fileName)) {
+            return MAPPER.readTree(inputStream);
+        } catch (IOException e) {
+            log.warn("Can't read file {}, error: {}", fileName, e.getMessage());
+            return MAPPER.createObjectNode();
         }
     }
 }
