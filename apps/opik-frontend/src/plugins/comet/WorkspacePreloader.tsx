@@ -54,9 +54,6 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return <Loader />;
   }
 
-  useAppStore.getState().setActiveWorkspaceName(workspaceNameFromURL);
-  return children;
-
   const workspace = workspaceNameFromURL
     ? workspaces.find(
         (workspace) => workspace.workspaceName === workspaceNameFromURL,
