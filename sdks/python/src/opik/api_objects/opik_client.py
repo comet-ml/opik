@@ -19,7 +19,8 @@ from . import (
     constants,
     validation_helpers,
 )
-from .experiment import helpers as experiment_helpers
+from .experiment import rest_operations as experiment_rest_operations
+from .dataset import rest_operations as dataset_rest_operations
 from ..message_processing import streamer_constructors, messages
 from ..message_processing.batching import sequence_splitter
 
@@ -452,34 +453,9 @@ class Opik:
         Returns:
             List[dataset.Dataset]: A list of dataset objects that match the filter string.
         """
-        page_size = 100
-        datasets_fern: List[dataset_public.DatasetPublic] = []
-
-        page = 1
-        while len(datasets_fern) < max_results:
-            page_datasets = self._rest_client.datasets.find_datasets(
-                page=page,
-                size=page_size,
-            )
-
-            if len(page_datasets.content) == 0:
-                break
-
-            datasets_fern.extend(page_datasets.content)
-            page += 1
-
-        datasets: List[dataset.Dataset] = []
-        for dataset_fern in datasets_fern:
-            dataset_ = dataset.Dataset(
-                name=dataset_fern.name,
-                description=dataset_fern.description,
-                rest_client=self._rest_client,
-            )
-
-            if sync_items:
-                dataset_.__internal_api__sync_hashes__()
-
-            datasets.append(dataset_)
+        datasets = dataset_rest_operations.get_datasets(
+            self._rest_client, max_results, sync_items
+        )
 
         return datasets
 
@@ -498,43 +474,13 @@ class Opik:
         Returns:
             List[experiment.Experiment]: A list of experiment objects.
         """
-        try:
-            dataset_id = self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=dataset_name
-            ).id
-        except ApiError as e:
-            if e.status_code == 404:
-                raise exceptions.DatasetNotFound(
-                    f"Dataset with the name {dataset_name} not found."
-                ) from e
-            raise
+        dataset_id = dataset_rest_operations.get_dataset_id(
+            self._rest_client, dataset_name
+        )
 
-        page_size = 100
-        experiments: List[experiment.Experiment] = []
-
-        page = 1
-        while len(experiments) < max_results:
-            page_experiments = self._rest_client.experiments.find_experiments(
-                page=page,
-                size=page_size,
-                dataset_id=dataset_id,
-            )
-
-            if len(page_experiments.content) == 0:
-                break
-
-            for experiment_ in page_experiments.content:
-                experiments.append(
-                    experiment.Experiment(
-                        id=experiment_.id,
-                        name=experiment_.name,
-                        dataset_name=experiment_.dataset_name,
-                        rest_client=self._rest_client,
-                        # TODO: add prompt if exists
-                    )
-                )
-
-            page += 1
+        experiments = dataset_rest_operations.get_dataset_experiments(
+            self._rest_client, dataset_id, max_results
+        )
 
         return experiments
 
@@ -645,7 +591,7 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
-        experiment_public = experiment_helpers.get_experiment_data_by_name(
+        experiment_public = experiment_rest_operations.get_experiment_data_by_name(
             rest_client=self._rest_client, name=name
         )
 
