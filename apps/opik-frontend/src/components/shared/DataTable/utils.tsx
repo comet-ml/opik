@@ -5,6 +5,7 @@ import {
   Column,
   ColumnDef,
   ColumnDefTemplate,
+  Row,
 } from "@tanstack/react-table";
 import {
   ROW_HEIGHT_MAP,
@@ -57,7 +58,65 @@ export const getCommonPinningClasses = <TData,>(
   return isPinned ? (isHeader ? "bg-[#FBFCFD]" : "bg-white") : "";
 };
 
+const getRowRange = <TData,>(
+  rows: Array<Row<TData>>,
+  clickedRowID: string,
+  previousClickedRowID: string,
+) => {
+  const range: Array<Row<TData>> = [];
+  const processedRowsMap = {
+    [clickedRowID]: false,
+    [previousClickedRowID]: false,
+  };
+  for (const row of rows) {
+    if (row.id === clickedRowID || row.id === previousClickedRowID) {
+      if ("" === previousClickedRowID) {
+        range.push(row);
+        break;
+      }
+
+      processedRowsMap[row.id] = true;
+    }
+    if (
+      (processedRowsMap[clickedRowID] ||
+        processedRowsMap[previousClickedRowID]) &&
+      !row.getIsGrouped()
+    ) {
+      range.push(row);
+    }
+    if (
+      processedRowsMap[clickedRowID] &&
+      processedRowsMap[previousClickedRowID]
+    ) {
+      break;
+    }
+  }
+
+  return range;
+};
+
+export const shiftCheckboxClickHandler = <TData,>(
+  event: React.MouseEvent<HTMLButtonElement>,
+  context: CellContext<TData, unknown>,
+  previousClickedRowID: string,
+) => {
+  if (event.shiftKey) {
+    const { rows, rowsById: rowsMap } = context.table.getRowModel();
+    const rowsToToggle = getRowRange(
+      rows,
+      context.row.id,
+      rows.map((r) => r.id).includes(previousClickedRowID)
+        ? previousClickedRowID
+        : "",
+    );
+    const isLastSelected = !rowsMap[context.row.id]?.getIsSelected() || false;
+    rowsToToggle.forEach((row) => row.toggleSelected(isLastSelected));
+  }
+};
+
 export const generateSelectColumDef = <TData,>() => {
+  let previousSelectedRowID = "";
+
   return {
     accessorKey: COLUMN_SELECT_ID,
     header: (context) => (
@@ -86,10 +145,14 @@ export const generateSelectColumDef = <TData,>() => {
         className="py-3.5"
       >
         <Checkbox
-          onClick={(event) => event.stopPropagation()}
           checked={context.row.getIsSelected()}
           disabled={!context.row.getCanSelect()}
           onCheckedChange={(value) => context.row.toggleSelected(!!value)}
+          onClick={(event) => {
+            event.stopPropagation();
+            shiftCheckboxClickHandler(event, context, previousSelectedRowID);
+            previousSelectedRowID = context.row.id;
+          }}
           aria-label="Select row"
         />
       </CellWrapper>
