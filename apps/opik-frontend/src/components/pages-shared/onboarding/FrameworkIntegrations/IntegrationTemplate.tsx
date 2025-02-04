@@ -12,6 +12,7 @@ type IntegrationTemplateProps = {
   code: string;
   executionUrl?: string;
   executionLogs?: string[];
+  withLineHighlights?: boolean;
 };
 
 const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
@@ -19,15 +20,22 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   code,
   executionUrl,
   executionLogs = [],
+  withLineHighlights,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const codeWithConfig = putConfigInCode({
+  const { code: codeWithConfig, lines } = putConfigInCode({
     code,
     workspaceName,
     apiKey,
     shouldMaskApiKey: true,
+    withHighlight: withLineHighlights,
   });
-  const codeWithConfigToCopy = putConfigInCode({ code, workspaceName, apiKey });
+  const { code: codeWithConfigToCopy } = putConfigInCode({
+    code,
+    workspaceName,
+    apiKey,
+    withHighlight: withLineHighlights,
+  });
 
   const canExecuteCode =
     executionUrl &&
@@ -57,11 +65,13 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
             copyData={codeWithConfigToCopy}
             apiKey={apiKey}
             workspaceName={workspaceName}
+            highlightedLines={lines}
           />
         ) : (
           <CodeHighlighter
             data={codeWithConfig}
             copyData={codeWithConfigToCopy}
+            highlightedLines={lines}
           />
         )}
       </div>

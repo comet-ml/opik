@@ -1,10 +1,10 @@
 import anthropic
-from opik.integrations.anthropic import track_anthropic
+from opik.integrations.anthropic import track_anthropic # HIGHLIGHTED_LINE
 
 # INJECT_OPIK_CONFIGURATION
 
 anthropic_client = anthropic.Anthropic()
-anthropic_client = track_anthropic(anthropic_client)
+anthropic_client = track_anthropic(anthropic_client) # HIGHLIGHTED_LINE
 response = anthropic_client.messages.create(
     model="claude-3-5-sonnet-20241022",
     max_tokens=1024,

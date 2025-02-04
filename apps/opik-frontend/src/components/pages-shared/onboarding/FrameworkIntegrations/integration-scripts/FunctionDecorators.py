@@ -1,11 +1,11 @@
 import os, openai
-from opik import track
+from opik import track # HIGHLIGHTED_LINE
 
 # INJECT_OPIK_CONFIGURATION
 
 client = openai.OpenAI()
 
-@track
+@track # HIGHLIGHTED_LINE
 def retrieve_context(input_text):
     return [
         "What specific information are you looking for?",
@@ -13,7 +13,7 @@ def retrieve_context(input_text):
         "Are there any topics you'd like to explore or learn more about?",
     ]
 
-@track
+@track # HIGHLIGHTED_LINE
 def generate_response(input_text, context):
     full_prompt = f'If the user asks a question that is not specific, use the context to provide a relevant response.\nContext: {", ".join(context)}\nUser: {input_text}\nAI:'
     response = client.chat.completions.create(
