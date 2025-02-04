@@ -260,5 +260,17 @@
 }
 
 .comet-line-highlight {
-  background: hsl(var(--secondary)) !important;
+  position: relative;
+
+  &:after {
+    content: "";
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -5;
+    background: hsl(var(--secondary));
+  }
 }

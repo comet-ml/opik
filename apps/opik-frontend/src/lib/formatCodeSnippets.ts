@@ -4,7 +4,6 @@ import { BASE_API_URL } from "@/api/api";
 export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
 export const OPIK_HIGHLIGHT_LINE_TEMPLATE = " # HIGHLIGHTED_LINE";
 
-// TODO lala workspace name
 export const buildApiKeyConfig = (
   apiKey: string,
   masked = false,
