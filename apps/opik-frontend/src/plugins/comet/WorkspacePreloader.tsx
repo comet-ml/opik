@@ -9,13 +9,14 @@ import React from "react";
 
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
 import Loader from "@/components/shared/Loader/Loader";
+import { Button } from "@/components/ui/button";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import useAppStore from "@/store/AppStore";
 import useSegment from "./analytics/useSegment";
 import Logo from "./Logo";
+import useAllUserWorkspaces from "./useAllUserWorkspaces";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
-import { Button } from "@/components/ui/button";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -25,6 +26,9 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   children,
 }) => {
   const { data: user, isLoading } = useUser();
+  const { data: workspaces } = useAllUserWorkspaces({
+    enabled: !!user?.loggedIn,
+  });
   const matchRoute = useMatchRoute();
   const workspaceNameFromURL = useParams({
     strict: false,
@@ -46,27 +50,34 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return null;
   }
 
+  if (!workspaces) {
+    return <Loader />;
+  }
+
+  useAppStore.getState().setActiveWorkspaceName(workspaceNameFromURL);
+  return children;
+
   const workspace = workspaceNameFromURL
-    ? user.getTeams.teams.find((team) => team.teamName === workspaceNameFromURL)
+    ? workspaces.find(
+        (workspace) => workspace.workspaceName === workspaceNameFromURL,
+      )
     : null;
 
   if (workspace) {
-    useAppStore.getState().setActiveWorkspaceName(workspace.teamName);
+    useAppStore.getState().setActiveWorkspaceName(workspace.workspaceName);
   } else {
-    const defaultWorkspace = user.getTeams.teams.find(
-      (team) => team.default_team,
-    );
+    const defaultWorkspace = workspaces.find((workspace) => workspace.default);
 
     if (defaultWorkspace) {
       if (isRootPath) {
         useAppStore
           .getState()
-          .setActiveWorkspaceName(defaultWorkspace.teamName);
+          .setActiveWorkspaceName(defaultWorkspace.workspaceName);
 
         return (
           <Navigate
             to="/$workspaceName"
-            params={{ workspaceName: defaultWorkspace.teamName }}
+            params={{ workspaceName: defaultWorkspace.workspaceName }}
           />
         );
       }
@@ -77,7 +88,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
             <Link
               to="/$workspaceName"
               className="absolute left-[18px] z-10 block"
-              params={{ workspaceName: defaultWorkspace.teamName }}
+              params={{ workspaceName: defaultWorkspace.workspaceName }}
             >
               <Logo expanded />
             </Link>
@@ -89,7 +100,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
             </div>
             <Link
               to="/$workspaceName"
-              params={{ workspaceName: defaultWorkspace.teamName }}
+              params={{ workspaceName: defaultWorkspace.workspaceName }}
             >
               <div className="comet-body flex flex-row items-center justify-end text-[#5155F5]">
                 <MoveLeft className="mr-2 size-4" /> Go back to your workspace
