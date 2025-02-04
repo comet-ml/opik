@@ -67,6 +67,7 @@ const FrameworkIntegrationsContent: React.FC<
         apiKey={apiKey}
         executionUrl={integration.executionUrl}
         executionLogs={integration.executionLogs}
+        withLineHighlights
       />
     </IntegrationListLayout>
   );
