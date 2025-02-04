@@ -43,7 +43,8 @@ public class CostService {
                 BigDecimal inputPrice = getPrice("input_cost_per_token", modelData);
                 BigDecimal outputPrice = getPrice("output_cost_per_token", modelData);
                 if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    modelPrices.put(modelName, new ModelPrice(inputPrice, outputPrice, SpanCostCalculator::textGenerationCost));
+                    modelPrices.put(modelName,
+                            new ModelPrice(inputPrice, outputPrice, SpanCostCalculator::textGenerationCost));
                 }
             }
         });
