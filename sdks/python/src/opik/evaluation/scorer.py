@@ -259,7 +259,13 @@ def score_test_cases(
     else:
         with futures.ThreadPoolExecutor(max_workers=workers) as pool:
             test_result_futures = [
-                pool.submit(_score_test_case, test_case_, scoring_metrics)
+                pool.submit(
+                    _score_test_case,
+                    client,
+                    project_name=project_name,
+                    test_case_=test_case_,
+                    scoring_metrics=scoring_metrics,
+                )
                 for test_case_ in test_cases
             ]
 
