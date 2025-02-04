@@ -2,10 +2,6 @@ from datetime import datetime
 import uuid
 
 
-# STATIC NS
-UUIDV7_NS = 1733244176020523256
-
-
 def uuid4_to_uuid7(user_datetime: datetime, user_uuid: str) -> uuid.UUID:
     """Convert a UUID v4 into a UUID v7 following RFC draft specification."""
     # Get Unix timestamp in milliseconds
