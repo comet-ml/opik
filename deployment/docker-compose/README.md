@@ -19,7 +19,7 @@ Run docker-compose from the root of the project:
 
 ```bash
 cd deployment/docker-compose
-docker compose up -d
+docker compose -f docker-compose.yaml up -d
 ```
 
 ## Run docker-compose with building application from latest code
@@ -28,7 +28,7 @@ From the root of the project:
 
 ```bash
 cd deployment/docker-compose
-docker compose up -d --build
+docker compose -f docker-compose.yaml up -d --build
 ```
 
 ## Exposing Database and Backend Ports for Local Development
@@ -52,6 +52,16 @@ This will expose the following services to the host machine:
 - Backend: Available on ports 8080 (HTTP) and 3003 (OpenAPI specification).
 - Python backend: Available on port 8000 (HTTP).
 - Frontend: Available on port 5173.
+
+## Binding Ports in Docker Compose
+By default, Docker Compose binds exposed container ports to 0.0.0.0, making them accessible from any network interface on the host. To restrict access, specify a specific IP in the ports section, such as 127.0.0.1:8080:80, to limit exposure to the local machine.
+This can be done in `docker-compose.yaml` file
+```
+frontend:
+    ports:
+      - "127.0.0.1:5173:5173" # Frontend server port
+
+```
 
 ## Run Opik backend locally and the rest of the components with docker-compose
 
