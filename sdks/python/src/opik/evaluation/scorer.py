@@ -11,15 +11,17 @@ from opik.api_objects.experiment import experiment, experiment_item
 
 from opik.decorator import error_info_collector
 from opik.types import ErrorInfoDict
-from . import test_case, test_result, exception_analyzer
+from . import test_case, test_result, exception_analyzer, scores_logger
 from .metrics import arguments_helpers, base_metric, score_result
 from .types import LLMTask
 
 LOGGER = logging.getLogger(__name__)
 
 
-@track(name="metrics_calculation")
+@track(name="metrics_calculation", ignore_arguments=["client", "project_name"])
 def _score_test_case(
+    client: opik_client.Opik,
+    project_name: Optional[str],
     test_case_: test_case.TestCase,
     scoring_metrics: List[base_metric.BaseMetric],
 ) -> test_result.TestResult:
@@ -68,7 +70,11 @@ def _score_test_case(
     test_result_ = test_result.TestResult(
         test_case=test_case_, score_results=score_results
     )
-
+    scores_logger.log_scores(
+        client=client,
+        test_result=test_result_,
+        project_name=project_name,
+    )
     return test_result_
 
 
@@ -129,7 +135,15 @@ def _process_item(
         )
 
         test_result_ = _score_test_case(
-            test_case_=test_case_, scoring_metrics=scoring_metrics
+            client=client,
+            project_name=project_name,
+            test_case_=test_case_,
+            scoring_metrics=scoring_metrics
+        )
+        scores_logger.log_scores(
+            client=client,
+            test_result=test_result_,
+            project_name=project_name,
         )
         return test_result_
     finally:
@@ -220,6 +234,8 @@ def score_tasks(
 
 
 def score_test_cases(
+    client: opik_client.Opik,
+    project_name: Optional[str],
     test_cases: List[test_case.TestCase],
     scoring_metrics: List[base_metric.BaseMetric],
     workers: int,
@@ -227,7 +243,12 @@ def score_test_cases(
 ) -> List[test_result.TestResult]:
     if workers == 1:
         test_results = [
-            _score_test_case(test_case_=test_case_, scoring_metrics=scoring_metrics)
+            _score_test_case(
+                client=client,
+                project_name=project_name,
+                test_case_=test_case_,
+                scoring_metrics=scoring_metrics
+            )
             for test_case_ in tqdm.tqdm(
                 test_cases,
                 disable=(verbose < 1),

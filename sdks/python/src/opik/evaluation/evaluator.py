@@ -99,9 +99,9 @@ def evaluate(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    scores_logger.log_scores(
-        client=client, test_results=test_results, project_name=project_name
-    )
+    # scores_logger.log_scores(
+    #     client=client, test_results=test_results, project_name=project_name
+    # )
 
     report.display_experiment_link(dataset.name, experiment.id)
 
@@ -159,22 +159,23 @@ def evaluate_experiment(
         dataset_id=experiment.dataset_id,
         scoring_key_mapping=scoring_key_mapping,
     )
+    first_trace_id = test_cases[0].trace_id
+    project_name = utils.get_trace_project_name(client=client, trace_id=first_trace_id)
 
     with asyncio_support.async_http_connections_expire_immediately():
         test_results = scorer.score_test_cases(
+            client=client,
+            project_name=project_name,
             test_cases=test_cases,
             scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
         )
 
-    first_trace_id = test_results[0].test_case.trace_id
-    project_name = utils.get_trace_project_name(client=client, trace_id=first_trace_id)
 
-    # Log scores - Needs to be updated to use the project name
-    scores_logger.log_scores(
-        client=client, test_results=test_results, project_name=project_name
-    )
+    # scores_logger.log_scores(
+    #     client=client, test_results=test_results, project_name=project_name
+    # )
     total_time = time.time() - start_time
 
     if verbose == 1:
@@ -301,9 +302,9 @@ def evaluate_prompt(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    scores_logger.log_scores(
-        client=client, test_results=test_results, project_name=project_name
-    )
+    # scores_logger.log_scores(
+    #     client=client, test_results=test_results, project_name=project_name
+    # )
 
     report.display_experiment_link(dataset.name, experiment.id)
 
