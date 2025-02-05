@@ -20,6 +20,7 @@ import { Experiment } from "@/types/datasets";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
@@ -70,6 +71,13 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       id: "trace_count",
       label: "Trace count",
       type: COLUMN_TYPE.number,
+    },
+    {
+      id: "feedback_scores",
+      label: "Feedback scores",
+      type: COLUMN_TYPE.numberDictionary,
+      accessorFn: (row) => get(row, "feedback_scores", []),
+      cell: FeedbackScoreListCell as never,
     },
     {
       id: "created_at",
