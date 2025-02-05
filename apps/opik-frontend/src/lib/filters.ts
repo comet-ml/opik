@@ -36,7 +36,7 @@ export const generateSearchByIDFilters = (search?: string) => {
       id: uniqid(),
       field: "id",
       type: COLUMN_TYPE.string,
-      operator: "=",
+      operator: "contains",
       key: "",
       value: search,
     },
