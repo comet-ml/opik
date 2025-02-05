@@ -191,7 +191,7 @@ class LlmProviderApiKeyResourceTest {
         ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
         return Stream.of(
                 arguments(body,
-                        "Unable to process JSON. Unrecognized token '%s': was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')"
+                        "Unable to process JSON. Unrecognized token '%s': was expecting (JSON String, Number (or 'NaN'/'+INF'/'-INF'), Array, Object or token 'null', 'true' or 'false')"
                                 .formatted(body)),
                 arguments(
                         JsonUtils.writeValueAsString(providerApiKey).replace(providerApiKey.provider().getValue(),
