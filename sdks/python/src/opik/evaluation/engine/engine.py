@@ -2,13 +2,11 @@ import functools
 import logging
 from typing import Any, Callable, Dict, List, Optional, Union
 
-
 from opik import exceptions, logging_messages, opik_context, track
 from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment
 from opik.evaluation import (
-    exception_analyzer,
     rest_operations,
     test_case,
     test_result,
@@ -16,7 +14,7 @@ from opik.evaluation import (
 from opik.evaluation.metrics import arguments_helpers, base_metric, score_result
 from opik.evaluation.types import LLMTask
 
-from . import helpers, evaluation_tasks_executor
+from . import evaluation_tasks_executor, exception_analyzer, helpers
 from .types import EvaluationTask
 
 LOGGER = logging.getLogger(__name__)
