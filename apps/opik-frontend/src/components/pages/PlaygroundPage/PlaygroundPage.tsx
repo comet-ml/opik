@@ -15,7 +15,7 @@ const PLAYGROUND_PROMPT_MIN_HEIGHT = 190;
 
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const defaultPromptHeight = window.innerHeight - 300;
+  const defaultPromptHeight = window.innerHeight - 350;
   const maxPromptHeight = window.innerHeight - 150;
 
   const { data: providerKeysData, isPending: isPendingProviderKeys } =
