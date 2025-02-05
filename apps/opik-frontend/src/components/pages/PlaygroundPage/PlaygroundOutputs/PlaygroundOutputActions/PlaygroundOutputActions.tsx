@@ -153,6 +153,11 @@ const PlaygroundOutputActions = ({
       ? "action-tooltip-open-tooltip"
       : "action-tooltip";
 
+    const runLabel =
+      promptCount > 1 || (datasetId && datasetItems.length > 1)
+        ? "Run all"
+        : "Run";
+
     return (
       <TooltipWrapper
         content={tooltipMessage}
@@ -168,7 +173,7 @@ const PlaygroundOutputActions = ({
           style={style}
         >
           <Play className="mr-1 size-4" />
-          Run all
+          {runLabel}
         </Button>
       </TooltipWrapper>
     );
