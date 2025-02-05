@@ -231,7 +231,7 @@ def verify_experiment(
 
     experiment_content = rest_client.experiments.get_experiment_by_id(id)
 
-    verify_experiment_metadata(experiment_content, experiment_metadata)
+    _verify_experiment_metadata(experiment_content, experiment_metadata)
 
     assert (
         experiment_content.name == experiment_name
@@ -253,10 +253,10 @@ def verify_experiment(
         actual_trace_count == traces_amount
     ), f"{actual_trace_count} != {traces_amount}"
 
-    verify_experiment_prompts(experiment_content, prompts)
+    _verify_experiment_prompts(experiment_content, prompts)
 
 
-def verify_experiment_metadata(
+def _verify_experiment_metadata(
     experiment_content: ExperimentPublic,
     metadata: Optional[Dict[str, Any]],
 ):
@@ -269,7 +269,7 @@ def verify_experiment_metadata(
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
 
 
-def verify_experiment_prompts(
+def _verify_experiment_prompts(
     experiment_content: ExperimentPublic,
     prompts: Optional[List[Prompt]],
 ):
