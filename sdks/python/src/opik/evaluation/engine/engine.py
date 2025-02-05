@@ -10,15 +10,16 @@ from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment
 
-from . import (
+from opik.evaluation import (
     exception_analyzer,
     rest_operations,
     test_case,
     test_result,
-    helpers,
 )
-from .metrics import arguments_helpers, base_metric, score_result
-from .types import LLMTask
+from opik.evaluation.metrics import arguments_helpers, base_metric, score_result
+from opik.evaluation.types import LLMTask
+
+from . import helpers
 
 LOGGER = logging.getLogger(__name__)
 
