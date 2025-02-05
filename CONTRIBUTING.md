@@ -47,94 +47,10 @@ In addition, Opik relies on:
 2. MySQL: Used to store metadata associated with projects, datasets, experiments, etc.
 3. Redis: Used for caching
 
-### Configuring your development environment
-
-#### Pre-requisites
-In order to run the development environment, you will need to have the following tools installed:
-
-* Docker - https://docs.docker.com/engine/install/
-
-* kubectl - https://kubernetes.io/docs/tasks/tools/#kubectl
-
-* Helm - https://helm.sh/docs/intro/install/
-
-* minikube - https://minikube.sigs.k8s.io/docs/start
-
-* More tools:
-    * **`bash`** completion / `zsh` completion
-    * `kubectx` and `kubens` - easy switch context/namespaces for kubectl -  https://github.com/ahmetb/kubectx
-
 #### Setting up the environment
 
-The local development environment is based on minikube. Once you have minikube installed, you can run it using:
-
-```bash
-minikube start
-```
-
-You can then run Opik and it's dependencies (Clickhouse, Redis, MySQL, etc) using:
-
-```bash
-./build_and_run.sh
-```
-
-This script supports the following options:
-```
---no-build          Skip the build process
---no-fe-build       Skip the FE build process
---no-helm-update    Skip helm repo update
---local-fe          Run FE locally (For frontend developers)
---help              Display help message
-```
-
-> [!NOTE]
-> The first time you run the `build_and_run` script, it can take a few minutes to install everything.
-
-To check the application is running, you can access the FE using: `http://localhost:5173`
-
-#### Advanced usage
-
-*Connecting to Clickhouse*
-You can run the `clickhouse-client` with:
-```bash
-kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 clickhouse-client
-```
-
-After the client is connected, you can check the databases with 
-```bash
-show databases;
-```
-
-*Minikube commands*
-
-List the pods that are running
-```bash
-kubectl get pods
-```
-To restart a pod just delete the pod, k8s will start a new one
-```bash
-kubectl delete pod <pod name>
-```
-There is no clean way to delete the databases, so if you need to do that, it's better to delete the namespace and then install again.
-Run 
-```bash
-kubectl delete namespace opik 
-```
-and in parallel (in another terminal window/tab) run 
-```bash
-kubectl patch chi opik-clickhouse --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]'
-```
-after the namespace is deleted, run 
-```bash
-./build_and_run.sh --no-build
-```
-to install everything again
-
-Stop minikube
-```bash
-minikube stop
-```
-Next time you will start the minikube, it will run everything with the same configuration and data you had before.
+The local development environment is based on `docker-compose`. 
+Please see instructions in `deployment/docker-compose/README.md`
 
 ### Contributing to the documentation
 

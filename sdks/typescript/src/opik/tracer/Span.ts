@@ -7,28 +7,31 @@ export interface SavedSpan extends ISpan {
 
 export class Span {
   constructor(
-    private data: SavedSpan,
+    public data: SavedSpan,
     private opik: OpikClient
   ) {}
 
-  public end = async () => {
-    await this.update({ endTime: new Date() });
+  public end = () => {
+    return this.update({ endTime: new Date() });
   };
 
-  public update = async (
+  public update = (
     updates: Omit<
       SpanUpdate,
       "traceId" | "parentSpanId" | "projectId" | "projectName"
     >
   ) => {
-    await this.opik.apiClient.spans
-      .updateSpan(this.data.id, {
-        projectName: this.data.projectName ?? this.opik.config.projectName,
-        traceId: this.data.traceId,
-        ...updates,
-      })
-      .asRaw();
+    const spanUpdates = {
+      parentSpanId: this.data.parentSpanId,
+      projectName: this.data.projectName ?? this.opik.config.projectName,
+      traceId: this.data.traceId,
+      ...updates,
+    };
+
+    this.opik.spanBatchQueue.update(this.data.id, spanUpdates);
 
     this.data = { ...this.data, ...updates };
+
+    return this;
   };
 }

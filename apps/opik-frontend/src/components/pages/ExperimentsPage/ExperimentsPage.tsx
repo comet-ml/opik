@@ -46,6 +46,7 @@ import {
   generateGroupedCellDef,
   getIsCustomRow,
   getRowId,
+  getSharedShiftCheckboxClickHandler,
   GROUPING_CONFIG,
   renderCustomRow,
 } from "@/components/pages/ExperimentsShared/table";
@@ -138,6 +139,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const { checkboxClickHandler } = useMemo(() => {
+    return {
+      checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
+    };
+  }, []);
 
   const { data, isPending, refetch } = useGroupedExperimentsList({
     workspaceName,
@@ -185,18 +191,21 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>(),
-      generateGroupedCellDef<GroupedExperiment, unknown>({
-        id: GROUPING_COLUMN,
-        label: "Dataset",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "dataset_name",
-          idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
+      generateExperimentNameColumDef<GroupedExperiment>(checkboxClickHandler),
+      generateGroupedCellDef<GroupedExperiment, unknown>(
+        {
+          id: GROUPING_COLUMN,
+          label: "Dataset",
+          type: COLUMN_TYPE.string,
+          cell: ResourceCell as never,
+          customMeta: {
+            nameKey: "dataset_name",
+            idKey: "dataset_id",
+            resource: RESOURCE_TYPE.dataset,
+          },
         },
-      }),
+        checkboxClickHandler,
+      ),
       ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
         DEFAULT_COLUMNS,
         {
@@ -208,7 +217,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         cell: ExperimentRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder]);
+  }, [selectedColumns, columnsOrder, checkboxClickHandler]);
 
   const resizeConfig = useMemo(
     () => ({

@@ -65,6 +65,7 @@ from opik.integrations.bedrock import track_bedrock
 
 bedrock_client = track_bedrock(bedrock, project_name="bedrock-integration-demo")
 
+MODEL_ID="anthropic.claude-3-haiku-20240307-v1:0"
 PROMPT = "Why is it important to use a LLM Monitoring like CometML Opik tool that allows you to log traces and spans when working with LLM Models hosted on AWS Bedrock?"
 
 response = bedrock_client.converse(
