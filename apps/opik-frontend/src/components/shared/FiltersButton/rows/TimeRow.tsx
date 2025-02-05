@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector
 import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
 import { COLUMN_TYPE } from "@/types/shared";
 import dayjs from "dayjs";
+import { SelectSingleEventHandler } from "react-day-picker";
 
 type TimeRowProps = {
   filter: Filter;
@@ -25,10 +26,19 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   filter,
   onChange,
 }) => {
+  const [open, setOpen] = useState(false);
   const date = useMemo(
     () => (dayjs(filter.value).isValid() ? new Date(filter.value) : undefined),
     [filter.value],
   );
+
+  const onSelectDate: SelectSingleEventHandler = (value) => {
+    onChange({
+      ...filter,
+      value: value ? value.toISOString() : "",
+    });
+    setOpen(false);
+  };
 
   return (
     <>
@@ -42,7 +52,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
         />
       </td>
       <td className="p-1">
-        <Popover>
+        <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button
               variant={"outline"}
@@ -63,12 +73,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
             <Calendar
               mode="single"
               selected={date}
-              onSelect={(value) => {
-                onChange({
-                  ...filter,
-                  value: value ? value.toISOString() : "",
-                });
-              }}
+              onSelect={onSelectDate}
               initialFocus
             />
           </PopoverContent>
