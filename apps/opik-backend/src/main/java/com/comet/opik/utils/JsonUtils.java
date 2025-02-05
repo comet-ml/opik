@@ -100,12 +100,9 @@ public class JsonUtils {
         }
     }
 
-    public JsonNode readJsonFile(String fileName) {
+    public <T> T readJsonFile(@NonNull String fileName, @NonNull TypeReference<T> valueTypeRef) throws IOException {
         try (InputStream inputStream = JsonUtils.class.getClassLoader().getResourceAsStream(fileName)) {
-            return MAPPER.readTree(inputStream);
-        } catch (IOException e) {
-            log.warn("Can't read file {}, error: {}", fileName, e.getMessage());
-            return MAPPER.createObjectNode();
+            return MAPPER.readValue(inputStream, valueTypeRef);
         }
     }
 }

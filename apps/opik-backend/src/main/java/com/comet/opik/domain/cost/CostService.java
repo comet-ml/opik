@@ -1,10 +1,12 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.api.ModelCostData;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,7 +20,12 @@ public class CostService {
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
 
     static {
-        parseModelPrices();
+        try {
+            parseModelPrices();
+        } catch (IOException e) {
+            log.error("Failed to load model prices", e);
+            throw new RuntimeException(e);
+        }
     }
 
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
@@ -32,28 +39,26 @@ public class CostService {
         return modelPrice.calculator().apply(modelPrice, Optional.ofNullable(usage).orElse(Map.of()));
     }
 
-    private static void parseModelPrices() {
-        JsonNode pricesJson = JsonUtils.readJsonFile(PRICES_FILE);
-        pricesJson.fields().forEachRemaining(modelEntry -> {
-            String modelName = modelEntry.getKey();
-            JsonNode modelData = modelEntry.getValue();
-            String provider = Optional.ofNullable(modelData.get("litellm_provider"))
-                    .map(JsonNode::asText).orElse("");
+    private static void parseModelPrices() throws IOException {
+        Map<String, ModelCostData> modelCosts = JsonUtils.readJsonFile(PRICES_FILE, new TypeReference<>() {
+        });
+        if (modelCosts.isEmpty()) {
+            throw new RuntimeException("Failed to load model prices");
+        }
+
+        modelCosts.forEach((modelName, modelCost) -> {
+            String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
             if (providers.contains(provider)) {
-                BigDecimal inputPrice = getPrice("input_cost_per_token", modelData);
-                BigDecimal outputPrice = getPrice("output_cost_per_token", modelData);
+                BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
                 if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
                     modelPrices.put(modelName,
                             new ModelPrice(inputPrice, outputPrice, SpanCostCalculator::textGenerationCost));
                 }
             }
         });
-    }
-
-    private static BigDecimal getPrice(String key, JsonNode data) {
-        return Optional.ofNullable(data.get(key))
-                .map(JsonNode::asText)
-                .map(BigDecimal::new)
-                .orElse(BigDecimal.ZERO);
+        int i = 0;
     }
 }
