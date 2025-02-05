@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.DummyLockService;
@@ -26,8 +27,8 @@ import org.mockito.Mockito;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static com.comet.opik.infrastructure.auth.RemoteAuthService.MISSING_API_KEY;
-import static com.comet.opik.infrastructure.auth.RemoteAuthService.MISSING_WORKSPACE;
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -93,7 +94,8 @@ class RemoteAuthServiceTest {
                 .stubFor(post("/auth").willReturn(aResponse().withStatus(remoteAuthStatusCode)
                         .withHeader("Content-Type", "application/json")
                         .withJsonBody(JsonUtils.readTree(
-                                new RemoteAuthService.ErrorResponse("test error message", remoteAuthStatusCode)))));
+                                new AuthenticationErrorResponse("test error message",
+                                        remoteAuthStatusCode)))));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock(workspaceName, apiKey), null, "/priv/something"))

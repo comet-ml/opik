@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.TestComparators;
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
@@ -35,7 +36,6 @@ import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.infrastructure.auth.RemoteAuthService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
@@ -236,7 +236,8 @@ class ProjectsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                                    401)))));
         }
 
         @ParameterizedTest
@@ -427,7 +428,8 @@ class ProjectsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                                    401)))));
         }
 
         @ParameterizedTest

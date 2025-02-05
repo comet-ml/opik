@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AuthDetailsHolder;
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -10,7 +11,6 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.infrastructure.auth.RemoteAuthService;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
@@ -38,14 +38,14 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
+import static com.comet.opik.api.AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
+import static com.comet.opik.api.AuthenticationErrorResponse.NO_PERMISSION_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
-import static com.comet.opik.infrastructure.auth.RemoteAuthService.MISSING_API_KEY;
-import static com.comet.opik.infrastructure.auth.RemoteAuthService.MISSING_WORKSPACE;
-import static com.comet.opik.infrastructure.auth.RemoteAuthService.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
-import static com.comet.opik.infrastructure.auth.RemoteAuthService.NO_PERMISSION_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -138,7 +138,7 @@ class AuthenticationResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new RemoteAuthService.ErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/opik/auth"))

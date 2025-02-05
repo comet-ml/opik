@@ -1,8 +1,8 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.lock.LockService;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -21,18 +21,17 @@ import reactor.core.scheduler.Schedulers;
 import java.net.URI;
 import java.util.Optional;
 
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
+import static com.comet.opik.api.AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
+import static com.comet.opik.api.AuthenticationErrorResponse.NO_PERMISSION_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.infrastructure.AuthenticationConfig.UrlConfig;
 import static com.comet.opik.infrastructure.auth.AuthCredentialsCacheService.AuthCredentials;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 @RequiredArgsConstructor
 @Slf4j
-public class RemoteAuthService implements AuthService {
-
-    public static final String NOT_ALLOWED_TO_ACCESS_WORKSPACE = "User is not allowed to access workspace";
-    public static final String NO_PERMISSION_TO_ACCESS_WORKSPACE = "User has no permission to the workspace";
-    public static final String MISSING_WORKSPACE = "Workspace name should be provided";
-    public static final String MISSING_API_KEY = "API key should be provided";
+class RemoteAuthService implements AuthService {
     private final @NonNull Client client;
     private final @NonNull UrlConfig apiKeyAuthUrl;
     private final @NonNull UrlConfig uiAuthUrl;
@@ -47,10 +46,6 @@ public class RemoteAuthService implements AuthService {
     }
 
     record ValidatedAuthCredentials(boolean shouldCache, String userName, String workspaceId) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ErrorResponse(String msg, int code) {
     }
 
     @Override
@@ -148,14 +143,14 @@ public class RemoteAuthService implements AuthService {
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
             return response.readEntity(AuthResponse.class);
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            var errorResponse = response.readEntity(ErrorResponse.class);
-            throw new ClientErrorException(errorResponse.msg, Response.Status.UNAUTHORIZED);
+            var errorResponse = response.readEntity(AuthenticationErrorResponse.class);
+            throw new ClientErrorException(errorResponse.msg(), Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             // EM never returns FORBIDDEN as of now
             throw new ClientErrorException(NO_PERMISSION_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(ErrorResponse.class);
-            throw new ClientErrorException(errorResponse.msg, Response.Status.BAD_REQUEST);
+            var errorResponse = response.readEntity(AuthenticationErrorResponse.class);
+            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
         }
 
         log.error("Unexpected error while authenticating user, received status code: {}", response.getStatus());
