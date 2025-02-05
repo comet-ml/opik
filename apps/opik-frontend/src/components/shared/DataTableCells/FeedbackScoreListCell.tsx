@@ -6,10 +6,12 @@ import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreTag from "../FeedbackScoreTag/FeedbackScoreTag";
 
 const FeedbackScoreListCell = (context: CellContext<unknown, unknown>) => {
-  const feedbackScoreList = context.getValue() as
-    | TraceFeedbackScore[]
-    | undefined;
+  const feedbackScoreList = context.getValue() as TraceFeedbackScore[];
   const isEmpty = !feedbackScoreList?.length;
+
+  const sortedList = feedbackScoreList.sort((c1, c2) =>
+    c1.name.localeCompare(c2.name),
+  );
 
   return (
     <CellWrapper
@@ -19,7 +21,7 @@ const FeedbackScoreListCell = (context: CellContext<unknown, unknown>) => {
     >
       {isEmpty
         ? "-"
-        : feedbackScoreList.map<React.ReactNode>((item) => (
+        : sortedList.map<React.ReactNode>((item) => (
             <FeedbackScoreTag
               key={item.name}
               label={item.name}

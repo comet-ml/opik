@@ -28,6 +28,10 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
 
   const isRemovable = isFunction(onDelete);
 
+  const separatorStyles = reason
+    ? "after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px"
+    : "";
+
   const Reason = reason ? (
     <TooltipWrapper content={reason} delayDuration={100}>
       <MessageSquareMore className="size-3.5 text-light-slate" />
@@ -38,7 +42,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     <div
       data-testid="feedback-score-tag"
       className={cn(
-        "group flex h-6 items-center gap-2 rounded-md border border-border pl-1 pr-3",
+        "group flex h-6 items-center gap-2 rounded-md border border-border pl-2 pr-2",
         className,
       )}
     >
@@ -46,12 +50,12 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
         className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
         style={{ "--bg-color": color } as React.CSSProperties}
       />
-      <p
+      <div
         data-testid="feedback-score-tag-label"
-        className="comet-body-s-accented truncate text-light-slate"
+        className="comet-body-s-accented truncate leading-none text-light-slate"
       >
         {label}
-      </p>
+      </div>
       <div className="flex items-center gap-1">
         <span
           data-testid="feedback-score-tag-value"
@@ -65,7 +69,10 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
         <Button
           size="icon-xs"
           variant="minimal"
-          className="-ml-0.5 -mr-2 hidden shrink-0 group-hover:flex"
+          className={cn(
+            "relative hidden w-auto shrink-0 group-hover:flex",
+            separatorStyles,
+          )}
           onClick={() => onDelete(label)}
         >
           <CircleX className="size-3.5" />
