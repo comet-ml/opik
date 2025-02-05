@@ -25,7 +25,7 @@ def execute(
 
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
         test_result_futures = [
-            pool.submit(scoring_task) for scoring_task in evaluation_tasks
+            pool.submit(evaluation_task) for evaluation_task in evaluation_tasks
         ]
 
         test_results = [
