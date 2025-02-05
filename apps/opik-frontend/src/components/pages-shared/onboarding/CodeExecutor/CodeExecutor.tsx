@@ -7,6 +7,7 @@ import { jsonLanguage } from "@codemirror/lang-json";
 import { yamlLanguage } from "@codemirror/lang-yaml";
 import { pythonLanguage } from "@codemirror/lang-python";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
+import { useCodemirrorLineHighlight } from "@/hooks/useCodemirrorLineHighlight";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import { Button } from "@/components/ui/button";
 import useRunCodeSnippet from "./useRunCodeSnippet";
@@ -35,6 +36,7 @@ type CodeExecutorProps = {
   apiKey: string;
   workspaceName: string;
   executionLogs: string[];
+  highlightedLines?: number[];
 };
 
 const CodeExecutor: React.FC<CodeExecutorProps> = ({
@@ -45,8 +47,13 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
   apiKey,
   workspaceName,
   executionLogs,
+  highlightedLines,
 }) => {
   const theme = useCodemirrorTheme();
+  const LineHighlightExtension = useCodemirrorLineHighlight({
+    lines: highlightedLines,
+  });
+
   const { consoleOutput, isRunning, executeCode } = useRunCodeSnippet({
     executionUrl,
     executionLogs,
@@ -179,6 +186,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
           EditorView.lineWrapping,
           EditorState.readOnly.of(true),
           EditorView.editable.of(false),
+          LineHighlightExtension,
         ]}
       />
     </div>
