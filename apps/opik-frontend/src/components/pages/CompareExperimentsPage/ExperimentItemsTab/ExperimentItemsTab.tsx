@@ -20,6 +20,7 @@ import useLocalStorageState from "use-local-storage-state";
 
 import {
   CELL_VERTICAL_ALIGNMENT,
+  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -60,6 +61,7 @@ import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeed
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import ExperimentsFeedbackScoresAutocomplete from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresAutocomplete/ExperimentsFeedbackScoresAutocomplete";
 import {
   calculateHeightStyle,
   generateSelectColumDef,
@@ -86,13 +88,13 @@ const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
-    id: "feedback_scores",
+    id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
   },
   {
     id: "output",
-    label: "Output",
+    label: "Evaluation task",
     type: COLUMN_TYPE.string,
   },
 ];
@@ -147,6 +149,21 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_FEEDBACK_SCORES_ID]: {
+          keyComponent: ExperimentsFeedbackScoresAutocomplete,
+          keyComponentProps: {
+            experimentsIds,
+            placeholder: "Feedback score",
+          },
+        },
+      },
+    }),
+    [experimentsIds],
+  );
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -490,7 +507,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ({ id, label, columnType }) => {
         retVal.push({
           id,
-          label,
+          label: `${label} (Dataset)`,
           type: columnType,
         });
       },
@@ -574,6 +591,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         <div className="flex items-center gap-2">
           <FiltersButton
             columns={filterColumns}
+            config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
           />
