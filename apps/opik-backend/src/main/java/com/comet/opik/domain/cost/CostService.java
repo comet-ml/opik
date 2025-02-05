@@ -39,7 +39,7 @@ public class CostService {
             JsonNode modelData = modelEntry.getValue();
             String provider = Optional.ofNullable(modelData.get("litellm_provider"))
                     .map(JsonNode::asText).orElse("");
-            if (!modelName.startsWith("ft:") && providers.contains(provider)) {
+            if (providers.contains(provider)) {
                 BigDecimal inputPrice = getPrice("input_cost_per_token", modelData);
                 BigDecimal outputPrice = getPrice("output_cost_per_token", modelData);
                 if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
