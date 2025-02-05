@@ -40,6 +40,7 @@ const LLMJudgeScores = ({
         name: "Score name",
         description: "Score description",
         type: LLM_SCHEMA_TYPE.INTEGER,
+        unsaved: false,
       },
     ]);
   }, [onChange, scores]);
