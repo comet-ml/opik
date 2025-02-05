@@ -8,9 +8,12 @@ import { Button } from "@/components/ui/button";
 import { FormErrorSkeleton } from "@/components/ui/form";
 import LLMJudgeScore from "@/components/pages-shared/llm/LLMJudgeScores/LLMJudgeScore";
 
-type ScoresValidationError =
+export type ScoresValidationError =
   | {
       name?: {
+        message: string;
+      };
+      unsaved?: {
         message: string;
       };
     }[]
@@ -62,7 +65,7 @@ const LLMJudgeScores = ({
           <LLMJudgeScore
             key={score.name + index}
             hideRemoveButton={scores?.length === 1}
-            errorText={get(validationErrors, [index, "name", "message"])}
+            error={get(validationErrors, [index])}
             onRemoveScore={() => handleRemoveScore(index)}
             onChangeScore={(changes) => handleChangeScore(index, changes)}
             score={score}
