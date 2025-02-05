@@ -15,7 +15,7 @@ const FeedbackScoreListCell = (context: CellContext<unknown, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-1.5 overflow-hidden"
+      className="gap-1.5 overflow-x-auto overflow-y-hidden py-1"
     >
       {isEmpty
         ? "-"
