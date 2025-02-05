@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,7 +25,7 @@ public class CostService {
             parseModelPrices();
         } catch (IOException e) {
             log.error("Failed to load model prices", e);
-            throw new RuntimeException(e);
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -43,7 +44,7 @@ public class CostService {
         Map<String, ModelCostData> modelCosts = JsonUtils.readJsonFile(PRICES_FILE, new TypeReference<>() {
         });
         if (modelCosts.isEmpty()) {
-            throw new RuntimeException("Failed to load model prices");
+            throw new UncheckedIOException(new IOException("Failed to load model prices"));
         }
 
         modelCosts.forEach((modelName, modelCost) -> {
@@ -59,6 +60,5 @@ public class CostService {
                 }
             }
         });
-        int i = 0;
     }
 }
