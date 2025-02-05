@@ -14,7 +14,7 @@ on:
     inputs:
       version:
         type: string
-        required: true
+        required: false
         description: Version (optional)
         default: ""
       push_latest:
