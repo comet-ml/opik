@@ -2,6 +2,7 @@ package com.comet.opik.utils;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +29,7 @@ public class JsonUtils {
             .setSerializationInclusion(JsonInclude.Include.NON_NULL)
             .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
             .configure(SerializationFeature.INDENT_OUTPUT, false)
+            .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature())
             .registerModule(new JavaTimeModule()
                     .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
                     .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE));

@@ -42,7 +42,11 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
+import com.fasterxml.jackson.core.json.JsonWriteFeature;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
@@ -3757,6 +3761,32 @@ class SpansResourceTest {
         createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
         getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+    }
+
+    @Test
+    void createSpanWithNonNumericNumbers() throws JsonProcessingException {
+
+        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                .projectId(null)
+                .parentSpanId(null)
+                .build();
+
+        ObjectNode span = (ObjectNode) JsonUtils.readTree(expectedSpan);
+
+        ObjectNode input = JsonUtils.MAPPER.createObjectNode();
+        input.put("value", Double.POSITIVE_INFINITY);
+        span.replace("input", input);
+
+        ObjectMapper customObjectMapper = new ObjectMapper()
+                .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature())
+                .disable(JsonWriteFeature.WRITE_NAN_AS_STRINGS.mappedFeature());
+
+        String spanStr = customObjectMapper.writeValueAsString(span);
+
+        spanResourceClient.createSpan(spanStr, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+        getAndAssert(
+                expectedSpan.toBuilder().input(JsonUtils.getJsonNodeFromString("{\"value\": \"Infinity\"}")).build(),
+                API_KEY, TEST_WORKSPACE);
     }
 
     @ParameterizedTest

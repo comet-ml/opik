@@ -18,6 +18,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.hc.core5.http.ContentType;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.glassfish.jersey.client.ChunkedInput;
@@ -76,6 +77,20 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
         return response;
+    }
+
+    public UUID createSpan(String spanString, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.entity(spanString, ContentType.APPLICATION_JSON.toString()))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            return TestUtils.getIdFromLocation(response.getLocation());
+        }
     }
 
     public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
