@@ -33,6 +33,8 @@ const SCORE_TYPE_OPTIONS: DropdownOption<LLM_SCHEMA_TYPE>[] = [
   },
 ];
 
+type ScoreFieldData = Omit<LLMJudgeSchema, "unsaved">;
+
 interface LLMJudgeScoreProps {
   hideRemoveButton: boolean;
   error?: ScoresValidationError;
@@ -49,14 +51,18 @@ const LLMJudgeScore = ({
   onRemoveScore,
 }: LLMJudgeScoreProps) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [scoreData, setScoreData] = useState<LLMJudgeSchema>({
+  const [scoreData, setScoreData] = useState<ScoreFieldData>({
     name: score.name || "",
     description: score.description || "",
     type: score.type || LLM_SCHEMA_TYPE.INTEGER,
   });
 
   useEffect(() => {
-    setScoreData(score);
+    setScoreData({
+      name: score.name,
+      description: score.description,
+      type: score.type,
+    });
   }, [score.description, score.name, score.type]);
 
   const handleDoneEditing = () => {
@@ -72,7 +78,7 @@ const LLMJudgeScore = ({
     setIsEditing(false);
   };
 
-  const onUpdateField = (value: string, fieldKey: keyof LLMJudgeSchema) => {
+  const onUpdateField = (value: string, fieldKey: keyof ScoreFieldData) => {
     const isChanged = scoreData[fieldKey] !== value;
 
     if (isChanged && !score.unsaved) {
@@ -90,7 +96,7 @@ const LLMJudgeScore = ({
   const unsavedErrorText = get(error, ["unsaved", "message"]);
 
   return (
-    <>
+    <div className="flex flex-col gap-1">
       <Card
         className={cn("relative p-3", {
           "border-destructive": unsavedErrorText,
@@ -200,7 +206,7 @@ const LLMJudgeScore = ({
           {unsavedErrorText}
         </FormErrorSkeleton>
       )}
-    </>
+    </div>
   );
 };
 

@@ -49,7 +49,8 @@ export const LLMJudgeDetailsFormSchema = z.object({
         unsaved: z
           .boolean()
           .optional()
-          .refine((value) => value !== true, {
+          .default(false)
+          .refine((value) => !value, {
             message: "Changes not saved",
           }),
       }),
