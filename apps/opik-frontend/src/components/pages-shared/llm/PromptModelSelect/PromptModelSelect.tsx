@@ -178,7 +178,7 @@ const PromptModelSelect = ({
               <SelectItem
                 key={option.value}
                 value={option.value!}
-                className="h-10"
+                className="h-10 justify-center"
               >
                 {option.label}
               </SelectItem>
@@ -198,7 +198,7 @@ const PromptModelSelect = ({
                 onMouseEnter={() => setOpenProviderMenu(group.label)}
                 onMouseLeave={() => setOpenProviderMenu(null)}
                 className={cn(
-                  "comet-body-s flex h-10 w-full items-center rounded-sm p-0 pl-2 hover:bg-primary-foreground",
+                  "comet-body-s flex h-10 w-full items-center rounded-sm p-0 pl-2 hover:bg-primary-foreground justify-center",
                   {
                     "bg-primary-foreground": group.label === openProviderMenu,
                   },
@@ -223,7 +223,7 @@ const PromptModelSelect = ({
                   <SelectItem
                     key={option.value}
                     value={option.value}
-                    className="flex h-10 pr-5"
+                    className="flex h-10 pr-5 justify-center"
                   >
                     {option.label}
                   </SelectItem>
@@ -275,7 +275,7 @@ const PromptModelSelect = ({
           </SelectValue>
         </SelectTrigger>
         <SelectContent onKeyDown={handleKeyDown} className="p-0">
-          <div className="relative flex h-10 items-center gap-1 pl-6">
+          <div className="relative flex h-10 items-center gap-1 pl-6 justify-center">
             <Search className="absolute left-2 size-4 text-light-slate" />
             <Input
               ref={inputRef}
