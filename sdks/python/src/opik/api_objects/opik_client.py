@@ -497,6 +497,7 @@ class Opik:
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
         prompt: Optional[Prompt] = None,
+        prompts: Optional[List[Prompt]] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -505,15 +506,22 @@ class Opik:
             dataset_name: The name of the dataset to associate with the experiment.
             name: The optional name for the experiment. If None, a generated name will be used.
             experiment_config: Optional experiment configuration parameters. Must be a dictionary if provided.
-            prompt: Prompt object to associate with the experiment.
+            prompt: Prompt object to associate with the experiment. Deprecated, use `prompts` argument instead.
+            prompts: List of Prompt objects to associate with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
         id = helpers.generate_id()
 
-        metadata, prompt_version = experiment.build_metadata_and_prompt_version(
-            experiment_config=experiment_config, prompt=prompt
+        checked_prompts = experiment_helpers.handle_prompt_args(
+            prompt=prompt,
+            prompts=prompts,
+        )
+
+        metadata, prompt_versions = experiment.build_metadata_and_prompt_versions(
+            experiment_config=experiment_config,
+            prompts=checked_prompts,
         )
 
         self._rest_client.experiments.create_experiment(
@@ -521,7 +529,7 @@ class Opik:
             dataset_name=dataset_name,
             id=id,
             metadata=metadata,
-            prompt_version=prompt_version,
+            prompt_versions=prompt_versions,
         )
 
         experiment_ = experiment.Experiment(
@@ -529,7 +537,7 @@ class Opik:
             name=name,
             dataset_name=dataset_name,
             rest_client=self._rest_client,
-            prompt=prompt,
+            prompts=checked_prompts,
         )
 
         return experiment_

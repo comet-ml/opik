@@ -51,8 +51,9 @@ def is_google_run(run: "Run") -> bool:
         if run.serialized is None:
             return False
 
-        provider = run.metadata.get("ls_provider", "")
-        is_google = "google" in provider.lower()
+        invocation_params = run.extra.get("invocation_params", {})
+        provider = invocation_params.get("_type", "").lower()
+        is_google = "vertexai" in provider.lower()
 
         return is_google
 
@@ -73,8 +74,10 @@ def _get_provider_and_model(
     provider = None
     model = None
 
-    if metadata := run_dict["extra"].get("metadata"):
-        provider = metadata.get("ls_provider")
-        model = metadata.get("ls_model_name")
+    if invocation_params := run_dict["extra"].get("invocation_params"):
+        provider = invocation_params.get("_type")
+        if provider == "vertexai":
+            provider = "google_vertexai"
+        model = invocation_params.get("model_name")
 
     return provider, model
