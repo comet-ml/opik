@@ -24,7 +24,12 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
     try:
-        token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
+        if run_dict["outputs"]["llm_output"] is not None:
+            token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
+        # streaming mode
+        else:
+            token_usage = run_dict['outputs']['generations'][-1][-1]['message']['kwargs']['usage_metadata']
+
         if usage_validator.UsageValidator(token_usage).validate().ok():
             return cast(UsageDict, token_usage)
 
