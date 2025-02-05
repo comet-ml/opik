@@ -8,6 +8,7 @@ import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.ClickHouseQueryConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -29,6 +30,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -270,14 +272,22 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_ID = """
             SELECT
                 t.*,
-                if(end_time IS NOT NULL AND start_time IS NOT NULL
-                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                        NULL) as duration_millis,
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 groupUniqArrayArray(c.comments_array) as comments
-            FROM traces t
+            FROM (
+                SELECT
+                    *,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) AS duration_millis
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id = :id
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS t
             LEFT JOIN (
                 SELECT
                     trace_id,
@@ -286,6 +296,8 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND trace_id = :id
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
             LEFT JOIN (
                 SELECT
@@ -302,31 +314,29 @@ class TraceDAOImpl implements TraceDAO {
                         entity_id
                     FROM comments
                     WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    AND entity_id = :id
+                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 GROUP BY entity_id
             ) AS c ON t.id = c.entity_id
-            WHERE workspace_id = :workspace_id
-            AND id = :id
             GROUP BY
-                t.*,
-                duration_millis
-            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+                t.*
             ;
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
             WITH spans_agg AS (
                 SELECT
+                    workspace_id,
+                    project_id,
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                GROUP BY trace_id
+                GROUP BY workspace_id, project_id, trace_id
             ), comments_agg AS (
                 SELECT
                     entity_id,
@@ -363,7 +373,7 @@ class TraceDAOImpl implements TraceDAO {
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration_millis
-                 FROM traces t
+                 FROM traces t <useFinal>
                  <if(trace_aggregation_filters)>
                  LEFT JOIN spans_agg s ON t.id = s.trace_id
                  <endif>
@@ -438,7 +448,7 @@ class TraceDAOImpl implements TraceDAO {
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration_millis
-                    FROM traces
+                    FROM traces <useFinal>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(filters)> AND <filters> <endif>
@@ -655,11 +665,11 @@ class TraceDAOImpl implements TraceDAO {
             FROM (
                 SELECT
                     *,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                        NULL) as duration_millis
-                FROM traces
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) as duration_millis
+                FROM traces <useFinal>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(filters)> AND <filters> <endif>
@@ -690,13 +700,14 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
             LEFT JOIN feedback_scores_agg as f ON t.id = f.entity_id
             GROUP BY t.workspace_id, t.project_id
-            SETTINGS join_algorithm = 'partial_merge'
+            SETTINGS join_algorithm = 'auto'
             ;
             """;
 
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull @Config ClickHouseQueryConfig queryConfig;
 
     @Override
     @WithSpan
@@ -971,6 +982,9 @@ class TraceDAOImpl implements TraceDAO {
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+
+        verifyFinalConfig(template);
+
         template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
@@ -984,8 +998,17 @@ class TraceDAOImpl implements TraceDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
+    private void verifyFinalConfig(ST template) {
+        if (queryConfig.isUseFinal()) {
+            template.add("useFinal", "FINAL");
+        }
+    }
+
     private Mono<? extends Result> countTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
         var template = newFindTemplate(COUNT_BY_PROJECT_ID, traceSearchCriteria);
+
+        verifyFinalConfig(template);
+
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId());
 
@@ -1134,6 +1157,8 @@ class TraceDAOImpl implements TraceDAO {
         return asyncTemplate.nonTransaction(connection -> {
 
             ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
+
+            verifyFinalConfig(statsSQL);
 
             var statement = connection.createStatement(statsSQL.render())
                     .bind("project_ids", List.of(criteria.projectId()));
