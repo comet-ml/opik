@@ -52,3 +52,14 @@ export interface UserPermission {
     | "project_visibility";
   permissionValue: "true" | "false";
 }
+
+export interface Workspace {
+  createdAt: number;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceOwner: string;
+  workspaceCreator: string;
+  organizationId: string;
+  collaborationFeaturesDisabled: boolean;
+  default: boolean;
+}
