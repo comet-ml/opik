@@ -56,6 +56,16 @@ def browser_context(browser: Browser, env_config: EnvConfig):
                 f"Login failed with status {response.status}: {response.text()}"
             )
 
+        # Extract API key from login response
+        response_data = response.json()
+        if "api_keys" not in response_data or not response_data["api_keys"]:
+            raise Exception("No API keys found in login response")
+
+        # Set the API key in environment
+        os.environ["OPIK_API_KEY"] = response_data["api_keys"][0]
+        # Update env_config with the API key
+        env_config.api_key = response_data["api_keys"][0]
+
         page.close()
 
     yield context
@@ -95,10 +105,6 @@ def configure_env(env_config: EnvConfig):
     # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
     os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
-
-    # Set API key if available
-    if env_config.api_key:
-        os.environ["OPIK_API_KEY"] = env_config.api_key
 
 
 @pytest.fixture(scope="session", autouse=True)

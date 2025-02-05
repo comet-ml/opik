@@ -34,7 +34,6 @@ def get_environment_config(env: Environment = Environment.LOCAL) -> EnvConfig:
         Environment.STAGING: EnvConfig(
             api_url="https://staging.dev.comet.com/opik/api",
             web_url="https://staging.dev.comet.com/opik",
-            api_key=os.getenv("OPIK_API_KEY"),
             test_user_email=os.getenv("OPIK_TEST_USER_EMAIL"),
             test_user_name=os.getenv("OPIK_TEST_USER_NAME"),
             test_user_password=os.getenv("OPIK_TEST_USER_PASSWORD"),
@@ -47,8 +46,6 @@ def get_environment_config(env: Environment = Environment.LOCAL) -> EnvConfig:
     # Validate required environment variables for non-local environments
     if env != Environment.LOCAL:
         missing_vars = []
-        if not config.api_key:
-            missing_vars.append("OPIK_API_KEY")
         if not config.test_user_email:
             missing_vars.append("OPIK_TEST_USER_EMAIL")
         if not config.test_user_name:
