@@ -1,15 +1,12 @@
 import functools
 import logging
-from concurrent import futures
-from typing import Any, Callable, Dict, List, Optional, Protocol, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
-import tqdm
 
 from opik import exceptions, logging_messages, opik_context, track
 from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment
-
 from opik.evaluation import (
     exception_analyzer,
     rest_operations,
@@ -19,14 +16,10 @@ from opik.evaluation import (
 from opik.evaluation.metrics import arguments_helpers, base_metric, score_result
 from opik.evaluation.types import LLMTask
 
-from . import helpers
+from . import helpers, evaluation_tasks_executor
+from .types import EvaluationTask
 
 LOGGER = logging.getLogger(__name__)
-
-
-class EvaluationTask(Protocol):
-    def __call__(self) -> test_result.TestResult:
-        pass
 
 
 class EvaluationEngine:
@@ -183,7 +176,7 @@ class EvaluationEngine:
             for item in dataset_items
         ]
 
-        test_results = _execute_evaluation_tasks(
+        test_results = evaluation_tasks_executor.execute(
             evaluation_tasks, self._workers, self._verbose
         )
 
@@ -201,44 +194,8 @@ class EvaluationEngine:
             for test_case_ in test_cases
         ]
 
-        test_results = _execute_evaluation_tasks(
+        test_results = evaluation_tasks_executor.execute(
             evaluation_tasks, self._workers, self._verbose
         )
 
         return test_results
-
-
-def _execute_evaluation_tasks(
-    evaluation_tasks: List[EvaluationTask], workers: int, verbose: int
-) -> List[test_result.TestResult]:
-    if workers == 1:
-        test_results = [
-            scoring_task()
-            for scoring_task in tqdm.tqdm(
-                evaluation_tasks,
-                disable=(verbose < 1),
-                desc="Scoring",
-                total=len(evaluation_tasks),
-            )
-        ]
-
-        return test_results
-
-    with futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        test_result_futures = [
-            pool.submit(scoring_task) for scoring_task in evaluation_tasks
-        ]
-
-        test_results = [
-            test_result_future.result()
-            for test_result_future in tqdm.tqdm(
-                futures.as_completed(
-                    test_result_futures,
-                ),
-                disable=(verbose < 1),
-                desc="Evaluation",
-                total=len(test_result_futures),
-            )
-        ]
-
-    return test_results
