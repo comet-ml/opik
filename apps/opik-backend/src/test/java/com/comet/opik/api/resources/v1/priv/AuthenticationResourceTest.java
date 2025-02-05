@@ -41,7 +41,6 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
 import static com.comet.opik.api.AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
-import static com.comet.opik.api.AuthenticationErrorResponse.NO_PERMISSION_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
@@ -172,7 +171,7 @@ class AuthenticationResourceTest {
         private Stream<Arguments> useInvalidWorkspace__thenReturnForbiddenResponse() {
             return Stream.of(
                     arguments("", MISSING_WORKSPACE),
-                    arguments(UNAUTHORISED_WORKSPACE_NAME, NO_PERMISSION_TO_ACCESS_WORKSPACE),
+                    arguments(UNAUTHORISED_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE),
                     arguments(DEFAULT_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE));
         }
 

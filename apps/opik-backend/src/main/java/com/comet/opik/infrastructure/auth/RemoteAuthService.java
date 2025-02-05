@@ -15,6 +15,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -24,7 +25,6 @@ import java.util.Optional;
 import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
 import static com.comet.opik.api.AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
-import static com.comet.opik.api.AuthenticationErrorResponse.NO_PERMISSION_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.infrastructure.AuthenticationConfig.UrlConfig;
 import static com.comet.opik.infrastructure.auth.AuthCredentialsCacheService.AuthCredentials;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -32,6 +32,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @RequiredArgsConstructor
 @Slf4j
 class RemoteAuthService implements AuthService {
+    private static final String USER_NOT_FOUND = "User not found";
     private final @NonNull Client client;
     private final @NonNull UrlConfig apiKeyAuthUrl;
     private final @NonNull UrlConfig uiAuthUrl;
@@ -141,13 +142,20 @@ class RemoteAuthService implements AuthService {
 
     private AuthResponse verifyResponse(Response response) {
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
-            return response.readEntity(AuthResponse.class);
+            var authResponse = response.readEntity(AuthResponse.class);
+
+            if (StringUtils.isEmpty(authResponse.user())) {
+                log.warn("User not found");
+                throw new ClientErrorException(USER_NOT_FOUND, Response.Status.UNAUTHORIZED);
+            }
+
+            return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
             var errorResponse = response.readEntity(AuthenticationErrorResponse.class);
             throw new ClientErrorException(errorResponse.msg(), Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             // EM never returns FORBIDDEN as of now
-            throw new ClientErrorException(NO_PERMISSION_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
             var errorResponse = response.readEntity(AuthenticationErrorResponse.class);
             throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
