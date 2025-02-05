@@ -46,7 +46,12 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
         className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
         style={{ "--bg-color": color } as React.CSSProperties}
       />
-      <p className="comet-body-s-accented truncate text-light-slate">{label}</p>
+      <p
+        data-testid="feedback-score-tag-label"
+        className="comet-body-s-accented truncate text-light-slate"
+      >
+        {label}
+      </p>
       <div className="flex items-center gap-1">
         <span
           data-testid="feedback-score-tag-value"
