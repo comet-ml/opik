@@ -1,5 +1,9 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Database, Trash } from "lucide-react";
+import last from "lodash/last";
+import first from "lodash/first";
+import get from "lodash/get";
+import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
@@ -8,7 +12,7 @@ import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDia
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import ExportToButton from "@/components/pages/TracesPage/TracesSpansTab/ExportToButton";
+import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -38,6 +42,37 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, rows]);
+
+  const mapRowData = useCallback(() => {
+    return rows.map((row) => {
+      return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
+        // we need split by dot to parse usage into correct structure
+        const keys = column.split(".");
+        const key = last(keys) as string;
+        const keyPrefix = first(keys) as string;
+
+        if (keyPrefix === "feedback_scores") {
+          acc[key] = get(
+            row.feedback_scores?.find((f) => f.name === key),
+            "value",
+            "-",
+          );
+        } else {
+          acc[key] = get(row, keys, "");
+        }
+        return acc;
+      }, {});
+    });
+  }, [rows, columnsToExport]);
+
+  const generateFileName = useCallback(
+    (extension = "csv") => {
+      return `${slugify(projectName, { lower: true })}-${
+        type === TRACE_DATA_TYPE.traces ? "traces" : "llm-calls"
+      }.${extension}`;
+    },
+    [projectName, type],
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -71,12 +106,9 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       </TooltipWrapper>
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
-        type={type}
-        columnsToExport={columnsToExport}
-        rows={rows}
-        projectName={projectName}
+        getData={mapRowData}
+        generateFileName={generateFileName}
       />
-
       {type === TRACE_DATA_TYPE.traces && (
         <TooltipWrapper content="Delete">
           <Button

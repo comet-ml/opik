@@ -54,6 +54,7 @@ import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPane
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import { DEFAULT_COLUMN_PINNING } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -422,7 +423,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const columnsToExport = useMemo(() => {
     return columns
       .map((c) => get(c, "accessorKey", ""))
-      .filter((c) => selectedColumns.includes(c));
+      .filter((c) =>
+        c === COLUMN_SELECT_ID
+          ? false
+          : selectedColumns.includes(c) ||
+            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+      );
   }, [columns, selectedColumns]);
 
   const activeRowId = type === TRACE_DATA_TYPE.traces ? traceId : spanId;
