@@ -5,26 +5,30 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Union
 
 import tqdm
 
-from opik import context_storage, exceptions, logging_messages, opik_context, track
+from opik import exceptions, logging_messages, opik_context, track
 from opik.api_objects import opik_client, trace
 from opik.api_objects.dataset import dataset, dataset_item
-from opik.api_objects.experiment import experiment, experiment_item
-from opik.decorator import error_info_collector
-from opik.types import ErrorInfoDict
+from opik.api_objects.experiment import experiment
 
-from . import exception_analyzer, scores_logger, test_case, test_result
+from . import (
+    exception_analyzer,
+    rest_operations,
+    test_case,
+    test_result,
+    helpers,
+)
 from .metrics import arguments_helpers, base_metric, score_result
 from .types import LLMTask
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ScoringTask(Protocol):
+class EvaluationTask(Protocol):
     def __call__(self) -> test_result.TestResult:
         pass
 
 
-class ScoringEngine:
+class EvaluationEngine:
     def __init__(
         self,
         client: opik_client.Opik,
@@ -41,8 +45,8 @@ class ScoringEngine:
         self._verbose = verbose
         self._scoring_metrics = scoring_metrics
 
-    @track(name="metrics_calculation", ignore_arguments=["client", "project_name"])
-    def _score_test_case(
+    @track(name="metrics_calculation")
+    def _evaluate_test_case(
         self,
         test_case_: test_case.TestCase,
     ) -> test_result.TestResult:
@@ -91,37 +95,38 @@ class ScoringEngine:
         test_result_ = test_result.TestResult(
             test_case=test_case_, score_results=score_results
         )
-        scores_logger.log_scores(
+        rest_operations.log_test_result_scores(
             client=self._client,
             test_result=test_result_,
             project_name=self._project_name,
         )
         return test_result_
 
-    def _evaluate_task_on_dataset_item(
+    def _evaluate_llm_task(
         self,
         item: dataset_item.DatasetItem,
         task: LLMTask,
-        scoring_metrics: List[base_metric.BaseMetric],
         scoring_key_mapping: Optional[
             Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
         ],
     ) -> test_result.TestResult:
-        error_info: Optional[ErrorInfoDict] = None
-
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
             task = track(name=name)(task)
 
-        try:
-            trace_data = trace.TraceData(
-                input=item.get_content(),
-                name="evaluation_task",
-                created_by="evaluation",
-                project_name=self._project_name,
-            )
-            context_storage.set_trace_data(trace_data)
+        trace_data = trace.TraceData(
+            input=item.get_content(),
+            name="evaluation_task",
+            created_by="evaluation",
+            project_name=self._project_name,
+        )
 
+        with helpers.evaluate_llm_task_context(
+            experiment=self._experiment,
+            dataset_item_id=item.id,
+            trace_data=trace_data,
+            client=self._client,
+        ):
             item_content = item.get_content()
 
             LOGGER.debug("Task started, input: %s", item_content)
@@ -133,7 +138,6 @@ class ScoringEngine:
                         logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
                     )
 
-                error_info = error_info_collector.collect(exception)
                 raise
             LOGGER.debug("Task finished, output: %s", task_output_)
 
@@ -151,28 +155,11 @@ class ScoringEngine:
                 scoring_inputs=scoring_inputs,
                 task_output=task_output_,
             )
+            test_result_ = self._evaluate_test_case(test_case_=test_case_)
 
-            test_result_ = self._score_test_case(test_case_=test_case_)
+        return test_result_
 
-            return test_result_
-        finally:
-            trace_data = context_storage.pop_trace_data()  # type: ignore
-
-            assert trace_data is not None
-
-            if error_info is not None:
-                trace_data.error_info = error_info
-
-            trace_data.init_end_time()
-            self._client.trace(**trace_data.__dict__)
-            experiment_item_ = experiment_item.ExperimentItemReferences(
-                dataset_item_id=item.id,
-                trace_id=trace_data.id,
-            )
-
-            self._experiment.insert(experiment_items_references=[experiment_item_])
-
-    def score_llm_tasks(
+    def evaluate_llm_tasks(
         self,
         dataset_: dataset.Dataset,
         task: LLMTask,
@@ -185,53 +172,52 @@ class ScoringEngine:
             nb_samples=nb_samples
         )
 
-        scoring_tasks: List[ScoringTask] = [
+        evaluation_tasks: List[EvaluationTask] = [
             functools.partial(
-                self._evaluate_task_on_dataset_item,
+                self._evaluate_llm_task,
                 item=item,
                 task=task,
-                scoring_metrics=self._scoring_metrics,
                 scoring_key_mapping=scoring_key_mapping,
             )
             for item in dataset_items
         ]
 
-        test_results = _execute_scoring_tasks(
-            scoring_tasks, self._workers, self._verbose
+        test_results = _execute_evaluation_tasks(
+            evaluation_tasks, self._workers, self._verbose
         )
 
         return test_results
 
-    def score_test_cases(
+    def evaluate_test_cases(
         self,
         test_cases: List[test_case.TestCase],
     ) -> List[test_result.TestResult]:
-        scoring_tasks: List[ScoringTask] = [
+        evaluation_tasks: List[EvaluationTask] = [
             functools.partial(
-                self._score_test_case,
+                self._evaluate_test_case,
                 test_case_=test_case_,
             )
             for test_case_ in test_cases
         ]
 
-        test_results = _execute_scoring_tasks(
-            scoring_tasks, self._workers, self._verbose
+        test_results = _execute_evaluation_tasks(
+            evaluation_tasks, self._workers, self._verbose
         )
 
         return test_results
 
 
-def _execute_scoring_tasks(
-    scoring_tasks: List[ScoringTask], workers: int, verbose: int
+def _execute_evaluation_tasks(
+    evaluation_tasks: List[EvaluationTask], workers: int, verbose: int
 ) -> List[test_result.TestResult]:
     if workers == 1:
         test_results = [
             scoring_task()
             for scoring_task in tqdm.tqdm(
-                scoring_tasks,
+                evaluation_tasks,
                 disable=(verbose < 1),
                 desc="Scoring",
-                total=len(scoring_tasks),
+                total=len(evaluation_tasks),
             )
         ]
 
@@ -239,7 +225,7 @@ def _execute_scoring_tasks(
 
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
         test_result_futures = [
-            pool.submit(scoring_task) for scoring_task in scoring_tasks
+            pool.submit(scoring_task) for scoring_task in evaluation_tasks
         ]
 
         test_results = [
