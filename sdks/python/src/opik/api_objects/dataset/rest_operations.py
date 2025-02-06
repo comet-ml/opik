@@ -5,6 +5,7 @@ from . import dataset
 from .. import experiment
 from ...rest_api.core.api_error import ApiError
 
+
 def get_datasets(
     rest_client: OpikApi, max_results: int = 1000, sync_items: bool = True
 ) -> List[dataset.Dataset]:
@@ -20,8 +21,8 @@ def get_datasets(
 
         if len(page_datasets.content) == 0:
             break
-        
-        for dataset_fern in page_datasets.content[:(max_results - len(datasets))]:
+
+        for dataset_fern in page_datasets.content[: (max_results - len(datasets))]:
             dataset_ = dataset.Dataset(
                 name=dataset_fern.name,
                 description=dataset_fern.description,
@@ -38,9 +39,7 @@ def get_datasets(
     return datasets
 
 
-def get_dataset_id(
-    rest_client: OpikApi, dataset_name: str
-) -> str:
+def get_dataset_id(rest_client: OpikApi, dataset_name: str) -> str:
     try:
         dataset_id = rest_client.datasets.get_dataset_by_identifier(
             dataset_name=dataset_name
@@ -54,8 +53,9 @@ def get_dataset_id(
 
     return dataset_id
 
+
 def get_dataset_experiments(
-    rest_client: OpikApi, dataset_id: str, max_results
+    rest_client: OpikApi, dataset_id: str, max_results: int = 1000
 ) -> List[experiment.Experiment]:
     page_size = 100
     experiments: List[experiment.Experiment] = []
@@ -71,7 +71,7 @@ def get_dataset_experiments(
         if len(page_experiments.content) == 0:
             break
 
-        for experiment_ in page_experiments.content[:max_results - len(experiments)]:
+        for experiment_ in page_experiments.content[: max_results - len(experiments)]:
             experiments.append(
                 experiment.Experiment(
                     id=experiment_.id,
@@ -79,9 +79,9 @@ def get_dataset_experiments(
                     dataset_name=experiment_.dataset_name,
                     rest_client=rest_client,
                     # TODO: add prompt if exists
-                ))
+                )
+            )
 
         page += 1
-    
-    return experiments
 
+    return experiments

@@ -19,6 +19,7 @@ from . import (
     constants,
     validation_helpers,
 )
+from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from .dataset import rest_operations as dataset_rest_operations
 from ..message_processing import streamer_constructors, messages

@@ -2,6 +2,7 @@ from opik.rest_api import OpikApi
 from opik.rest_api.types import experiment_public
 from opik import exceptions
 
+
 def get_experiment_data_by_name(
     rest_client: OpikApi, name: str
 ) -> experiment_public.ExperimentPublic:

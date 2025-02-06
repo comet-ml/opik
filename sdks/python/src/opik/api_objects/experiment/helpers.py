@@ -45,6 +45,7 @@ def build_metadata_and_prompt_versions(
 
     return metadata, prompt_versions
 
+
 def handle_prompt_args(
     prompt: Optional[prompt.Prompt] = None,
     prompts: Optional[List[prompt.Prompt]] = None,
