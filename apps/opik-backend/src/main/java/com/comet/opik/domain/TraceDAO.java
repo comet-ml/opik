@@ -334,7 +334,7 @@ class TraceDAOImpl implements TraceDAO {
                         trace_id,
                         sumMap(usage) as usage,
                         sum(total_estimated_cost) as total_estimated_cost
-                    FROM spans FINAL
+                    FROM spans <useFinal>
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     GROUP BY workspace_id, project_id, trace_id
@@ -365,7 +365,7 @@ class TraceDAOImpl implements TraceDAO {
                     SELECT
                         entity_id,
                         groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by)) AS comments_array
-                    FROM comments
+                    FROM comments <useFinal>
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     GROUP BY workspace_id, project_id, entity_id
