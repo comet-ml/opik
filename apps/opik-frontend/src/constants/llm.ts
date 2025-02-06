@@ -170,6 +170,7 @@ export const LLM_PROMPT_CUSTOM_TEMPLATE: LLMPromptTemplate = {
       description:
         "Correctness score identifies the LLM output addresses the input",
       type: LLM_SCHEMA_TYPE.INTEGER,
+      unsaved: false,
     },
   ],
 };
@@ -222,6 +223,7 @@ export const LLM_PROMPT_TEMPLATES: LLMPromptTemplate[] = [
         description:
           "Hallucination score identifies factual errors in the response",
         type: LLM_SCHEMA_TYPE.DOUBLE,
+        unsaved: false,
       },
     ],
   },
@@ -271,6 +273,7 @@ export const LLM_PROMPT_TEMPLATES: LLMPromptTemplate[] = [
         description:
           "Moderation score identifies harmful content in the response",
         type: LLM_SCHEMA_TYPE.DOUBLE,
+        unsaved: false,
       },
     ],
   },
@@ -341,6 +344,7 @@ export const LLM_PROMPT_TEMPLATES: LLMPromptTemplate[] = [
         description:
           "Answer relevance score checks if the output is relevant to the question",
         type: LLM_SCHEMA_TYPE.INTEGER,
+        unsaved: false,
       },
     ],
   },
