@@ -29,7 +29,8 @@ We are currently working on both improving existing features and developing new 
 - **New features**:
   - [x] Prompt playground for evaluating prompt templates
   - [ ] Running evaluations from the Opik platform
-  - [x] Online trace scoring, allows Opik to score traces logged to the platform using LLM as a Judge and code metrics
+  - [x] Online evaluation using LLM as a Judge metrics, allows Opik to score traces logged to the platform using LLM as a Judge metrics
+  - [ ] Online evaluation using code metrics
 
 You can view all the features we have released in our [changelog](/changelog.md).
 
