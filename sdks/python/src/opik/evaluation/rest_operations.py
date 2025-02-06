@@ -1,8 +1,10 @@
-from typing import List, Optional, Dict, Union, Any, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
+from opik.types import FeedbackScoreDict
 
 from ..api_objects import opik_client
-from . import test_case
 from ..rest_api.experiments.client import ExperimentPublic
+from . import test_case, test_result
 from .metrics import arguments_helpers
 
 
@@ -69,3 +71,27 @@ def get_experiment_test_cases(
         page += 1
 
     return test_cases
+
+
+def log_test_result_scores(
+    client: opik_client.Opik,
+    test_result: test_result.TestResult,
+    project_name: Optional[str],
+) -> None:
+    all_trace_scores: List[FeedbackScoreDict] = []
+
+    for score_result in test_result.score_results:
+        if score_result.scoring_failed:
+            continue
+
+        trace_score = FeedbackScoreDict(
+            id=test_result.test_case.trace_id,
+            name=score_result.name,
+            value=score_result.value,
+            reason=score_result.reason,
+        )
+        all_trace_scores.append(trace_score)
+
+    client.log_traces_feedback_scores(
+        scores=all_trace_scores, project_name=project_name
+    )

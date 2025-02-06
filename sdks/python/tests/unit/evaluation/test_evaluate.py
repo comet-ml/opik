@@ -110,7 +110,6 @@ def test_evaluate_happyflow(fake_backend):
                     type="general",
                     name="metrics_calculation",
                     input={
-                        "scoring_metrics": ANY_BUT_NONE,
                         "test_case_": ANY_BUT_NONE,
                     },
                     output={
@@ -179,7 +178,6 @@ def test_evaluate_happyflow(fake_backend):
                     type="general",
                     name="metrics_calculation",
                     input={
-                        "scoring_metrics": ANY_BUT_NONE,
                         "test_case_": ANY_BUT_NONE,
                     },
                     output={"output": ANY_BUT_NONE},
@@ -321,7 +319,6 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                     type="general",
                     name="metrics_calculation",
                     input={
-                        "scoring_metrics": ANY_BUT_NONE,
                         "test_case_": ANY_BUT_NONE,
                     },
                     output={
@@ -396,7 +393,6 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
                     type="general",
                     name="metrics_calculation",
                     input={
-                        "scoring_metrics": ANY_BUT_NONE,
                         "test_case_": ANY_BUT_NONE,
                     },
                     output={
