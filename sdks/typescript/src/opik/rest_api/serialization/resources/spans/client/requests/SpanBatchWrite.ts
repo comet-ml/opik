@@ -13,7 +13,7 @@ export const SpanBatchWrite: core.serialization.Schema<serializers.SpanBatchWrit
     });
 
 export declare namespace SpanBatchWrite {
-    interface Raw {
+    export interface Raw {
         spans: SpanWrite.Raw[];
     }
 }

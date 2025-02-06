@@ -20,7 +20,7 @@ export const Project: core.serialization.ObjectSchema<serializers.Project.Raw, O
         lastUpdatedTraceAt: core.serialization.property("last_updated_trace_at", core.serialization.date().optional()),
         feedbackScores: core.serialization.property(
             "feedback_scores",
-            core.serialization.list(FeedbackScoreAverage).optional()
+            core.serialization.list(FeedbackScoreAverage).optional(),
         ),
         duration: PercentageValues.optional(),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
@@ -28,7 +28,7 @@ export const Project: core.serialization.ObjectSchema<serializers.Project.Raw, O
     });
 
 export declare namespace Project {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         name: string;
         description?: string | null;

@@ -16,7 +16,7 @@ export const ErrorMessagePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace ErrorMessagePublic {
-    interface Raw {
+    export interface Raw {
         code?: number | null;
         message?: string | null;
         details?: string | null;

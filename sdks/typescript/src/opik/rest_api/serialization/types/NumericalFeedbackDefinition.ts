@@ -19,7 +19,7 @@ export const NumericalFeedbackDefinition: core.serialization.ObjectSchema<
 });
 
 export declare namespace NumericalFeedbackDefinition {
-    interface Raw {
+    export interface Raw {
         details?: NumericalFeedbackDetail.Raw | null;
         created_at?: string | null;
         created_by?: string | null;

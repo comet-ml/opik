@@ -10,5 +10,5 @@ export const JsonNode: core.serialization.Schema<serializers.JsonNode.Raw, OpikA
     core.serialization.record(core.serialization.string(), core.serialization.unknown());
 
 export declare namespace JsonNode {
-    type Raw = Record<string, unknown>;
+    export type Raw = Record<string, unknown>;
 }

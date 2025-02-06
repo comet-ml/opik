@@ -2,7 +2,7 @@ import { Schema } from "../../Schema";
 
 export function property<RawKey extends string, RawValue, ParsedValue>(
     rawKey: RawKey,
-    valueSchema: Schema<RawValue, ParsedValue>
+    valueSchema: Schema<RawValue, ParsedValue>,
 ): Property<RawKey, RawValue, ParsedValue> {
     return {
         rawKey,

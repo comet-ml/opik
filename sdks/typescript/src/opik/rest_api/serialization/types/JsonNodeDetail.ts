@@ -10,5 +10,5 @@ export const JsonNodeDetail: core.serialization.Schema<serializers.JsonNodeDetai
     core.serialization.record(core.serialization.string(), core.serialization.unknown());
 
 export declare namespace JsonNodeDetail {
-    type Raw = Record<string, unknown>;
+    export type Raw = Record<string, unknown>;
 }

@@ -10,6 +10,16 @@ on:
       - 'sdks/**'
 
   workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: false
+        description: Version (optional)
+        default: ""
+      push_latest:
+        type: boolean
+        description: Push latest tag (optional)
+        default: false
   workflow_call:
     inputs:
       version:
@@ -17,6 +27,10 @@ on:
         required: true
         description: Version
         default: ""
+      push_latest:
+        type: boolean
+        description: Push latest tag 
+        default: true
 
 jobs:
 
@@ -63,7 +77,7 @@ jobs:
             else
               echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
             fi
-            if [[ "${{inputs.version}}" != "" || "${{ github.ref_name }}" == "main" ]]; then
+            if [[ ("${{inputs.version}}" != "" && "${{inputs.push_latest}}" == "true") || "${{ github.ref_name }}" == "main" ]]; then
               echo "push_latest=true" | tee -a $GITHUB_OUTPUT
             else
               echo "push_latest=false" | tee -a $GITHUB_OUTPUT

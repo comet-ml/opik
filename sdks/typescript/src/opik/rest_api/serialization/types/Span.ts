@@ -38,13 +38,13 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
     totalEstimatedCostVersion: core.serialization.property(
         "total_estimated_cost_version",
-        core.serialization.string().optional()
+        core.serialization.string().optional(),
     ),
     duration: core.serialization.number().optional(),
 });
 
 export declare namespace Span {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         project_name?: string | null;
         project_id?: string | null;
