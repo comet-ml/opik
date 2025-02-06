@@ -17,6 +17,7 @@ from ...testlib import (
     SpanModel,
     TraceModel,
     assert_equal,
+    patch_environ,
 )
 
 
@@ -754,24 +755,22 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
 
 
 def test_langchain_callback__disabled_tracking(fake_backend):
-    os.environ["OPIK_TRACK_DISABLE"] = "true"
+    with patch_environ({"OPIK_TRACK_DISABLE": "true"}):
+        llm = fake.FakeListLLM(
+            responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"]
+        )
 
-    llm = fake.FakeListLLM(
-        responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"]
-    )
+        template = "Given the title of play, write a synopsys for that. Title: {title}."
 
-    template = "Given the title of play, write a synopsys for that. Title: {title}."
+        prompt_template = PromptTemplate(input_variables=["title"], template=template)
 
-    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+        synopsis_chain = prompt_template | llm
+        test_prompts = {"title": "Documentary about Bigfoot in Paris"}
 
-    synopsis_chain = prompt_template | llm
-    test_prompts = {"title": "Documentary about Bigfoot in Paris"}
+        callback = OpikTracer()
+        synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
-    callback = OpikTracer()
-    synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
+        callback.flush()
 
-    callback.flush()
-    os.environ["OPIK_TRACK_DISABLE"] = "false"
-
-    assert len(fake_backend.trace_trees) == 0
-    assert len(callback.created_traces()) == 0
+        assert len(fake_backend.trace_trees) == 0
+        assert len(callback.created_traces()) == 0

@@ -84,6 +84,14 @@ class Opik:
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
+    @property
+    def config(self) -> config.OpikConfig:
+        """
+        Returns:
+            config.OpikConfig: Read-only copy of the configuration of the Opik client.
+        """
+        return self._config.model_copy()
+
     def _initialize_streamer(
         self,
         base_url: str,
@@ -135,8 +143,8 @@ class Opik:
         Checks if current API key user has an access to the configured workspace and its content.
         """
         self._rest_client.check.access(
-            request={}
-        )  # empty body for future backward compatibility
+            request={}  # empty body for future backward compatibility
+        )
 
     def trace(
         self,

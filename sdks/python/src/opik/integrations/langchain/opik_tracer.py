@@ -287,7 +287,7 @@ class OpikTracer(BaseTracer):
         return self._created_traces
 
     def _skip_tracking(self) -> bool:
-        config = self._opik_client._config
+        config = self._opik_client.config
         if config.track_disable:
             return True
 
