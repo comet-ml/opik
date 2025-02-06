@@ -123,22 +123,40 @@ def test_langchain__happyflow(
 
 
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt",
+    "llm_model, expected_input_prompt, stream_usage",
     [
         (
             langchain_openai.OpenAI,
             "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            False,
         ),
         (
             langchain_openai.ChatOpenAI,
             "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            False,
+        ),
+        (
+            langchain_openai.ChatOpenAI,
+            "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            True,
         ),
     ],
 )
 def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_backend, ensure_openai_configured, llm_model, expected_input_prompt
+    fake_backend,
+    ensure_openai_configured,
+    llm_model,
+    expected_input_prompt,
+    stream_usage,
 ):
-    llm = llm_model(max_tokens=10, name="custom-openai-llm-name")
+    llm_args = {
+        "max_tokens": 10,
+        "name": "custom-openai-llm-name",
+    }
+    if stream_usage is True:
+        llm_args["stream_usage"] = stream_usage
+
+    llm = llm_model(**llm_args)
 
     template = "Given the title of play, write a synopsys for that. Title: {title}."
 
