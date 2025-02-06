@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AuthDetailsHolder;
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -10,6 +11,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
@@ -36,8 +38,12 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
+import static com.comet.opik.api.AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -117,9 +123,9 @@ class AuthenticationResourceTest {
 
         Stream<Arguments> credentials() {
             return Stream.of(
-                    arguments(okApikey, 204),
-                    arguments(fakeApikey, 401),
-                    arguments("", 401));
+                    arguments(okApikey, 204, ""),
+                    arguments(fakeApikey, 401, FAKE_API_KEY_MESSAGE),
+                    arguments("", 401, MISSING_API_KEY));
         }
 
         @BeforeEach
@@ -129,13 +135,9 @@ class AuthenticationResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
-
-            wireMock.server().stubFor(
-                    post(urlPathEqualTo("/opik/auth"))
-                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(""))
-                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/opik/auth"))
@@ -147,34 +149,36 @@ class AuthenticationResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create project: when api key is present, then return proper response")
-        void createProject__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, int expectedStatus) {
+        void createProject__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, int expectedStatus,
+                String errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            checkProjectAccess(apiKey, workspaceName, expectedStatus);
+            checkProjectAccess(apiKey, workspaceName, expectedStatus, errorMessage);
         }
 
         @ParameterizedTest
         @MethodSource
-        void useInvalidWorkspace__thenReturnForbiddenResponse(String invalidWorkspaceName) {
+        void useInvalidWorkspace__thenReturnForbiddenResponse(String invalidWorkspaceName, String errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            checkProjectAccess(okApikey, invalidWorkspaceName, 403);
+            checkProjectAccess(okApikey, invalidWorkspaceName, 403, errorMessage);
         }
 
         private Stream<Arguments> useInvalidWorkspace__thenReturnForbiddenResponse() {
             return Stream.of(
-                    arguments(""),
-                    arguments(UNAUTHORISED_WORKSPACE_NAME),
-                    arguments(DEFAULT_WORKSPACE_NAME));
+                    arguments("", MISSING_WORKSPACE),
+                    arguments(UNAUTHORISED_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE),
+                    arguments(DEFAULT_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE));
         }
 
         private void checkProjectAccess(String apiKey,
                 String workspaceName,
-                int expectedStatus) {
+                int expectedStatus,
+                String expectedErrorMessage) {
             var request = AuthDetailsHolder.builder().build();
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -189,7 +193,8 @@ class AuthenticationResourceTest {
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError.getMessage()).isEqualTo(expectedErrorMessage);
                 }
             }
         }

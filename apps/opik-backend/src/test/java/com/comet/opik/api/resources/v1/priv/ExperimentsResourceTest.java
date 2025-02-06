@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
@@ -107,6 +108,8 @@ import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.ass
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -243,9 +246,9 @@ class ExperimentsResourceTest {
 
         Stream<Arguments> credentials() {
             return Stream.of(
-                    arguments(okApikey, true),
-                    arguments(fakeApikey, false),
-                    arguments("", false));
+                    arguments(okApikey, true, null),
+                    arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
+                    arguments("", false, NO_API_KEY_RESPONSE));
         }
 
         @BeforeEach
@@ -254,18 +257,16 @@ class ExperimentsResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
-
-            wireMock.server().stubFor(
-                    post(urlPathEqualTo("/opik/auth"))
-                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(""))
-                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                                    401)))));
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void getById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void getById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -287,14 +288,15 @@ class ExperimentsResourceTest {
                     assertThat(actualEntity.id()).isEqualTo(expectedExperiment.id());
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var expectedExperiment = generateExperiment();
 
             var workspaceName = UUID.randomUUID().toString();
@@ -311,14 +313,15 @@ class ExperimentsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void find__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void find__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
@@ -346,14 +349,15 @@ class ExperimentsResourceTest {
                     assertThat(actualEntity.content()).hasSize(1);
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void deleteExperimentsById_whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void deleteExperimentsById_whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -378,14 +382,15 @@ class ExperimentsResourceTest {
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void deleteExperimentItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void deleteExperimentItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
             var createRequest = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
@@ -411,14 +416,15 @@ class ExperimentsResourceTest {
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void createExperimentItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void createExperimentItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -437,14 +443,15 @@ class ExperimentsResourceTest {
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void getExperimentItemById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success) {
+        void getExperimentItemById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
             var expectedExperimentItem = podamFactory.manufacturePojo(ExperimentItem.class);
             var id = expectedExperimentItem.id();
@@ -469,7 +476,7 @@ class ExperimentsResourceTest {
                     assertThat(actualEntity.id()).isEqualTo(id);
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
         }
@@ -501,7 +508,10 @@ class ExperimentsResourceTest {
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                                    401)))));
         }
 
         @ParameterizedTest

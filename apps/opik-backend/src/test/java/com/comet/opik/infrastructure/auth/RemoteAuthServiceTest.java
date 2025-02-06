@@ -1,9 +1,11 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.DummyLockService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.ClientErrorException;
@@ -25,7 +27,8 @@ import org.mockito.Mockito;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static com.comet.opik.infrastructure.auth.RemoteAuthService.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -35,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class RemoveAuthServiceTest {
+class RemoteAuthServiceTest {
     private Client client;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
@@ -87,7 +90,12 @@ class RemoveAuthServiceTest {
         var workspaceName = RandomStringUtils.randomAlphabetic(10);
         var apiKey = RandomStringUtils.randomAlphabetic(10);
 
-        wireMock.server().stubFor(post("/auth").willReturn(aResponse().withStatus(remoteAuthStatusCode)));
+        wireMock.server()
+                .stubFor(post("/auth").willReturn(aResponse().withStatus(remoteAuthStatusCode)
+                        .withHeader("Content-Type", "application/json")
+                        .withJsonBody(JsonUtils.readTree(
+                                new AuthenticationErrorResponse("test error message",
+                                        remoteAuthStatusCode)))));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock(workspaceName, apiKey), null, "/priv/something"))
@@ -98,8 +106,7 @@ class RemoveAuthServiceTest {
         return Stream.of(
                 arguments(HttpStatus.SC_UNAUTHORIZED, ClientErrorException.class),
                 arguments(HttpStatus.SC_FORBIDDEN, ClientErrorException.class),
-                arguments(HttpStatus.SC_SERVER_ERROR, InternalServerErrorException.class),
-                arguments(HttpStatus.SC_NOT_FOUND, InternalServerErrorException.class));
+                arguments(HttpStatus.SC_SERVER_ERROR, InternalServerErrorException.class));
     }
 
     @Test
@@ -110,7 +117,7 @@ class RemoveAuthServiceTest {
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock("", apiKey), null, "/priv/something"))
                 .isInstanceOf(ClientErrorException.class)
-                .hasMessageContaining(NOT_ALLOWED_TO_ACCESS_WORKSPACE);
+                .hasMessageContaining(MISSING_WORKSPACE);
     }
 
     @Test
@@ -121,7 +128,7 @@ class RemoveAuthServiceTest {
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock(workspaceName, ""), null, "/priv/something"))
                 .isInstanceOf(ClientErrorException.class)
-                .hasMessage(NOT_ALLOWED_TO_ACCESS_WORKSPACE);
+                .hasMessage(MISSING_API_KEY);
     }
 
     private RemoteAuthService getService(RequestContext requestContext) {

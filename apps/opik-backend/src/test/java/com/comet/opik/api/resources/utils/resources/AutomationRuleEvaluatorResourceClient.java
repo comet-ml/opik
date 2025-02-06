@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
-import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
@@ -51,7 +50,8 @@ public class AutomationRuleEvaluatorResourceClient {
     }
 
     public void updateEvaluator(UUID evaluatorId, UUID projectId, String workspaceName,
-            AutomationRuleEvaluatorUpdate updatedEvaluator, String apiKey, boolean isAuthorized) {
+            AutomationRuleEvaluatorUpdate updatedEvaluator, String apiKey, boolean isAuthorized,
+            io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
                 .path(evaluatorId.toString())
                 .request()
@@ -66,7 +66,7 @@ public class AutomationRuleEvaluatorResourceClient {
             } else {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                 assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                        .isEqualTo(TestHttpClientUtils.UNAUTHORIZED_RESPONSE);
+                        .isEqualTo(errorMessage);
             }
         }
     }
