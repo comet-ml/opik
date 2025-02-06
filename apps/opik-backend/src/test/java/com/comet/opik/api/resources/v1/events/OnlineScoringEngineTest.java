@@ -244,7 +244,7 @@ class OnlineScoringEngineTest {
                 .build(); // lets make sure all traces are expected to be scored
 
         log.info("Creating evaluator {}", evaluator);
-        evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
+        evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
         var traceId = UUID.randomUUID();
         trace = Trace.builder()
