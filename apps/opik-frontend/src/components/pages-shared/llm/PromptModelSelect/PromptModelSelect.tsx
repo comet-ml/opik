@@ -223,7 +223,7 @@ const PromptModelSelect = ({
                   <SelectItem
                     key={option.value}
                     value={option.value}
-                    className="flex h-10 pr-5 justify-center"
+                    className="flex h-10 justify-center pr-5"
                   >
                     {option.label}
                   </SelectItem>
@@ -275,7 +275,7 @@ const PromptModelSelect = ({
           </SelectValue>
         </SelectTrigger>
         <SelectContent onKeyDown={handleKeyDown} className="p-0">
-          <div className="relative flex h-10 items-center gap-1 pl-6 justify-center">
+          <div className="relative flex h-10 items-center justify-center gap-1 pl-6">
             <Search className="absolute left-2 size-4 text-light-slate" />
             <Input
               ref={inputRef}
