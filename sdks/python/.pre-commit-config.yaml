@@ -13,7 +13,7 @@ repos:
     rev: v0.4.9
     hooks:
       - id: ruff
-        args: [--diff]
+        args: [ --fix, --show-fixes]
         files: ^sdks/python
         exclude: '(sdks/python/src/opik/rest_api/)'
       - id: ruff-format
