@@ -2,15 +2,15 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from . import asyncio_support, evaluation_result, report, scorer, scores_logger, utils
-from .metrics import base_metric
-from .models import base_model, models_factory
-from .types import LLMTask
 from .. import Prompt
 from ..api_objects import opik_client
 from ..api_objects.dataset import dataset
-from ..api_objects.experiment.helpers import handle_prompt_args
+from ..api_objects.experiment import helpers as experiment_helpers
 from ..api_objects.prompt import prompt_template
+from . import asyncio_support, engine, evaluation_result, report, rest_operations
+from .metrics import base_metric
+from .models import base_model, models_factory
+from .types import LLMTask
 
 LOGGER = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ def evaluate(
     if scoring_metrics is None:
         scoring_metrics = []
 
-    checked_prompts = handle_prompt_args(
+    checked_prompts = experiment_helpers.handle_prompt_args(
         prompt=prompt,
         prompts=prompts,
     )
@@ -93,16 +93,18 @@ def evaluate(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        test_results = scorer.score_tasks(
+        evaluation_engine = engine.EvaluationEngine(
             client=client,
+            project_name=project_name,
             experiment_=experiment,
-            dataset_=dataset,
-            task=task,
             scoring_metrics=scoring_metrics,
-            nb_samples=nb_samples,
             workers=task_threads,
             verbose=verbose,
-            project_name=project_name,
+        )
+        test_results = evaluation_engine.evaluate_llm_tasks(
+            dataset_=dataset,
+            task=task,
+            nb_samples=nb_samples,
             scoring_key_mapping=scoring_key_mapping,
         )
 
@@ -110,10 +112,6 @@ def evaluate(
 
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
-
-    scores_logger.log_scores(
-        client=client, test_results=test_results, project_name=project_name
-    )
 
     report.display_experiment_link(dataset.name, experiment.id)
 
@@ -161,32 +159,32 @@ def evaluate_experiment(
 
     client = opik_client.get_client_cached()
 
-    experiment = utils.get_experiment_by_name(
+    experiment = rest_operations.get_experiment_by_name(
         client=client, experiment_name=experiment_name
     )
 
-    test_cases = utils.get_experiment_test_cases(
+    test_cases = rest_operations.get_experiment_test_cases(
         client=client,
         experiment_id=experiment.id,
         dataset_id=experiment.dataset_id,
         scoring_key_mapping=scoring_key_mapping,
     )
+    first_trace_id = test_cases[0].trace_id
+    project_name = rest_operations.get_trace_project_name(
+        client=client, trace_id=first_trace_id
+    )
 
     with asyncio_support.async_http_connections_expire_immediately():
-        test_results = scorer.score_test_cases(
-            test_cases=test_cases,
+        evaluation_engine = engine.EvaluationEngine(
+            client=client,
+            project_name=project_name,
+            experiment_=experiment,
             scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
         )
+        test_results = evaluation_engine.evaluate_test_cases(test_cases=test_cases)
 
-    first_trace_id = test_results[0].test_case.trace_id
-    project_name = utils.get_trace_project_name(client=client, trace_id=first_trace_id)
-
-    # Log scores - Needs to be updated to use the project name
-    scores_logger.log_scores(
-        client=client, test_results=test_results, project_name=project_name
-    )
     total_time = time.time() - start_time
 
     if verbose == 1:
@@ -301,16 +299,18 @@ def evaluate_prompt(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        test_results = scorer.score_tasks(
+        evaluation_engine = engine.EvaluationEngine(
             client=client,
+            project_name=project_name,
             experiment_=experiment,
-            dataset_=dataset,
-            task=_build_prompt_evaluation_task(model=model, messages=messages),
             scoring_metrics=scoring_metrics,
-            nb_samples=nb_samples,
             workers=task_threads,
             verbose=verbose,
-            project_name=project_name,
+        )
+        test_results = evaluation_engine.evaluate_llm_tasks(
+            dataset_=dataset,
+            task=_build_prompt_evaluation_task(model=model, messages=messages),
+            nb_samples=nb_samples,
             scoring_key_mapping=None,
         )
 
@@ -318,10 +318,6 @@ def evaluate_prompt(
 
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
-
-    scores_logger.log_scores(
-        client=client, test_results=test_results, project_name=project_name
-    )
 
     report.display_experiment_link(dataset.name, experiment.id)
 
