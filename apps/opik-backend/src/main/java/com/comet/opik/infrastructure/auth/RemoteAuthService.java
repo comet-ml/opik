@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Provider;
@@ -21,6 +22,9 @@ import reactor.core.scheduler.Schedulers;
 import java.net.URI;
 import java.util.Optional;
 
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
+import static com.comet.opik.api.AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.infrastructure.AuthenticationConfig.UrlConfig;
 import static com.comet.opik.infrastructure.auth.AuthCredentialsCacheService.AuthCredentials;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -28,9 +32,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @RequiredArgsConstructor
 @Slf4j
 class RemoteAuthService implements AuthService {
-
-    public static final String NOT_ALLOWED_TO_ACCESS_WORKSPACE = "User not allowed to access workspace";
-    public static final String USER_NOT_FOUND = "User not found";
+    private static final String USER_NOT_FOUND = "User not found";
     private final @NonNull Client client;
     private final @NonNull UrlConfig apiKeyAuthUrl;
     private final @NonNull UrlConfig uiAuthUrl;
@@ -52,8 +54,10 @@ class RemoteAuthService implements AuthService {
 
         var currentWorkspaceName = getCurrentWorkspaceName(headers);
 
-        if (currentWorkspaceName.isBlank()
-                || ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(currentWorkspaceName)) {
+        if (currentWorkspaceName.isBlank()) {
+            log.warn("Workspace name is missing");
+            throw new ClientErrorException(MISSING_WORKSPACE, Response.Status.FORBIDDEN);
+        } else if (ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(currentWorkspaceName)) {
             log.warn("Default workspace name is not allowed");
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
@@ -94,7 +98,7 @@ class RemoteAuthService implements AuthService {
 
         if (apiKey.isBlank()) {
             log.info("API key not found in headers");
-            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.UNAUTHORIZED);
+            throw new ClientErrorException(MISSING_API_KEY, Response.Status.UNAUTHORIZED);
         }
 
         var lock = new Lock(apiKey, workspaceName);
@@ -147,9 +151,14 @@ class RemoteAuthService implements AuthService {
 
             return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.UNAUTHORIZED);
+            var errorResponse = response.readEntity(AuthenticationErrorResponse.class);
+            throw new ClientErrorException(errorResponse.msg(), Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
-            throw new ClientErrorException("User has no permission to the workspace", Response.Status.FORBIDDEN);
+            // EM never returns FORBIDDEN as of now
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+        } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
+            var errorResponse = response.readEntity(AuthenticationErrorResponse.class);
+            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
         }
 
         log.error("Unexpected error while authenticating user, received status code: {}", response.getStatus());

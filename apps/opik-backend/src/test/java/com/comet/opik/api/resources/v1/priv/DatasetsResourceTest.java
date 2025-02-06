@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.Dataset;
@@ -57,6 +58,7 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -121,6 +123,8 @@ import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -131,7 +135,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.unauthorized;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.flatMapping;
 import static java.util.stream.Collectors.groupingBy;
@@ -302,9 +305,9 @@ class DatasetsResourceTest {
 
         Stream<Arguments> credentials() {
             return Stream.of(
-                    arguments(okApikey, true),
-                    arguments(fakeApikey, false),
-                    arguments("", false));
+                    arguments(okApikey, true, null),
+                    arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
+                    arguments("", false, NO_API_KEY_RESPONSE));
         }
 
         @BeforeEach
@@ -314,19 +317,17 @@ class DatasetsResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(unauthorized()));
-
-            wireMock.server().stubFor(
-                    post(urlPathEqualTo("/opik/auth"))
-                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(""))
-                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                                    401)))));
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create dataset: when api key is present, then return proper response")
-        void createDataset__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void createDataset__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var project = factory.manufacturePojo(Project.class).toBuilder()
                     .id(null)
                     .build();
@@ -347,7 +348,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -355,7 +356,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Get dataset by id: when api key is present, then return proper response")
-        void getDatasetById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void getDatasetById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
@@ -383,7 +385,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -391,7 +393,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Get dataset by name: when api key is present, then return proper response")
-        void getDatasetByName__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void getDatasetByName__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
@@ -419,7 +422,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -427,7 +430,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Get datasets: when api key is present, then return proper response")
-        void getDatasets__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void getDatasets__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -456,7 +460,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -464,7 +468,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Update dataset: when api key is present, then return proper response")
-        void updateDataset__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void updateDataset__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
 
@@ -491,7 +496,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -499,7 +504,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Delete dataset: when api key is present, then return proper response")
-        void deleteDataset__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void deleteDataset__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
@@ -524,7 +530,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -532,7 +538,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Create dataset items: when api key is present, then return proper response")
-        void createDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void createDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
                     .map(item -> item.toBuilder()
@@ -564,7 +571,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
 
@@ -574,7 +581,7 @@ class DatasetsResourceTest {
         @MethodSource("credentials")
         @DisplayName("Get dataset items by dataset id: when api key is present, then return proper response")
         void getDatasetItemsByDatasetId__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean shouldSucceed) {
+                boolean shouldSucceed, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
@@ -615,7 +622,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -623,7 +630,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Stream dataset items: when api key is present, then return proper response")
-        void streamDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void streamDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
@@ -669,7 +677,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -677,7 +685,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Delete dataset items: when api key is present, then return proper response")
-        void deleteDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void deleteDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
@@ -714,7 +723,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
@@ -722,7 +731,8 @@ class DatasetsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Get dataset item by id: when api key is present, then return proper response")
-        void getDatasetItemById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed) {
+        void getDatasetItemById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
@@ -759,7 +769,7 @@ class DatasetsResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.hasEntity()).isTrue();
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
 
@@ -787,7 +797,10 @@ class DatasetsResourceTest {
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                                    401)))));
         }
 
         Stream<Arguments> credentials() {
