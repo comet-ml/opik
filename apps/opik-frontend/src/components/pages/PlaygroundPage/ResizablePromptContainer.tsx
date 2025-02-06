@@ -11,7 +11,7 @@ interface ResizableDivContainerProps {
 
 const ResizablePromptContainer = ({ children }: ResizableDivContainerProps) => {
   const defaultHeight = Math.max(
-    window.innerHeight - 300,
+    window.innerHeight - 360,
     PLAYGROUND_PROMPT_MIN_HEIGHT,
   );
 
