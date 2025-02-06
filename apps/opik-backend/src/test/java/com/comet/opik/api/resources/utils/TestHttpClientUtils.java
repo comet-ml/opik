@@ -8,11 +8,16 @@ import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
 import org.apache.http.ssl.SSLContextBuilder;
 
+import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
+
 @UtilityClass
 public class TestHttpClientUtils {
 
+    public static final String FAKE_API_KEY_MESSAGE = "User not allowed to access workspace!";
     public static final io.dropwizard.jersey.errors.ErrorMessage UNAUTHORIZED_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
-            401, "User not allowed to access workspace");
+            401, FAKE_API_KEY_MESSAGE);
+    public static final io.dropwizard.jersey.errors.ErrorMessage NO_API_KEY_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
+            401, MISSING_API_KEY);
 
     public static Client client() {
         try {
@@ -35,5 +40,4 @@ public class TestHttpClientUtils {
             }
         };
     }
-
 }
