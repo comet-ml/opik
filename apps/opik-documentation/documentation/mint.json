@@ -55,10 +55,6 @@
       "pages": ["docs/home", "docs/quickstart", "docs/changelog", "docs/roadmap", "docs/FAQ"]
     },
     {
-      "group": "API Reference",
-      "pages": ["docs/api-reference/endpoints"]
-    },
-    {
       "group": "Self-host",
       "pages": [
         "docs/self-host/overview",
