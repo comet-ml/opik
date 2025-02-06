@@ -26,9 +26,17 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
     try:
         if run_dict["outputs"]["llm_output"] is not None:
             token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
-        # streaming mode
+
+        # streaming mode handling
         else:
-            token_usage = run_dict['outputs']['generations'][-1][-1]['message']['kwargs']['usage_metadata']
+            token_usage_full = run_dict['outputs']['generations'][-1][-1]['message']['kwargs']['usage_metadata']
+
+            token_usage = UsageDict(
+                completion_tokens=token_usage_full["output_tokens"],
+                prompt_tokens=token_usage_full["input_tokens"],
+                total_tokens=token_usage_full["total_tokens"],
+            )
+            token_usage.update(token_usage_full)
 
         if usage_validator.UsageValidator(token_usage).validate().ok():
             return cast(UsageDict, token_usage)
