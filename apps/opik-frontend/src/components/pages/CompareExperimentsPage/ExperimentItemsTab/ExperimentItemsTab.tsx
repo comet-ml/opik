@@ -61,7 +61,7 @@ import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeed
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import ExperimentsFeedbackScoresAutocomplete from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresAutocomplete/ExperimentsFeedbackScoresAutocomplete";
+import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import {
   calculateHeightStyle,
   generateSelectColumDef,
@@ -154,10 +154,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     () => ({
       rowsMap: {
         [COLUMN_FEEDBACK_SCORES_ID]: {
-          keyComponent: ExperimentsFeedbackScoresAutocomplete,
+          keyComponent: ExperimentsFeedbackScoresSelect,
           keyComponentProps: {
             experimentsIds,
-            placeholder: "Feedback score",
+            placeholder: "Select score",
           },
         },
       },

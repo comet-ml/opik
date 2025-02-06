@@ -54,7 +54,7 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
-import TracesOrSpansFeedbackScoresAutocomplete from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresAutocomplete/TracesOrSpansFeedbackScoresAutocomplete";
+import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -266,11 +266,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           },
         },
         [COLUMN_FEEDBACK_SCORES_ID]: {
-          keyComponent: TracesOrSpansFeedbackScoresAutocomplete,
+          keyComponent: TracesOrSpansFeedbackScoresSelect,
           keyComponentProps: {
             projectId,
             type,
-            placeholder: "Feedback score",
+            placeholder: "Select score",
           },
         },
       },
