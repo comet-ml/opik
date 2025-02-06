@@ -46,6 +46,13 @@ export const LLMJudgeDetailsFormSchema = z.object({
           .min(1, { message: "Score definition name is required" }),
         type: z.nativeEnum(LLM_SCHEMA_TYPE),
         description: z.string(),
+        unsaved: z
+          .boolean()
+          .optional()
+          .default(false)
+          .refine((value) => !value, {
+            message: "Changes not saved",
+          }),
       }),
     )
     .refine(
