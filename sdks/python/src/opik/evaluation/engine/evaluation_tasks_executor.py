@@ -12,11 +12,11 @@ def execute(
 ) -> List[test_result.TestResult]:
     if workers == 1:
         test_results = [
-            scoring_task()
-            for scoring_task in tqdm.tqdm(
+            evaluation_task()
+            for evaluation_task in tqdm.tqdm(
                 evaluation_tasks,
                 disable=(verbose < 1),
-                desc="Scoring",
+                desc="Evaluation",
                 total=len(evaluation_tasks),
             )
         ]
