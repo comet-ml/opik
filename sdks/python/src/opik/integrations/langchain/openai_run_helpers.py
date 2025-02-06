@@ -29,7 +29,9 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
 
         # streaming mode handling
         else:
-            token_usage_full = run_dict['outputs']['generations'][-1][-1]['message']['kwargs']['usage_metadata']
+            token_usage_full = run_dict["outputs"]["generations"][-1][-1]["message"][
+                "kwargs"
+            ]["usage_metadata"]
 
             token_usage = UsageDict(
                 completion_tokens=token_usage_full["output_tokens"],

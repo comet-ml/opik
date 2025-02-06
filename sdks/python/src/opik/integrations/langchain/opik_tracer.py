@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
+from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING, cast
 
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
@@ -27,12 +27,14 @@ opik_encoder_extension.register()
 
 language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 
+SpanType = Literal["llm", "tool", "general"]
 
-def _get_span_type(run: Dict[str, Any]) -> Literal["llm", "tool", "general"]:
+
+def _get_span_type(run: Dict[str, Any]) -> SpanType:
     if run.get("run_type") in ["llm", "tool"]:
-        return run.get("run_type")
+        return cast(SpanType, run.get("run_type"))
 
-    return "general"
+    return cast(SpanType, "general")
 
 
 class OpikTracer(BaseTracer):
