@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
@@ -114,6 +115,8 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpd
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.resources.SpanResourceClient.IGNORED_FIELDS;
 import static com.comet.opik.api.resources.utils.resources.SpanResourceClient.IGNORED_FIELDS_SCORES;
@@ -240,9 +243,9 @@ class SpansResourceTest {
 
         Stream<Arguments> credentials() {
             return Stream.of(
-                    arguments(okApikey, true),
-                    arguments(fakeApikey, false),
-                    arguments("", false));
+                    arguments(okApikey, true, null),
+                    arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
+                    arguments("", false, NO_API_KEY_RESPONSE));
         }
 
         @BeforeEach
@@ -252,18 +255,16 @@ class SpansResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
-
-            wireMock.server().stubFor(
-                    post(urlPathEqualTo("/opik/auth"))
-                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(""))
-                            .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                                    401)))));
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -276,13 +277,14 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(span))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 201);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 201, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void update__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void update__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -304,13 +306,14 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .method(HttpMethod.PATCH, Entity.json(update))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 204, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void delete__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void delete__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -326,13 +329,14 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .delete()) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 501);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 501, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void getById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void getById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -356,14 +360,15 @@ class SpansResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
 
@@ -388,14 +393,15 @@ class SpansResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void feedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void feedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -414,13 +420,14 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedbackScore))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 204, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void deleteFeedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void deleteFeedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -442,13 +449,14 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(new DeleteFeedbackScore(feedbackScore.name())))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 204, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void feedbackBatch__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void feedbackBatch__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -476,13 +484,14 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedbackScoreBatch))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 204, errorMessage);
             }
         }
 
         @ParameterizedTest
         @MethodSource("credentials")
-        void search__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected) {
+        void search__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var span = podamFactory.manufacturePojo(Span.class);
             String workspaceName = UUID.randomUUID().toString();
@@ -506,21 +515,22 @@ class SpansResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
 
     }
 
-    private void assertExpectedResponseWithoutBody(boolean expected, Response actualResponse, int expectedStatus) {
+    private void assertExpectedResponseWithoutBody(boolean expected, Response actualResponse, int expectedStatus,
+            io.dropwizard.jersey.errors.ErrorMessage expectedErrorMessage) {
         if (expected) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
             assertThat(actualResponse.hasEntity()).isFalse();
         } else {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
             assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                    .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    .isEqualTo(expectedErrorMessage);
         }
     }
 
@@ -550,7 +560,10 @@ class SpansResourceTest {
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(fakeSessionToken))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized()));
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                                    401)))));
         }
 
         @ParameterizedTest
@@ -566,7 +579,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(span))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 201);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 201, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -594,7 +607,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .method(HttpMethod.PATCH, Entity.json(update))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 204, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -616,7 +629,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .delete()) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 501);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 501, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -706,7 +719,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedbackScore))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 204, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -734,7 +747,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(new DeleteFeedbackScore(feedbackScore.name())))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 204, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -768,7 +781,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedbackScoreBatch))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204);
+                assertExpectedResponseWithoutBody(expected, actualResponse, 204, UNAUTHORIZED_RESPONSE);
             }
         }
 
