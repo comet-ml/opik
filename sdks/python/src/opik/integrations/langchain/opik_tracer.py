@@ -1,13 +1,12 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
 
-from opik.types import ErrorInfoDict, LLMUsageInfo
-
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 
 from opik import dict_utils, opik_context
 from opik.api_objects import opik_client, span, trace
+from opik.types import ErrorInfoDict, LLMUsageInfo
 from . import (
     base_llm_patcher,
     google_run_helpers,
@@ -29,9 +28,9 @@ opik_encoder_extension.register()
 language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 
 
-def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
-    if run.run_type in ["llm", "tool"]:
-        return run.run_type  # type: ignore[no-any-return]
+def _get_span_type(run: Dict[str, Any]) -> Literal["llm", "tool", "general"]:
+    if run.get("run_type") in ["llm", "tool"]:
+        return run.get("run_type")
 
     return "general"
 
@@ -124,7 +123,7 @@ class OpikTracer(BaseTracer):
                 input=run_dict["inputs"],
                 metadata=run_dict["extra"],
                 name=run.name,
-                type=_get_span_type(run),
+                type=_get_span_type(run_dict),
                 project_name=project_name,
             )
 
@@ -178,6 +177,7 @@ class OpikTracer(BaseTracer):
             parent_span_id=None,
             name=run_dict["name"],
             input=run_dict["inputs"],
+            type=_get_span_type(run_dict),
             metadata=root_metadata,
             tags=self._trace_default_tags,
             project_name=self._project_name,
@@ -204,6 +204,7 @@ class OpikTracer(BaseTracer):
             metadata=root_metadata,
             tags=self._trace_default_tags,
             project_name=project_name,
+            type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(span_data.trace_id)
@@ -227,6 +228,7 @@ class OpikTracer(BaseTracer):
             metadata=root_metadata,
             tags=self._trace_default_tags,
             project_name=project_name,
+            type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(current_trace_data.id)
