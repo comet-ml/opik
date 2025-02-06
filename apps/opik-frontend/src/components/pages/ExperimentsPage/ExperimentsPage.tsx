@@ -54,6 +54,7 @@ import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpa
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import { formatNumericData } from "@/lib/utils";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -101,7 +102,11 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "feedback_scores",
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) => get(row, "feedback_scores", []),
+    accessorFn: (row) =>
+      get(row, "feedback_scores", []).map((score) => ({
+        ...score,
+        value: formatNumericData(score.value),
+      })),
     cell: FeedbackScoreListCell as never,
   },
 ];
@@ -111,7 +116,10 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["created_at"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "created_at",
+  "feedback_scores",
+];
 
 const ExperimentsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);

@@ -116,7 +116,11 @@ export const DEFAULT_COLUMNS: ColumnData<ProjectWithStatistic>[] = [
     id: "feedback_scores",
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) => get(row, "feedback_scores", []),
+    accessorFn: (row) =>
+      get(row, "feedback_scores", []).map((score) => ({
+        ...score,
+        value: formatNumericData(score.value),
+      })),
     cell: FeedbackScoreListCell as never,
   },
   {

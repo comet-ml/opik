@@ -9,7 +9,7 @@ export const formatCost = (
   value: number | string | undefined,
   short = false,
 ) => {
-  if (isUndefined(value)) {
+  if (isUndefined(value) || value === 0 || value === "0") {
     return "-";
   }
 
