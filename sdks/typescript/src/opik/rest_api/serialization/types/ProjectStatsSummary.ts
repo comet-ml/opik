@@ -15,7 +15,7 @@ export const ProjectStatsSummary: core.serialization.ObjectSchema<
 });
 
 export declare namespace ProjectStatsSummary {
-    interface Raw {
+    export interface Raw {
         content?: ProjectStatsSummaryItem.Raw[] | null;
     }
 }

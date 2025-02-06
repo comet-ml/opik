@@ -1,7 +1,7 @@
 import os
 from typing import Optional, TypedDict
 from langgraph.graph import END, StateGraph
-from opik.integrations.langchain import OpikTracer
+from opik.integrations.langchain import OpikTracer # HIGHLIGHTED_LINE
 
 # INJECT_OPIK_CONFIGURATION
 
@@ -55,7 +55,7 @@ workflow.set_entry_point("classify_input")
 workflow.add_edge("handle_greeting", END)
 workflow.add_edge("handle_search", END)
 app = workflow.compile()
-tracer = OpikTracer(graph=app.get_graph(xray=True))
+tracer = OpikTracer(graph=app.get_graph(xray=True)) # HIGHLIGHTED_LINE
 inputs = {"question": "Hello, how are you?"}
-result = app.invoke(inputs, config={"callbacks": [tracer]})
+result = app.invoke(inputs, config={"callbacks": [tracer]}) # HIGHLIGHTED_LINE
 print(result)

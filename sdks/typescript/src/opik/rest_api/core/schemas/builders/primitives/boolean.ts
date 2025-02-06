@@ -21,5 +21,5 @@ export const boolean = createIdentitySchemaCreator<boolean>(
                 ],
             };
         }
-    }
+    },
 );

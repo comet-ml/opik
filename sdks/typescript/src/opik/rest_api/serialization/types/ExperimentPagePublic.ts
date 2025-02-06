@@ -18,7 +18,7 @@ export const ExperimentPagePublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace ExperimentPagePublic {
-    interface Raw {
+    export interface Raw {
         page?: number | null;
         size?: number | null;
         total?: number | null;

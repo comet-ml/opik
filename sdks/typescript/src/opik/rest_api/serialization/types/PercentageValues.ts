@@ -16,7 +16,7 @@ export const PercentageValues: core.serialization.ObjectSchema<
 });
 
 export declare namespace PercentageValues {
-    interface Raw {
+    export interface Raw {
         p50?: number | null;
         p90?: number | null;
         p99?: number | null;

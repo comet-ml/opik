@@ -14,7 +14,7 @@ export const ChunkedOutputJsonNodeType: core.serialization.ObjectSchema<
 });
 
 export declare namespace ChunkedOutputJsonNodeType {
-    interface Raw {
+    export interface Raw {
         typeName?: string | null;
     }
 }

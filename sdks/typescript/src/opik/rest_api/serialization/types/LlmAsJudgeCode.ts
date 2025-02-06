@@ -18,7 +18,7 @@ export const LlmAsJudgeCode: core.serialization.ObjectSchema<serializers.LlmAsJu
     });
 
 export declare namespace LlmAsJudgeCode {
-    interface Raw {
+    export interface Raw {
         model: LlmAsJudgeModelParameters.Raw;
         messages: LlmAsJudgeMessage.Raw[];
         variables: Record<string, string>;

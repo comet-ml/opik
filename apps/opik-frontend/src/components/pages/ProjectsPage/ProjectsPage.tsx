@@ -40,6 +40,8 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import { get } from "lodash";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -109,6 +111,13 @@ export const DEFAULT_COLUMNS: ColumnData<ProjectWithStatistic>[] = [
       row.usage && isNumber(row.usage.completion_tokens)
         ? formatNumericData(row.usage.completion_tokens)
         : "-",
+  },
+  {
+    id: "feedback_scores",
+    label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+    accessorFn: (row) => get(row, "feedback_scores", []),
+    cell: FeedbackScoreListCell as never,
   },
   {
     id: "last_updated_at",

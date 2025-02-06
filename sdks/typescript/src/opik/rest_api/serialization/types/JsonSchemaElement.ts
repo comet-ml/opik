@@ -14,7 +14,7 @@ export const JsonSchemaElement: core.serialization.ObjectSchema<
 });
 
 export declare namespace JsonSchemaElement {
-    interface Raw {
+    export interface Raw {
         type?: string | null;
     }
 }

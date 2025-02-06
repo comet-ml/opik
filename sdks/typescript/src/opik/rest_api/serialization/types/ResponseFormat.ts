@@ -15,7 +15,7 @@ export const ResponseFormat: core.serialization.ObjectSchema<serializers.Respons
     });
 
 export declare namespace ResponseFormat {
-    interface Raw {
+    export interface Raw {
         type?: ResponseFormatType.Raw | null;
         json_schema?: JsonSchema.Raw | null;
     }

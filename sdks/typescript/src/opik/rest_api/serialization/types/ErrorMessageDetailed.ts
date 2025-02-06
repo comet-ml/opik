@@ -14,7 +14,7 @@ export const ErrorMessageDetailed: core.serialization.ObjectSchema<
 });
 
 export declare namespace ErrorMessageDetailed {
-    interface Raw {
+    export interface Raw {
         errors?: string[] | null;
     }
 }

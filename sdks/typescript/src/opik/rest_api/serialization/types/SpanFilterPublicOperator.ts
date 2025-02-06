@@ -12,5 +12,5 @@ export const SpanFilterPublicOperator: core.serialization.Schema<
 > = core.serialization.enum_(["contains", "not_contains", "starts_with", "ends_with", "=", "!=", ">", ">=", "<", "<="]);
 
 export declare namespace SpanFilterPublicOperator {
-    type Raw = "contains" | "not_contains" | "starts_with" | "ends_with" | "=" | "!=" | ">" | ">=" | "<" | "<=";
+    export type Raw = "contains" | "not_contains" | "starts_with" | "ends_with" | "=" | "!=" | ">" | ">=" | "<" | "<=";
 }

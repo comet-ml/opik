@@ -26,6 +26,7 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import {
   getCommonPinningClasses,
   getCommonPinningStyles,
+  shiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
 
 export const GROUPING_CONFIG = {
@@ -37,7 +38,28 @@ export const getRowId = (e: GroupedExperiment) => e.id;
 export const getIsMoreRow = (row: Row<GroupedExperiment>) =>
   checkIsMoreRowId(row?.original?.id || "");
 
-export const generateExperimentNameColumDef = <TData,>() => {
+// The goal to use shared handler between two different helpers to draw cells in Experiments table,
+// to share in closure the previousSelectedRowID between two helpers
+// generateExperimentNameColumDef and generateGroupedCellDef
+export const getSharedShiftCheckboxClickHandler = () => {
+  let previousSelectedRowID = "";
+
+  return <TData,>(
+    event: React.MouseEvent<HTMLButtonElement>,
+    context: CellContext<TData, unknown>,
+  ) => {
+    event.stopPropagation();
+    shiftCheckboxClickHandler(event, context, previousSelectedRowID);
+    previousSelectedRowID = context.row.id;
+  };
+};
+
+export const generateExperimentNameColumDef = <TData,>(
+  checkboxClickHandler: (
+    event: React.MouseEvent<HTMLButtonElement>,
+    context: CellContext<TData, unknown>,
+  ) => void,
+) => {
   return {
     accessorKey: COLUMN_NAME_ID,
     header: (context) => (
@@ -70,10 +92,10 @@ export const generateExperimentNameColumDef = <TData,>() => {
             style={{
               marginLeft: `${context.row.depth * 28}px`,
             }}
-            onClick={(event) => event.stopPropagation()}
             checked={context.row.getIsSelected()}
             disabled={!context.row.getCanSelect()}
             onCheckedChange={(value) => context.row.toggleSelected(!!value)}
+            onClick={(event) => checkboxClickHandler(event, context)}
             aria-label="Select row"
           />
           <div className="ml-3 min-w-1 max-w-full">
@@ -98,6 +120,10 @@ export const generateExperimentNameColumDef = <TData,>() => {
 
 export const generateGroupedCellDef = <TData, TValue>(
   columnData: ColumnData<TData>,
+  checkboxClickHandler: (
+    event: React.MouseEvent<HTMLButtonElement>,
+    context: CellContext<TData, unknown>,
+  ) => void,
 ) => {
   return {
     ...mapColumnDataFields(columnData),
@@ -108,13 +134,13 @@ export const generateGroupedCellDef = <TData, TValue>(
         <div className="flex size-full h-11 items-center">
           <div className="flex shrink-0 items-center pl-5">
             <Checkbox
-              onClick={(event) => event.stopPropagation()}
               checked={
                 row.getIsAllSubRowsSelected() ||
                 (row.getIsSomeSelected() && "indeterminate")
               }
               disabled={!row.getCanSelect()}
               onCheckedChange={(value) => row.toggleSelected(!!value)}
+              onClick={(event) => checkboxClickHandler(event, context)}
               aria-label="Select row"
             />
             <Button

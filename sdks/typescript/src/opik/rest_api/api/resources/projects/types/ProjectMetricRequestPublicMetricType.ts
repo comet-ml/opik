@@ -8,7 +8,6 @@ export type ProjectMetricRequestPublicMetricType =
     | "TOKEN_USAGE"
     | "DURATION"
     | "COST";
-
 export const ProjectMetricRequestPublicMetricType = {
     FeedbackScores: "FEEDBACK_SCORES",
     TraceCount: "TRACE_COUNT",

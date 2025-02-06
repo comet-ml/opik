@@ -2,6 +2,7 @@ package com.comet.opik.utils;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import dev.ai4j.openai4j.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -21,6 +23,7 @@ import java.math.BigDecimal;
 import java.util.Collection;
 
 @UtilityClass
+@Slf4j
 public class JsonUtils {
 
     public static final ObjectMapper MAPPER = new ObjectMapper()
@@ -28,6 +31,7 @@ public class JsonUtils {
             .setSerializationInclusion(JsonInclude.Include.NON_NULL)
             .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
             .configure(SerializationFeature.INDENT_OUTPUT, false)
+            .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature())
             .registerModule(new JavaTimeModule()
                     .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
                     .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE));
@@ -95,6 +99,12 @@ public class JsonUtils {
             MAPPER.writeValue(baos, value);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    public <T> T readJsonFile(@NonNull String fileName, @NonNull TypeReference<T> valueTypeRef) throws IOException {
+        try (InputStream inputStream = JsonUtils.class.getClassLoader().getResourceAsStream(fileName)) {
+            return MAPPER.readValue(inputStream, valueTypeRef);
         }
     }
 }
