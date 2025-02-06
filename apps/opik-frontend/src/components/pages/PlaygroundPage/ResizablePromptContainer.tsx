@@ -5,13 +5,16 @@ import useLocalStorageState from "use-local-storage-state";
 const PLAYGROUND_PROMPT_HEIGHT_KEY = "playground-prompts-height";
 const PLAYGROUND_PROMPT_MIN_HEIGHT = 190;
 
+const calculateDefaultHeight = () => window.innerHeight - 360;
+const calculateMaxHeight = () => window.innerHeight - 100;
+
 interface ResizableDivContainerProps {
   children: React.ReactNode;
 }
 
 const ResizablePromptContainer = ({ children }: ResizableDivContainerProps) => {
   const defaultHeight = Math.max(
-    window.innerHeight - 360,
+    calculateDefaultHeight(),
     PLAYGROUND_PROMPT_MIN_HEIGHT,
   );
 
@@ -20,7 +23,7 @@ const ResizablePromptContainer = ({ children }: ResizableDivContainerProps) => {
     { defaultValue: defaultHeight },
   );
 
-  const [maxHeight, setMaxHeight] = useState(window.innerHeight - 100);
+  const [maxHeight, setMaxHeight] = useState(calculateMaxHeight());
 
   const onResizeStop: ResizeCallback = useCallback(
     (e, direction, ref, delta) => {
@@ -30,7 +33,7 @@ const ResizablePromptContainer = ({ children }: ResizableDivContainerProps) => {
   );
 
   useEffect(() => {
-    const updateMaxHeight = () => setMaxHeight(window.innerHeight - 100);
+    const updateMaxHeight = () => setMaxHeight(calculateMaxHeight());
     window.addEventListener("resize", updateMaxHeight);
 
     return () => window.removeEventListener("resize", updateMaxHeight);
