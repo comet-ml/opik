@@ -252,7 +252,8 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
     chunks = []
     # for chunk in model.stream("what color is the sky?"):
     for chunk in model.stream(
-        "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."):
+        "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
+    ):
         chunks.append(chunk)
         # print(chunk.content, end="|", flush=True)
 
@@ -260,7 +261,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name='custom-openai-llm-name',
+        name="custom-openai-llm-name",
         input={"prompts": [expected_input_prompt]},
         output={
             "generations": ANY_BUT_NONE,
@@ -270,12 +271,12 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
         },
         tags=["tag3", "tag4"],
         metadata={
-            'c': 'd',
-            'ls_max_tokens': 10,
-            'ls_model_name': 'gpt-3.5-turbo',
-            'ls_model_type': 'chat',
-            'ls_provider': 'openai',
-            'ls_temperature': None,
+            "c": "d",
+            "ls_max_tokens": 10,
+            "ls_model_name": "gpt-3.5-turbo",
+            "ls_model_type": "chat",
+            "ls_provider": "openai",
+            "ls_temperature": None,
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -287,20 +288,26 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                 output=ANY_BUT_NONE,
                 tags=["tag3", "tag4"],
                 metadata={
-                    'c': 'd',
-                    'ls_max_tokens': 10,
-                    'ls_model_name': 'gpt-3.5-turbo',
-                    'ls_model_type': 'chat',
-                    'ls_provider': 'openai',
-                    'ls_temperature': None,
+                    "c": "d",
+                    "ls_max_tokens": 10,
+                    "ls_model_name": "gpt-3.5-turbo",
+                    "ls_model_type": "chat",
+                    "ls_provider": "openai",
+                    "ls_temperature": None,
                     "usage": {
-                        'completion_tokens': ANY_BUT_NONE,
-                        'input_token_details': {'audio': ANY_BUT_NONE, 'cache_read': ANY_BUT_NONE},
-                        'input_tokens': ANY_BUT_NONE,
-                        'output_token_details': {'audio': ANY_BUT_NONE, 'reasoning': ANY_BUT_NONE},
-                        'output_tokens': ANY_BUT_NONE,
-                        'prompt_tokens': ANY_BUT_NONE,
-                        'total_tokens': ANY_BUT_NONE,
+                        "completion_tokens": ANY_BUT_NONE,
+                        "input_token_details": {
+                            "audio": ANY_BUT_NONE,
+                            "cache_read": ANY_BUT_NONE,
+                        },
+                        "input_tokens": ANY_BUT_NONE,
+                        "output_token_details": {
+                            "audio": ANY_BUT_NONE,
+                            "reasoning": ANY_BUT_NONE,
+                        },
+                        "output_tokens": ANY_BUT_NONE,
+                        "prompt_tokens": ANY_BUT_NONE,
+                        "total_tokens": ANY_BUT_NONE,
                     },
                 },
                 start_time=ANY_BUT_NONE,
@@ -310,9 +317,9 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                 model=ANY_STRING(startswith="gpt-3.5-turbo"),
                 provider="openai",
                 usage={
-                    'completion_tokens': ANY_BUT_NONE,
-                    'prompt_tokens': ANY_BUT_NONE,
-                    'total_tokens': ANY_BUT_NONE,
+                    "completion_tokens": ANY_BUT_NONE,
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
                 },
             )
         ],
