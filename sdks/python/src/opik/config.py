@@ -261,8 +261,13 @@ def check_for_misconfiguration(config: OpikConfig) -> None:
     )  # does not detect all OSS installations
     workspace_is_default = config.workspace == OPIK_WORKSPACE_DEFAULT_NAME
     api_key_configured = config.api_key is not None
+    tracking_disabled = config.track_disable
 
-    if cloud_installation and (not api_key_configured or workspace_is_default):
+    if (
+        cloud_installation
+        and (not api_key_configured or workspace_is_default)
+        and not tracking_disabled
+    ):
         print()
         LOGGER.error(
             "========================\n"
@@ -273,7 +278,7 @@ def check_for_misconfiguration(config: OpikConfig) -> None:
         )
         return
 
-    if localhost_installation and not workspace_is_default:
+    if localhost_installation and not workspace_is_default and not tracking_disabled:
         print()
         LOGGER.error(
             "========================\n"

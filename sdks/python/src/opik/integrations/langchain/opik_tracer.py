@@ -286,38 +286,72 @@ class OpikTracer(BaseTracer):
         """
         return self._created_traces
 
+    def _skip_tracking(self) -> bool:
+        config = self._opik_client.config
+        if config.track_disable:
+            return True
+
+        return False
+
     def _on_llm_start(self, run: "Run") -> None:
         """Process the LLM Run upon start."""
+        if self._skip_tracking():
+            return
+
         self._process_start_span(run)
 
     def _on_llm_end(self, run: "Run") -> None:
         """Process the LLM Run."""
+        if self._skip_tracking():
+            return
+
         self._process_end_span(run)
 
     def _on_llm_error(self, run: "Run") -> None:
         """Process the LLM Run upon error."""
+        if self._skip_tracking():
+            return
+
         self._process_end_span_with_error(run)
 
     def _on_chain_start(self, run: "Run") -> None:
         """Process the Chain Run upon start."""
+        if self._skip_tracking():
+            return
+
         self._process_start_span(run)
 
     def _on_chain_end(self, run: "Run") -> None:
         """Process the Chain Run."""
+        if self._skip_tracking():
+            return
+
         self._process_end_span(run)
 
     def _on_chain_error(self, run: "Run") -> None:
         """Process the Chain Run upon error."""
+        if self._skip_tracking():
+            return
+
         self._process_end_span_with_error(run)
 
     def _on_tool_start(self, run: "Run") -> None:
         """Process the Tool Run upon start."""
+        if self._skip_tracking():
+            return
+
         self._process_start_span(run)
 
     def _on_tool_end(self, run: "Run") -> None:
         """Process the Tool Run."""
+        if self._skip_tracking():
+            return
+
         self._process_end_span(run)
 
     def _on_tool_error(self, run: "Run") -> None:
         """Process the Tool Run upon error."""
+        if self._skip_tracking():
+            return
+
         self._process_end_span_with_error(run)

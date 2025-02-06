@@ -70,6 +70,7 @@ class Opik:
             api_key=api_key,
         )
         config.check_for_misconfiguration(config_)
+        self._config = config_
 
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name
@@ -84,6 +85,14 @@ class Opik:
             use_batching=_use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
+
+    @property
+    def config(self) -> config.OpikConfig:
+        """
+        Returns:
+            config.OpikConfig: Read-only copy of the configuration of the Opik client.
+        """
+        return self._config.model_copy()
 
     def _initialize_streamer(
         self,
@@ -136,8 +145,8 @@ class Opik:
         Checks if current API key user has an access to the configured workspace and its content.
         """
         self._rest_client.check.access(
-            request={}
-        )  # empty body for future backward compatibility
+            request={}  # empty body for future backward compatibility
+        )
 
     def trace(
         self,
