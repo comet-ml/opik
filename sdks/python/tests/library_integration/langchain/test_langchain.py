@@ -4,7 +4,6 @@ import pytest
 from langchain.llms import fake
 from langchain.prompts import PromptTemplate
 
-import os
 import opik
 from opik import context_storage
 from opik.api_objects import opik_client, span, trace
@@ -757,7 +756,9 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
 def test_langchain_callback__disabled_tracking(fake_backend):
     with patch_environ({"OPIK_TRACK_DISABLE": "true"}):
         llm = fake.FakeListLLM(
-            responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"]
+            responses=[
+                "I'm sorry, I don't think I'm talented enough to write a synopsis"
+            ]
         )
 
         template = "Given the title of play, write a synopsys for that. Title: {title}."
