@@ -327,24 +327,71 @@ class TraceDAOImpl implements TraceDAO {
 
     private static final String SELECT_BY_PROJECT_ID = """
             WITH spans_agg AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    trace_id,
-                    sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                GROUP BY workspace_id, project_id, trace_id
+                <if(useFinal)>
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        trace_id,
+                        sumMap(usage) as usage,
+                        sum(total_estimated_cost) as total_estimated_cost
+                    FROM spans <useFinal>
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    GROUP BY workspace_id, project_id, trace_id
+                <else>
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        trace_id,
+                        sumMap(usage) as usage,
+                        sum(total_estimated_cost) as total_estimated_cost
+                    FROM (
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            trace_id,
+                            usage,
+                            total_estimated_cost
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY workspace_id, project_id, trace_id
+                <endif>
             ), comments_agg AS (
-                SELECT
-                    entity_id,
-                    groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by)) AS comments_array
-                FROM comments
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                GROUP BY workspace_id, project_id, entity_id
+                <if(useFinal)>
+                    SELECT
+                        entity_id,
+                        groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by)) AS comments_array
+                    FROM comments <useFinal>
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    GROUP BY workspace_id, project_id, entity_id
+                <else>
+                    SELECT
+                        entity_id,
+                        groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by)) AS comments_array
+                    FROM (
+                        SELECT
+                            id,
+                            text,
+                            created_at,
+                            last_updated_at,
+                            created_by,
+                            last_updated_by,
+                            entity_id,
+                            workspace_id,
+                            project_id
+                        FROM comments
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY workspace_id, project_id, entity_id
+                <endif>
             )
             SELECT
                   t.id as id,
@@ -399,6 +446,9 @@ class TraceDAOImpl implements TraceDAO {
                  AND <trace_aggregation_filters>
                  <endif>
                  ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                 <if(!useFinal)>
+                 LIMIT 1 BY id
+                 <endif>
                  LIMIT :limit OFFSET :offset
              ) AS t
              LEFT JOIN spans_agg AS s ON t.id = s.trace_id
@@ -427,7 +477,7 @@ class TraceDAOImpl implements TraceDAO {
                      COUNT(DISTINCT id) AS trace_count
                 FROM traces
                 WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                GROUP BY workspace_id,created_by
+                GROUP BY workspace_id, created_by
             ;
             """;
 
@@ -458,14 +508,22 @@ class TraceDAOImpl implements TraceDAO {
                             entity_id
                         FROM (
                             SELECT *
-                            FROM feedback_scores
+                            FROM feedback_scores <useFinal>
                             WHERE entity_type = 'trace'
                             AND workspace_id = :workspace_id
                             AND project_id = :project_id
+                            <if(!useFinal)>
+                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                            <endif>
                         )
                         GROUP BY entity_id
                         HAVING <feedback_scores_filters>
                     )
+                    <endif>
+                    <if(!useFinal)>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                     <endif>
                 ) AS t
                 <if(trace_aggregation_filters)>
@@ -474,9 +532,13 @@ class TraceDAOImpl implements TraceDAO {
                         trace_id,
                         usage,
                         total_estimated_cost
-                    FROM spans
+                    FROM spans <useFinal>
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(!useFinal)>
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    <endif>
                 ) AS s ON t.id = s.trace_id
                 GROUP BY
                     t.id
@@ -624,30 +686,79 @@ class TraceDAOImpl implements TraceDAO {
 
     private static final String SELECT_TRACES_STATS = """
              WITH spans_agg AS (
-                SELECT
-                	workspace_id,
-                	project_id,
-                    trace_id,
-                    sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND project_id IN :project_ids
-                GROUP BY workspace_id, project_id, trace_id
+                <if(useFinal)>
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        trace_id,
+                        sumMap(usage) as usage,
+                        sum(total_estimated_cost) as total_estimated_cost
+                    FROM spans <useFinal>
+                    WHERE workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    GROUP BY workspace_id, project_id, trace_id
+                <else>
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        trace_id,
+                        sumMap(usage) as usage,
+                        sum(total_estimated_cost) as total_estimated_cost
+                    FROM (
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            trace_id,
+                            usage,
+                            total_estimated_cost
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND project_id IN :project_ids
+                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY workspace_id, project_id, trace_id
+                <endif>
             ), feedback_scores_agg AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    mapFromArrays(
-                        groupArray(name),
-                        groupArray(value)
-                    ) as feedback_scores
-                FROM feedback_scores
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                AND project_id IN :project_ids
-                GROUP BY  workspace_id, project_id, entity_id
+                <if(useFinal)>
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        mapFromArrays(
+                            groupArray(name),
+                            groupArray(value)
+                        ) as feedback_scores
+                    FROM feedback_scores <useFinal>
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    GROUP BY workspace_id, project_id, entity_id
+                <else>
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        mapFromArrays(
+                            groupArray(name),
+                            groupArray(value)
+                        ) as feedback_scores
+                    FROM (
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            entity_id,
+                            name,
+                            value
+                        FROM feedback_scores
+                        WHERE entity_type = 'trace'
+                        AND workspace_id = :workspace_id
+                        AND project_id IN :project_ids
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    )
+                    GROUP BY workspace_id, project_id, entity_id
+                <endif>
             )
             SELECT
                 t.workspace_id as workspace_id,
@@ -665,10 +776,10 @@ class TraceDAOImpl implements TraceDAO {
             FROM (
                 SELECT
                     *,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) as duration_millis
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                        NULL) as duration_millis
                 FROM traces <useFinal>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
@@ -679,10 +790,14 @@ class TraceDAOImpl implements TraceDAO {
                         entity_id
                     FROM (
                         SELECT *
-                        FROM feedback_scores
+                        FROM feedback_scores <useFinal>
                         WHERE entity_type = 'trace'
                         AND workspace_id = :workspace_id
                         AND project_id IN :project_ids
+                        <if(!useFinal)>
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                        <endif>
                     )
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
@@ -695,6 +810,10 @@ class TraceDAOImpl implements TraceDAO {
                     FROM spans_agg
                     WHERE <trace_aggregation_filters>
                 )
+                <endif>
+                <if(!useFinal)>
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
                 <endif>
             ) t
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id

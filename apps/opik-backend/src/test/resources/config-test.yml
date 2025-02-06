@@ -244,3 +244,6 @@ clickHouseLogAppender:
   # Default: PT0.500S or 500ms
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: PT0.500S
+
+clickHouseQuery:
+  useFinal: true
