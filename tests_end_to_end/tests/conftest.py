@@ -79,7 +79,7 @@ def env_config() -> EnvConfig:
     Get the environment configuration from environment variables.
     """
     env_config = get_environment_config()
-     # Set base URL and API URL override
+    # Set base URL and API URL override
     os.environ["OPIK_BASE_URL"] = env_config.base_url
     os.environ["OPIK_URL_OVERRIDE"] = env_config.api_url
 
