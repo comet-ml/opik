@@ -15,11 +15,7 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
 } from "@/lib/playground";
-import {
-  generateDefaultLLMPromptMessage,
-  getModelProvider,
-  getNextMessageType,
-} from "@/lib/llm";
+import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import { getAlphabetLetter } from "@/lib/utils";
@@ -33,9 +29,11 @@ import {
   useUpdateOutput,
   useUpdatePrompt,
 } from "@/store/PlaygroundStore";
-import { getDefaultProviderKey } from "@/lib/provider";
-import { PROVIDERS } from "@/constants/providers";
 import useLastPickedModel from "@/components/pages/PlaygroundPage/PlaygroundPrompts/useLastPickedModel";
+import {
+  ModelResolver,
+  ProviderResolver,
+} from "@/hooks/useLLMProviderModelsData";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -43,6 +41,8 @@ interface PlaygroundPromptProps {
   promptId: string;
   providerKeys: PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
+  providerResolver: ProviderResolver;
+  modelResolver: ModelResolver;
 }
 
 const PlaygroundPrompt = ({
@@ -51,6 +51,8 @@ const PlaygroundPrompt = ({
   index,
   providerKeys,
   isPendingProviderKeys,
+  providerResolver,
+  modelResolver,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
 
@@ -66,7 +68,7 @@ const PlaygroundPrompt = ({
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
 
-  const provider = model ? getModelProvider(model) : "";
+  const provider = providerResolver(model);
 
   const hintMessage = datasetVariables?.length
     ? `Reference dataset variables using mustache syntax: ${datasetVariables
@@ -91,6 +93,8 @@ const PlaygroundPrompt = ({
     const newPrompt = generateDefaultPrompt({
       initPrompt: prompt,
       setupProviders: providerKeys,
+      providerResolver: providerResolver,
+      modelResolver: modelResolver,
     });
 
     addPrompt(newPrompt, index + 1);
@@ -116,32 +120,40 @@ const PlaygroundPrompt = ({
   );
 
   const handleUpdateModel = useCallback(
-    (model: PROVIDER_MODEL_TYPE) => {
-      updatePrompt(promptId, { model });
-      setLastPickedModel(model);
+    (newModel: PROVIDER_MODEL_TYPE, newProvider: PROVIDER_TYPE) => {
+      updatePrompt(promptId, {
+        model: newModel,
+        provider: newProvider,
+        ...(newProvider !== provider && {
+          configs: getDefaultConfigByProvider(newProvider),
+        }),
+      });
+      setLastPickedModel(newModel);
     },
-    [updatePrompt, promptId, setLastPickedModel],
+    [updatePrompt, promptId, provider, setLastPickedModel],
   );
 
   const handleAddProvider = useCallback(
     (provider: PROVIDER_TYPE) => {
-      const modelProvider = model ? getModelProvider(model) : "";
-      const noCurrentModel = !modelProvider;
+      const newModel = modelResolver(model, providerKeys, provider);
 
-      if (noCurrentModel) {
-        const newModel = PROVIDERS[provider]?.defaultModel || "";
-
-        const newDefaultConfigs = provider
-          ? getDefaultConfigByProvider(provider)
-          : {};
-
+      if (newModel !== model) {
+        const newProvider = providerResolver(newModel);
         updatePrompt(promptId, {
           model: newModel,
-          configs: newDefaultConfigs,
+          provider: newProvider,
+          configs: getDefaultConfigByProvider(newProvider),
         });
       }
     },
-    [model, promptId, updatePrompt],
+    [
+      modelResolver,
+      model,
+      providerKeys,
+      providerResolver,
+      updatePrompt,
+      promptId,
+    ],
   );
 
   useEffect(() => {
@@ -149,40 +161,24 @@ const PlaygroundPrompt = ({
     if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
       checkedIfModelIsValidRef.current = true;
 
-      const modelProvider = model ? getModelProvider(model) : "";
+      const newModel = modelResolver(model, providerKeys);
 
-      const noModelProviderWhenProviderKeysSet =
-        !modelProvider && providerKeys.length > 0;
-      const modelProviderIsNotFromProviderKeys =
-        modelProvider && !providerKeys.includes(modelProvider);
+      if (newModel !== model) {
+        const newProvider = providerResolver(newModel);
+        updatePrompt(promptId, {
+          model: newModel,
+          provider: newProvider,
+          configs: getDefaultConfigByProvider(newProvider),
+        });
 
-      const needToChangeProvider =
-        noModelProviderWhenProviderKeysSet ||
-        modelProviderIsNotFromProviderKeys;
-
-      if (!needToChangeProvider) {
-        return;
+        updateOutput(promptId, "", { value: "" });
       }
-
-      const newProvider = getDefaultProviderKey(providerKeys);
-      const newModel = newProvider
-        ? PROVIDERS[newProvider]?.defaultModel || ""
-        : "";
-
-      const newDefaultConfigs = newProvider
-        ? getDefaultConfigByProvider(newProvider)
-        : {};
-
-      updatePrompt(promptId, {
-        model: newModel,
-        configs: newDefaultConfigs,
-      });
-
-      updateOutput(promptId, "", { value: "" });
     }
   }, [
     providerKeys,
     isPendingProviderKeys,
+    providerResolver,
+    modelResolver,
     updateOutput,
     updatePrompt,
     promptId,

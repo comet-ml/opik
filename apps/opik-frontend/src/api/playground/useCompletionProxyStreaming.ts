@@ -1,6 +1,7 @@
 import { useCallback } from "react";
-
 import dayjs from "dayjs";
+import isObject from "lodash/isObject";
+
 import { UsageType } from "@/types/shared";
 import {
   ChatCompletionMessageChoiceType,
@@ -8,6 +9,7 @@ import {
   ChatCompletionProviderErrorMessageType,
   ChatCompletionSuccessMessageType,
   ChatCompletionOpikErrorMessageType,
+  ChatCompletionPythonProxyErrorMessageType,
 } from "@/types/playground";
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
@@ -19,12 +21,19 @@ const getNowUtcTimeISOString = (): string => {
 };
 
 interface GetCompletionProxyStreamParams {
+  url?: string;
   model: PROVIDER_MODEL_TYPE | "";
   messages: ProviderMessageType[];
   signal: AbortSignal;
   configs: LLMPromptConfigsType;
   workspaceName: string;
 }
+
+const isPythonProxyError = (
+  response: ChatCompletionResponse,
+): response is ChatCompletionPythonProxyErrorMessageType => {
+  return "detail" in response;
+};
 
 const isOpikError = (
   response: ChatCompletionResponse,
@@ -42,13 +51,14 @@ const isProviderError = (
 };
 
 const getCompletionProxyStream = async ({
+  url = `${BASE_API_URL}/v1/private/chat/completions`,
   model,
   messages,
   signal,
   configs,
   workspaceName,
 }: GetCompletionProxyStreamParams) => {
-  return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
+  return fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -67,6 +77,7 @@ const getCompletionProxyStream = async ({
 };
 
 export interface RunStreamingArgs {
+  url?: string;
   model: PROVIDER_MODEL_TYPE | "";
   messages: ProviderMessageType[];
   configs: LLMPromptConfigsType;
@@ -82,6 +93,7 @@ export interface RunStreamingReturn {
   choices: ChatCompletionMessageChoiceType[] | null;
   providerError: null | string;
   opikError: null | string;
+  pythonProxyError: null | string;
 }
 
 interface UseCompletionProxyStreamingParameters {
@@ -91,8 +103,9 @@ interface UseCompletionProxyStreamingParameters {
 const useCompletionProxyStreaming = ({
   workspaceName,
 }: UseCompletionProxyStreamingParameters) => {
-  const runStreaming = useCallback(
+  return useCallback(
     async ({
+      url,
       model,
       messages,
       configs,
@@ -106,11 +119,13 @@ const useCompletionProxyStreaming = ({
       let choices: ChatCompletionMessageChoiceType[] = [];
 
       // errors
+      let pythonProxyError = null;
       let opikError = null;
       let providerError = null;
 
       try {
         const response = await getCompletionProxyStream({
+          url,
           model,
           messages,
           configs,
@@ -156,12 +171,25 @@ const useCompletionProxyStreaming = ({
           opikError = parsedMessage.errors.join(" ");
         };
 
+        const handlePythonProxyErrorMessage = (
+          parsedMessage: ChatCompletionPythonProxyErrorMessageType,
+        ) => {
+          if (
+            isObject(parsedMessage.detail) &&
+            "error" in parsedMessage.detail
+          ) {
+            pythonProxyError = parsedMessage.detail.error;
+          } else {
+            pythonProxyError = parsedMessage.detail ?? "Python proxy error";
+          }
+        };
+
         // an analogue of true && reader
         // we need it to wait till the stream is closed
         while (reader) {
           const { done, value } = await reader.read();
 
-          if (done || opikError || providerError) {
+          if (done || opikError || pythonProxyError || providerError) {
             break;
           }
 
@@ -169,10 +197,17 @@ const useCompletionProxyStreaming = ({
           const lines = chunk.split("\n").filter((line) => line.trim() !== "");
 
           for (const line of lines) {
-            const parsed = safelyParseJSON(line) as ChatCompletionResponse;
+            const ollamaDataPrefix = "data:";
+            const JSONData = line.startsWith(ollamaDataPrefix)
+              ? line.split(ollamaDataPrefix)[1]
+              : line;
+
+            const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;
 
             // handle different message types
-            if (isOpikError(parsed)) {
+            if (isPythonProxyError(parsed)) {
+              handlePythonProxyErrorMessage(parsed);
+            } else if (isOpikError(parsed)) {
               handleOpikErrorMessage(parsed);
             } else if (isProviderError(parsed)) {
               handleAIPlatformErrorMessage(parsed);
@@ -188,6 +223,7 @@ const useCompletionProxyStreaming = ({
           result: accumulatedValue,
           providerError,
           opikError,
+          pythonProxyError,
           usage,
           choices,
         };
@@ -205,6 +241,7 @@ const useCompletionProxyStreaming = ({
           result: accumulatedValue,
           providerError,
           opikError: opikError || defaultErrorMessage,
+          pythonProxyError,
           usage: null,
           choices,
         };
@@ -212,8 +249,6 @@ const useCompletionProxyStreaming = ({
     },
     [workspaceName],
   );
-
-  return runStreaming;
 };
 
 export default useCompletionProxyStreaming;
