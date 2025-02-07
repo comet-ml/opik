@@ -4,19 +4,21 @@ This directory contains end-to-end tests for the Opik application.
 
 ## Environment Configuration
 
-The tests can be run against different environments (local or staging) using environment variables. The configuration system supports:
-
-- Local development environment (default)
-- Staging environment
+The tests use environment variables for configuration. All settings can be customized through environment variables, with defaults provided for local development.
 
 ### Environment Variables
 
 The following environment variables are used to configure the test environment:
 
-- `OPIK_TEST_ENV`: The environment to run tests against (`local` or `staging`). Defaults to `local`.
-- `OPIK_API_KEY`: API key for authentication (required for staging environment)
-- `OPIK_TEST_USER_EMAIL`: Test user email (required for staging environment)
-- `OPIK_TEST_USER_PASSWORD`: Test user password (required for staging environment)
+- `OPIK_BASE_URL`: Base URL for the application (defaults to `http://localhost:5173`)
+  - Web UI is accessed at this URL
+  - API is accessed at `{base_url}/api`
+- `OPIK_TEST_WORKSPACE`: Test workspace name (defaults to `default`)
+- `OPIK_TEST_PROJECT_NAME`: Test project name (defaults to `automated_tests_project`)
+- `OPIK_TEST_USER_EMAIL`: Test user email (required for non-local environments)
+- `OPIK_TEST_USER_NAME`: Test user name (required for non-local environments)
+- `OPIK_TEST_USER_PASSWORD`: Test user password (required for non-local environments)
+- `OPIK_API_KEY`: API key (optional, used for non-local environments)
 
 ### Running Tests
 
@@ -40,21 +42,22 @@ pytest
 ```
 
 This will use the default configuration:
-- API URL: http://localhost:5173/api
-- Web URL: http://localhost:5173
+- Base URL: http://localhost:5173
+  - Web UI: http://localhost:5173
+  - API: http://localhost:5173/api
 
-#### Staging Environment
+#### Non-Local Environments
 
-To run tests against the staging environment, you need to:
+To run tests against other environments, you need to:
 
 1. Set up the required environment variables:
 
 ```bash
-export OPIK_TEST_ENV=staging
-export OPIK_API_KEY=your_api_key
+export OPIK_BASE_URL=https://your-environment.comet.com/opik
 export OPIK_TEST_USER_EMAIL=test_user@example.com
 export OPIK_TEST_USER_NAME=test_user
 export OPIK_TEST_USER_PASSWORD=test_password
+export OPIK_API_KEY=your_api_key  # if required
 ```
 
 2. Run the tests:
@@ -62,10 +65,6 @@ export OPIK_TEST_USER_PASSWORD=test_password
 ```bash
 pytest
 ```
-
-This will use the staging configuration:
-- API URL: https://staging.dev.comet.com/opik/api
-- Web URL: https://staging.dev.comet.com/opik
 
 ### Test Suites
 
@@ -125,23 +124,3 @@ pytest --browser webkit
 
 # Combine multiple options
 pytest -v -s tests/Datasets/ --browser firefox --setup-show
-```
-
-### Running in Different Environments
-
-You can combine environment configuration with specific test suites:
-
-```bash
-# Run sanity tests in staging
-OPIK_TEST_ENV=staging \
-OPIK_API_KEY=your_api_key \
-OPIK_TEST_USER_EMAIL=test_user@example.com \
-OPIK_TEST_USER_PASSWORD=test_password \
-pytest -m sanity
-
-# Run specific suite in staging
-OPIK_TEST_ENV=staging \
-OPIK_API_KEY=your_api_key \
-OPIK_TEST_USER_EMAIL=test_user@example.com \
-OPIK_TEST_USER_PASSWORD=test_password \
-pytest tests/Projects/test_projects_crud_operations.py

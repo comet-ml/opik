@@ -2,7 +2,7 @@ import pytest
 import os
 import opik
 from opik import track, opik_context
-from tests.config import EnvConfig, Environment, get_environment_config
+from tests.config import EnvConfig, get_environment_config
 from playwright.sync_api import Page, Browser
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
@@ -33,10 +33,10 @@ def browser_context(browser: Browser, env_config: EnvConfig):
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
     # Handle cloud environment authentication
-    if not env_config.api_url.startswith("http://localhost"):
+    if not env_config.base_url.startswith("http://localhost"):
         page = context.new_page()
-        # Extract base URL for authentication (remove /opik/api from the end)
-        base_url = re.sub(r"(/opik)?/api$", "", env_config.api_url)
+        # Extract base URL for authentication (remove /opik from the end)
+        base_url = re.sub(r"/opik$", "", env_config.base_url)
         auth_url = f"{base_url}/api/auth/login"
 
         # Perform login
@@ -73,34 +73,19 @@ def browser_context(browser: Browser, env_config: EnvConfig):
 
 
 @pytest.fixture(scope="session")
-def env_name() -> str:
+def env_config() -> EnvConfig:
     """
-    Get the environment name from pytest command line option.
-    Defaults to 'local' if not specified.
+    Get the environment configuration from environment variables.
     """
-    return os.getenv("OPIK_TEST_ENV", "local")
-
-
-@pytest.fixture(scope="session")
-def env_config(env_name) -> EnvConfig:
-    """
-    Get the environment configuration based on the environment name.
-    """
-    try:
-        env = Environment(env_name)
-    except ValueError:
-        raise ValueError(
-            f"Invalid environment: {env_name}. Must be one of: {[e.value for e in Environment]}"
-        )
-    return get_environment_config(env)
+    return get_environment_config()
 
 
 @pytest.fixture(scope="session", autouse=True)
 def configure_env(env_config: EnvConfig):
     """Configure environment variables for the test session"""
-    # Set URLs from config
+    # Set base URL and API URL override
+    os.environ["OPIK_BASE_URL"] = env_config.base_url
     os.environ["OPIK_URL_OVERRIDE"] = env_config.api_url
-    os.environ["OPIK_WEB_URL"] = env_config.web_url
 
     # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
@@ -112,7 +97,7 @@ def client(env_config: EnvConfig) -> opik.Opik:
     """Create an Opik client configured for the current environment"""
     kwargs = {
         "workspace": env_config.workspace,
-        "host": env_config.api_url,
+        "host": env_config.api_url,  # SDK expects the full API URL
     }
     if env_config.api_key:
         kwargs["api_key"] = env_config.api_key

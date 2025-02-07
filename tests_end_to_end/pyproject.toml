@@ -10,9 +10,7 @@ disallow_incomplete_defs = false
 [tool.pytest.ini_options]
 pythonpath = "."
 env = [
-    "OPIK_TEST_ENV=local",
-    "OPIK_API_KEY=",
-    "OPIK_TEST_USER_EMAIL=",
-    "OPIK_TEST_USER_NAME=",
-    "OPIK_TEST_USER_PASSWORD="
+    "OPIK_BASE_URL=http://localhost:5173",
+    "OPIK_TEST_WORKSPACE=default",
+    "OPIK_TEST_PROJECT_NAME=automated_tests_project"
 ]

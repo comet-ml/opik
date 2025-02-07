@@ -14,7 +14,7 @@ class BasePage:
         """
         self.page = page
         self.workspace = os.environ.get("OPIK_WORKSPACE", "default")
-        self.web_url = os.environ.get("OPIK_WEB_URL", "http://localhost:5173")
+        self.base_url = os.environ.get("OPIK_BASE_URL", "http://localhost:5173")
 
         # Remove leading/trailing slashes and combine path components
         clean_path = path.strip("/")
@@ -28,5 +28,5 @@ class BasePage:
     def go_to_page(self):
         """Navigate to the page URL"""
         # Combine base URL with path, ensuring no double slashes
-        full_url = f"{self.web_url.rstrip('/')}/{self.path}"
+        full_url = f"{self.base_url.rstrip('/')}/{self.path}"
         self.page.goto(full_url)
