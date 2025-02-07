@@ -3,24 +3,19 @@ sidebar_label: Overview
 description: A high-level overview on how to use Opik's evaluation features including some code snippets
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# Overview
-
 Evaluation in Opik helps you assess and measure the quality of your LLM outputs across different dimensions.
 It provides a framework to systematically test your prompts and models against datasets, using various metrics
 to measure performance.
 
-![Opik Evaluation](/img/evaluation/evaluation_overview.gif)
+![Opik Evaluation](/static/img/evaluation/evaluation_overview.gif)
 
 Opik also provides a set of pre-built metrics for common evaluation tasks. These metrics are designed to help you
 quickly and effectively gauge the performance of your LLM outputs and include metrics such as Hallucination,
 Answer Relevance, Context Precision/Recall and more. You can learn more about the available metrics in the
-[Metrics Overview](/evaluation/metrics/overview.md) section.
+[Metrics Overview](/docs/evaluation/metrics/overview) section.
 
 ::: tip
-If you are interested in evaluating your LLM application in production, please refer to the [Online evaluation guide](/production/rules.md).
+If you are interested in evaluating your LLM application in production, please refer to the [Online evaluation guide](/docs/production/rules).
 Online evaluation rules allow you to define LLM as a Judge metrics that will automatically score all, or a subset, of your production traces.
 :::
 
@@ -38,7 +33,7 @@ To simplify the evaluation process, Opik provides two main evaluation methods: `
 templates and a more general `evaluate` method for more complex evaluation scenarios.
 
 <Tabs>
-    <TabItem value="Evaluating Prompts" title="Evaluating Prompts">
+    <Tab value="Evaluating Prompts" title="Evaluating Prompts">
 
 To evaluate a specific prompt against a dataset:
 
@@ -64,8 +59,8 @@ result = evaluate_prompt(
 )
 ```
 
-</TabItem>
-<TabItem value="Evaluating RAG applications and Agents" title="Evaluating RAG applications and Agents">
+</Tab>
+<Tab value="Evaluating RAG applications and Agents" title="Evaluating RAG applications and Agents">
 
 For more complex evaluation scenarios where you need custom processing:
 
@@ -110,11 +105,11 @@ result = evaluate(
 )
 ```
 
-</TabItem>
-<TabItem value="Using the Playground" title="Using the Playground">
+</Tab>
+<Tab value="Using the Playground" title="Using the Playground">
     You can also use the Opik Playground to quickly evaluate different prompts and LLM models.
 
-    To use the Playground, you will need to navigate to the [Playground](/prompt_engineering/playground.md) page and:
+    To use the Playground, you will need to navigate to the [Playground](/docs/prompt_engineering/playground) page and:
 
     1. Configure the LLM provider you want to use
     2. Enter the prompts you want to evaluate - You should include variables in the prompts using the `{{variable}}` syntax
@@ -123,16 +118,18 @@ result = evaluate(
 
     You will now be able to view the LLM outputs for each sample in the dataset:
 
-    ![Playground](/img/evaluation/playground_evaluation.gif)
+    ![Playground](/static/img/evaluation/playground_evaluation.gif)
 
-</TabItem>
+</Tab>
 </Tabs>
 
 ## Analyzing Evaluation Results
 
 Once the evaluation is complete, Opik allows you to manually review the results and compare them with previous iterations.
 
-![Experiment page](/img/evaluation/experiment_items.png)
+<Frame>
+  <img src="/static/img/evaluation/experiment_items.png" />
+</Frame>
 
 In the experiment pages, you will be able to:
 
@@ -145,8 +142,8 @@ In the experiment pages, you will be able to:
 
 You can learn more about Opik's evaluation features in:
 
-1. [Evaluation concepts](/evaluation/concepts.md)
-1. [Evaluate prompts](/evaluation/evaluate_prompt.md)
-1. [Evaluate complex LLM applications](/evaluation/evaluate_your_llm.md)
-1. [Evaluation metrics](/evaluation/metrics/overview.md)
-1. [Manage datasets](/evaluation/manage_datasets.md)
+1. [Evaluation concepts](/docs/evaluation/concepts)
+1. [Evaluate prompts](/docs/evaluation/evaluate_prompt)
+1. [Evaluate complex LLM applications](/docs/evaluation/evaluate_your_llm)
+1. [Evaluation metrics](/docs/evaluation/metrics/overview)
+1. [Manage datasets](/docs/evaluation/manage_datasets)

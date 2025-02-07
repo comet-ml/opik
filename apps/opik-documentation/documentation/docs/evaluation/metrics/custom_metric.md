@@ -9,13 +9,13 @@ pytest_codeblocks_execute_previous: true
 
 Opik allows you to define your own metrics. This is useful if you have a specific metric that is not already implemented.
 
-If you want to write an LLM as a Judge metric, you can use either the [G-Eval metric](/evaluation/metrics/g_eval.md) or create your own from scratch.
+If you want to write an LLM as a Judge metric, you can use either the [G-Eval metric](/docs/evaluation/metrics/g_eval) or create your own from scratch.
 
 ## Custom LLM as a Judge metric
 
 ### Creating a custom metric using G-Eval
 
-[G-eval](/evaluation/metrics/g_eval.md) allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.
+[G-eval](/docs/evaluation/metrics/g_eval) allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.
 
 To use G-Eval, you will need to specify a task introduction and evaluation criteria:
 
@@ -58,11 +58,11 @@ class MyCustomMetric(base_metric.BaseMetric):
 
 The `score` method should return a `ScoreResult` object. The `ascore` method is optional and can be used to compute asynchronously if needed.
 
-:::tip
+<Tip>
 You can also return a list of `ScoreResult` objects as part of your custom metric. This is useful if you want to return multiple scores for a given input and output pair.
-:::
+</Tip>
 
-This metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/evaluation/evaluate_your_llm.md).
+This metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/docs/evaluation/evaluate_your_llm).
 
 #### Example: Creating a metric with OpenAI model
 

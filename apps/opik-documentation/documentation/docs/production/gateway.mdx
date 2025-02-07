@@ -3,11 +3,6 @@ sidebar_label: LLM Gateway
 description: Describes how to use the Opik LLM gateway and how to integrate with the Kong AI Gateway
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# LLM Gateway
-
 An LLM gateway is a proxy server that forwards requests to an LLM API and returns the response. This is useful for when you want to centralize the access to LLM providers or when you want to be able to query multiple LLM providers from a single endpoint using a consistent request and response format.
 
 The Opik platform includes a light-weight LLM gateway that can be used for **development and testing purposes**. If you are looking for an LLM gateway that is production ready, we recommend looking at the [Kong AI Gateway](https://docs.konghq.com/gateway/latest/ai-gateway/).
@@ -19,7 +14,7 @@ The Opik LLM gateway is a light-weight proxy server that can be used to query di
 In order to use the Opik LLM gateway, you will first need to configure your LLM provider credentials in the Opik UI. Once this is done, you can use the Opik gateway to query your LLM provider:
 
 <Tabs>
-    <TabItem value="Opik Cloud" title="Opik Cloud">
+    <Tab value="Opik Cloud" title="Opik Cloud">
     ```bash
     curl -L 'https://www.comet.com/opik/api/v1/private/chat/completions' \
     -H 'Content-Type: application/json' \
@@ -39,8 +34,8 @@ In order to use the Opik LLM gateway, you will first need to configure your LLM 
         "max_tokens": 10000
     }'
     ```
-    </TabItem>
-        <TabItem value="Opik self-hosted" title="Opik self-hosted">
+    </Tab>
+        <Tab value="Opik self-hosted" title="Opik self-hosted">
     ```bash
     curl -L 'http://localhost:5173/api/v1/private/chat/completions' \
     -H 'Content-Type: application/json' \
@@ -58,12 +53,13 @@ In order to use the Opik LLM gateway, you will first need to configure your LLM 
         "max_tokens": 10000
     }'
     ```
-    </TabItem>
+    </Tab>
 </Tabs>
 
-:::warning
-The Opik LLM gateway is currently in beta and is subject to change. We recommend using the Kong AI gateway for production applications.
-:::
+<Warning>
+  The Opik LLM gateway is currently in beta and is subject to change. We recommend using the Kong AI gateway for
+  production applications.
+</Warning>
 
 ## Kong AI Gateway
 
@@ -96,4 +92,6 @@ You can find more information about the Opik Kong plugin the [`opik-kong-plugin`
 
 Once configured, you will be able to view all your LLM calls in the Opik dashboard:
 
-![Opik Kong AI Gateway](/img/production/opik-kong-gateway.png)
+<Frame>
+  <img src="/static/img/production/opik-kong-gateway.png" />
+</Frame>

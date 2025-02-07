@@ -4,11 +4,6 @@ description: Describes how to use Opik with Dify
 pytest_codeblocks_skip: true
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# Dify Integration
-
 Learn how to connect Opik with Dify to monitor your applications' performance.
 
 ## Setup Instructions
@@ -21,10 +16,12 @@ Follow these simple steps to connect Dify with Opik:
 4. Click on **Configure** for Opik
 5. Enter your connection details based on your Opik version:
 
-![How to configure Dify settings](/img/tracing/dify_configuration.png)
+<Frame>
+  <img src="/static/img/tracing/dify_configuration.png" />
+</Frame>
 
 <Tabs>
-<TabItem value="Hosted Opik" title="Hosted Opik">
+<Tab value="Hosted Opik" title="Hosted Opik">
 
 Fill in these fields:
 
@@ -33,9 +30,9 @@ Fill in these fields:
 - **Workspace**: Your Comet Workspace name (must already exist)
 - **URL**: Your Opik installation URL (make sure it ends with `/api/`)
 
-</TabItem>
+</Tab>
 
-<TabItem value="Self-Hosted Opik" title="Self-Hosted Opik">
+<Tab value="Self-Hosted Opik" title="Self-Hosted Opik">
 
 Fill in these fields:
 
@@ -44,7 +41,7 @@ Fill in these fields:
 - **Workspace**: Type `default`
 - **URL**: Your Opik installation URL (make sure it ends with `/api/`)
 
-</TabItem>
+</Tab>
 
 </Tabs>
 
@@ -56,4 +53,6 @@ After setup, you can view your application traces by:
 2. Finding and clicking the **OPIK** button in the top-right corner
 3. Selecting **View** to open your Opik project dashboard
 
-![How to view your Opik project](/img/tracing/dify_view_project.png)
+<Frame>
+  <img src="/static/img/tracing/dify_view_project.png" />
+</Frame>

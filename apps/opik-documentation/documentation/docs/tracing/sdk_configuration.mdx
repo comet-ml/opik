@@ -3,15 +3,10 @@ sidebar_label: Python SDK Configuration
 description: Describes how to configure the Python SDK
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# Python SDK Configuration
-
 The recommended approach to configuring the Python SDK is to use the `opik configure` command. This will prompt you for the necessary information and save it to a configuration file.
 
 <Tabs>
-    <TabItem value="Opik Cloud" title="Opik Cloud">
+    <Tab value="Opik Cloud" title="Opik Cloud">
 
 If you are using the Cloud version of the platform, you can configure the SDK by running:
 
@@ -27,8 +22,8 @@ You can also configure the SDK by calling [`configure`](https://www.comet.com/do
 opik configure
 ```
 
-    </TabItem>
-    <TabItem value="Self-hosting" title="Self-hosting">
+    </Tab>
+    <Tab value="Self-hosting" title="Self-hosting">
 
 If you are self-hosting the platform, you can configure the SDK by running:
 
@@ -44,7 +39,7 @@ or from the Command line:
 opik configure --use_local
 ```
 
-    </TabItem>
+    </Tab>
 
 </Tabs>
 
@@ -64,7 +59,7 @@ The `configure` method is a helper method to help you create the Opik SDK config
 The Opik configuration file follows the [TOML](https://github.com/toml-lang/toml) format, here is an example configuration file:
 
 <Tabs>
-    <TabItem value="Opik Cloud" title="Opik Cloud">
+    <Tab value="Opik Cloud" title="Opik Cloud">
 
 ```toml
 [opik]
@@ -73,8 +68,8 @@ workspace = <Workspace name>
 api_key = <API Key>
 ```
 
-    </TabItem>
-    <TabItem value="Self-hosting" title="Self-hosting">
+    </Tab>
+    <Tab value="Self-hosting" title="Self-hosting">
 
 ```toml
 [opik]
@@ -82,15 +77,16 @@ url_override = http://localhost:5173/api
 workspace = default
 ```
 
-    </TabItem>
+    </Tab>
 
 </Tabs>
 
-You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration.mdx#configuration-values) below.
+You can find a full list of the the configuration options in the [Configuration values section](/docs/tracing/sdk_configuration#configuration-values) below.
 
-:::tip
-By default, the SDK will look for the configuration file in your home directory (`~/.opik.config`). If you would like to specify a different location, you can do so by setting the `OPIK_CONFIG_PATH` environment variable.
-:::
+<Tip>
+  By default, the SDK will look for the configuration file in your home directory (`~/.opik.config`). If you would like
+  to specify a different location, you can do so by setting the `OPIK_CONFIG_PATH` environment variable.
+</Tip>
 
 ### Using environment variables
 
@@ -100,7 +96,7 @@ If you do not wish to use a configuration file, you can set environment variable
 - `OPIK_API_KEY`: The API key to use - Only required if you are using the Opik Cloud version of the platform
 - `OPIK_WORKSPACE`: The workspace to use - Only required if you are using the Opik Cloud version of the platform
 
-You can find a full list of the the configuration options in the [Configuration values section](/tracing/sdk_configuration.mdx#configuration-values) below.
+You can find a full list of the the configuration options in the [Configuration values section](/docs/tracing/sdk_configuration#configuration-values) below.
 
 ### Configuration values
 
