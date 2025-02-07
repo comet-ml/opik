@@ -4,6 +4,7 @@ import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import {
   useOutputLoadingByPromptDatasetItemId,
+  useOutputStaleStatusByPromptDatasetItemId,
   useOutputValueByPromptDatasetItemId,
 } from "@/store/PlaygroundStore";
 import ReactMarkdown from "react-markdown";
@@ -24,22 +25,31 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const { promptId } = (custom ?? {}) as CustomMeta;
   const originalRow = context.row.original;
 
-  const cellValue = useOutputValueByPromptDatasetItemId(
+  const value = useOutputValueByPromptDatasetItemId(
     promptId,
     originalRow.dataItemId,
   );
 
-  const cellIsLoading = useOutputLoadingByPromptDatasetItemId(
+  const isLoading = useOutputLoadingByPromptDatasetItemId(
+    promptId,
+    originalRow.dataItemId,
+  );
+
+  const stale = useOutputStaleStatusByPromptDatasetItemId(
     promptId,
     originalRow.dataItemId,
   );
 
   const renderContent = () => {
-    if (cellIsLoading && !cellValue) {
+    if (isLoading && !value) {
       return <PlaygroundOutputLoader />;
     }
 
-    return <ReactMarkdown>{cellValue}</ReactMarkdown>;
+    return (
+      <ReactMarkdown className={stale ? "text-muted-gray" : ""}>
+        {value}
+      </ReactMarkdown>
+    );
   };
 
   return (

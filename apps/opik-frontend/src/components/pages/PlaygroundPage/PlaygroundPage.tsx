@@ -5,7 +5,7 @@ import useLocalStorageState from "use-local-storage-state";
 import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import PlaygroundPrompts from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompts";
+import ResizablePromptContainer from "@/components/pages/PlaygroundPage/ResizablePromptContainer";
 
 const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
 const LEGACY_PLAYGROUND_PROMPTS_KEY = "playground-prompts-state";
@@ -49,17 +49,19 @@ const PlaygroundPage = () => {
         } as React.CSSProperties
       }
     >
-      <PlaygroundPrompts
+      <ResizablePromptContainer
         workspaceName={workspaceName}
         providerKeys={providerKeys}
         isPendingProviderKeys={isPendingProviderKeys}
       />
 
-      <PlaygroundOutputs
-        datasetId={datasetId}
-        onChangeDatasetId={setDatasetId}
-        workspaceName={workspaceName}
-      />
+      <div className="flex">
+        <PlaygroundOutputs
+          datasetId={datasetId}
+          onChangeDatasetId={setDatasetId}
+          workspaceName={workspaceName}
+        />
+      </div>
     </div>
   );
 };

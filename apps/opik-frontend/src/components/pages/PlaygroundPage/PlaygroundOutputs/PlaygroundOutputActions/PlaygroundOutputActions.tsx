@@ -153,6 +153,11 @@ const PlaygroundOutputActions = ({
       ? "action-tooltip-open-tooltip"
       : "action-tooltip";
 
+    const runLabel =
+      promptCount > 1 || (datasetId && datasetItems.length > 1)
+        ? "Run all"
+        : "Run";
+
     return (
       <TooltipWrapper
         content={tooltipMessage}
@@ -168,7 +173,7 @@ const PlaygroundOutputActions = ({
           style={style}
         >
           <Play className="mr-1 size-4" />
-          Run all
+          {runLabel}
         </Button>
       </TooltipWrapper>
     );
@@ -207,9 +212,9 @@ const PlaygroundOutputActions = ({
           options={datasetOptions}
           value={datasetId || ""}
           placeholder={
-            <div className="flex w-full items-center text-foreground">
+            <div className="flex w-full items-center text-light-slate">
               <Database className="mr-2 size-4" />
-              <span className="truncate">Dataset</span>
+              <span className="truncate font-normal">Dataset</span>
             </div>
           }
           onChange={handleChangeDatasetId}
