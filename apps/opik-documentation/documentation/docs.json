@@ -1,17 +1,20 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "palm",
+  "theme": "mint",
   "name": "Opik Documentation",
   "colors": {
     "primary": "#2e8555",
     "light": "#2e8555",
     "dark": "#166534"
   },
+  "styling": {
+    "codeblocks": "system"
+  },
   "favicon": "/static/img/logo.svg",
   "navigation": {
-    "tabs": [
+    "anchors": [
       {
-        "tab": "Guides",
+        "anchor": "Documentation",
         "icon": "building",
         "groups": [
           {
@@ -101,7 +104,7 @@
         ]
       },
       {
-        "tab": "Self-host",
+        "anchor": "Self-hosting Opik",
         "icon": "server",
         "color": {
           "light": "#2e8555",
@@ -123,7 +126,7 @@
         ]
       },
       {
-        "tab": "Cookbooks",
+        "anchor": "Cookbooks",
         "icon": "notebook",
         "color": {
           "light": "#2e8555",
@@ -168,7 +171,7 @@
         ]
       },
       {
-        "tab": "Reference",
+        "anchor": "SDK and API reference",
         "icon": "square-terminal",
         "groups": [
           {
@@ -365,7 +368,13 @@
     "primary": {
       "type": "github",
       "href": "https://github.com/comet-ml/opik"
-    }
+    },
+    "links": [
+      {
+        "label": "To Opik →",
+        "href": "https://www.comet.com/blog"
+      }
+    ]
   },
   "footer": {
     "socials": {
