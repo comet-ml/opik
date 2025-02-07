@@ -1,0 +1,377 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "palm",
+  "name": "Opik Documentation",
+  "colors": {
+    "primary": "#2e8555",
+    "light": "#2e8555",
+    "dark": "#166534"
+  },
+  "favicon": "/static/img/logo.svg",
+  "navigation": {
+    "anchors": [
+      {
+        "anchor": "Guides",
+        "icon": "building",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["docs/home", "docs/quickstart", "docs/changelog", "docs/roadmap", "docs/FAQ"]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              "docs/tracing/log_traces",
+              "docs/tracing/log_agents",
+              "docs/tracing/log_multimodal_traces",
+              "docs/tracing/log_distributed_traces",
+              "docs/tracing/annotate_traces",
+              "docs/tracing/cost_tracking",
+              "docs/tracing/sdk_configuration",
+              "docs/tracing/export_data",
+              {
+                "group": "Integrations",
+                "pages": [
+                  "docs/tracing/integrations/overview",
+                  "docs/tracing/integrations/openai",
+                  "docs/tracing/integrations/litellm",
+                  "docs/tracing/integrations/langchain",
+                  "docs/tracing/integrations/aisuite",
+                  "docs/tracing/integrations/anthropic",
+                  "docs/tracing/integrations/bedrock",
+                  "docs/tracing/integrations/crewai",
+                  "docs/tracing/integrations/dify",
+                  "docs/tracing/integrations/dspy",
+                  "docs/tracing/integrations/gemini",
+                  "docs/tracing/integrations/groq",
+                  "docs/tracing/integrations/guardrails-ai",
+                  "docs/tracing/integrations/haystack",
+                  "docs/tracing/integrations/langgraph",
+                  "docs/tracing/integrations/llama_index",
+                  "docs/tracing/integrations/ollama",
+                  "docs/tracing/integrations/predibase",
+                  "docs/tracing/integrations/ragas",
+                  "docs/tracing/integrations/watsonx"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Evaluation",
+            "pages": [
+              "docs/evaluation/overview",
+              "docs/evaluation/concepts",
+              "docs/evaluation/evaluate_prompt",
+              "docs/evaluation/evaluate_your_llm",
+              "docs/evaluation/update_existing_experiment",
+              "docs/evaluation/manage_datasets",
+              {
+                "group": "Metrics",
+                "pages": [
+                  "docs/evaluation/metrics/overview",
+                  "docs/evaluation/metrics/heuristic_metrics",
+                  "docs/evaluation/metrics/hallucination",
+                  "docs/evaluation/metrics/g_eval",
+                  "docs/evaluation/metrics/moderation",
+                  "docs/evaluation/metrics/answer_relevance",
+                  "docs/evaluation/metrics/context_precision",
+                  "docs/evaluation/metrics/context_recall",
+                  "docs/evaluation/metrics/custom_model",
+                  "docs/evaluation/metrics/custom_metric"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Prompt engineering",
+            "pages": [
+              "docs/prompt_engineering/prompt_management",
+              "docs/prompt_engineering/managing_prompts_in_code",
+              "docs/prompt_engineering/playground"
+            ]
+          },
+          {
+            "group": "Testing",
+            "pages": ["docs/testing/pytest_integration"]
+          },
+          {
+            "group": "Production",
+            "pages": ["docs/production/production_monitoring", "docs/production/rules", "docs/production/gateway"]
+          }
+        ]
+      },
+      {
+        "anchor": "Self-host",
+        "icon": "server",
+        "color": {
+          "light": "#2e8555",
+          "dark": "#2e8555"
+        },
+        "groups": [
+          {
+            "group": "Self-host",
+            "pages": [
+              "docs/self-host/overview",
+              "docs/self-host/local_deployment",
+              "docs/self-host/kubernetes",
+              {
+                "group": "Configuration",
+                "pages": ["docs/self-host/configure/anonymous_usage_statistics"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "anchor": "Cookbooks",
+        "icon": "notebook",
+        "color": {
+          "light": "#2e8555",
+          "dark": "#2e8555"
+        },
+        "groups": [
+          {
+            "group": "Cookbooks",
+            "pages": ["docs/cookbook/overview"]
+          },
+          {
+            "group": "Getting started tutorials",
+            "pages": [
+              "docs/cookbook/quickstart_notebook",
+              "docs/cookbook/evaluate_hallucination_metric",
+              "docs/cookbook/evaluate_moderation_metric"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "docs/cookbook/openai",
+              "docs/cookbook/litellm",
+              "docs/cookbook/langchain",
+              "docs/cookbook/aisuite",
+              "docs/cookbook/anthropic",
+              "docs/cookbook/bedrock",
+              "docs/cookbook/crewai",
+              "docs/cookbook/dspy",
+              "docs/cookbook/gemini",
+              "docs/cookbook/groq",
+              "docs/cookbook/guardrails-ai",
+              "docs/cookbook/haystack",
+              "docs/cookbook/langgraph",
+              "docs/cookbook/llama-index",
+              "docs/cookbook/ollama",
+              "docs/cookbook/predibase",
+              "docs/cookbook/ragas",
+              "docs/cookbook/watsonx"
+            ]
+          }
+        ]
+      },
+      {
+        "anchor": "Reference",
+        "icon": "square-terminal",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": ["docs/reference/overview"]
+          },
+          {
+            "group": "Python SDK",
+            "pages": ["docs/reference/python-sdk/overview"]
+          },
+          {
+            "group": "Rest API",
+            "pages": [
+              "docs/reference/api-reference/overview",
+              {
+                "group": "API Reference",
+                "pages": [
+                  "docs/reference/api-reference/get-is-aliveping",
+                  "docs/reference/api-reference/get-is-alivever"
+                ]
+              },
+              {
+                "group": "System usage",
+                "pages": [
+                  "docs/reference/api-reference/system-usage/get-datasets-information-for-bi-events",
+                  "docs/reference/api-reference/system-usage/get-experiments-information-for-bi-events",
+                  "docs/reference/api-reference/system-usage/get-traces-information-for-bi-events",
+                  "docs/reference/api-reference/system-usage/get-traces-count-on-previous-day-for-all-available-workspaces"
+                ]
+              },
+              {
+                "group": "Check",
+                "pages": ["docs/reference/api-reference/check/check-user-access-to-workspace"]
+              },
+              {
+                "group": "Automation rule evaluators",
+                "pages": [
+                  "docs/reference/api-reference/automation-rule-evaluators/find-project-evaluators",
+                  "docs/reference/api-reference/automation-rule-evaluators/create-automation-rule-evaluator",
+                  "docs/reference/api-reference/automation-rule-evaluators/delete-automation-rule-evaluators",
+                  "docs/reference/api-reference/automation-rule-evaluators/get-automation-rule-evaluator-by-id",
+                  "docs/reference/api-reference/automation-rule-evaluators/update-automation-rule-evaluator-by-id",
+                  "docs/reference/api-reference/automation-rule-evaluators/get-automation-rule-evaluator-logs-by-id"
+                ]
+              },
+              {
+                "group": "Chat Completions",
+                "pages": ["docs/reference/api-reference/chat-completions/create-chat-completions"]
+              },
+              {
+                "group": "Datasets",
+                "pages": [
+                  "docs/reference/api-reference/datasets/find-datasets",
+                  "docs/reference/api-reference/datasets/create-dataset",
+                  "docs/reference/api-reference/datasets/delete-dataset-by-name",
+                  "docs/reference/api-reference/datasets/delete-datasets",
+                  "docs/reference/api-reference/datasets/createupdate-dataset-items",
+                  "docs/reference/api-reference/datasets/delete-dataset-items",
+                  "docs/reference/api-reference/datasets/stream-dataset-items",
+                  "docs/reference/api-reference/datasets/get-dataset-item-by-id",
+                  "docs/reference/api-reference/datasets/get-dataset-by-name",
+                  "docs/reference/api-reference/datasets/get-dataset-by-id",
+                  "docs/reference/api-reference/datasets/update-dataset-by-id",
+                  "docs/reference/api-reference/datasets/delete-dataset-by-id",
+                  "docs/reference/api-reference/datasets/get-dataset-items",
+                  "docs/reference/api-reference/datasets/find-dataset-items-with-experiment-items",
+                  "docs/reference/api-reference/datasets/get-dataset-items-output-columns"
+                ]
+              },
+              {
+                "group": "Experiments",
+                "pages": [
+                  "docs/reference/api-reference/experiments/find-experiments",
+                  "docs/reference/api-reference/experiments/create-experiment",
+                  "docs/reference/api-reference/experiments/delete-experiments-by-id",
+                  "docs/reference/api-reference/experiments/find-feedback-score-names",
+                  "docs/reference/api-reference/experiments/create-experiment-items",
+                  "docs/reference/api-reference/experiments/delete-experiment-items",
+                  "docs/reference/api-reference/experiments/stream-experiment-items",
+                  "docs/reference/api-reference/experiments/get-experiment-item-by-id",
+                  "docs/reference/api-reference/experiments/get-experiment-by-name",
+                  "docs/reference/api-reference/experiments/get-experiment-by-id"
+                ]
+              },
+              {
+                "group": "Feedback-definitions",
+                "pages": [
+                  "docs/reference/api-reference/feedback-definitions/find-feedback-definitions",
+                  "docs/reference/api-reference/feedback-definitions/create-feedback-definition",
+                  "docs/reference/api-reference/feedback-definitions/delete-feedback-definitions",
+                  "docs/reference/api-reference/feedback-definitions/get-feedback-definition-by-id",
+                  "docs/reference/api-reference/feedback-definitions/update-feedback-definition-by-id",
+                  "docs/reference/api-reference/feedback-definitions/delete-feedback-definition-by-id"
+                ]
+              },
+              {
+                "group": "LlmProviderKey",
+                "pages": [
+                  "docs/reference/api-reference/llmproviderkey/find-llm-providers-apikeys",
+                  "docs/reference/api-reference/llmproviderkey/store-llm-providers-apikey",
+                  "docs/reference/api-reference/llmproviderkey/delete-llm-providers-apikeys",
+                  "docs/reference/api-reference/llmproviderkey/get-llm-providers-apikey-by-id",
+                  "docs/reference/api-reference/llmproviderkey/update-llm-providers-apikey"
+                ]
+              },
+              {
+                "group": "Projects",
+                "pages": [
+                  "docs/reference/api-reference/projects/find-projects",
+                  "docs/reference/api-reference/projects/create-project",
+                  "docs/reference/api-reference/projects/delete-projects",
+                  "docs/reference/api-reference/projects/find-feedback-score-names-by-project-ids",
+                  "docs/reference/api-reference/projects/retrieve-project",
+                  "docs/reference/api-reference/projects/get-project-stats",
+                  "docs/reference/api-reference/projects/get-project-by-id",
+                  "docs/reference/api-reference/projects/delete-project-by-id",
+                  "docs/reference/api-reference/projects/update-project-by-id",
+                  "docs/reference/api-reference/projects/get-project-metrics"
+                ]
+              },
+              {
+                "group": "Prompts",
+                "pages": [
+                  "docs/reference/api-reference/prompts/get-prompts",
+                  "docs/reference/api-reference/prompts/create-prompt",
+                  "docs/reference/api-reference/prompts/delete-prompts",
+                  "docs/reference/api-reference/prompts/create-prompt-version",
+                  "docs/reference/api-reference/prompts/retrieve-prompt-version",
+                  "docs/reference/api-reference/prompts/get-prompt-version-by-id",
+                  "docs/reference/api-reference/prompts/get-prompt-by-id",
+                  "docs/reference/api-reference/prompts/update-prompt",
+                  "docs/reference/api-reference/prompts/delete-prompt",
+                  "docs/reference/api-reference/prompts/get-prompt-versions"
+                ]
+              },
+              {
+                "group": "Spans",
+                "pages": [
+                  "docs/reference/api-reference/spans/get-spans-by-project_name-or-project_id-and-optionally-by-trace_id-andor-type",
+                  "docs/reference/api-reference/spans/create-span",
+                  "docs/reference/api-reference/spans/create-spans",
+                  "docs/reference/api-reference/spans/delete-span-comments",
+                  "docs/reference/api-reference/spans/update-span-comment-by-id",
+                  "docs/reference/api-reference/spans/batch-feedback-scoring-for-spans",
+                  "docs/reference/api-reference/spans/find-feedback-score-names",
+                  "docs/reference/api-reference/spans/search-spans",
+                  "docs/reference/api-reference/spans/get-span-stats",
+                  "docs/reference/api-reference/spans/get-span-by-id",
+                  "docs/reference/api-reference/spans/delete-span-by-id",
+                  "docs/reference/api-reference/spans/update-span-by-id",
+                  "docs/reference/api-reference/spans/add-span-comment",
+                  "docs/reference/api-reference/spans/add-span-feedback-score",
+                  "docs/reference/api-reference/spans/delete-span-feedback-score",
+                  "docs/reference/api-reference/spans/get-span-comment"
+                ]
+              },
+              {
+                "group": "Traces",
+                "pages": [
+                  "docs/reference/api-reference/traces/get-traces-by-project_name-or-project_id",
+                  "docs/reference/api-reference/traces/create-trace",
+                  "docs/reference/api-reference/traces/create-traces",
+                  "docs/reference/api-reference/traces/delete-trace-comments",
+                  "docs/reference/api-reference/traces/update-trace-comment-by-id",
+                  "docs/reference/api-reference/traces/delete-traces",
+                  "docs/reference/api-reference/traces/batch-feedback-scoring-for-traces",
+                  "docs/reference/api-reference/traces/find-feedback-score-names",
+                  "docs/reference/api-reference/traces/get-trace-stats",
+                  "docs/reference/api-reference/traces/get-trace-by-id",
+                  "docs/reference/api-reference/traces/delete-trace-by-id",
+                  "docs/reference/api-reference/traces/update-trace-by-id",
+                  "docs/reference/api-reference/traces/add-trace-comment",
+                  "docs/reference/api-reference/traces/add-trace-feedback-score",
+                  "docs/reference/api-reference/traces/delete-trace-feedback-score",
+                  "docs/reference/api-reference/traces/get-trace-comment"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/static/img/opik-logo.svg",
+    "dark": "/static/img/logo-dark-mode.svg"
+  },
+  "api": {
+    "playground": {
+      "display": "interactive"
+    }
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/comet-ml/opik"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/comet-ml/opik",
+      "slack": "https://chat.comet.com",
+      "x": "https://x.com/cometml"
+    }
+  }
+}
