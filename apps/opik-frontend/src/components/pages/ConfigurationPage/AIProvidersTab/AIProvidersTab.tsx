@@ -63,6 +63,11 @@ const AIProvidersTab = () => {
 
   const providerKeys = useMemo(() => data?.content ?? [], [data?.content]);
 
+  const configuredProviderKeys = useMemo(
+    () => providerKeys.map((p) => p.provider),
+    [providerKeys],
+  );
+
   const filteredProviderKeys = useMemo(() => {
     if (providerKeys?.length === 0 || search === "") {
       return providerKeys;
@@ -140,6 +145,7 @@ const AIProvidersTab = () => {
         />
       </div>
       <AddEditAIProviderDialog
+        excludedProviders={configuredProviderKeys}
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}

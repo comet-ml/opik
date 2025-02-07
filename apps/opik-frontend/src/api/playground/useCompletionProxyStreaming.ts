@@ -19,6 +19,7 @@ const getNowUtcTimeISOString = (): string => {
 };
 
 interface GetCompletionProxyStreamParams {
+  url?: string;
   model: PROVIDER_MODEL_TYPE | "";
   messages: ProviderMessageType[];
   signal: AbortSignal;
@@ -42,13 +43,14 @@ const isProviderError = (
 };
 
 const getCompletionProxyStream = async ({
+  url = `${BASE_API_URL}/v1/private/chat/completions`,
   model,
   messages,
   signal,
   configs,
   workspaceName,
 }: GetCompletionProxyStreamParams) => {
-  return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
+  return fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -67,6 +69,7 @@ const getCompletionProxyStream = async ({
 };
 
 export interface RunStreamingArgs {
+  url?: string;
   model: PROVIDER_MODEL_TYPE | "";
   messages: ProviderMessageType[];
   configs: LLMPromptConfigsType;
@@ -91,8 +94,9 @@ interface UseCompletionProxyStreamingParameters {
 const useCompletionProxyStreaming = ({
   workspaceName,
 }: UseCompletionProxyStreamingParameters) => {
-  const runStreaming = useCallback(
+  return useCallback(
     async ({
+      url,
       model,
       messages,
       configs,
@@ -111,6 +115,7 @@ const useCompletionProxyStreaming = ({
 
       try {
         const response = await getCompletionProxyStream({
+          url,
           model,
           messages,
           configs,
@@ -169,7 +174,12 @@ const useCompletionProxyStreaming = ({
           const lines = chunk.split("\n").filter((line) => line.trim() !== "");
 
           for (const line of lines) {
-            const parsed = safelyParseJSON(line) as ChatCompletionResponse;
+            const ollamaDataPrefix = "data:";
+            const JSONData = line.startsWith(ollamaDataPrefix)
+              ? line.split(ollamaDataPrefix)[1]
+              : line;
+
+            const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;
 
             // handle different message types
             if (isOpikError(parsed)) {
@@ -212,8 +222,6 @@ const useCompletionProxyStreaming = ({
     },
     [workspaceName],
   );
-
-  return runStreaming;
 };
 
 export default useCompletionProxyStreaming;

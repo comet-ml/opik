@@ -2,7 +2,11 @@ import { HttpStatusCode } from "axios";
 
 import { JsonNode, UsageType } from "@/types/shared";
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
-import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  LLMPromptConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { SPAN_TYPE } from "@/types/traces";
 
 export interface PlaygroundPromptType {
@@ -10,6 +14,7 @@ export interface PlaygroundPromptType {
   id: string;
   messages: LLMMessage[];
   model: PROVIDER_MODEL_TYPE | "";
+  provider: PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
 }
 
