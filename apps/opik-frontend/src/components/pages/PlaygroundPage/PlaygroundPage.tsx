@@ -5,7 +5,6 @@ import useLocalStorageState from "use-local-storage-state";
 import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import PlaygroundPrompts from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompts";
 import ResizablePromptContainer from "@/components/pages/PlaygroundPage/ResizablePromptContainer";
 
 const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";

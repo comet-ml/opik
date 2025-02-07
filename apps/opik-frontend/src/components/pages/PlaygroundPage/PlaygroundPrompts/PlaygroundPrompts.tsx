@@ -48,7 +48,7 @@ const PlaygroundPrompts = ({
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
     onResetHeight();
-  }, [setPromptMap, providerKeys, lastPickedModel]);
+  }, [setPromptMap, providerKeys, lastPickedModel, onResetHeight]);
 
   useEffect(() => {
     // hasn't been initialized yet or the last prompt is removed

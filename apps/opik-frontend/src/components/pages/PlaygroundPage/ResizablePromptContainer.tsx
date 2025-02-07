@@ -33,7 +33,7 @@ const ResizablePromptContainer = ({
 
   const handleResetHeight = useCallback(() => {
     setHeight(defaultHeight);
-  }, []);
+  }, [defaultHeight, setHeight]);
 
   const onResizeStop: ResizeCallback = useCallback(
     (e, direction, ref, delta) => {

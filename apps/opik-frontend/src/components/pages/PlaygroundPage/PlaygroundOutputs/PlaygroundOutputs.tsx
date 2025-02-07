@@ -42,7 +42,7 @@ const PlaygroundOutputs = ({
   const renderResult = () => {
     if (datasetId) {
       return (
-        <div className="flex w-full pt-2 pb-4">
+        <div className="flex w-full pb-4 pt-2">
           <PlaygroundOutputTable
             promptIds={promptIds}
             datasetItems={datasetItems}
@@ -54,7 +54,7 @@ const PlaygroundOutputs = ({
     }
 
     return (
-      <div className="flex w-full gap-[var(--item-gap)] pt-2 pb-4">
+      <div className="flex w-full gap-[var(--item-gap)] pb-4 pt-2">
         {promptIds?.map((promptId, promptIdx) => (
           <PlaygroundOutput
             key={`output-${promptId}`}
