@@ -30,12 +30,12 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         totalEstimatedCostVersion: core.serialization.property(
             "total_estimated_cost_version",
-            core.serialization.string().optional()
+            core.serialization.string().optional(),
         ),
     });
 
 export declare namespace SpanWrite {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         project_name?: string | null;
         trace_id: string;

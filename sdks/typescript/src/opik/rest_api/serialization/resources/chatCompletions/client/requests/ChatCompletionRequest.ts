@@ -30,7 +30,7 @@ export const ChatCompletionRequest: core.serialization.Schema<
     frequencyPenalty: core.serialization.property("frequency_penalty", core.serialization.number().optional()),
     logitBias: core.serialization.property(
         "logit_bias",
-        core.serialization.record(core.serialization.string(), core.serialization.number()).optional()
+        core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
     ),
     user: core.serialization.string().optional(),
     responseFormat: core.serialization.property("response_format", ResponseFormat.optional()),
@@ -38,7 +38,7 @@ export const ChatCompletionRequest: core.serialization.Schema<
     tools: core.serialization.list(Tool).optional(),
     toolChoice: core.serialization.property(
         "tool_choice",
-        core.serialization.record(core.serialization.string(), core.serialization.unknown()).optional()
+        core.serialization.record(core.serialization.string(), core.serialization.unknown()).optional(),
     ),
     parallelToolCalls: core.serialization.property("parallel_tool_calls", core.serialization.boolean().optional()),
     functions: core.serialization.list(Function).optional(),
@@ -46,7 +46,7 @@ export const ChatCompletionRequest: core.serialization.Schema<
 });
 
 export declare namespace ChatCompletionRequest {
-    interface Raw {
+    export interface Raw {
         model?: string | null;
         messages?: Message.Raw[] | null;
         temperature?: number | null;

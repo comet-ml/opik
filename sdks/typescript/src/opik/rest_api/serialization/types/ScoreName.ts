@@ -12,7 +12,7 @@ export const ScoreName: core.serialization.ObjectSchema<serializers.ScoreName.Ra
     });
 
 export declare namespace ScoreName {
-    interface Raw {
+    export interface Raw {
         name?: string | null;
     }
 }

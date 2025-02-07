@@ -15,6 +15,7 @@ export interface LLMJudgeSchema {
   name: string;
   type: LLM_SCHEMA_TYPE;
   description: string;
+  unsaved: boolean;
 }
 
 export interface LLMJudgeObject {

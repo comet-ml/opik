@@ -2,7 +2,7 @@ import { getObjectUtils } from "../object";
 import { getObjectLikeUtils } from "../object-like";
 import { BaseObjectSchema, ObjectSchema } from "../object/types";
 import { getSchemaUtils } from "../schema-utils";
-import { constructLazyBaseSchema, getMemoizedSchema, SchemaGetter } from "./lazy";
+import { SchemaGetter, constructLazyBaseSchema, getMemoizedSchema } from "./lazy";
 
 export function lazyObject<Raw, Parsed>(getter: SchemaGetter<ObjectSchema<Raw, Parsed>>): ObjectSchema<Raw, Parsed> {
     const baseSchema: BaseObjectSchema<Raw, Parsed> = {

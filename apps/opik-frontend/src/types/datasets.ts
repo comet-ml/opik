@@ -53,7 +53,9 @@ export interface Experiment {
   metadata?: object;
   name: string;
   feedback_scores?: AverageFeedbackScore[];
+  // @deprecated
   prompt_version?: ExperimentPromptVersion;
+  prompt_versions?: ExperimentPromptVersion[];
   trace_count: number;
   created_at: string;
   last_updated_at: string;

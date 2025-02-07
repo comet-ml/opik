@@ -7,16 +7,15 @@ from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from opik.api_objects.experiment import experiment_item
 from . import verifiers
-from .conftest import _random_chars
+from ..conftest import random_chars
 from ..testlib import assert_equal, ANY_BUT_NONE
 
 import pytest
 
 
-def test_experiment_creation_via_evaluate_function__happyflow(
+def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happyflow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    # TODO: this test is not finished, it does not check experiment items content
     dataset = opik_client.create_dataset(dataset_name)
 
     dataset.insert(
@@ -49,8 +48,8 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         )
 
     prompt = Prompt(
-        name=f"test-experiment-prompt-{_random_chars()}",
-        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
     )
 
     equals_metric = metrics.Equals()
@@ -77,7 +76,146 @@ def test_experiment_creation_via_evaluate_function__happyflow(
         experiment_metadata={"model_name": "gpt-3.5"},
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
-        prompt=prompt,
+        prompts=[prompt],
+    )
+
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items_contents = retrieved_experiment.get_items()
+    assert len(experiment_items_contents) == 3
+
+    EXPECTED_EXPERIMENT_ITEMS_CONTENT = [
+        experiment_item.ExperimentItemContent(
+            id=ANY_BUT_NONE,
+            dataset_item_id=ANY_BUT_NONE,
+            trace_id=ANY_BUT_NONE,
+            dataset_item_data={
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+            evaluation_task_output={"output": "Paris"},
+            feedback_scores=[
+                {
+                    "category_name": None,
+                    "name": "equals_metric",
+                    "reason": None,
+                    "value": 1.0,
+                }
+            ],
+        ),
+        experiment_item.ExperimentItemContent(
+            id=ANY_BUT_NONE,
+            dataset_item_id=ANY_BUT_NONE,
+            trace_id=ANY_BUT_NONE,
+            dataset_item_data={
+                "input": {"question": "What is the of capital of Germany?"},
+                "expected_model_output": {"output": "Berlin"},
+            },
+            evaluation_task_output={"output": "Berlin"},
+            feedback_scores=[
+                {
+                    "category_name": None,
+                    "name": "equals_metric",
+                    "reason": None,
+                    "value": 1.0,
+                }
+            ],
+        ),
+        experiment_item.ExperimentItemContent(
+            id=ANY_BUT_NONE,
+            dataset_item_id=ANY_BUT_NONE,
+            trace_id=ANY_BUT_NONE,
+            dataset_item_data={
+                "input": {"question": "What is the of capital of Poland?"},
+                "expected_model_output": {"output": "Warsaw"},
+            },
+            evaluation_task_output={"output": "Krakow"},
+            feedback_scores=[
+                {
+                    "category_name": None,
+                    "name": "equals_metric",
+                    "reason": None,
+                    "value": 0.0,
+                }
+            ],
+        ),
+    ]
+    assert_equal(
+        sorted(
+            EXPECTED_EXPERIMENT_ITEMS_CONTENT,
+            key=lambda item: str(item.dataset_item_data),
+        ),
+        sorted(experiment_items_contents, key=lambda item: str(item.dataset_item_data)),
+    )
+
+
+def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__happyflow(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+            {
+                "input": {"question": "What is the of capital of Germany?"},
+                "expected_model_output": {"output": "Berlin"},
+            },
+            {
+                "input": {"question": "What is the of capital of Poland?"},
+                "expected_model_output": {"output": "Warsaw"},
+            },
+        ]
+    )
+
+    def task(item: Dict[str, Any]):
+        if item["input"] == {"question": "What is the of capital of France?"}:
+            return {"output": "Paris"}
+        if item["input"] == {"question": "What is the of capital of Germany?"}:
+            return {"output": "Berlin"}
+        if item["input"] == {"question": "What is the of capital of Poland?"}:
+            return {"output": "Krakow"}
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item['input']}"
+        )
+
+    prompt1 = Prompt(
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
+    )
+    prompt2 = Prompt(
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
+    )
+
+    equals_metric = metrics.Equals()
+    evaluation_result = opik.evaluate(
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[equals_metric],
+        experiment_name=experiment_name,
+        experiment_config={
+            "model_name": "gpt-3.5",
+        },
+        scoring_key_mapping={
+            "reference": lambda x: x["expected_model_output"]["output"],
+        },
+        prompts=[prompt1, prompt2],
+    )
+
+    opik.flush_tracker()
+
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=evaluation_result.experiment_id,
+        experiment_name=evaluation_result.experiment_name,
+        experiment_metadata={"model_name": "gpt-3.5"},
+        traces_amount=3,  # one trace per dataset item
+        feedback_scores_amount=1,
+        prompts=[prompt1, prompt2],
     )
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
@@ -328,8 +466,8 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         )
 
     prompt = Prompt(
-        name=f"test-experiment-prompt-{_random_chars()}",
-        prompt=f"test-experiment-prompt-template-{_random_chars()}",
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
     )
 
     # Create the experiment first
@@ -354,7 +492,7 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         },
         traces_amount=1,
         feedback_scores_amount=0,
-        prompt=prompt,
+        prompts=[prompt],
     )
 
     # Populate the existing experiment with a new feedback score
@@ -377,7 +515,7 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         },
         traces_amount=1,
         feedback_scores_amount=3,
-        prompt=prompt,
+        prompts=[prompt],
     )
 
 
@@ -393,3 +531,38 @@ def test_experiment__get_experiment_by_name__experiment_not_found__ExperimentNot
 ):
     with pytest.raises(exceptions.ExperimentNotFound):
         opik_client.get_experiment_by_id("not-existing-name")
+
+
+def test_experiment__get_experiment_items__no_feedback_scores(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+        ]
+    )
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "output": "Paris",
+        }
+
+    opik.evaluate(
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[],
+        experiment_name=experiment_name,
+    )
+
+    opik.flush_tracker()
+
+    experiment = opik_client.get_experiment_by_name(experiment_name)
+    items = experiment.get_items()
+
+    assert len(items) == 1
+    assert items[0].feedback_scores == []

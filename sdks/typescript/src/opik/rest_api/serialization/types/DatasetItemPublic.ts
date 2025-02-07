@@ -20,7 +20,7 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
     data: JsonNode,
     experimentItems: core.serialization.property(
         "experiment_items",
-        core.serialization.list(ExperimentItemPublic).optional()
+        core.serialization.list(ExperimentItemPublic).optional(),
     ),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -29,7 +29,7 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
 });
 
 export declare namespace DatasetItemPublic {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         trace_id?: string | null;
         span_id?: string | null;

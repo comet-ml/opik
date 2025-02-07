@@ -21,7 +21,7 @@ export const ChatCompletionResponse: core.serialization.ObjectSchema<
 });
 
 export declare namespace ChatCompletionResponse {
-    interface Raw {
+    export interface Raw {
         id?: string | null;
         created?: number | null;
         model?: string | null;

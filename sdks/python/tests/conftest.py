@@ -1,3 +1,5 @@
+import random
+import string
 from typing import cast
 
 import mock
@@ -109,3 +111,7 @@ def fake_backend_without_batching(patch_streamer_without_batching):
         mock_construct_online_streamer,
     ):
         yield fake_message_processor_
+
+
+def random_chars(n: int = 6) -> str:
+    return "".join(random.choice(string.ascii_letters) for _ in range(n))

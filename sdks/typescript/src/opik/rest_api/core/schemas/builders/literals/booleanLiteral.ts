@@ -22,7 +22,7 @@ export function booleanLiteral<V extends boolean>(literal: V): Schema<V, V> {
                     ],
                 };
             }
-        }
+        },
     );
 
     return schemaCreator();

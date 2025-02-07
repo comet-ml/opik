@@ -20,6 +20,8 @@ from . import (
     validation_helpers,
 )
 from .experiment import helpers as experiment_helpers
+from .experiment import rest_operations as experiment_rest_operations
+from .dataset import rest_operations as dataset_rest_operations
 from ..message_processing import streamer_constructors, messages
 from ..message_processing.batching import sequence_splitter
 
@@ -68,6 +70,7 @@ class Opik:
             api_key=api_key,
         )
         config.check_for_misconfiguration(config_)
+        self._config = config_
 
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name
@@ -82,6 +85,14 @@ class Opik:
             use_batching=_use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
+
+    @property
+    def config(self) -> config.OpikConfig:
+        """
+        Returns:
+            config.OpikConfig: Read-only copy of the configuration of the Opik client.
+        """
+        return self._config.model_copy()
 
     def _initialize_streamer(
         self,
@@ -134,8 +145,8 @@ class Opik:
         Checks if current API key user has an access to the configured workspace and its content.
         """
         self._rest_client.check.access(
-            request={}
-        )  # empty body for future backward compatibility
+            request={}  # empty body for future backward compatibility
+        )
 
     def trace(
         self,
@@ -437,6 +448,52 @@ class Opik:
 
         return dataset_
 
+    def get_datasets(
+        self,
+        max_results: int = 100,
+        sync_items: bool = True,
+    ) -> List[dataset.Dataset]:
+        """
+        Returns all datasets up to the specified limit.
+
+        Args:
+            max_results: The maximum number of datasets to return.
+            sync_items: Whether to sync the hashes of the dataset items. This is used to deduplicate items when fetching the dataset but it can be an expensive operation.
+
+        Returns:
+            List[dataset.Dataset]: A list of dataset objects that match the filter string.
+        """
+        datasets = dataset_rest_operations.get_datasets(
+            self._rest_client, max_results, sync_items
+        )
+
+        return datasets
+
+    def get_dataset_experiments(
+        self,
+        dataset_name: str,
+        max_results: int = 100,
+    ) -> List[experiment.Experiment]:
+        """
+        Returns all experiments up to the specified limit.
+
+        Args:
+            dataset_name: The name of the dataset
+            max_results: The maximum number of experiments to return.
+
+        Returns:
+            List[experiment.Experiment]: A list of experiment objects.
+        """
+        dataset_id = dataset_rest_operations.get_dataset_id(
+            self._rest_client, dataset_name
+        )
+
+        experiments = dataset_rest_operations.get_dataset_experiments(
+            self._rest_client, dataset_id, max_results
+        )
+
+        return experiments
+
     def delete_dataset(self, name: str) -> None:
         """
         Delete dataset by name
@@ -497,6 +554,7 @@ class Opik:
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
         prompt: Optional[Prompt] = None,
+        prompts: Optional[List[Prompt]] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -505,15 +563,22 @@ class Opik:
             dataset_name: The name of the dataset to associate with the experiment.
             name: The optional name for the experiment. If None, a generated name will be used.
             experiment_config: Optional experiment configuration parameters. Must be a dictionary if provided.
-            prompt: Prompt object to associate with the experiment.
+            prompt: Prompt object to associate with the experiment. Deprecated, use `prompts` argument instead.
+            prompts: List of Prompt objects to associate with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
         id = helpers.generate_id()
 
-        metadata, prompt_version = experiment.build_metadata_and_prompt_version(
-            experiment_config=experiment_config, prompt=prompt
+        checked_prompts = experiment_helpers.handle_prompt_args(
+            prompt=prompt,
+            prompts=prompts,
+        )
+
+        metadata, prompt_versions = experiment.build_metadata_and_prompt_versions(
+            experiment_config=experiment_config,
+            prompts=checked_prompts,
         )
 
         self._rest_client.experiments.create_experiment(
@@ -521,7 +586,7 @@ class Opik:
             dataset_name=dataset_name,
             id=id,
             metadata=metadata,
-            prompt_version=prompt_version,
+            prompt_versions=prompt_versions,
         )
 
         experiment_ = experiment.Experiment(
@@ -529,7 +594,7 @@ class Opik:
             name=name,
             dataset_name=dataset_name,
             rest_client=self._rest_client,
-            prompt=prompt,
+            prompts=checked_prompts,
         )
 
         return experiment_
@@ -544,7 +609,7 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
-        experiment_public = experiment_helpers.get_experiment_data_by_name(
+        experiment_public = experiment_rest_operations.get_experiment_data_by_name(
             rest_client=self._rest_client, name=name
         )
 

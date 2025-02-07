@@ -19,6 +19,8 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
+import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
@@ -53,14 +55,15 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
     {
       id: "prompt",
       label: "Prompt commit",
-      type: COLUMN_TYPE.string,
-      cell: ResourceCell as never,
+      type: COLUMN_TYPE.list,
+      accessorFn: (row) => get(row, ["prompt_versions"], []),
+      cell: MultiResourceCell as never,
       customMeta: {
-        nameKey: "prompt_version.commit",
-        idKey: "prompt_version.prompt_id",
+        nameKey: "commit",
+        idKey: "prompt_id",
         resource: RESOURCE_TYPE.prompt,
         getSearch: (data: Experiment) => ({
-          activeVersionId: get(data, "prompt_version.id", null),
+          activeVersionId: get(data, "id", null),
         }),
       },
     },
@@ -68,6 +71,13 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       id: "trace_count",
       label: "Trace count",
       type: COLUMN_TYPE.number,
+    },
+    {
+      id: "feedback_scores",
+      label: "Feedback scores",
+      type: COLUMN_TYPE.numberDictionary,
+      accessorFn: (row) => get(row, "feedback_scores", []),
+      cell: FeedbackScoreListCell as never,
     },
     {
       id: "created_at",

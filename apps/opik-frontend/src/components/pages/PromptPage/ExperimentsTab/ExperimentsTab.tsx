@@ -31,6 +31,7 @@ import {
   generateGroupedCellDef,
   getIsCustomRow,
   getRowId,
+  getSharedShiftCheckboxClickHandler,
   GROUPING_CONFIG,
   renderCustomRow,
 } from "@/components/pages/ExperimentsShared/table";
@@ -47,6 +48,7 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { Separator } from "@/components/ui/separator";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 
 const SELECTED_COLUMNS_KEY = "prompt-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompt-experiments-columns-width";
@@ -58,14 +60,15 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
     id: "prompt",
     label: "Prompt commit",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
+    type: COLUMN_TYPE.list,
+    accessorFn: (row) => get(row, ["prompt_versions"], []),
+    cell: MultiResourceCell as never,
     customMeta: {
-      nameKey: "prompt_version.commit",
-      idKey: "prompt_version.prompt_id",
+      nameKey: "commit",
+      idKey: "prompt_id",
       resource: RESOURCE_TYPE.prompt,
       getSearch: (data: GroupedExperiment) => ({
-        activeVersionId: get(data, "prompt_version.id", null),
+        activeVersionId: get(data, "id", null),
       }),
     },
   },
@@ -98,8 +101,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [datasetId, setDatasetId] = useState("");
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const { checkboxClickHandler } = useMemo(() => {
+    return {
+      checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
+    };
+  }, []);
 
   const { data, isPending } = useGroupedExperimentsList({
     workspaceName,
@@ -200,18 +208,21 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>(),
-      generateGroupedCellDef<GroupedExperiment, unknown>({
-        id: GROUPING_COLUMN,
-        label: "Dataset",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "dataset_name",
-          idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
+      generateExperimentNameColumDef<GroupedExperiment>(checkboxClickHandler),
+      generateGroupedCellDef<GroupedExperiment, unknown>(
+        {
+          id: GROUPING_COLUMN,
+          label: "Dataset",
+          type: COLUMN_TYPE.string,
+          cell: ResourceCell as never,
+          customMeta: {
+            nameKey: "dataset_name",
+            idKey: "dataset_id",
+            resource: RESOURCE_TYPE.dataset,
+          },
         },
-      }),
+        checkboxClickHandler,
+      ),
       ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
         DEFAULT_COLUMNS,
         {
@@ -227,7 +238,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         },
       ),
     ];
-  }, [selectedColumns, columnsOrder, scoresColumnsOrder, scoresColumnsData]);
+  }, [
+    selectedColumns,
+    columnsOrder,
+    checkboxClickHandler,
+    scoresColumnsOrder,
+    scoresColumnsData,
+  ]);
 
   const resizeConfig = useMemo(
     () => ({
