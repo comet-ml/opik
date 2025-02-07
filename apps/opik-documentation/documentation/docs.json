@@ -9,9 +9,9 @@
   },
   "favicon": "/static/img/logo.svg",
   "navigation": {
-    "anchors": [
+    "tabs": [
       {
-        "anchor": "Guides",
+        "tab": "Guides",
         "icon": "building",
         "groups": [
           {
@@ -101,7 +101,7 @@
         ]
       },
       {
-        "anchor": "Self-host",
+        "tab": "Self-host",
         "icon": "server",
         "color": {
           "light": "#2e8555",
@@ -123,7 +123,7 @@
         ]
       },
       {
-        "anchor": "Cookbooks",
+        "tab": "Cookbooks",
         "icon": "notebook",
         "color": {
           "light": "#2e8555",
@@ -168,7 +168,7 @@
         ]
       },
       {
-        "anchor": "Reference",
+        "tab": "Reference",
         "icon": "square-terminal",
         "groups": [
           {
