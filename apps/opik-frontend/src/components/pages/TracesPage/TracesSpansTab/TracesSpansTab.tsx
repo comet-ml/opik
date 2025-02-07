@@ -18,7 +18,9 @@ import useTracesOrSpansList, {
 } from "@/hooks/useTracesOrSpansList";
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
+  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
+  COLUMN_METADATA_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
@@ -51,6 +53,8 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
+import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -106,7 +110,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     statisticDataFormater: formatDuration,
   },
   {
-    id: "metadata",
+    id: COLUMN_METADATA_ID,
     label: "Metadata",
     type: COLUMN_TYPE.dictionary,
     accessorFn: (row) =>
@@ -178,12 +182,13 @@ export const TRACES_PAGE_FILTERS_COLUMNS = [
     type: COLUMN_TYPE.string,
   },
 
+  ...SHARED_COLUMNS,
+
   {
-    id: "feedback_scores",
+    id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
   },
-  ...SHARED_COLUMNS,
 ];
 
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
@@ -246,6 +251,32 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_METADATA_ID]: {
+          keyComponent: TracesOrSpansPathsAutocomplete,
+          keyComponentProps: {
+            rootKeys: ["metadata"],
+            projectId,
+            type,
+            placeholder: "key",
+            excludeRoot: true,
+          },
+        },
+        [COLUMN_FEEDBACK_SCORES_ID]: {
+          keyComponent: TracesOrSpansFeedbackScoresSelect,
+          keyComponentProps: {
+            projectId,
+            type,
+            placeholder: "Select score",
+          },
+        },
+      },
+    }),
+    [projectId, type],
+  );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -487,6 +518,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           ></SearchInput>
           <FiltersButton
             columns={TRACES_PAGE_FILTERS_COLUMNS}
+            config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
           />

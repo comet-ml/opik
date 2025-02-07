@@ -11,25 +11,33 @@ import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 
 export type TRACE_AUTOCOMPLETE_ROOT_KEY = "input" | "output" | "metadata";
 
-type TracesPathsAutocompleteProps = {
+type TracesOrSpansPathsAutocompleteProps = {
   projectId: string;
   rootKeys: TRACE_AUTOCOMPLETE_ROOT_KEY[];
   hasError?: boolean;
   value: string;
   onValueChange: (value: string) => void;
+  type?: TRACE_DATA_TYPE;
+  placeholder?: string;
+  excludeRoot?: boolean;
 };
 
-const TracesPathsAutocomplete: React.FC<TracesPathsAutocompleteProps> = ({
+const TracesOrSpansPathsAutocomplete: React.FC<
+  TracesOrSpansPathsAutocompleteProps
+> = ({
   projectId,
   rootKeys,
   hasError,
   value,
   onValueChange,
+  type = TRACE_DATA_TYPE.traces,
+  placeholder = "Select a key from recent trace",
+  excludeRoot = false,
 }) => {
   const { data, isPending } = useTracesOrSpansList(
     {
       projectId,
-      type: TRACE_DATA_TYPE.traces,
+      type,
       page: 1,
       size: 100,
       truncate: true,
@@ -45,7 +53,11 @@ const TracesPathsAutocomplete: React.FC<TracesPathsAutocompleteProps> = ({
             (internalAcc, key) =>
               internalAcc.concat(
                 isObject(d[key]) || isArray(d[key])
-                  ? getJSONPaths(d[key], key)
+                  ? getJSONPaths(d[key], key).map((path) =>
+                      excludeRoot
+                        ? path.substring(path.indexOf(".") + 1)
+                        : path,
+                    )
                   : [],
               ),
             [],
@@ -57,7 +69,7 @@ const TracesPathsAutocomplete: React.FC<TracesPathsAutocompleteProps> = ({
         value ? p.toLowerCase().includes(value.toLowerCase()) : true,
       )
       .sort();
-  }, [data, rootKeys, value]);
+  }, [data, rootKeys, value, excludeRoot]);
 
   return (
     <Autocomplete
@@ -66,9 +78,9 @@ const TracesPathsAutocomplete: React.FC<TracesPathsAutocompleteProps> = ({
       items={items}
       hasError={hasError}
       isLoading={isPending}
-      placeholder="Select a key from recent trace"
+      placeholder={placeholder}
     />
   );
 };
 
-export default TracesPathsAutocomplete;
+export default TracesOrSpansPathsAutocomplete;

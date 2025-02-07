@@ -7,30 +7,31 @@ type InputValue = string | number | readonly string[] | undefined;
 
 export interface DebounceInputProps extends Omit<InputProps, "onChange"> {
   delay?: number;
-  onChangeValue: (value: InputValue) => void;
+  onValueChange: (value: InputValue) => void;
 }
 
 const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
-  ({ value, onChangeValue, delay = 300, ...props }, ref) => {
+  ({ value, onValueChange, delay = 300, ...props }, ref) => {
     const [localValue, setLocalValue] = useState<InputValue>(undefined);
+
+    const handleDebouncedValueChange = useMemo(
+      () => debounce(onValueChange, delay),
+      [delay, onValueChange],
+    );
 
     useEffect(() => {
       setLocalValue(value);
-    }, [value]);
-
-    const handleDebouncedChangeValue = useMemo(
-      () => debounce(onChangeValue, delay),
-      [delay, onChangeValue],
-    );
+      return () => handleDebouncedValueChange.cancel();
+    }, [handleDebouncedValueChange, value]);
 
     const handleChange = useCallback(
       (event: React.ChangeEvent<HTMLInputElement>) => {
         const value = event.target.value;
 
         setLocalValue(value);
-        handleDebouncedChangeValue(value);
+        handleDebouncedValueChange(value);
       },
-      [handleDebouncedChangeValue],
+      [handleDebouncedValueChange],
     );
 
     return (

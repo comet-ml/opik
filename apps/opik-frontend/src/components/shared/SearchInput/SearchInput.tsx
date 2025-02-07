@@ -31,7 +31,7 @@ export const SearchInput = ({
       <DebounceInput
         className="pl-9"
         delay={SEARCH_TEXT_DELAY}
-        onChangeValue={setSearchText as (value: unknown) => void}
+        onValueChange={setSearchText as (value: unknown) => void}
         placeholder={placeholder}
         disabled={disabled}
         value={searchText}

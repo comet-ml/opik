@@ -70,6 +70,10 @@ export const SelectBox = ({
             </SelectItem>
           );
         })}
+
+        {!options.length && (
+          <div className="comet-boby-s p-2 text-light-slate">No items</div>
+        )}
       </SelectContent>
     </Select>
   );

@@ -30,7 +30,7 @@ export const StringRow: React.FunctionComponent<StringRowProps> = ({
           className="w-full min-w-40"
           placeholder="value"
           value={filter.value}
-          onChangeValue={(value) =>
+          onValueChange={(value) =>
             onChange({ ...filter, value: value as string })
           }
           disabled={filter.operator === ""}

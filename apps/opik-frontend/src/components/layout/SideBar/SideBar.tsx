@@ -402,7 +402,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
             </Button>
           )}
         </div>
-        <div className="flex h-[calc(100%-var(--header-height))] flex-col justify-between px-3 py-6">
+        <div className="flex h-[calc(100%-var(--header-height))] flex-col justify-between px-3 py-4">
           <ul className="flex flex-col gap-1">{renderGroups(MENU_ITEMS)}</ul>
           <div className="flex flex-col gap-4">
             <Separator />

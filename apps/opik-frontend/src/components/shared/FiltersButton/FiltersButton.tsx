@@ -10,18 +10,26 @@ import { Button } from "@/components/ui/button";
 import { Filter, Filters } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
 import { createEmptyFilter, isFilterValid } from "@/lib/filters";
-import FilterRow from "@/components/shared/FiltersButton/FilterRow";
+import FilterRow, {
+  FilterRowConfig,
+} from "@/components/shared/FiltersButton/FilterRow";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Separator } from "@/components/ui/separator";
 
+type FilterButtonConfig = {
+  rowsMap: Record<string, FilterRowConfig>;
+};
+
 type FiltersButtonProps<TColumnData> = {
   columns: ColumnData<TColumnData>[];
+  config?: FilterButtonConfig;
   filters: Filters;
   onChange: (filters: Filters) => void;
 };
 
 const FiltersButton = <TColumnData,>({
   filters: initialFilters,
+  config,
   columns,
   onChange,
 }: FiltersButtonProps<TColumnData>) => {
@@ -72,6 +80,7 @@ const FiltersButton = <TColumnData,>({
         <FilterRow
           key={filter.id}
           columns={columns}
+          config={config?.rowsMap[filter.field]}
           filter={filter}
           prefix={prefix}
           onRemove={onRemoveRow}

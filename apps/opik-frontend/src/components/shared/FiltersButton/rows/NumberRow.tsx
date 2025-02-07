@@ -31,7 +31,7 @@ export const NumberRow: React.FunctionComponent<NumberRowProps> = ({
           placeholder="value"
           value={filter.value}
           type="number"
-          onChangeValue={(value) =>
+          onValueChange={(value) =>
             onChange({ ...filter, value: value as number })
           }
           disabled={filter.operator === ""}

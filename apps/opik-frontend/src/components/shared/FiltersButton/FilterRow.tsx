@@ -10,13 +10,18 @@ import StringRow from "@/components/shared/FiltersButton/rows/StringRow";
 import NumberRow from "@/components/shared/FiltersButton/rows/NumberRow";
 import ListRow from "@/components/shared/FiltersButton/rows/ListRow";
 import TimeRow from "@/components/shared/FiltersButton/rows/TimeRow";
-import DictionaryRow from "@/components/shared/FiltersButton/rows/DictionaryRow";
+import DictionaryRow, {
+  DictionaryRowConfig,
+} from "@/components/shared/FiltersButton/rows/DictionaryRow";
 import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
 import { createEmptyFilter } from "@/lib/filters";
+
+export type FilterRowConfig = DictionaryRowConfig;
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
   columns: ColumnData<TColumnData>[];
+  config?: FilterRowConfig;
   filter: Filter;
   onRemove: (id: string) => void;
   onChange: (filter: Filter) => void;
@@ -26,6 +31,7 @@ export const FilterRow = <TColumnData,>({
   filter,
   columns,
   prefix,
+  config,
   onRemove,
   onChange,
 }: FilterRowProps<TColumnData>) => {
@@ -43,7 +49,9 @@ export const FilterRow = <TColumnData,>({
         return <TimeRow filter={filter} onChange={onChange} />;
       case COLUMN_TYPE.dictionary:
       case COLUMN_TYPE.numberDictionary:
-        return <DictionaryRow filter={filter} onChange={onChange} />;
+        return (
+          <DictionaryRow filter={filter} onChange={onChange} config={config} />
+        );
       case "":
       default:
         return <DefaultRow filter={filter} />;
