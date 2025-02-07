@@ -50,15 +50,11 @@ const PlaygroundPage = () => {
         } as React.CSSProperties
       }
     >
-      <ResizablePromptContainer>
-        <div className="size-full">
-          <PlaygroundPrompts
-            workspaceName={workspaceName}
-            providerKeys={providerKeys}
-            isPendingProviderKeys={isPendingProviderKeys}
-          />
-        </div>
-      </ResizablePromptContainer>
+      <ResizablePromptContainer
+        workspaceName={workspaceName}
+        providerKeys={providerKeys}
+        isPendingProviderKeys={isPendingProviderKeys}
+      />
 
       <div className="flex">
         <PlaygroundOutputs

@@ -16,12 +16,14 @@ interface PlaygroundPromptsState {
   workspaceName: string;
   providerKeys: PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
+  onResetHeight: () => void;
 }
 
 const PlaygroundPrompts = ({
   workspaceName,
   providerKeys,
   isPendingProviderKeys,
+  onResetHeight,
 }: PlaygroundPromptsState) => {
   const promptCount = usePromptCount();
   const addPrompt = useAddPrompt();
@@ -45,6 +47,7 @@ const PlaygroundPrompts = ({
       lastPickedModel,
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
+    onResetHeight();
   }, [setPromptMap, providerKeys, lastPickedModel]);
 
   useEffect(() => {

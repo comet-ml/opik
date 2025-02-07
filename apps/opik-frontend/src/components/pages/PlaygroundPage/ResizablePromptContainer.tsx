@@ -1,22 +1,28 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Resizable, ResizeCallback } from "re-resizable";
 import useLocalStorageState from "use-local-storage-state";
+import PlaygroundPrompts from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompts";
+import { PROVIDER_TYPE } from "@/types/providers";
 
-const PLAYGROUND_PROMPT_HEIGHT_KEY = "playground-prompts-height";
 const PLAYGROUND_PROMPT_MIN_HEIGHT = 190;
+export const PLAYGROUND_PROMPT_HEIGHT_KEY = "playground-prompts-height";
 
-const calculateDefaultHeight = () => window.innerHeight - 360;
 const calculateMaxHeight = () => window.innerHeight - 100;
+const calculateDefaultHeight = () =>
+  Math.max(window.innerHeight - 360, PLAYGROUND_PROMPT_MIN_HEIGHT);
 
 interface ResizableDivContainerProps {
-  children: React.ReactNode;
+  workspaceName: string;
+  providerKeys: PROVIDER_TYPE[];
+  isPendingProviderKeys: boolean;
 }
 
-const ResizablePromptContainer = ({ children }: ResizableDivContainerProps) => {
-  const defaultHeight = Math.max(
-    calculateDefaultHeight(),
-    PLAYGROUND_PROMPT_MIN_HEIGHT,
-  );
+const ResizablePromptContainer = ({
+  workspaceName,
+  providerKeys,
+  isPendingProviderKeys,
+}: ResizableDivContainerProps) => {
+  const defaultHeight = calculateDefaultHeight();
 
   const [height, setHeight] = useLocalStorageState(
     PLAYGROUND_PROMPT_HEIGHT_KEY,
@@ -24,6 +30,10 @@ const ResizablePromptContainer = ({ children }: ResizableDivContainerProps) => {
   );
 
   const [maxHeight, setMaxHeight] = useState(calculateMaxHeight());
+
+  const handleResetHeight = useCallback(() => {
+    setHeight(defaultHeight);
+  }, []);
 
   const onResizeStop: ResizeCallback = useCallback(
     (e, direction, ref, delta) => {
@@ -42,13 +52,20 @@ const ResizablePromptContainer = ({ children }: ResizableDivContainerProps) => {
   return (
     <Resizable
       enable={{ bottom: true }}
-      defaultSize={{ height: height }}
-      className="border-b"
+      size={{ height }}
+      className="border-b pb-1"
       minHeight={PLAYGROUND_PROMPT_MIN_HEIGHT}
       maxHeight={maxHeight}
       onResizeStop={onResizeStop}
     >
-      {children}
+      <div className="size-full">
+        <PlaygroundPrompts
+          workspaceName={workspaceName}
+          providerKeys={providerKeys}
+          isPendingProviderKeys={isPendingProviderKeys}
+          onResetHeight={handleResetHeight}
+        />
+      </div>
     </Resizable>
   );
 };
