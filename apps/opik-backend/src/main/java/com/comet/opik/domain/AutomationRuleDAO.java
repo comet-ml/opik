@@ -54,12 +54,13 @@ interface AutomationRuleDAO {
     @SqlQuery("""
             SELECT COUNT(*)
             FROM automation_rules
-            WHERE project_id = :projectId AND workspace_id = :workspaceId
+            WHERE workspace_id = :workspaceId
+            <if(projectId)> AND project_id = :projectId <endif>
             <if(action)> AND `action` = :action <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    long findCount(@Bind("projectId") UUID projectId,
+    long findCount(@Define("projectId") @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId,
             @Define("action") @Bind("action") AutomationRule.AutomationRuleAction action);
 }

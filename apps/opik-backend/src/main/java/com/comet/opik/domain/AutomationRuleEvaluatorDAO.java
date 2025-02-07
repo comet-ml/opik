@@ -45,8 +45,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
-            WHERE workspace_id = :workspaceId AND project_id = :projectId
-            AND rule.action = :action
+            WHERE workspace_id = :workspaceId AND rule.action = :action
+            <if(projectId)> AND project_id = :projectId <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(name)> AND rule.name like concat('%', :name, '%') <endif>
@@ -56,7 +56,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
-            @Bind("projectId") UUID projectId,
+            @Define("projectId") @Bind("projectId") UUID projectId,
             @Bind("action") AutomationRule.AutomationRuleAction action,
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,

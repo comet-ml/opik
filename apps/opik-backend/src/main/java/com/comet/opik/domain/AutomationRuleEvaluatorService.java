@@ -43,12 +43,12 @@ public interface AutomationRuleEvaluatorService {
     void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
             AutomationRuleEvaluatorUpdate automationRuleEvaluator);
 
-    <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId,
+    <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, UUID projectId,
             @NonNull String workspaceId);
 
     void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
 
-    AutomationRuleEvaluatorPage find(@NonNull UUID projectId, @NonNull String workspaceId,
+    AutomationRuleEvaluatorPage find(UUID projectId, @NonNull String workspaceId,
             String name, int page, int size);
 
     List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
@@ -154,7 +154,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, @NonNull UUID projectId,
+    public <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, UUID projectId,
             @NonNull String workspaceId) {
         log.debug("Finding AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId,
                 workspaceId);
@@ -202,7 +202,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public AutomationRuleEvaluatorPage find(@NonNull UUID projectId,
+    public AutomationRuleEvaluatorPage find(UUID projectId,
             @NonNull String workspaceId,
             String name,
             int pageNum, int size) {

@@ -40,8 +40,7 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final UUID id;
 
-    @JsonView({View.Public.class})
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
+    @JsonView({View.Public.class, View.Write.class})
     private final UUID projectId;
 
     @JsonView({View.Public.class, View.Write.class})
