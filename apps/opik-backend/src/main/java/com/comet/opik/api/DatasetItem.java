@@ -47,6 +47,9 @@ public record DatasetItem(
             @JsonView({DatasetItem.View.Public.class}) long total,
             @JsonView({DatasetItem.View.Public.class}) Set<Column> columns) implements Page<DatasetItem>{
 
+        public static DatasetItemPage empty(int page) {
+            return new DatasetItemPage(List.of(), page, 0, 0, Set.of());
+        }
     }
 
     public static class View {
