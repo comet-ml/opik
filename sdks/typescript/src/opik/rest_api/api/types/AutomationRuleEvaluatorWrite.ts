@@ -12,6 +12,7 @@ export namespace AutomationRuleEvaluatorWrite {
     }
 
     export interface _Base {
+        projectId?: string;
         name: string;
         samplingRate?: number;
         action?: "evaluator";

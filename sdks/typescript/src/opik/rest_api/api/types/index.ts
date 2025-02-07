@@ -34,6 +34,7 @@ export * from "./AutomationRuleEvaluatorPublic";
 export * from "./LogItemLevel";
 export * from "./LogItem";
 export * from "./LogPage";
+export * from "./AutomationRuleEvaluatorUpdate";
 export * from "./AssistantMessageRole";
 export * from "./AssistantMessage";
 export * from "./ChatCompletionChoice";

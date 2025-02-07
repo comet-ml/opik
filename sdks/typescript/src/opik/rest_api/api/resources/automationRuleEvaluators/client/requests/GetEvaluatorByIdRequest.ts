@@ -6,9 +6,6 @@
  * @example
  *     {}
  */
-export interface FindEvaluatorsRequest {
+export interface GetEvaluatorByIdRequest {
     projectId?: string;
-    name?: string;
-    page?: number;
-    size?: number;
 }

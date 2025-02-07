@@ -6,9 +6,6 @@
  * @example
  *     {}
  */
-export interface FindEvaluatorsRequest {
-    projectId?: string;
-    name?: string;
-    page?: number;
+export interface GetEvaluatorLogsByIdDeprecatedRequest {
     size?: number;
 }
