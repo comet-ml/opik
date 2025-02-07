@@ -6,7 +6,7 @@ import os
 @dataclass
 class EnvConfig:
     base_url: str
-    workspace: Optional[str] = "default"
+    workspace: Optional[str] = None
     project_name: Optional[str] = "automated_tests_project"
     api_key: Optional[str] = None
     test_user_email: Optional[str] = None
@@ -34,7 +34,7 @@ def get_environment_config() -> EnvConfig:
 
     config = EnvConfig(
         base_url=base_url,
-        workspace=os.getenv("OPIK_TEST_WORKSPACE", "default"),
+        workspace=os.getenv("OPIK_TEST_USER_NAME", "default"),
         project_name=os.getenv("OPIK_TEST_PROJECT_NAME", "automated_tests_project"),
         test_user_email=os.getenv("OPIK_TEST_USER_EMAIL"),
         test_user_name=os.getenv("OPIK_TEST_USER_NAME"),

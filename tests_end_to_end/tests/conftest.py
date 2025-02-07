@@ -58,13 +58,14 @@ def browser_context(browser: Browser, env_config: EnvConfig):
 
         # Extract API key from login response
         response_data = response.json()
-        if "api_keys" not in response_data or not response_data["api_keys"]:
+        if "apiKeys" not in response_data or not response_data["apiKeys"]:
+            print("RESPONSE DATA IS", response_data)
             raise Exception("No API keys found in login response")
 
         # Set the API key in environment
-        os.environ["OPIK_API_KEY"] = response_data["api_keys"][0]
+        os.environ["OPIK_API_KEY"] = response_data["apiKeys"][0]
         # Update env_config with the API key
-        env_config.api_key = response_data["api_keys"][0]
+        env_config.api_key = response_data["apiKeys"][0]
 
         page.close()
 
@@ -77,13 +78,8 @@ def env_config() -> EnvConfig:
     """
     Get the environment configuration from environment variables.
     """
-    return get_environment_config()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def configure_env(env_config: EnvConfig):
-    """Configure environment variables for the test session"""
-    # Set base URL and API URL override
+    env_config = get_environment_config()
+     # Set base URL and API URL override
     os.environ["OPIK_BASE_URL"] = env_config.base_url
     os.environ["OPIK_URL_OVERRIDE"] = env_config.api_url
 
@@ -91,9 +87,11 @@ def configure_env(env_config: EnvConfig):
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
     os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
 
+    return env_config
+
 
 @pytest.fixture(scope="session", autouse=True)
-def client(env_config: EnvConfig) -> opik.Opik:
+def client(env_config: EnvConfig, browser_context) -> opik.Opik:
     """Create an Opik client configured for the current environment"""
     kwargs = {
         "workspace": env_config.workspace,
