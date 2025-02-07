@@ -1,3 +1,5 @@
+import asyncio
+
 import langchain_google_vertexai
 import langchain_openai
 import pytest
@@ -239,7 +241,6 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
     callback = OpikTracer(
         tags=["tag3", "tag4"],
         metadata={"c": "d"},
-        project_name="878",
     )
 
     model = langchain_openai.ChatOpenAI(
@@ -250,12 +251,10 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
     )
 
     chunks = []
-    # for chunk in model.stream("what color is the sky?"):
     for chunk in model.stream(
         "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
     ):
         chunks.append(chunk)
-        # print(chunk.content, end="|", flush=True)
 
     callback.flush()
 
@@ -321,6 +320,113 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                     "prompt_tokens": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert len(callback.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langchain__openai_llm_is_used__async_astream__gpt4o__happyflow(
+    fake_backend,
+    ensure_openai_configured,
+):
+    callback = OpikTracer(
+        tags=["tag3", "tag4"],
+        metadata={"c": "d"},
+    )
+
+    model = langchain_openai.ChatOpenAI(
+        model_name="gpt-4o",
+        max_tokens=10,
+        name="custom-openai-llm-name",
+        callbacks=[callback],
+    )
+
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    chain = prompt_template | model
+
+    async def stream_generator(chain, inputs):
+        async for chunk in chain.astream(inputs, config={"callbacks": [callback]}):
+            yield chunk
+
+    async def invoke_generator(chain, inputs):
+        async for chunk in stream_generator(chain, inputs):
+            print(chunk)
+
+    inputs = {"title": "The Hobbit"}
+
+    asyncio.run(invoke_generator(chain, inputs))
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="RunnableSequence",
+        input={"input": ""},
+        output=ANY_DICT,
+        tags=["tag3", "tag4"],
+        metadata={
+            "c": "d",
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="RunnableSequence",
+                input={"input": ""},
+                output=ANY_BUT_NONE,
+                tags=["tag3", "tag4"],
+                metadata={
+                    "c": "d",
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="general",
+                model=None,
+                provider=None,
+                usage=None,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="PromptTemplate",
+                        input={"title": "The Hobbit"},
+                        output=ANY_BUT_NONE,
+                        tags=None,
+                        metadata={},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        type="general",
+                        model=None,
+                        provider=None,
+                        usage=None,
+                        spans=[],
+                    ),
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="custom-openai-llm-name",
+                        input={
+                            "prompts": [
+                                "Human: Given the title of play, write a synopsys for that. Title: The Hobbit."
+                            ]
+                        },
+                        output=ANY_BUT_NONE,
+                        tags=None,
+                        metadata=ANY_DICT,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        type="llm",
+                        model="gpt-4o",
+                        provider="openai",
+                        usage=None,
+                        spans=[],
+                    ),
+                ],
             )
         ],
     )
