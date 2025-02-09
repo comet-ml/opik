@@ -28,6 +28,8 @@ During development, you can use the platform to log, view and debug your LLM tra
 
    b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces.mdx) guide.
 
+   c. Using the Typescript Opik SDK, learn more in the [Logging Traces](/tracing/log_traces.mdx#logging-with-the-js--ts-sdk) guide.
+
 2. [Annotate and label traces](/tracing/annotate_traces.md) through the SDK or the UI.
 
 ### Evaluation and Testing
