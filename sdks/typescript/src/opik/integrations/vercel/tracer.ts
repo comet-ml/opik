@@ -1,0 +1,220 @@
+import { OpikClient } from "@/client/Client";
+import { Span } from "@/tracer/Span";
+import { Trace } from "@/tracer/Trace";
+import { ExportResultCode } from "@opentelemetry/core";
+import { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
+
+type SpanExporter = NodeSDKConfiguration["traceExporter"];
+type ExportFunction = SpanExporter["export"];
+type ReadableSpan = Parameters<ExportFunction>[0][0];
+
+const aiSDKClient = new OpikClient();
+
+export class OpikExporter implements SpanExporter {
+  // <otelTraceId, opikTrace>
+  private traces = new Map<string, Trace>();
+  // <otelSpanId, opikSpan>
+  private spans = new Map<string, Span>();
+  private client: OpikClient;
+
+  constructor({ client = aiSDKClient }: { client?: OpikClient } = {}) {
+    this.client = client;
+  }
+
+  private _safeParseJson = (value: unknown): unknown => {
+    try {
+      return JSON.parse(value as string);
+    } catch (e) {
+      return value;
+    }
+  };
+
+  private getSpanInput = (otelSpan: ReadableSpan): Record<string, unknown> => {
+    const input: Record<string, unknown> = {};
+    const { attributes } = otelSpan;
+    const attributeKeys = Object.keys(attributes);
+
+    attributeKeys.forEach((key) => {
+      if (key.startsWith("ai.prompt")) {
+        const promptKey = key.replace("ai.prompt.", "");
+
+        input[promptKey] = this._safeParseJson(attributes[key]);
+      }
+
+      if (key.startsWith("gen_ai.request")) {
+        const promptKey = key.replace("gen_ai.request.", "");
+
+        input[promptKey] = this._safeParseJson(attributes[key]);
+      }
+    });
+
+    return input;
+  };
+
+  private getSpanOutput = (otelSpan: ReadableSpan): Record<string, unknown> => {
+    const { attributes } = otelSpan;
+
+    if (attributes["ai.response.text"]) {
+      return { text: attributes["ai.response.text"] };
+    }
+
+    if (attributes["ai.toolCall.result"]) {
+      return { result: attributes["ai.toolCall.result"] };
+    }
+
+    return {};
+  };
+
+  private getSpanMetadata = (
+    otelSpan: ReadableSpan
+  ): Record<string, unknown> => {
+    const { attributes } = otelSpan;
+    const metadata: Record<string, unknown> = {};
+
+    if (attributes["gen_ai.response.model"]) {
+      metadata.model = attributes["gen_ai.response.model"];
+    }
+
+    if (attributes["gen_ai.system"]) {
+      metadata.system = attributes["gen_ai.system"];
+    }
+
+    return metadata;
+  };
+
+  private getSpanUsage = (otelSpan: ReadableSpan): Record<string, number> => {
+    const { attributes } = otelSpan;
+    const usage: Record<string, number> = {};
+
+    if ("gen_ai.usage.input_tokens" in attributes) {
+      usage.prompt_tokens = attributes["gen_ai.usage.input_tokens"] as number;
+    }
+
+    if ("gen_ai.usage.output_tokens" in attributes) {
+      usage.completion_tokens = attributes[
+        "gen_ai.usage.output_tokens"
+      ] as number;
+    }
+
+    if (usage.prompt_tokens || usage.completion_tokens) {
+      usage.total_tokens =
+        (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+    }
+
+    return usage;
+  };
+
+  processSpan = ({
+    otelSpan,
+    parentSpan,
+    trace,
+  }: {
+    otelSpan: ReadableSpan;
+    parentSpan?: Span;
+    trace: Trace;
+  }): Span => {
+    return trace.span({
+      name: otelSpan.name,
+      startTime: new Date(hrTimeToMilliseconds(otelSpan.startTime)),
+      endTime: new Date(hrTimeToMilliseconds(otelSpan.endTime)),
+      parentSpanId: parentSpan?.data.id,
+      input: this.getSpanInput(otelSpan),
+      output: this.getSpanOutput(otelSpan),
+      metadata: this.getSpanMetadata(otelSpan),
+      usage: this.getSpanUsage(otelSpan),
+      type: "llm",
+    });
+  };
+
+  shutdown = async (): Promise<void> => {
+    await this.client.flush();
+  };
+
+  forceFlush = async (): Promise<void> => {
+    await this.client.flush();
+  };
+
+  export: ExportFunction = (otelSpans, resultCallback) => {
+    const spanGroups = groupAndSortOtelSpans(otelSpans);
+
+    Object.entries(spanGroups).forEach(([otelTraceId, otelSpans]) => {
+      const [rootOtelSpan, ...otherOtelSpans] = otelSpans;
+      const trace = this.client.trace({
+        startTime: new Date(hrTimeToMilliseconds(rootOtelSpan.startTime)),
+        endTime: new Date(hrTimeToMilliseconds(rootOtelSpan.endTime)),
+        name: rootOtelSpan.name,
+        input: this.getSpanInput(rootOtelSpan),
+        output: this.getSpanOutput(rootOtelSpan),
+        metadata: this.getSpanMetadata(rootOtelSpan),
+        usage: this.getSpanUsage(rootOtelSpan),
+      });
+
+      this.traces.set(otelTraceId, trace);
+
+      otherOtelSpans.forEach((otelSpan) => {
+        const parentSpan = this.spans.get(otelSpan.parentSpanId ?? "");
+        const span = this.processSpan({ parentSpan, otelSpan, trace });
+
+        this.spans.set(otelSpan.spanContext().spanId, span);
+      });
+    });
+
+    resultCallback({ code: ExportResultCode.SUCCESS });
+  };
+}
+
+function groupAndSortOtelSpans(
+  otelSpans: ReadableSpan[]
+): Record<string, ReadableSpan[]> {
+  const spanGroupsByTraceId: Record<string, ReadableSpan[]> = {};
+
+  otelSpans.forEach((otelSpan) => {
+    const context = otelSpan.spanContext();
+
+    if (!spanGroupsByTraceId[context.traceId]) {
+      spanGroupsByTraceId[context.traceId] = [];
+    }
+
+    spanGroupsByTraceId[context.traceId].push(otelSpan);
+  });
+
+  Object.values(spanGroupsByTraceId).forEach((otelSpans) => {
+    otelSpans.sort((a, b) => {
+      // Put spans without parent first
+      if (!a.parentSpanId && b.parentSpanId) return -1;
+      if (a.parentSpanId && !b.parentSpanId) return 1;
+
+      // If both have parents, check if one is parent of the other
+      if (a.parentSpanId && b.parentSpanId) {
+        if (a.parentSpanId === b.spanContext().spanId) return 1;
+        if (b.parentSpanId === a.spanContext().spanId) return -1;
+      }
+
+      // If no parent relationship, maintain relative order
+      return 0;
+    });
+  });
+
+  return spanGroupsByTraceId;
+}
+
+// Convert hrTime ([seconds, nanoseconds]) to milliseconds
+function hrTimeToMilliseconds(hrTime: [number, number]) {
+  return hrTime[0] * 1e3 + hrTime[1] / 1e6;
+}
+
+function getCircularReplacer() {
+  const seen = new WeakSet();
+
+  return function (key: string, value: any) {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) {
+        // Option 1: Return a placeholder value like undefined or a string
+        return "[Circular]";
+        // Option 2: Omit the key by returning undefined
+      }
+      seen.add(value);
+    }
+    return value;
+  };
+}

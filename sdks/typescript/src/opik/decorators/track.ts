@@ -127,7 +127,7 @@ export function track(
   } = {}
 ) {
   return function (...args: any[]): any {
-    // New decorator API: ([value, context])
+    // New decorator API: (value, context)
     if (
       args.length === 2 &&
       typeof args[1] === "object" &&

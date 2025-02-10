@@ -37,6 +37,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./vercel": {
+      "types": "./dist/integrations/vercel/index.d.ts",
+      "import": "./dist/integrations/vercel/index.js",
+      "require": "./dist/integrations/vercel/index.cjs"
     }
   },
   "main": "dist/index.cjs",
@@ -68,6 +73,8 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@opentelemetry/core": "^1.30.1",
+    "@opentelemetry/sdk-node": "^0.57.1",
     "node-fetch": "^3.3.2",
     "qs": "^6.13.1",
     "url-join": "^5.0.0",
