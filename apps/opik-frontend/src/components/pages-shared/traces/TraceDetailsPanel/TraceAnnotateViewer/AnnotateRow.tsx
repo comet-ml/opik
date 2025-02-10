@@ -86,10 +86,16 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           step="any"
           dimension="sm"
           delay={SET_VALUE_DEBOUNCE_DELAY}
-          onChangeValue={(value) => {
+          onValueChange={(value) => {
             const newValue = value === "" ? "" : Number(value);
 
             setValue(newValue);
+
+            if (newValue === "") {
+              deleteFeedbackScore();
+              return;
+            }
+
             if (
               isNumericFeedbackScoreValid(feedbackDefinition.details, newValue)
             ) {
@@ -108,6 +114,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         <ToggleGroup
           className="w-fit"
           onValueChange={(newCategoryName) => {
+            if (newCategoryName === "") {
+              deleteFeedbackScore();
+              return;
+            }
+
             const categoryEntry = Object.entries(
               feedbackDefinition.details.categories,
             ).find(([categoryName]) => categoryName === newCategoryName);

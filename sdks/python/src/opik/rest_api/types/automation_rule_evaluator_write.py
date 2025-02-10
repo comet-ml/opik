@@ -9,6 +9,7 @@ from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
 
 
 class Base(UniversalBaseModel):
+    project_id: typing.Optional[str] = None
     name: str
     sampling_rate: typing.Optional[float] = None
     action: typing.Optional[typing.Literal["evaluator"]] = None

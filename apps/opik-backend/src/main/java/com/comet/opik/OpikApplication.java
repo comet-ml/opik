@@ -24,6 +24,7 @@ import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
@@ -97,6 +98,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         // However, it does not apply to OpenAPI documentation.
         environment.getObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE);
         environment.getObjectMapper().configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        environment.getObjectMapper().enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
         environment.getObjectMapper()
                 .registerModule(new SimpleModule()
                         .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)

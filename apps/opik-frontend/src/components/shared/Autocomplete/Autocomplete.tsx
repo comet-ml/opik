@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
-import { Check } from "lucide-react";
+import debounce from "lodash/debounce";
 
 import { cn } from "@/lib/utils";
 import {
@@ -26,6 +26,7 @@ type Props<T extends string> = {
   isLoading?: boolean;
   emptyMessage?: string;
   placeholder?: string;
+  delay?: number;
 };
 
 const AutoComplete = <T extends string>({
@@ -36,21 +37,20 @@ const AutoComplete = <T extends string>({
   isLoading,
   emptyMessage = "No items found",
   placeholder = "Search...",
+  delay = 300,
 }: Props<T>) => {
   const [open, setOpen] = useState(false);
+  const [localValue, setLocalValue] = useState<T>();
 
-  const reset = () => {
-    onValueChange("" as T);
-  };
+  const handleDebouncedValueChange = useMemo(
+    () => debounce(onValueChange, delay),
+    [delay, onValueChange],
+  );
 
-  const onSelectItem = (inputValue: string) => {
-    if (inputValue === value) {
-      reset();
-    } else {
-      onValueChange(inputValue as T);
-    }
-    setOpen(false);
-  };
+  useEffect(() => {
+    setLocalValue(value);
+    return () => handleDebouncedValueChange.cancel();
+  }, [handleDebouncedValueChange, value]);
 
   return (
     <div className="flex items-center">
@@ -59,10 +59,12 @@ const AutoComplete = <T extends string>({
           <PopoverAnchor asChild>
             <CommandPrimitive.Input
               asChild
-              value={value}
-              onValueChange={(v) => onValueChange(v as T)}
+              value={localValue}
+              onValueChange={(v) => {
+                setLocalValue(v as T);
+                handleDebouncedValueChange(v as T);
+              }}
               onKeyDown={(e) => setOpen(e.key !== "Escape")}
-              onMouseDown={() => setOpen((open) => !!value || !open)}
               onFocus={() => setOpen(true)}
             >
               <Input
@@ -100,15 +102,12 @@ const AutoComplete = <T extends string>({
                       key={option}
                       value={option}
                       onMouseDown={(e) => e.preventDefault()}
-                      onSelect={onSelectItem}
+                      onSelect={(inputValue: string) => {
+                        onValueChange(inputValue as T);
+                        setOpen(false);
+                      }}
                     >
-                      <Check
-                        className={cn(
-                          "size-4",
-                          value === option ? "opacity-100" : "opacity-0",
-                        )}
-                      />
-                      {option}
+                      <span className="truncate">{option}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

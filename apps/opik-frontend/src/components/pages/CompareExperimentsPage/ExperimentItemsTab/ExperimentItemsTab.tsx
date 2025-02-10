@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import findIndex from "lodash/findIndex";
 import find from "lodash/find";
 import get from "lodash/get";
@@ -10,12 +10,19 @@ import {
   useQueryParam,
 } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
-import { ColumnPinningState, createColumnHelper } from "@tanstack/react-table";
+import {
+  ColumnDef,
+  ColumnPinningState,
+  createColumnHelper,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 
 import {
   CELL_VERTICAL_ALIGNMENT,
+  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
+  COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
@@ -54,7 +61,11 @@ import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeed
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import { calculateHeightStyle } from "@/components/shared/DataTable/utils";
+import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
+import {
+  calculateHeightStyle,
+  generateSelectColumDef,
+} from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 
@@ -77,19 +88,19 @@ const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
-    id: "feedback_scores",
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
+    id: "output",
+    label: "Evaluation task",
+    type: COLUMN_TYPE.string,
   },
   {
-    id: "output",
-    label: "Output",
-    type: COLUMN_TYPE.string,
+    id: COLUMN_FEEDBACK_SCORES_ID,
+    label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
   },
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
   right: [],
 };
 
@@ -139,6 +150,21 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     updateType: "replaceIn",
   });
 
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_FEEDBACK_SCORES_ID]: {
+          keyComponent: ExperimentsFeedbackScoresSelect,
+          keyComponentProps: {
+            experimentsIds,
+            placeholder: "Select score",
+          },
+        },
+      },
+    }),
+    [experimentsIds],
+  );
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
@@ -170,6 +196,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   >(COLUMNS_OUTPUT_ORDER_KEY, {
     defaultValue: [],
   });
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const { data, isPending } = useCompareExperimentsList(
     {
@@ -322,6 +350,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     );
   }, [dynamicScoresColumns, experimentsIds]);
 
+  const selectedRows: Array<ExperimentsCompare> = useMemo(() => {
+    return rows.filter((row) => rowSelection[row.id]);
+  }, [rowSelection, rows]);
+
   const handleRowClick = useCallback(
     (row: ExperimentsCompare) => {
       setActiveRowId((state) => (row.id === state ? "" : row.id));
@@ -344,6 +376,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         size: 165,
       }),
     ];
+
+    if (experimentsCount === 1) {
+      retVal.unshift(generateSelectColumDef<ExperimentsCompare>());
+    }
 
     if (hasAnyVisibleColumns(datasetColumnsData, selectedColumns)) {
       retVal.push(
@@ -447,20 +483,34 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     scoresColumnsOrder,
   ]);
 
+  const columnsToExport = useMemo(() => {
+    return experimentsCount === 1
+      ? columns
+          .reduce<Array<ColumnDef<ExperimentsCompare>>>((acc, c) => {
+            const subColumns = get(c, "columns");
+            return acc.concat(subColumns ? subColumns : [c]);
+          }, [])
+          .map((c) => get(c, "accessorKey", ""))
+          .filter((c) =>
+            c === COLUMN_SELECT_ID
+              ? false
+              : selectedColumns.includes(c) ||
+                (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+          )
+      : undefined;
+  }, [columns, selectedColumns, experimentsCount]);
+
   const filterColumns = useMemo(() => {
-    const retVal: ColumnData<ExperimentsCompare>[] = [...FILTER_COLUMNS];
-
-    sortBy(dynamicDatasetColumns, "label").forEach(
-      ({ id, label, columnType }) => {
-        retVal.push({
+    return [
+      ...sortBy(dynamicDatasetColumns, "label").map(
+        ({ id, label, columnType }) => ({
           id,
-          label,
+          label: `${label} (Dataset)`,
           type: columnType,
-        });
-      },
-    );
-
-    return retVal;
+        }),
+      ),
+      ...FILTER_COLUMNS,
+    ];
   }, [dynamicDatasetColumns]);
 
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
@@ -538,12 +588,17 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         <div className="flex items-center gap-2">
           <FiltersButton
             columns={filterColumns}
+            config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
           />
         </div>
         <div className="flex items-center gap-2">
-          <CompareExperimentsActionsPanel />
+          <CompareExperimentsActionsPanel
+            rows={selectedRows}
+            columnsToExport={columnsToExport}
+            experimentName={experiments?.[0]?.name}
+          />
           <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
@@ -564,6 +619,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         data={rows}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         getRowHeightStyle={getRowHeightStyle}

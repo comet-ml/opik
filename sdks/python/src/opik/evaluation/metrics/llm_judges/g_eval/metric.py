@@ -166,6 +166,12 @@ class GEval(base_metric.BaseMetric):
             weighted_score_sum = 0.0
 
             for token_info in top_score_logprobs:
+                # litellm in v1.60.2 (or earlier) started provide logprobes
+                # as pydantic model, not just dict
+                # we will convert model to dict to provide backward compatability
+                if not isinstance(token_info, dict):
+                    token_info = token_info.model_dump()
+
                 # if not a number
                 if not token_info["token"].isdecimal():
                     continue

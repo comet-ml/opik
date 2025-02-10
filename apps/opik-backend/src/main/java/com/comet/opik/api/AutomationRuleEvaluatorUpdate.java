@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import java.util.UUID;
+
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 
 @Builder(toBuilder = true)
@@ -14,5 +16,7 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCod
 public record AutomationRuleEvaluatorUpdate(
         @NotNull String name,
         @NotNull LlmAsJudgeCode code,
-        @NotNull Float samplingRate) {
+        @NotNull Float samplingRate,
+        // TODO: add @NotNull after deprecated endpoint is removed
+        UUID projectId) {
 }

@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
-import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
@@ -21,24 +20,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RequiredArgsConstructor
 public class AutomationRuleEvaluatorResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/automations/projects/%s/evaluators/";
+    private static final String RESOURCE_PATH = "%s/v1/private/automations/evaluators/";
 
     private final ClientSupport client;
     private final String baseURI;
 
-    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, UUID projectId, String workspaceName,
+    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName,
             String apiKey) {
-        try (var actualResponse = createEvaluator(evaluator, projectId, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
+        try (var actualResponse = createEvaluator(evaluator, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
             return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
     }
 
-    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, UUID projectId, String workspaceName,
+    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName,
             String apiKey,
             int expectedStatus) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -50,9 +49,10 @@ public class AutomationRuleEvaluatorResourceClient {
         return actualResponse;
     }
 
-    public void updateEvaluator(UUID evaluatorId, UUID projectId, String workspaceName,
-            AutomationRuleEvaluatorUpdate updatedEvaluator, String apiKey, boolean isAuthorized) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
+    public void updateEvaluator(UUID evaluatorId, String workspaceName,
+            AutomationRuleEvaluatorUpdate updatedEvaluator, String apiKey, boolean isAuthorized,
+            io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(evaluatorId.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -66,7 +66,7 @@ public class AutomationRuleEvaluatorResourceClient {
             } else {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                 assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                        .isEqualTo(TestHttpClientUtils.UNAUTHORIZED_RESPONSE);
+                        .isEqualTo(errorMessage);
             }
         }
     }

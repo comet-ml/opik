@@ -77,6 +77,7 @@
     "mermaid": "^11.4.1",
     "mustache": "^4.2.0",
     "patch-package": "^8.0.0",
+    "re-resizable": "^6.10.3",
     "react": "^18.3.1",
     "react-complex-tree": "^2.4.4",
     "react-day-picker": "^8.10.1",
@@ -119,7 +120,7 @@
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "@vitejs/plugin-react-swc": "^3.7.0",
-    "@vitest/ui": "^1.6.0",
+    "@vitest/ui": "^3.0.5",
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
@@ -140,6 +141,6 @@
     "vite": "^5.2.11",
     "vite-plugin-svgr": "^4.3.0",
     "vite-tsconfig-paths": "^4.3.2",
-    "vitest": "^1.6.0"
+    "vitest": "^3.0.5"
   }
 }

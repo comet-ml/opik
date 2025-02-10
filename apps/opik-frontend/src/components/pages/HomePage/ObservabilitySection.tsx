@@ -19,6 +19,9 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { ProjectWithStatistic } from "@/types/projects";
 import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn } from "@/lib/table";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import { get } from "lodash";
+import { formatNumericData } from "@/lib/utils";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
@@ -40,19 +43,23 @@ export const COLUMNS = convertColumnDataToColumn<
       },
     },
     {
-      id: "created_at",
-      label: "Created",
-      type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.created_at),
-      sortable: true,
-    },
-    {
       id: "last_updated_at",
       label: "Last updated",
       type: COLUMN_TYPE.time,
       accessorFn: (row) =>
         formatDate(row.last_updated_trace_at ?? row.last_updated_at),
       sortable: true,
+    },
+    {
+      id: "feedback_scores",
+      label: "Feedback scores",
+      type: COLUMN_TYPE.numberDictionary,
+      accessorFn: (row) =>
+        get(row, "feedback_scores", []).map((score) => ({
+          ...score,
+          value: formatNumericData(score.value),
+        })),
+      cell: FeedbackScoreListCell as never,
     },
     {
       id: "total_estimated_cost",
