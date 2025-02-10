@@ -40,6 +40,7 @@ class UsageDictVertexAI(UsageDict):
     This class defines the structure for token usage, including fields
     for completion tokens, prompt tokens, and the total number of tokens used.
     """
+
     cached_content_token_count: NotRequired[int]
     """The number of tokens cached."""
 

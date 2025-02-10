@@ -1,8 +1,8 @@
 import logging
-from typing import Any, Dict, Final, Optional, TYPE_CHECKING, Tuple, cast
+from typing import Any, Dict, Final, Optional, TYPE_CHECKING, Tuple
 
 from opik import logging_messages
-from opik.types import LLMProvider, LLMUsageInfo, UsageDict, UsageDictVertexAI
+from opik.types import LLMProvider, LLMUsageInfo, UsageDictVertexAI
 from opik.validation import usage as usage_validator
 
 if TYPE_CHECKING:
@@ -33,13 +33,17 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDictVertexAI
             completion_tokens=usage_metadata["candidates_token_count"],
             prompt_tokens=usage_metadata["prompt_token_count"],
             total_tokens=usage_metadata["total_token_count"],
-            **usage_metadata
+            **usage_metadata,
         )
 
-        if usage_validator.UsageValidator(
-            usage=token_usage,
-            provider=PROVIDER_NAME,
-        ).validate().ok():
+        if (
+            usage_validator.UsageValidator(
+                usage=token_usage,
+                provider=PROVIDER_NAME,
+            )
+            .validate()
+            .ok()
+        ):
             return token_usage
 
         return None
