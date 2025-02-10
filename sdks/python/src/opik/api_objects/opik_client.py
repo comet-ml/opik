@@ -271,7 +271,11 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        parsed_usage = validation_helpers.validate_and_parse_usage(
+            usage=usage,
+            logger=LOGGER,
+            provider=provider,
+        )
         if parsed_usage.full_usage is not None:
             metadata = (
                 {"usage": parsed_usage.full_usage}
@@ -313,9 +317,7 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=parsed_usage.full_usage
-            if provider == "google_vertexai"
-            else parsed_usage.supported_usage,
+            usage=parsed_usage.supported_usage,
             model=model,
             provider=provider,
             error_info=error_info,
