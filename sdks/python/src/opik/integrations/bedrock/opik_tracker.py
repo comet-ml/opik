@@ -3,13 +3,13 @@ from typing import Optional, TYPE_CHECKING
 from . import chunks_aggregator, converse_decorator, invoke_agent_decorator
 
 if TYPE_CHECKING:
-    import botocore.client
+    from mypy_boto3_bedrock_runtime.client import BedrockRuntimeClient
 
 
 def track_bedrock(
-    client: "botocore.client.BaseClient",
+    client: "BedrockRuntimeClient",
     project_name: Optional[str] = None,
-) -> "botocore.client.BaseClient":
+) -> "BedrockRuntimeClient":
     """Adds Opik tracking to an AWS Bedrock client.
 
     Tracks calls to `converse()` and `converse_stream()` methods
