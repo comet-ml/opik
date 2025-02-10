@@ -24,8 +24,14 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
     try:
+        provider, _ = _get_provider_and_model(run_dict)
+
         token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
-        if usage_validator.UsageValidator(token_usage).validate().ok():
+        if (
+            usage_validator.UsageValidator(token_usage, provider=provider)
+            .validate()
+            .ok()
+        ):
             return cast(UsageDict, token_usage)
 
         return None

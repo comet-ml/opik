@@ -1,14 +1,16 @@
 import logging
-from typing import Any, Dict, Optional, TYPE_CHECKING, Tuple, cast
+from typing import Any, Dict, Final, Optional, TYPE_CHECKING, Tuple
 
 from opik import logging_messages
-from opik.types import LLMUsageInfo, UsageDict
+from opik.types import LLMProvider, LLMUsageInfo, UsageDictVertexAI
 from opik.validation import usage as usage_validator
 
 if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run
 
 LOGGER = logging.getLogger(__name__)
+
+PROVIDER_NAME: Final[LLMProvider] = "google_vertexai"
 
 
 def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInfo:
@@ -21,21 +23,30 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
     return LLMUsageInfo(provider=provider, model=model, usage=usage_dict)
 
 
-def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
+def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDictVertexAI]:
     try:
+        provider, _ = _get_provider_and_model(run_dict)
+
         usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
             "usage_metadata"
         ]
 
-        token_usage = UsageDict(
+        token_usage = UsageDictVertexAI(
             completion_tokens=usage_metadata["candidates_token_count"],
             prompt_tokens=usage_metadata["prompt_token_count"],
             total_tokens=usage_metadata["total_token_count"],
-        )
-        token_usage.update(usage_metadata)
+            **usage_metadata,
+        )  # type: ignore
 
-        if usage_validator.UsageValidator(token_usage).validate().ok():
-            return cast(UsageDict, token_usage)
+        if (
+            usage_validator.UsageValidator(
+                usage=token_usage,
+                provider=provider,
+            )
+            .validate()
+            .ok()
+        ):
+            return token_usage
 
         return None
     except Exception:
@@ -77,7 +88,7 @@ def _get_provider_and_model(
     if invocation_params := run_dict["extra"].get("invocation_params"):
         provider = invocation_params.get("_type")
         if provider == "vertexai":
-            provider = "google_vertexai"
+            provider = PROVIDER_NAME
         model = invocation_params.get("model_name")
 
     return provider, model
