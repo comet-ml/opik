@@ -147,6 +147,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <div className="flex-1">
               <MetricChart
                 name="Feedback scores"
+                description="Daily averages"
                 metricName={METRIC_NAME_TYPE.FEEDBACK_SCORES}
                 interval={interval}
                 intervalStart={intervalStart}
@@ -158,6 +159,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <div className="flex-1">
               <MetricChart
                 name="Number of traces"
+                description="Daily totals"
                 metricName={METRIC_NAME_TYPE.TRACE_COUNT}
                 interval={interval}
                 intervalStart={intervalStart}
@@ -172,6 +174,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <div className="flex-1">
               <MetricChart
                 name="Duration"
+                description="Daily averages in seconds"
                 metricName={METRIC_NAME_TYPE.DURATION}
                 interval={interval}
                 intervalStart={intervalStart}
@@ -187,6 +190,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <div className="flex-1">
               <MetricChart
                 name="Token usage"
+                description="Daily totals"
                 metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
                 interval={interval}
                 intervalStart={intervalStart}
@@ -200,6 +204,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             <div className="flex-1">
               <MetricChart
                 name="Estimated cost"
+                description="Total daily cost in USD"
                 metricName={METRIC_NAME_TYPE.COST}
                 interval={interval}
                 intervalStart={intervalStart}

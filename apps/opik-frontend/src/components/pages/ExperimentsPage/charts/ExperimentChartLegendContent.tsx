@@ -8,10 +8,18 @@ const ExperimentChartLegendContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<typeof RechartsPrimitive.Legend> &
     React.ComponentProps<"div"> & {
-      setHideState: OnChangeFn<string[]>;
+      setActiveLine: OnChangeFn<string | null>;
       chartId: string;
     }
->(({ payload, color, setHideState }, ref) => {
+>(({ payload, color, setActiveLine }, ref) => {
+  const handleMouseEnter = (id: string) => {
+    setActiveLine(id);
+  };
+
+  const handleMouseLeave = () => {
+    setActiveLine(null);
+  };
+
   if (!payload?.length) {
     return null;
   }
@@ -19,7 +27,8 @@ const ExperimentChartLegendContent = React.forwardRef<
   return (
     <div
       ref={ref}
-      className="-mt-2.5 flex size-full flex-col items-start gap-1 overflow-y-auto overflow-x-hidden"
+      className="group -mt-2.5 flex max-h-full w-full flex-col items-start gap-1 overflow-y-auto overflow-x-hidden"
+      onMouseLeave={handleMouseLeave}
     >
       {payload.map((item) => {
         const key = `${item.value || "value"}`;
@@ -29,24 +38,17 @@ const ExperimentChartLegendContent = React.forwardRef<
           <div
             key={key}
             className={cn(
-              "h-4 w-full pl-8 relative cursor-pointer mb-1",
-              item.inactive && "opacity-50",
+              "h-4 w-full pl-8 relative cursor-pointer pb-1 group-hover-except-self:opacity-60 duration-200",
             )}
-            onClick={() => {
-              setHideState((state) => {
-                return item.inactive
-                  ? state.filter((value) => value !== item.value)
-                  : [...state, item.value];
-              });
-            }}
+            onMouseEnter={() => handleMouseEnter(item.value)}
           >
             <TooltipWrapper content={item.value}>
-              <div className="comet-body-xs truncate text-light-slate">
+              <div className="comet-body-xs text-foreground truncate">
                 {item.value}
               </div>
             </TooltipWrapper>
             <div
-              className="absolute left-[20px] top-[5px] size-1.5 shrink-0 rounded-[1.5px] border-[--color-border] bg-[--color-bg]"
+              className="absolute left-[20px] top-[5px] size-1.5 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
               style={
                 {
                   "--color-bg": indicatorColor,

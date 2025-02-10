@@ -1,9 +1,16 @@
 import React, { useCallback, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   Tooltip,
   XAxis,
   YAxis,
@@ -31,6 +38,7 @@ const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
 
 interface MetricChartProps {
   name: string;
+  description: string;
   projectId: string;
   interval: INTERVAL_TYPE;
   intervalStart: string;
@@ -47,6 +55,7 @@ type TransformedData = { [key: string]: TransformedDataValueType };
 
 const MetricChart = ({
   name,
+  description,
   metricName,
   projectId,
   interval,
@@ -112,7 +121,7 @@ const MetricChart = ({
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       return (
-        <div className="comet-body-xs mb-1 text-light-slate">
+        <div className="comet-body-xs text-light-slate mb-1">
           {formatDate(payload?.[0]?.payload?.time, true)} UTC
         </div>
       );
@@ -132,6 +141,11 @@ const MetricChart = ({
   );
 
   const renderContent = () => {
+    const isSingleLine = lines.length === 1;
+    const isSinglePoint = data.length === 1;
+
+    const [firstLine] = lines;
+
     if (isPending) {
       return (
         <div className="flex h-[var(--chart-height)] w-full  items-center justify-center">
@@ -145,7 +159,7 @@ const MetricChart = ({
         config={config}
         className="h-[var(--chart-height)] w-full"
       >
-        <LineChart
+        <ComposedChart
           data={data}
           margin={{
             top: 5,
@@ -173,7 +187,6 @@ const MetricChart = ({
             interval={yTickInterval}
           />
           <ChartTooltip
-            cursor={false}
             isAnimationActive={false}
             content={
               <ChartTooltipContent
@@ -184,28 +197,69 @@ const MetricChart = ({
           />
           <Tooltip />
 
-          {lines.map((line) => (
-            <Line
-              key={line}
-              type="bump"
-              dataKey={line}
-              stroke={config[line].color || ""}
-              isAnimationActive={false}
-              dot={{ strokeWidth: 1, r: 1 }}
-              activeDot={{ strokeWidth: 1, r: 3 }}
-            />
-          ))}
-        </LineChart>
+          {isSingleLine ? (
+            <>
+              <defs>
+                <linearGradient
+                  id={`chart-area-gradient-${firstLine}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor={config[firstLine].color}
+                    stopOpacity={0.3}
+                  ></stop>
+                  <stop
+                    offset="50%"
+                    stopColor={config[firstLine].color}
+                    stopOpacity={0}
+                  ></stop>
+                </linearGradient>
+              </defs>
+              <Area
+                type="monotone"
+                dataKey={firstLine}
+                stroke={config[firstLine].color}
+                fill={`url(#chart-area-gradient-${firstLine})`}
+                connectNulls
+                strokeWidth={1.5}
+              />
+            </>
+          ) : (
+            lines.map((line) => (
+              <Line
+                key={line}
+                type="linear"
+                dataKey={line}
+                stroke={config[line].color || ""}
+                dot={
+                  isSinglePoint
+                    ? { fill: config[line].color, strokeWidth: 0 }
+                    : false
+                }
+                activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}
+                connectNulls
+                strokeWidth={1.5}
+              />
+            ))
+          )}
+        </ComposedChart>
       </ChartContainer>
     );
   };
 
   return (
     <Card>
-      <CardHeader className="mb-2">
-        <CardTitle>{name}</CardTitle>
+      <CardHeader className="space-y-0.5 px-4 pt-3">
+        <CardTitle className="comet-body-s-accented">{name}</CardTitle>
+        <CardDescription className="comet-body-xs text-xs">
+          {description}
+        </CardDescription>
       </CardHeader>
-      <CardContent>{renderContent()}</CardContent>
+      <CardContent className="px-4 pb-3">{renderContent()}</CardContent>
     </Card>
   );
 };

@@ -11,7 +11,13 @@ import {
 import ExperimentChartLegendContent from "@/components/pages/ExperimentsPage/charts/ExperimentChartLegendContent";
 import NoData from "@/components/shared/NoData/NoData";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
@@ -46,7 +52,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
   chartData,
   className,
 }) => {
-  const [hiddenLines, setHiddenLines] = useState<string[]>([]);
+  const [activeLine, setActiveLine] = useState<string | null>(null);
 
   const config = useMemo(() => {
     return getDefaultHashedColorsChartConfig(chartData.lines);
@@ -96,7 +102,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
           <div className="comet-body-xs-accented mb-0.5 truncate">
             {experimentName}
           </div>
-          <div className="comet-body-xs mb-1 text-light-slate">
+          <div className="comet-body-xs text-light-slate mb-1">
             {createdDate}
           </div>
         </>
@@ -105,15 +111,20 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     [],
   );
 
+  const isSinglePoint = chartData.data.length === 1;
+
   return (
     <Card className={cn("min-w-[max(400px,40%)]", className)} ref={ref}>
-      <CardHeader>
-        <CardTitle>{name}</CardTitle>
+      <CardHeader className="space-y-0.5 px-4 pt-3">
+        <CardTitle className="comet-body-s-accented">{name}</CardTitle>
+        <CardDescription className="comet-body-xs text-xs">
+          Average scores
+        </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4 pb-3">
         {noData ? (
           <NoData
-            className="min-h-32 text-light-slate"
+            className="text-light-slate min-h-32"
             message="No scores to show"
           />
         ) : (
@@ -134,7 +145,6 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 domain={domain}
               />
               <ChartTooltip
-                cursor={false}
                 isAnimationActive={false}
                 content={<ChartTooltipContent renderHeader={renderHeader} />}
               />
@@ -144,7 +154,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 align="right"
                 content={
                   <ExperimentChartLegendContent
-                    setHideState={setHiddenLines}
+                    setActiveLine={setActiveLine}
                     chartId={chartId}
                   />
                 }
@@ -152,19 +162,29 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 height={128}
               />
               {chartData.lines.map((line) => {
-                const hide = hiddenLines.includes(line);
+                const isActive = line === activeLine;
+
+                let strokeOpacity = 1;
+
+                if (activeLine) {
+                  strokeOpacity = isActive ? 1 : 0.4;
+                }
 
                 return (
                   <Line
-                    type="bump"
+                    type="linear"
                     key={line}
-                    isAnimationActive={false}
                     dataKey={(record) => record.scores[line]}
                     name={config[line].label as string}
                     stroke={config[line].color as string}
-                    dot={{ strokeWidth: 1, r: 1 }}
-                    activeDot={{ strokeWidth: 1, r: 3 }}
-                    hide={hide}
+                    dot={
+                      isSinglePoint
+                        ? { fill: config[line].color, strokeWidth: 0 }
+                        : false
+                    }
+                    activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}
+                    strokeWidth={1.5}
+                    strokeOpacity={strokeOpacity}
                   />
                 );
               })}
