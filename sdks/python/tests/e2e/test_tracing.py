@@ -516,6 +516,46 @@ def test_search_spans__happyflow(opik_client):
     assert spans[0].id == matching_span.id, "Expected to find the matching span"
 
 
+def test_move_traces__happyflow(opik_client):
+    # Log traces
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    project_name = f"e2e-tests-move-traces-project - {unique_identifier}"
+    for i in range(3):
+        trace = opik_client.trace(
+            name="trace",
+            project_name=project_name,
+            input={"input": f"test input - {i}"},
+        )
+
+        span = trace.span(
+            name="span",
+            input={"input": f"test input - {i}"},
+        )
+
+        span.span(
+            name="nested span",
+            input={"input": f"test input - {i}"},
+        )
+    opik_client.flush()
+
+    new_project_name = project_name + "_v2"
+    opik_client.move_traces(
+        project_name=project_name,
+        destination_project_name=new_project_name,
+    )
+
+    opik_client.flush()
+
+    traces = opik_client.search_traces(project_name=new_project_name)
+
+    assert len(traces) == 3
+
+    spans = opik_client.search_spans(project_name=new_project_name)
+
+    assert len(spans) == 6
+
+
 def test_tracked_function__update_current_span_used_to_update_cost__happyflow(
     opik_client,
 ):

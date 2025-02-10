@@ -76,6 +76,7 @@ class Opik:
         self._project_name: str = config_.project_name
         self._flush_timeout: Optional[int] = config_.default_flush_timeout
         self._project_name_most_recent_trace: Optional[str] = None
+        self._use_batching = _use_batching
 
         self._initialize_streamer(
             base_url=config_.url_override,
@@ -218,6 +219,104 @@ class Opik:
             project_name=project_name,
         )
 
+    def _move_traces_without_spans(
+        self, project_name: str, destination_project_name: str
+    ) -> Dict[str, str]:
+        trace_id_mapping = {}
+
+        traces = self.search_traces(project_name=project_name)
+
+        for trace_data in traces:
+            new_trace_data = helpers.trace_public_to_trace_dict(trace_data)
+            new_trace_id = helpers.generate_id()
+            trace_id_mapping[trace_data.id] = new_trace_id
+
+            self.trace(
+                **new_trace_data, project_name=destination_project_name, id=new_trace_id
+            )
+
+        return trace_id_mapping
+
+    def _move_spans_with_mapping(
+        self,
+        project_name: str,
+        destination_project_name: str,
+        trace_id_mapping: Dict[str, str],
+    ) -> Dict[str, str]:
+        spans = self.search_spans(project_name=project_name)
+
+        span_id_mapping = {}
+        span_list = []
+        for span_data in spans:
+            new_span_data = helpers.span_public_to_span_dict(span_data)
+            span_list.append(new_span_data)
+            new_span_id = helpers.generate_id()
+
+            new_span_data["id"] = new_span_id
+            span_id_mapping[span_data.id] = new_span_id
+
+        for span_data in span_list:
+            old_trace_id = span_data["trace_id"]
+            del span_data["trace_id"]
+            old_parent_span_id = span_data["parent_span_id"]
+            del span_data["parent_span_id"]
+
+            if old_trace_id in trace_id_mapping:
+                self.span(
+                    **span_data,
+                    project_name=destination_project_name,
+                    trace_id=trace_id_mapping[old_trace_id],
+                    parent_span_id=span_id_mapping.get(old_parent_span_id, None),
+                )
+
+        return span_id_mapping
+
+    def move_traces(
+        self,
+        project_name: str,
+        destination_project_name: str,
+        delete_original_project: bool = False,
+    ) -> None:
+        """
+        Move traces from one project to another. This method will move all traces in a source project
+        to the destination project.
+
+        Note: This method is not optimized for large projects, if you run into any issues please raise
+        an issue on GitHub.
+
+        Args:
+            project_name: The name of the project to move traces from.
+            destination_project_name: The name of the project to move traces to.
+            delete_original_project: Whether to delete the original project. Defaults to False.
+
+        Returns:
+            None
+        """
+
+        if not self._use_batching:
+            raise exceptions.OpikException(
+                "In order to use this method, you must enable batching using opik.Opik(_use_batching=True)."
+            )
+
+        # Get traces
+        trace_id_mapping = self._move_traces_without_spans(
+            project_name, destination_project_name
+        )
+        self._move_spans_with_mapping(
+            project_name, destination_project_name, trace_id_mapping
+        )
+
+        # Delete traces
+        if delete_original_project:
+            DELETE_BATCH_SIZE = 1_000
+
+            trace_ids = list(trace_id_mapping.keys())
+            while trace_ids:
+                self._rest_client.traces.delete_traces(
+                    ids=trace_ids[:DELETE_BATCH_SIZE]
+                )
+                trace_ids = trace_ids[DELETE_BATCH_SIZE:]
+
     def span(
         self,
         trace_id: Optional[str] = None,
@@ -238,6 +337,7 @@ class Opik:
         provider: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
+        **ignored_kwargs: Any,
     ) -> span.Span:
         """
         Create and log a new span.
