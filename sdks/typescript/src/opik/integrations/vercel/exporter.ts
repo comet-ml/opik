@@ -1,11 +1,25 @@
 import { Opik } from "opik";
 import type { Span, Trace } from "opik";
+import { AttributeValue, Tracer } from "@opentelemetry/api";
 import { ExportResultCode } from "@opentelemetry/core";
 import { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 
 type SpanExporter = NodeSDKConfiguration["traceExporter"];
 type ExportFunction = SpanExporter["export"];
 type ReadableSpan = Parameters<ExportFunction>[0][0];
+
+type TelemetrySettings = {
+  isEnabled?: boolean;
+  recordInputs?: boolean;
+  recordOutputs?: boolean;
+  functionId?: string;
+  metadata?: Record<string, AttributeValue>;
+  tracer?: Tracer;
+};
+
+type OpikExporterSettings = TelemetrySettings & {
+  name?: string;
+};
 
 const aiSDKClient = new Opik();
 
@@ -151,7 +165,10 @@ export class OpikExporter implements SpanExporter {
       const trace = this.client.trace({
         startTime: new Date(hrTimeToMilliseconds(rootOtelSpan.startTime)),
         endTime: new Date(hrTimeToMilliseconds(rootOtelSpan.endTime)),
-        name: rootOtelSpan.name,
+        name:
+          rootOtelSpan.attributes[
+            "ai.telemetry.metadata.traceName"
+          ]?.toString() ?? rootOtelSpan.name,
         input: this.getSpanInput(rootOtelSpan),
         output: this.getSpanOutput(rootOtelSpan),
         metadata: this.getSpanMetadata(rootOtelSpan),
@@ -170,6 +187,22 @@ export class OpikExporter implements SpanExporter {
 
     resultCallback({ code: ExportResultCode.SUCCESS });
   };
+
+  static getSettings(settings: OpikExporterSettings): TelemetrySettings {
+    const metadata = { ...settings.metadata };
+
+    if (settings.name) {
+      metadata.traceName = settings.name;
+    }
+
+    return {
+      isEnabled: settings.isEnabled ?? true,
+      recordInputs: settings.recordInputs ?? true,
+      recordOutputs: settings.recordOutputs ?? true,
+      functionId: settings.functionId,
+      metadata,
+    };
+  }
 }
 
 function groupAndSortOtelSpans(

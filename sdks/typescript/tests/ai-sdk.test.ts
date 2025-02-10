@@ -58,6 +58,7 @@ describe.only("Opik - Vercel AI SDK integration", () => {
   it("generateText", async () => {
     const input = "Hello, test!";
     const output = "Hello, world!";
+    const traceName = "trace-name-example";
 
     sdk.start();
 
@@ -67,11 +68,13 @@ describe.only("Opik - Vercel AI SDK integration", () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: "stop",
           usage: { promptTokens: 10, completionTokens: 20 },
-          text: "Hello, world!",
+          text: output,
         }),
       }),
       prompt: input,
-      experimental_telemetry: { isEnabled: true },
+      experimental_telemetry: OpikExporter.getSettings({
+        name: traceName,
+      }),
     });
 
     await sdk.shutdown();
@@ -87,8 +90,8 @@ describe.only("Opik - Vercel AI SDK integration", () => {
             prompt: input,
           },
           metadata: {},
-          name: "ai.generateText",
-          output: { text: output },
+          name: traceName,
+          output: { text },
           projectName: "opik-sdk-typescript",
           usage: {
             completion_tokens: 20,
