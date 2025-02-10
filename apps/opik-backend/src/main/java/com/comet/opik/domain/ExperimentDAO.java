@@ -188,8 +188,6 @@ class ExperimentDAO {
                     trace_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ) AS ei ON e.id = ei.experiment_id
             LEFT JOIN (
                 SELECT
@@ -334,8 +332,6 @@ class ExperimentDAO {
                     trace_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ) AS ei ON e.id = ei.experiment_id
             LEFT JOIN (
                 SELECT

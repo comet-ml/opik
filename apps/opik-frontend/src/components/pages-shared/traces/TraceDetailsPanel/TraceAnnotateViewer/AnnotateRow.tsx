@@ -86,7 +86,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           step="any"
           dimension="sm"
           delay={SET_VALUE_DEBOUNCE_DELAY}
-          onChangeValue={(value) => {
+          onValueChange={(value) => {
             const newValue = value === "" ? "" : Number(value);
 
             setValue(newValue);

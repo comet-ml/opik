@@ -18,35 +18,55 @@ Getting started is as simple as creating an [account on Comet](https://www.comet
 
 Once your account is created, you can start logging traces by installing the Opik Python SDK:
 
+<Tabs>
+  <TabItem value="Python" title="Python">
+
 ```bash
 pip install opik
 ```
 
+</TabItem>
+
+<TabItem value="JS / TS" title="JS / TS">
+
+```bash
+npm install opik
+```
+
+</TabItem>
+</Tabs>
+
 and configuring the SDK with:
 
 <Tabs>
-    <TabItem value="Python" title="Python">
+<TabItem value="Python" title="Python">
 
-```python
-import opik
-
-opik.configure(use_local=False)
-```
-
-:::tip
-If you are self-hosting the platform, simply set the `use_local` flag to True in the `opik.configure` method.
-:::
-
-</TabItem>
-<TabItem value="Command Line" title="cli">
+If you are using the Python SDK, we recommend running the `opik configure` command
+from the command line which will prompt you for all the necessary information:
 
 ```bash
 opik configure
 ```
 
-:::tip
-If you are self-hosting the platform, simply use the `opik configure --use_local` command.
-:::
+You can learn more about configuring the Python SDK [here](/tracing/sdk_configuration.mdx).
+
+</TabItem>
+<TabItem value="JS / TS" title="JS / TS">
+
+If you are using the Javascript SDK you will need to set the required required
+parameters when initializing the client:
+
+```js
+import { Opik } from "opik";
+
+// Create a new Opik client with your configuration
+const client = new Opik({
+  apiKey: "<your-api-key>",
+  host: "https://www.comet.com/opik/api", // Replace with http://localhost:5173/api if you are self-hosting
+  projectName: "default",
+  workspaceName: "<your-workspace-name>", // Typically the same as your username
+});
+```
 
 </TabItem>
 
@@ -60,7 +80,7 @@ The first step in integrating Opik with your codebase is to track your LLM calls
 can use one of our [integrations](/tracing/integrations/overview.md):
 
 <Tabs>
-    <TabItem value="OpenAI" title="OpenAI">
+    <TabItem value="OpenAI (Python)" title="OpenAI (Python)">
 
 ```python
 from opik.integrations.openai import track_openai
@@ -74,7 +94,7 @@ openai_client = track_openai(openai_client)
 All OpenAI calls made using the `openai_client` will now be logged to Opik.
 
 </TabItem>
-<TabItem value="LiteLLM" title="LiteLLM">
+<TabItem value="LiteLLM (Python)" title="LiteLLM (Python)">
 
 ```python pytest_codeblocks_skip=true
 from litellm.integrations.opik.opik import OpikLogger
@@ -89,7 +109,7 @@ All LiteLLM calls made using the `litellm` client will now be logged to Opik.
 
 </TabItem>
 
-<TabItem value="Any other provider" title="Any other provider">
+<TabItem value="Decorator (Python)" title="Decorator (Python)">
 
 If you are using an LLM provider that Opik does not have an integration for, you can still log the LLM calls by using the `@track` decorator:
 
@@ -112,6 +132,48 @@ as described in the [Traces / Logging Additional Data section](/tracing/log_trac
 
 </TabItem>
 
+<TabItem value="JS / TS" title="JS / TS">
+
+You can use the Opik client to log your LLM calls to Opik:
+
+```js
+import { Opik } from "opik";
+
+// Create a new Opik client with your configuration
+const client = new Opik({
+  apiKey: "<your-api-key>",
+  host: "https://www.comet.com/opik/api",
+  projectName: "<your-project-name>",
+  workspaceName: "<your-workspace-name>",
+});
+
+// Log a trace with an LLM span
+const trace = client.trace({
+  name: `Trace`,
+  input: {
+    prompt: `Hello!`,
+  },
+  output: {
+    response: `Hello, world!`,
+  },
+});
+
+const span = trace.span({
+  name: `Span`,
+  type: "llm",
+  input: {
+    prompt: `Hello, world!`,
+  },
+  output: {
+    response: `Hello, world!`,
+  },
+});
+
+// Flush the client to send all traces and spans
+await client.flush();
+```
+
+</TabItem>
 </Tabs>
 
 ### Logging chains
@@ -176,6 +238,10 @@ llm_chain("Hello, how are you?")
 
 While this code sample assumes that you are using OpenAI, the same principle applies if you are using any other LLM provider.
 
+:::info
+Your chains will now be logged to Opik and can be viewed in the Opik UI. To learn more about how you can customize the logged data, see the [Log Traces](/tracing/log_traces.mdx) guide.
+:::
+
 </TabItem>
 <TabItem value="LangChain" title="LangChain">
 
@@ -205,6 +271,10 @@ llm_chain = prompt_template | llm
 llm_chain.invoke({"input": "Hello, how are you?"}, callbacks=[opik_tracer])
 ```
 
+:::info
+Your chains will now be logged to Opik and can be viewed in the Opik UI. To learn more about how you can customize the logged data, see the [Log Traces](/tracing/log_traces.mdx) guide.
+:::
+
 </TabItem>
 
 <TabItem value="LLamaIndex" title="LLamaIndex">
@@ -220,13 +290,21 @@ opik_callback_handler = global_handler
 
 You LlamaIndex calls from that point forward will be logged to Opik. You can learn more about the LlamaIndex integration in the [LLamaIndex integration docs](/tracing/integrations/llama_index.md).
 
-</TabItem>
-
-</Tabs>
-
 :::info
 Your chains will now be logged to Opik and can be viewed in the Opik UI. To learn more about how you can customize the logged data, see the [Log Traces](/tracing/log_traces.mdx) guide.
 :::
+
+</TabItem>
+
+<TabItem value="AI Vercel SDK (JS / TS)" title="AI Vercel SDK (JS / TS)">
+
+We are currently working on a AI Vercel SDK integration, stay tuned!
+
+Feel free to [open an issue](https://github.com/comet-ml/opik/issues) if you have any specific requests or suggestions
+
+</TabItem>
+
+</Tabs>
 
 ## Next steps
 

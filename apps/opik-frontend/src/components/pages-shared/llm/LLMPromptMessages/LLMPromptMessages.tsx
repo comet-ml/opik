@@ -30,6 +30,7 @@ interface LLMPromptMessagesProps {
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChange: (messages: LLMMessage[]) => void;
   onAddMessage: () => void;
+  hint?: string;
 }
 
 const LLMPromptMessages = ({
@@ -38,6 +39,7 @@ const LLMPromptMessages = ({
   possibleTypes,
   onChange,
   onAddMessage,
+  hint = "",
 }: LLMPromptMessagesProps) => {
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -128,6 +130,8 @@ const LLMPromptMessages = ({
             ))}
           </div>
         </SortableContext>
+
+        {hint && <p className="comet-body-s mt-2 text-light-slate">{hint}</p>}
 
         <Button
           variant="outline"
