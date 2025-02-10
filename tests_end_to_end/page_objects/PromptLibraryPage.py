@@ -1,15 +1,12 @@
 from playwright.sync_api import Page, expect
 import time
+from .BasePage import BasePage
 
 
-class PromptLibraryPage:
+class PromptLibraryPage(BasePage):
     def __init__(self, page: Page):
-        self.page = page
-        self.url = "default/prompts"
+        super().__init__(page, "prompts")
         self.prompts_table = self.page.get_by_role("table")
-
-    def go_to_page(self):
-        self.page.goto(self.url)
 
     def click_prompt(self, prompt_name):
         self.page.get_by_role("link", name=prompt_name).click()

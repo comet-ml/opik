@@ -2,6 +2,7 @@ import pytest
 import os
 import opik
 from opik import track, opik_context
+from tests.config import EnvConfig, get_environment_config
 from playwright.sync_api import Page, Browser
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
@@ -17,48 +18,107 @@ from tests.sdk_helpers import (
 )
 from utils import TEST_ITEMS
 import time
+import re
+import json
 
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "sanity: mark test as a sanity test")
 
 
-@pytest.fixture
-def browser_clipboard_permissions(browser: Browser):
+@pytest.fixture(scope="session")
+def browser_context(browser: Browser, env_config: EnvConfig):
+    """Create a browser context with required permissions and authentication"""
     context = browser.new_context()
     context.grant_permissions(["clipboard-read", "clipboard-write"])
+
+    # Handle cloud environment authentication
+    if not env_config.base_url.startswith("http://localhost"):
+        page = context.new_page()
+        # Extract base URL for authentication (remove /opik from the end)
+        base_url = re.sub(r"/opik$", "", env_config.base_url)
+        auth_url = f"{base_url}/api/auth/login"
+
+        # Perform login
+        response = page.request.post(
+            auth_url,
+            data=json.dumps(
+                {
+                    "email": env_config.test_user_email,
+                    "plainTextPassword": env_config.test_user_password,
+                }
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+
+        if response.status != 200:
+            raise Exception(
+                f"Login failed with status {response.status}: {response.text()}"
+            )
+
+        # Extract API key from login response
+        response_data = response.json()
+        if "apiKeys" not in response_data or not response_data["apiKeys"]:
+            print("RESPONSE DATA IS", response_data)
+            raise Exception("No API keys found in login response")
+
+        # Set the API key in environment
+        os.environ["OPIK_API_KEY"] = response_data["apiKeys"][0]
+        # Update env_config with the API key
+        env_config.api_key = response_data["apiKeys"][0]
+
+        page.close()
+
     yield context
     context.close()
 
 
-@pytest.fixture
-def page_with_clipboard_perms(browser_clipboard_permissions):
-    page = browser_clipboard_permissions.new_page()
+@pytest.fixture(scope="session")
+def env_config() -> EnvConfig:
+    """
+    Get the environment configuration from environment variables.
+    """
+    env_config = get_environment_config()
+    # Set base URL and API URL override
+    os.environ["OPIK_BASE_URL"] = env_config.base_url
+    os.environ["OPIK_URL_OVERRIDE"] = env_config.api_url
+
+    # Set workspace and project
+    os.environ["OPIK_WORKSPACE"] = env_config.workspace
+    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
+
+    return env_config
+
+
+@pytest.fixture(scope="session", autouse=True)
+def client(env_config: EnvConfig, browser_context) -> opik.Opik:
+    """Create an Opik client configured for the current environment"""
+    kwargs = {
+        "workspace": env_config.workspace,
+        "host": env_config.api_url,  # SDK expects the full API URL
+    }
+    if env_config.api_key:
+        kwargs["api_key"] = env_config.api_key
+    return opik.Opik(**kwargs)
+
+
+@pytest.fixture(scope="function")
+def page(browser_context):
+    """Create a new page with authentication already handled"""
+    page = browser_context.new_page()
     yield page
     page.close()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def configure_local():
-    os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5173/api"
-    os.environ["OPIK_WORKSPACE"] = "default"
-    os.environ["OPIK_PROJECT_NAME"] = "automated_tests_project"
-
-
-@pytest.fixture(scope="session", autouse=True)
-def client() -> opik.Opik:
-    return opik.Opik(workspace="default", host="http://localhost:5173/api")
-
-
 @pytest.fixture(scope="function")
-def projects_page(page: Page):
+def projects_page(page):
     projects_page = ProjectsPage(page)
     projects_page.go_to_page()
     return projects_page
 
 
 @pytest.fixture(scope="function")
-def projects_page_timeout(page: Page) -> ProjectsPage:
+def projects_page_timeout(page) -> ProjectsPage:
     projects_page = ProjectsPage(page)
     projects_page.go_to_page()
     projects_page.page.wait_for_timeout(10000)
@@ -66,21 +126,21 @@ def projects_page_timeout(page: Page) -> ProjectsPage:
 
 
 @pytest.fixture(scope="function")
-def traces_page(page: Page, projects_page, config):
+def traces_page(page, projects_page, config):
     projects_page.click_project(config["project"]["name"])
     traces_page = TracesPage(page)
     return traces_page
 
 
 @pytest.fixture(scope="function")
-def datasets_page(page: Page):
+def datasets_page(page):
     datasets_page = DatasetsPage(page)
     datasets_page.go_to_page()
     return datasets_page
 
 
 @pytest.fixture(scope="function")
-def experiments_page(page: Page):
+def experiments_page(page):
     experiments_page = ExperimentsPage(page)
     experiments_page.go_to_page()
     return experiments_page
