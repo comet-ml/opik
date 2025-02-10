@@ -35,7 +35,7 @@ const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
           </TabsList>
 
           <TabsContent value="logLLM">
-            <FrameworkIntegrations />
+            <FrameworkIntegrations onRunCodeCallback={() => setOpen(false)} />
           </TabsContent>
           <TabsContent value="runEvaluations">
             <EvaluationExamples />

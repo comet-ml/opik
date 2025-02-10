@@ -14,7 +14,6 @@ import useRunCodeSnippet from "./useRunCodeSnippet";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { FINAL_LOG_TEMPLATE } from "../FrameworkIntegrations/integration-logs";
-import { SheetClose } from "@/components/ui/sheet";
 
 export enum SUPPORTED_LANGUAGE {
   json = "json",
@@ -37,6 +36,7 @@ type CodeExecutorProps = {
   workspaceName: string;
   executionLogs: string[];
   highlightedLines?: number[];
+  onRunCodeCallback?: () => void;
 };
 
 const CodeExecutor: React.FC<CodeExecutorProps> = ({
@@ -48,6 +48,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
   workspaceName,
   executionLogs,
   highlightedLines,
+  onRunCodeCallback,
 }) => {
   const theme = useCodemirrorTheme();
   const LineHighlightExtension = useCodemirrorLineHighlight({
@@ -139,24 +140,23 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
                   >
                     OPIK: Your LLM calls have been logged to your Opik
                     dashboard,
-                    <SheetClose asChild>
-                      <Button
-                        size="sm"
-                        variant="link"
-                        className="inline-flex h-auto"
-                        asChild
+                    <Button
+                      size="sm"
+                      variant="link"
+                      className="inline-flex h-auto"
+                      asChild
+                    >
+                      <Link
+                        to="/$workspaceName/redirect/projects"
+                        params={{ workspaceName }}
+                        search={{
+                          name: "Default Project",
+                        }}
+                        onClick={onRunCodeCallback}
                       >
-                        <Link
-                          to="/$workspaceName/redirect/projects"
-                          params={{ workspaceName }}
-                          search={{
-                            name: "Default Project",
-                          }}
-                        >
-                          view them here 🚀
-                        </Link>
-                      </Button>
-                    </SheetClose>
+                        view them here 🚀
+                      </Link>
+                    </Button>
                   </div>
                 );
               }

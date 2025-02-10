@@ -13,6 +13,7 @@ type IntegrationTemplateProps = {
   executionUrl?: string;
   executionLogs?: string[];
   withLineHighlights?: boolean;
+  onRunCodeCallback?: () => void;
 };
 
 const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
@@ -21,6 +22,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   executionUrl,
   executionLogs = [],
   withLineHighlights,
+  onRunCodeCallback,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { code: codeWithConfig, lines } = putConfigInCode({
@@ -66,6 +68,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
             apiKey={apiKey}
             workspaceName={workspaceName}
             highlightedLines={lines}
+            onRunCodeCallback={onRunCodeCallback}
           />
         ) : (
           <CodeHighlighter
