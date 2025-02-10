@@ -20,30 +20,30 @@ export class OpikExporter implements SpanExporter {
     this.client = client;
   }
 
-  private _safeParseJson = (value: unknown): unknown => {
-    try {
-      return JSON.parse(value as string);
-    } catch (e) {
-      return value;
-    }
-  };
-
   private getSpanInput = (otelSpan: ReadableSpan): Record<string, unknown> => {
-    const input: Record<string, unknown> = {};
+    let input: Record<string, unknown> = {};
     const { attributes } = otelSpan;
     const attributeKeys = Object.keys(attributes);
 
     attributeKeys.forEach((key) => {
-      if (key.startsWith("ai.prompt")) {
-        const promptKey = key.replace("ai.prompt.", "");
+      if (key === "ai.prompt" || key === "gen_ai.request") {
+        const parsedValue = tryParseJSON(attributes[key]);
 
-        input[promptKey] = this._safeParseJson(attributes[key]);
+        if (parsedValue) {
+          input = parsedValue;
+        }
       }
 
-      if (key.startsWith("gen_ai.request")) {
+      if (key.startsWith("ai.prompt.")) {
+        const promptKey = key.replace("ai.prompt.", "");
+
+        input[promptKey] = safeParseJson(attributes[key]);
+      }
+
+      if (key.startsWith("gen_ai.request.")) {
         const promptKey = key.replace("gen_ai.request.", "");
 
-        input[promptKey] = this._safeParseJson(attributes[key]);
+        input[promptKey] = safeParseJson(attributes[key]);
       }
     });
 
@@ -85,17 +85,27 @@ export class OpikExporter implements SpanExporter {
     const { attributes } = otelSpan;
     const usage: Record<string, number> = {};
 
+    // prompt tokens
+    if ("ai.usage.promptTokens" in attributes) {
+      usage.prompt_tokens = attributes["ai.usage.promptTokens"] as number;
+    }
     if ("gen_ai.usage.input_tokens" in attributes) {
       usage.prompt_tokens = attributes["gen_ai.usage.input_tokens"] as number;
     }
 
+    // completion tokens
+    if ("ai.usage.completionTokens" in attributes) {
+      usage.completion_tokens = attributes[
+        "ai.usage.completionTokens"
+      ] as number;
+    }
     if ("gen_ai.usage.output_tokens" in attributes) {
       usage.completion_tokens = attributes[
         "gen_ai.usage.output_tokens"
       ] as number;
     }
 
-    if (usage.prompt_tokens || usage.completion_tokens) {
+    if ("prompt_tokens" in usage || "completion_tokens" in usage) {
       usage.total_tokens =
         (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
     }
@@ -202,18 +212,32 @@ function hrTimeToMilliseconds(hrTime: [number, number]) {
   return hrTime[0] * 1e3 + hrTime[1] / 1e6;
 }
 
-function getCircularReplacer() {
-  const seen = new WeakSet();
-
-  return function (key: string, value: any) {
-    if (typeof value === "object" && value !== null) {
-      if (seen.has(value)) {
-        // Option 1: Return a placeholder value like undefined or a string
-        return "[Circular]";
-        // Option 2: Omit the key by returning undefined
-      }
-      seen.add(value);
-    }
+function safeParseJson(value: unknown): unknown {
+  try {
+    return JSON.parse(value as string) as Record<string, unknown>;
+  } catch (e) {
     return value;
-  };
+  }
+}
+
+function tryParseJSON(input: unknown): Record<string, unknown> | undefined {
+  if (typeof input !== "string") {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(input);
+
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    ) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch (error) {
+    return undefined;
+  }
+
+  return undefined;
 }
