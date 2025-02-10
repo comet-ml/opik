@@ -25,6 +25,8 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDictVertexAI]:
     try:
+        provider, _ = _get_provider_and_model(run_dict)
+
         usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
             "usage_metadata"
         ]
@@ -34,12 +36,12 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDictVertexAI
             prompt_tokens=usage_metadata["prompt_token_count"],
             total_tokens=usage_metadata["total_token_count"],
             **usage_metadata,
-        )
+        )  # type: ignore
 
         if (
             usage_validator.UsageValidator(
                 usage=token_usage,
-                provider=PROVIDER_NAME,
+                provider=provider,
             )
             .validate()
             .ok()

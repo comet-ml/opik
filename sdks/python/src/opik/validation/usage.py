@@ -1,9 +1,10 @@
-import pydantic
 import dataclasses
-
 from typing import Any, Dict, Optional, Union
-from ..types import LLMProvider, UsageDict, UsageDictVertexAI
-from . import validator, result
+
+import pydantic
+
+from . import result, validator
+from ..types import UsageDict, UsageDictVertexAI
 
 
 class PydanticWrapper(pydantic.BaseModel):
@@ -25,7 +26,7 @@ class UsageValidator(validator.Validator):
     Validator for span token usage
     """
 
-    def __init__(self, usage: Any, provider: Optional[LLMProvider]):
+    def __init__(self, usage: Any, provider: Optional[str]):
         self.usage = usage
         self.provider = provider
         self.parsed_usage = ParsedUsage()
@@ -39,9 +40,9 @@ class UsageValidator(validator.Validator):
                 PydanticWrapper(usage=filtered_usage)
 
                 if self.provider == "google_vertexai":
-                    supported_usage = UsageDictVertexAI(**filtered_usage)
+                    supported_usage = UsageDictVertexAI(**filtered_usage)  # type: ignore
                 else:
-                    supported_usage = UsageDict(**filtered_usage)
+                    supported_usage = UsageDict(**filtered_usage)  # type: ignore
                 self.parsed_usage = ParsedUsage(
                     full_usage=self.usage, supported_usage=supported_usage
                 )

@@ -10,7 +10,7 @@ from .. import logging_messages
 def validate_and_parse_usage(
     usage: Any,
     logger: logging.Logger,
-    provider: str,
+    provider: Optional[str],
 ) -> usage_validator.ParsedUsage:
     if usage is None:
         return usage_validator.ParsedUsage()
