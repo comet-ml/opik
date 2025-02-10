@@ -39,9 +39,9 @@
       "require": "./dist/index.cjs"
     },
     "./vercel": {
-      "types": "./dist/integrations/vercel/index.d.ts",
-      "import": "./dist/integrations/vercel/index.js",
-      "require": "./dist/integrations/vercel/index.cjs"
+      "types": "./dist/vercel/index.d.ts",
+      "import": "./dist/vercel/index.js",
+      "require": "./dist/vercel/index.cjs"
     }
   },
   "main": "dist/index.cjs",

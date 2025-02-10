@@ -1,6 +1,5 @@
-import { OpikClient } from "@/client/Client";
-import { Span } from "@/tracer/Span";
-import { Trace } from "@/tracer/Trace";
+import { Opik } from "opik";
+import type { Span, Trace } from "opik";
 import { ExportResultCode } from "@opentelemetry/core";
 import { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 
@@ -8,16 +7,16 @@ type SpanExporter = NodeSDKConfiguration["traceExporter"];
 type ExportFunction = SpanExporter["export"];
 type ReadableSpan = Parameters<ExportFunction>[0][0];
 
-const aiSDKClient = new OpikClient();
+const aiSDKClient = new Opik();
 
 export class OpikExporter implements SpanExporter {
   // <otelTraceId, opikTrace>
   private traces = new Map<string, Trace>();
   // <otelSpanId, opikSpan>
   private spans = new Map<string, Span>();
-  private client: OpikClient;
+  private client: Opik;
 
-  constructor({ client = aiSDKClient }: { client?: OpikClient } = {}) {
+  constructor({ client = aiSDKClient }: { client?: Opik } = {}) {
     this.client = client;
   }
 

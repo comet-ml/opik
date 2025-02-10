@@ -1,1 +1,1 @@
-export { OpikExporter } from "./tracer";
+export { OpikExporter } from "./exporter";
