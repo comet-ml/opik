@@ -183,29 +183,21 @@ class ExperimentDAO {
                 LIMIT 1 BY id
             ) AS e
             LEFT JOIN (
-                SELECT
+                SELECT DISTINCT
                     experiment_id,
                     trace_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS ei ON e.id = ei.experiment_id
             LEFT JOIN (
                 SELECT
-                    t.id,
-                    fs.name,
+                    entity_id as id,
+                    name as name,
                     SUM(value) as total_value,
                     COUNT(value) as count_value
                 FROM (
-                    SELECT
-                        id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS t
-                INNER JOIN (
                     SELECT
                         entity_id,
                         name,
@@ -213,12 +205,18 @@ class ExperimentDAO {
                     FROM feedback_scores
                     WHERE entity_type = :entity_type
                     AND workspace_id = :workspace_id
-                    ORDER BY entity_id DESC, last_updated_at DESC
+                    AND entity_id IN (
+                        SELECT
+                            id
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                    )
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
-                ) AS fs ON t.id = fs.entity_id
+                )
                 GROUP BY
-                    t.id,
-                    fs.name
+                    entity_id,
+                    name
             ) AS tfs ON ei.trace_id = tfs.id
             LEFT JOIN (
                 SELECT
@@ -235,7 +233,7 @@ class ExperimentDAO {
                         entity_id
                     FROM comments
                     WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 GROUP BY entity_id
@@ -331,29 +329,21 @@ class ExperimentDAO {
                 LIMIT 1 BY id
             ) AS e
             LEFT JOIN (
-                SELECT
+                SELECT DISTINCT
                     experiment_id,
                     trace_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS ei ON e.id = ei.experiment_id
             LEFT JOIN (
                 SELECT
-                    t.id,
-                    fs.name,
+                    entity_id as id,
+                    name,
                     SUM(value) as total_value,
                     COUNT(value) as count_value
                 FROM (
-                    SELECT
-                        id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS t
-                INNER JOIN (
                     SELECT
                         entity_id,
                         name,
@@ -361,12 +351,18 @@ class ExperimentDAO {
                     FROM feedback_scores
                     WHERE entity_type = :entity_type
                     AND workspace_id = :workspace_id
-                    ORDER BY entity_id DESC, last_updated_at DESC
+                    AND entity_id IN (
+                        SELECT
+                            id
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                    )
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
-                ) AS fs ON t.id = fs.entity_id
+                )
                 GROUP BY
-                    t.id,
-                    fs.name
+                    entity_id,
+                    name
             ) AS tfs ON ei.trace_id = tfs.id
             LEFT JOIN (
                 SELECT
@@ -383,7 +379,7 @@ class ExperimentDAO {
                         entity_id
                     FROM comments
                     WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 GROUP BY entity_id
@@ -417,7 +413,7 @@ class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
             ;
@@ -438,11 +434,9 @@ class ExperimentDAO {
 
     private static final String FIND_EXPERIMENT_AND_WORKSPACE_BY_EXPERIMENT_IDS = """
             SELECT
-                id, workspace_id
+                DISTINCT id, workspace_id
             FROM experiments
             WHERE id in :experiment_ids
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
             ;
             """;
 
