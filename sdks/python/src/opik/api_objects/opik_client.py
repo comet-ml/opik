@@ -219,7 +219,7 @@ class Opik:
             project_name=project_name,
         )
 
-    def _move_traces_without_spans(
+    def _copy_traces_without_spans(
         self, project_name: str, destination_project_name: str
     ) -> Dict[str, str]:
         trace_id_mapping = {}
@@ -237,7 +237,7 @@ class Opik:
 
         return trace_id_mapping
 
-    def _move_spans_with_mapping(
+    def _copy_spans_with_mapping(
         self,
         project_name: str,
         destination_project_name: str,
@@ -271,22 +271,25 @@ class Opik:
 
         return span_id_mapping
 
-    def move_traces(
+    def copy_traces(
         self,
         project_name: str,
         destination_project_name: str,
         delete_original_project: bool = False,
     ) -> None:
         """
-        Move traces from one project to another. This method will move all traces in a source project
-        to the destination project.
+        Copy traces from one project to another. This method will copy all traces in a source project
+        to the destination project. Optionally, you can also delete these traces from the source project.
+
+        As the traces are copied, the IDs for both traces and spans will be updated as part of the copy
+        process.
 
         Note: This method is not optimized for large projects, if you run into any issues please raise
         an issue on GitHub.
 
         Args:
-            project_name: The name of the project to move traces from.
-            destination_project_name: The name of the project to move traces to.
+            project_name: The name of the project to copy traces from.
+            destination_project_name: The name of the project to copy traces to.
             delete_original_project: Whether to delete the original project. Defaults to False.
 
         Returns:
@@ -299,10 +302,10 @@ class Opik:
             )
 
         # Get traces
-        trace_id_mapping = self._move_traces_without_spans(
+        trace_id_mapping = self._copy_traces_without_spans(
             project_name, destination_project_name
         )
-        self._move_spans_with_mapping(
+        self._copy_spans_with_mapping(
             project_name, destination_project_name, trace_id_mapping
         )
 

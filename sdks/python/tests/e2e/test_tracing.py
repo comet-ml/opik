@@ -516,11 +516,11 @@ def test_search_spans__happyflow(opik_client):
     assert spans[0].id == matching_span.id, "Expected to find the matching span"
 
 
-def test_move_traces__happyflow(opik_client):
+def test_copy_traces__happyflow(opik_client):
     # Log traces
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"e2e-tests-move-traces-project - {unique_identifier}"
+    project_name = f"e2e-tests-copy-traces-project - {unique_identifier}"
     for i in range(3):
         trace = opik_client.trace(
             name="trace",
@@ -540,7 +540,7 @@ def test_move_traces__happyflow(opik_client):
     opik_client.flush()
 
     new_project_name = project_name + "_v2"
-    opik_client.move_traces(
+    opik_client.copy_traces(
         project_name=project_name,
         destination_project_name=new_project_name,
     )
