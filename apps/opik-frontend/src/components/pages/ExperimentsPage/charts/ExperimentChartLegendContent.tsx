@@ -43,7 +43,7 @@ const ExperimentChartLegendContent = React.forwardRef<
             onMouseEnter={() => handleMouseEnter(item.value)}
           >
             <TooltipWrapper content={item.value}>
-              <div className="comet-body-xs text-foreground truncate">
+              <div className="comet-body-xs truncate font-light text-foreground">
                 {item.value}
               </div>
             </TooltipWrapper>

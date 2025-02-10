@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Card,
   CardContent,
@@ -16,7 +16,11 @@ import {
   YAxis,
 } from "recharts";
 import { ProjectMetricValue } from "@/types/projects";
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartTooltip,
+} from "@/components/ui/chart";
 import dayjs from "dayjs";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
@@ -32,6 +36,8 @@ import ChartTooltipContent, {
 import { formatDate } from "@/lib/date";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
+import MetricChartLegendContent from "./MetricChartLegendContent";
+import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 
 const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
   value;
@@ -48,10 +54,22 @@ interface MetricChartProps {
   renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
   labelsMap?: Record<string, string>;
   customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
+  chartId: string;
 }
 
 type TransformedDataValueType = null | number | string;
 type TransformedData = { [key: string]: TransformedDataValueType };
+
+const predefinedColorMap = {
+  traces: TAG_VARIANTS_COLOR_MAP.purple,
+  cost: TAG_VARIANTS_COLOR_MAP.purple,
+  "duration.p50": TAG_VARIANTS_COLOR_MAP.turquoise,
+  "duration.p90": TAG_VARIANTS_COLOR_MAP.burgundy,
+  "duration.p99": TAG_VARIANTS_COLOR_MAP.purple,
+  completion_tokens: TAG_VARIANTS_COLOR_MAP.turquoise,
+  prompt_tokens: TAG_VARIANTS_COLOR_MAP.burgundy,
+  total_tokens: TAG_VARIANTS_COLOR_MAP.purple,
+};
 
 const MetricChart = ({
   name,
@@ -65,7 +83,9 @@ const MetricChart = ({
   renderValue = renderTooltipValue,
   labelsMap,
   customYTickFormatter,
+  chartId,
 }: MetricChartProps) => {
+  const [activeLine, setActiveLine] = useState<string | null>(null);
   const { data: traces, isPending } = useProjectMetric(
     {
       projectId,
@@ -105,7 +125,11 @@ const MetricChart = ({
   }, [traces]);
 
   const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(lines, labelsMap);
+    return getDefaultHashedColorsChartConfig(
+      lines,
+      labelsMap,
+      predefinedColorMap,
+    );
   }, [lines, labelsMap]);
 
   const {
@@ -121,7 +145,7 @@ const MetricChart = ({
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       return (
-        <div className="comet-body-xs text-light-slate mb-1">
+        <div className="comet-body-xs mb-1 text-light-slate">
           {formatDate(payload?.[0]?.payload?.time, true)} UTC
         </div>
       );
@@ -197,6 +221,15 @@ const MetricChart = ({
           />
           <Tooltip />
 
+          <ChartLegend
+            content={
+              <MetricChartLegendContent
+                setActiveLine={setActiveLine}
+                chartId={chartId}
+              />
+            }
+          />
+
           {isSingleLine ? (
             <>
               <defs>
@@ -229,22 +262,33 @@ const MetricChart = ({
               />
             </>
           ) : (
-            lines.map((line) => (
-              <Line
-                key={line}
-                type="linear"
-                dataKey={line}
-                stroke={config[line].color || ""}
-                dot={
-                  isSinglePoint
-                    ? { fill: config[line].color, strokeWidth: 0 }
-                    : false
-                }
-                activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}
-                connectNulls
-                strokeWidth={1.5}
-              />
-            ))
+            lines.map((line) => {
+              const isActive = line === activeLine;
+
+              let strokeOpacity = 1;
+
+              if (activeLine) {
+                strokeOpacity = isActive ? 1 : 0.4;
+              }
+
+              return (
+                <Line
+                  key={line}
+                  type="linear"
+                  dataKey={line}
+                  stroke={config[line].color || ""}
+                  dot={
+                    isSinglePoint
+                      ? { fill: config[line].color, strokeWidth: 0 }
+                      : false
+                  }
+                  activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}
+                  connectNulls
+                  strokeWidth={1.5}
+                  strokeOpacity={strokeOpacity}
+                />
+              );
+            })
           )}
         </ComposedChart>
       </ChartContainer>
@@ -253,13 +297,13 @@ const MetricChart = ({
 
   return (
     <Card>
-      <CardHeader className="space-y-0.5 px-4 pt-3">
+      <CardHeader className="space-y-0.5 p-5">
         <CardTitle className="comet-body-s-accented">{name}</CardTitle>
         <CardDescription className="comet-body-xs text-xs">
           {description}
         </CardDescription>
       </CardHeader>
-      <CardContent className="px-4 pb-3">{renderContent()}</CardContent>
+      <CardContent className="p-5">{renderContent()}</CardContent>
     </Card>
   );
 };

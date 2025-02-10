@@ -61,7 +61,7 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
       ? "w-full"
       : chartsData.length === 2
         ? "basis-1/2"
-        : "w-full max-w-[520px]";
+        : "basis-[520px]";
 
   return (
     <div

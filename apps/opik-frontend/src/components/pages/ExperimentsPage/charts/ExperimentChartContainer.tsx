@@ -102,7 +102,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
           <div className="comet-body-xs-accented mb-0.5 truncate">
             {experimentName}
           </div>
-          <div className="comet-body-xs text-light-slate mb-1">
+          <div className="comet-body-xs mb-1 text-light-slate">
             {createdDate}
           </div>
         </>
@@ -114,7 +114,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
   const isSinglePoint = chartData.data.length === 1;
 
   return (
-    <Card className={cn("min-w-[max(400px,40%)]", className)} ref={ref}>
+    <Card className={cn("min-w-[400px]", className)} ref={ref}>
       <CardHeader className="space-y-0.5 px-4 pt-3">
         <CardTitle className="comet-body-s-accented">{name}</CardTitle>
         <CardDescription className="comet-body-xs text-xs">
@@ -124,7 +124,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
       <CardContent className="px-4 pb-3">
         {noData ? (
           <NoData
-            className="text-light-slate min-h-32"
+            className="min-h-32 text-light-slate"
             message="No scores to show"
           />
         ) : (

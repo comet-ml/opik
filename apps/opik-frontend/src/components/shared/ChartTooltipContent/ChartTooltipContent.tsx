@@ -61,7 +61,7 @@ const ChartTooltipContent = React.forwardRef<
           <div className="size-0.5 bg-transparent"></div>
         </PopoverAnchor>
         <PopoverContent className="min-w-32 max-w-72 px-1 py-1.5">
-          <div ref={ref} className="bg-background grid items-start gap-1.5">
+          <div ref={ref} className="grid items-start gap-1.5 bg-background">
             {isFunction(renderHeader) && (
               <div className="mb-1 max-w-full overflow-hidden border-b px-2 pt-0.5">
                 {renderHeader({ payload })}
@@ -94,12 +94,12 @@ const ChartTooltipContent = React.forwardRef<
                     />
                     <div className="flex flex-1 items-center justify-between gap-2 leading-none">
                       <div className="grid gap-1.5">
-                        <span className="comet-body-xs text-muted-slate truncate">
+                        <span className="comet-body-xs truncate text-muted-slate">
                           {itemConfig?.label || item.name}
                         </span>
                       </div>
                       {!isUndefined(item.value) && (
-                        <span className="comet-body-xs-accented">
+                        <span className="comet-body-xs">
                           {renderValue(item.value)}
                         </span>
                       )}
