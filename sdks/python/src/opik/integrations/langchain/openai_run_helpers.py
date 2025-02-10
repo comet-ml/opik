@@ -23,11 +23,19 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
 
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
+    """
+    Attempts to extract and return the token usage from the given run dictionary.
+
+    Depending on the execution type (invoke, streaming mode, async etc.), or even the model name itself,
+    token usage info might be in different places, different formats or completely missing.
+    """
     try:
         if run_dict["outputs"]["llm_output"] is not None:
             token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
 
-        # streaming mode handling (in async mode may not provide token usage info)
+        # streaming mode handling
+        # token usage data will be available at the end of streaming
+        # in async mode may not provide token usage info
         elif token_usage_full := run_dict["outputs"]["generations"][-1][-1]["message"][
             "kwargs"
         ].get("usage_metadata"):
