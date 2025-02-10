@@ -60,6 +60,4 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
 
-    @Valid @NotNull @JsonProperty
-    private ClickHouseQueryConfig clickHouseQuery = new ClickHouseQueryConfig();
 }
