@@ -23,6 +23,25 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
             "feedback_scores >= 4.5",
             {"field": "feedback_scores", "operator": ">=", "value": "4.5"},
         ),
+        # New test cases for quoted identifiers
+        (
+            'feedback_scores."Answer Relevance" < 0.8',
+            {
+                "field": "feedback_scores",
+                "key": "Answer Relevance",
+                "operator": "<",
+                "value": "0.8",
+            },
+        ),
+        (
+            'feedback_scores."Escaped ""Quote""" < 0.8',
+            {
+                "field": "feedback_scores",
+                "key": 'Escaped "Quote"',
+                "operator": "<",
+                "value": "0.8",
+            },
+        ),
     ],
 )
 def test_valid_oql_expressions(filter_string, expected):
@@ -46,6 +65,10 @@ def test_valid_oql_expressions(filter_string, expected):
             r"When querying usage, invalid_metric is not supported.*",
         ),
         ('name = "test" extra_stuff', r"Invalid filter string, trailing characters.*"),
+        (
+            'feedback_scores."Unterminated Quote < 0.8',
+            r'Missing closing quote for: "Unterminated Quote < 0.8',
+        ),
     ],
 )
 def test_invalid_oql_expressions(filter_string, error_pattern):
