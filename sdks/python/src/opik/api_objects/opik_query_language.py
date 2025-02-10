@@ -5,7 +5,7 @@ simple filters without "and" or "or" operators.
 
 import json
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 COLUMNS = {
     "name": "string",
@@ -70,7 +70,7 @@ class OpikQueryLanguage:
         ):
             self._cursor += 1
 
-    def _check_escaped_key(self) -> tuple[bool, str]:
+    def _check_escaped_key(self) -> Tuple[bool, str]:
         if self.query_string[self._cursor] in ('"', "'"):
             is_quoted_key = True
             quote_type = self.query_string[self._cursor]
