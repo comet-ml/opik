@@ -1,7 +1,7 @@
 import dataclasses
 import sys
 
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
@@ -12,6 +12,7 @@ else:
 SpanType = Literal["general", "tool", "llm"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
+LLMProvider = Literal["openai", "google_vertexai"]
 
 
 class UsageDict(TypedDict):
