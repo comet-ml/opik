@@ -138,11 +138,11 @@ class BaseTrackDecorator(abc.ABC):
         if inspect.isgeneratorfunction(func):
             return self._tracked_sync_generator(func=func, track_options=track_options)
 
-        # if inspect.isasyncgenfunction(func):
-        #     return self._tracked_async_generator(
-        #         func=func,
-        #         track_options=track_options,
-        #     )
+        if inspect.isasyncgenfunction(func):
+            return self._tracked_async_generator(
+                func=func,
+                track_options=track_options,
+            )
 
         if inspect_helpers.is_async(func):
             return self._tracked_async(

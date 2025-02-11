@@ -1,4 +1,3 @@
-import contextlib
 import logging
 from typing import (
     Any,
@@ -35,7 +34,7 @@ class FinishGeneratorCallback(Protocol):
     ) -> None: ...
 
 
-class BaseTrackedGenerator:
+class BaseTrackedGenerator(Generic[YieldType]):
     def __init__(
         self,
         start_span_arguments: arguments_helpers.StartSpanParameters,
@@ -50,7 +49,7 @@ class BaseTrackedGenerator:
         self._created_span_data: Optional[span.SpanData] = None
         self._created_trace_data: Optional[trace.TraceData] = None
 
-        self._accumulated_values: List[Any] = []
+        self._accumulated_values: List[YieldType] = []
 
         self._finally_callback = finally_callback
 
@@ -93,7 +92,7 @@ class BaseTrackedGenerator:
         )
 
 
-class SyncTrackedGenerator(BaseTrackedGenerator, Generic[YieldType]):
+class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
     def __init__(
         self,
         generator: Generator[YieldType, None, None],
@@ -118,7 +117,9 @@ class SyncTrackedGenerator(BaseTrackedGenerator, Generic[YieldType]):
             self._ensure_span_and_trace_created()
             assert self._created_span_data is not None
 
-            with context_storage.temporary_context(self._created_span_data, self._created_trace_data):
+            with context_storage.temporary_context(
+                self._created_span_data, self._created_trace_data
+            ):
                 value = next(self._generator)
                 self._accumulated_values.append(value)
                 return value
@@ -130,7 +131,7 @@ class SyncTrackedGenerator(BaseTrackedGenerator, Generic[YieldType]):
             raise
 
 
-class AsyncTrackedGenerator(BaseTrackedGenerator):
+class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
     def __init__(
         self,
         generator: AsyncGenerator[YieldType, None],
@@ -155,7 +156,9 @@ class AsyncTrackedGenerator(BaseTrackedGenerator):
             self._ensure_span_and_trace_created()
             assert self._created_span_data is not None
 
-            with context_storage.temporary_context(self._created_span_data, self._created_trace_data):
+            with context_storage.temporary_context(
+                self._created_span_data, self._created_trace_data
+            ):
                 value = await self._generator.__anext__()
                 self._accumulated_values.append(value)
                 return value
