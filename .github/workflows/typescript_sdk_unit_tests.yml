@@ -10,23 +10,124 @@ on:
     paths:
       - "sdks/typescript/**"
   workflow_dispatch:
+
 jobs:
-  lint:
+  test:
+    name: Test on ${{ matrix.runtime }} with ${{ matrix.package-manager }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: sdks/typescript
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Node.js 18
+          - runtime: node-18
+            node-version: "18"
+            package-manager: npm
+
+          # Node.js 20
+          - runtime: node-20
+            node-version: "20"
+            package-manager: npm
+
+          # Node.js 22 with different package managers
+          - runtime: node-22
+            node-version: "22"
+            package-manager: npm
+          - runtime: node-22
+            node-version: "22"
+            package-manager: pnpm
+          - runtime: node-22
+            node-version: "22"
+            package-manager: yarn
+
+          # Deno
+          - runtime: deno
+            deno-version: "v2.x"
+            package-manager: deno
+
+          # Bun
+          - runtime: bun
+            bun-version: "latest"
+            package-manager: bun
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
 
+      # Setup Node.js for npm/yarn/pnpm
       - name: Set up Node.js
+        if: matrix.runtime == 'node-18' || matrix.runtime == 'node-20' || matrix.runtime == 'node-22'
         uses: actions/setup-node@v4.2.0
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node-version || '20' }}
 
-      - name: Install dependencies
-        run: npm install
+      # Setup pnpm if needed
+      - name: Setup pnpm
+        if: matrix.package-manager == 'pnpm'
+        uses: pnpm/action-setup@v3
+        with:
+          version: latest
 
-      - name: Unit tests
+      # Setup yarn if needed
+      - name: Setup yarn
+        if: matrix.package-manager == 'yarn'
+        run: corepack enable && corepack prepare yarn@stable --activate
+
+      # Setup Deno if needed
+      - name: Setup Deno
+        if: matrix.runtime == 'deno'
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: ${{ matrix.deno-version }}
+
+      # Setup Bun if needed
+      - name: Setup Bun
+        if: matrix.runtime == 'bun'
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: ${{ matrix.bun-version }}
+
+      # Install dependencies based on package manager
+      - name: Install dependencies (npm)
+        if: matrix.package-manager == 'npm'
+        run: npm ci
+
+      - name: Install dependencies (pnpm)
+        if: matrix.package-manager == 'pnpm'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install dependencies (yarn)
+        if: matrix.package-manager == 'yarn'
+        run: yarn install --frozen-lockfile
+
+      - name: Install dependencies (deno)
+        if: matrix.package-manager == 'deno'
+        run: deno cache tests/**/*.ts
+
+      - name: Install dependencies (bun)
+        if: matrix.package-manager == 'bun'
+        run: bun install --frozen-lockfile
+
+      # Run tests based on runtime and package manager
+      - name: Run tests (npm)
+        if: matrix.package-manager == 'npm'
         run: npm run test
+
+      - name: Run tests (pnpm)
+        if: matrix.package-manager == 'pnpm'
+        run: pnpm test
+
+      - name: Run tests (yarn)
+        if: matrix.package-manager == 'yarn'
+        run: yarn test
+
+      - name: Run tests (Deno)
+        if: matrix.package-manager == 'deno'
+        run: deno test --allow-read --allow-env tests/
+
+      - name: Run tests (Bun)
+        if: matrix.package-manager == 'bun'
+        run: bun test
