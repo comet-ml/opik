@@ -11,6 +11,8 @@ type TrackContext =
     }
   | { span: Span; trace: Trace };
 
+const DEFAULT_TRACK_NAME = "track.decorator";
+
 const trackStorage = new AsyncLocalStorage<TrackContext>();
 
 function isPromise(obj: any): obj is Promise<any> {
@@ -142,7 +144,7 @@ function executeTrack<T extends (...args: any[]) => any>(
   const wrappedFn = function (...args: any[]): ReturnType<T> {
     const context = trackStorage.getStore();
     const { span, trace } = logSpan({
-      name: name ?? originalFn.name,
+      name: name ?? (originalFn.name || DEFAULT_TRACK_NAME),
       parentSpan: context?.span,
       projectName,
       trace: context?.trace,

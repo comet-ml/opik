@@ -1,9 +1,12 @@
 import { track, trackOpikClient } from "opik";
 
-const llmCall = track({ type: "llm" }, async () => "llm result");
+const llmCall = track(
+  { name: "llm-test", type: "llm" },
+  async () => "llm result"
+);
 
 const translate = track(
-  { name: "translate" },
+  { name: "translate", type: "tool" },
   async (text) => `translated: ${text}`
 );
 
