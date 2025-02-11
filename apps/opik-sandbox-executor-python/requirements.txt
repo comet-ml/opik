@@ -4,6 +4,7 @@ aiosignal==1.3.2
 annotated-types==0.7.0
 anyio==4.8.0
 attrs==24.3.0
+boto3-stubs[bedrock-runtime]==1.34.110
 certifi==2024.12.14
 charset-normalizer==3.4.1
 click==8.1.8
