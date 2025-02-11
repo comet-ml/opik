@@ -162,7 +162,7 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
                 value = await self._generator.__anext__()
                 self._accumulated_values.append(value)
                 return value
-        except StopIteration:
+        except StopAsyncIteration:
             self._handle_stop_iteration_before_raising()
             raise
         except Exception as exception:

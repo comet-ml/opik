@@ -683,7 +683,7 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__generator_function_tracked__generator_exhausted_in_another_tracked_function__trace_tree_remains_correct(
+def test_track__generator_function_tracked__generator_exhausted_in_another_tracked_function__generator_span_started_and_ended_with_generator_exhausting(
     fake_backend,
 ):
     @tracker.track(capture_output=True)
@@ -726,13 +726,81 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        name="gen_f",
-                        input={"y": "generator-input"},
-                        output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+                        name="f_inner",
+                        input={"z": "inner-input", "generator": ANY_BUT_NONE},
+                        output={"output": "inner-output"},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        spans=[],
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name="gen_f",
+                                input={"y": "generator-input"},
+                                output={
+                                    "output": "['yielded-1', 'yielded-2', 'yielded-3']"
+                                },
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                spans=[],
+                            ),
+                        ],
                     ),
+                ],
+            ),
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__generator_function_tracked__generator_exhausted_in_another_tracked_function__generator_span_started_and_ended_with_generator_exhausting__span_from_tracked_function_inside_generator_attached_to_generator_span(
+    fake_backend,
+):
+    @tracker.track
+    def f_inner(z, generator):
+        for _ in generator:
+            pass
+
+        return "inner-output"
+
+    @tracker.track
+    def f_called_inside_generator():
+        return "f-called-inside-generator-output"
+
+    @tracker.track
+    def gen_f(y):
+        f_called_inside_generator()
+        values = ["yielded-1", "yielded-2", "yielded-3"]
+        for value in values:
+            yield value
+
+    @tracker.track
+    def f_outer(x):
+        generator = gen_f("generator-input")
+        f_inner("inner-input", generator)
+        return "outer-output"
+
+    f_outer("outer-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={"x": "outer-input"},
+        output={"output": "outer-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f_outer",
+                input={"x": "outer-input"},
+                output={"output": "outer-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
                         name="f_inner",
@@ -740,7 +808,31 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                         output={"output": "inner-output"},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        spans=[],
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name="gen_f",
+                                input={"y": "generator-input"},
+                                output={
+                                    "output": "['yielded-1', 'yielded-2', 'yielded-3']"
+                                },
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        name="f_called_inside_generator",
+                                        input={},
+                                        output={
+                                            "output": "f-called-inside-generator-output"
+                                        },
+                                        start_time=ANY_BUT_NONE,
+                                        end_time=ANY_BUT_NONE,
+                                        spans=[],
+                                    ),
+                                ],
+                            ),
+                        ],
                     ),
                 ],
             ),
@@ -841,7 +933,7 @@ def test_track__nested_async_function_tracked__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__single_async_generator_function_tracked__generator_exhausted__happyflow(
+def test_track__top_level_single_async_generator_function_tracked__generator_exhausted__happyflow(
     fake_backend,
 ):
     @tracker.track(capture_output=True)
@@ -852,7 +944,8 @@ def test_track__single_async_generator_function_tracked__generator_exhausted__ha
             yield item
 
     async def async_generator_user():
-        async for _ in async_generator("generator-input"):
+        gen = async_generator("generator-input")
+        async for _ in gen:
             pass
 
     asyncio.run(async_generator_user())
@@ -875,6 +968,63 @@ def test_track__single_async_generator_function_tracked__generator_exhausted__ha
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__top_level_async_generator_function_tracked__generator_has_another_tracked_function_inside__nested_function_attached_to_generator_span_and_trace(
+    fake_backend,
+):
+    @tracker.track
+    async def some_async_work():
+        await asyncio.sleep(0.001)
+
+    @tracker.track(capture_output=True)
+    async def async_generator(x):
+        await some_async_work()
+
+        for item in ["yielded-1", "yielded-2", "yielded-3"]:
+            yield item
+
+    async def async_generator_user():
+        gen = async_generator("generator-input")
+        async for _ in gen:
+            pass
+
+    asyncio.run(async_generator_user())
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="async_generator",
+        input={"x": "generator-input"},
+        output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="async_generator",
+                input={"x": "generator-input"},
+                output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="some_async_work",
+                        input={},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                    )
+                ],
             )
         ],
     )
@@ -929,6 +1079,76 @@ def test_track__async_generator_inside_another_tracked_function__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                    )
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__async_generator_inside_another_tracked_function__another_tracked_function_called_inside_generator_and_attached_to_its_span(
+    fake_backend,
+):
+    @tracker.track
+    async def some_async_work():
+        await asyncio.sleep(0.001)
+
+    @tracker.track(capture_output=True)
+    async def async_generator(y):
+        await some_async_work()
+
+        for item in ["yielded-1", "yielded-2", "yielded-3"]:
+            yield item
+
+    @tracker.track(capture_output=True)
+    async def async_generator_user(x):
+        async for _ in async_generator("generator-input"):
+            pass
+
+        return "generator-user-output"
+
+    asyncio.run(async_generator_user("generator-user-input"))
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="async_generator_user",
+        input={"x": "generator-user-input"},
+        output={"output": "generator-user-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="async_generator_user",
+                input={"x": "generator-user-input"},
+                output={"output": "generator-user-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="async_generator",
+                        input={"y": "generator-input"},
+                        output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name="some_async_work",
+                                input={},
+                                output=None,
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                spans=[],
+                            )
+                        ],
                     )
                 ],
             )

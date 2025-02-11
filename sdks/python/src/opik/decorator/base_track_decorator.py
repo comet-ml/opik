@@ -208,7 +208,7 @@ class BaseTrackDecorator(abc.ABC):
         self, func: Callable, track_options: arguments_helpers.TrackOptions
     ) -> Callable:
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs) -> Any:  # type: ignore
+        def wrapper(*args, **kwargs) -> Any:  # type: ignore
             try:
                 opik_distributed_trace_headers: Optional[
                     DistributedTraceHeadersDict
