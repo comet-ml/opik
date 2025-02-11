@@ -45,16 +45,507 @@ export class AutomationRuleEvaluators {
     /**
      * Find project Evaluators
      *
-     * @param {string} projectId
      * @param {OpikApi.FindEvaluatorsRequest} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.automationRuleEvaluators.findEvaluators("projectId")
+     *     await client.automationRuleEvaluators.findEvaluators()
      */
     public async findEvaluators(
-        projectId: string,
         request: OpikApi.FindEvaluatorsRequest = {},
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<OpikApi.AutomationRuleEvaluatorPagePublic> {
+        const { projectId, name, page, size } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (projectId != null) {
+            _queryParams["project_id"] = projectId;
+        }
+
+        if (name != null) {
+            _queryParams["name"] = name;
+        }
+
+        if (page != null) {
+            _queryParams["page"] = page.toString();
+        }
+
+        if (size != null) {
+            _queryParams["size"] = size.toString();
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/automations/evaluators",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.AutomationRuleEvaluatorPagePublic.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/automations/evaluators.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * Create automation rule evaluator
+     *
+     * @param {OpikApi.AutomationRuleEvaluatorWrite} request
+     * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.automationRuleEvaluators.createAutomationRuleEvaluator({
+     *         type: "llm_as_judge"
+     *     })
+     */
+    public async createAutomationRuleEvaluator(
+        request: OpikApi.AutomationRuleEvaluatorWrite,
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/automations/evaluators",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.AutomationRuleEvaluatorWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/automations/evaluators.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * Delete automation rule evaluators batch
+     *
+     * @param {OpikApi.DeleteAutomationRuleEvaluatorBatchRequest} request
+     * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({
+     *         projectId: "project_id",
+     *         body: {
+     *             ids: ["ids"]
+     *         }
+     *     })
+     */
+    public async deleteAutomationRuleEvaluatorBatch(
+        request: OpikApi.DeleteAutomationRuleEvaluatorBatchRequest,
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<void> {
+        const { projectId, body: _body } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        _queryParams["project_id"] = projectId;
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/automations/evaluators/delete",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            body: serializers.BatchDelete.jsonOrThrow(_body, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/automations/evaluators/delete.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * Get automation rule by id
+     *
+     * @param {string} id
+     * @param {OpikApi.GetEvaluatorByIdRequest} request
+     * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.automationRuleEvaluators.getEvaluatorById("id")
+     */
+    public async getEvaluatorById(
+        id: string,
+        request: OpikApi.GetEvaluatorByIdRequest = {},
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<OpikApi.AutomationRuleEvaluatorPublic> {
+        const { projectId } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (projectId != null) {
+            _queryParams["project_id"] = projectId;
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/automations/evaluators/${encodeURIComponent(id)}`,
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.AutomationRuleEvaluatorPublic.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/automations/evaluators/{id}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * update Automation Rule Evaluator by id
+     *
+     * @param {string} id
+     * @param {OpikApi.AutomationRuleEvaluatorUpdate} request
+     * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.automationRuleEvaluators.updateAutomationRuleEvaluator("id", {
+     *         name: "name",
+     *         code: {
+     *             model: {
+     *                 name: "name",
+     *                 temperature: 1.1
+     *             },
+     *             messages: [{
+     *                     role: "SYSTEM",
+     *                     content: "content"
+     *                 }],
+     *             variables: {
+     *                 "key": "value"
+     *             },
+     *             schema: [{
+     *                     name: "name",
+     *                     type: "BOOLEAN",
+     *                     description: "description"
+     *                 }]
+     *         },
+     *         samplingRate: 1.1
+     *     })
+     */
+    public async updateAutomationRuleEvaluator(
+        id: string,
+        request: OpikApi.AutomationRuleEvaluatorUpdate,
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/automations/evaluators/${encodeURIComponent(id)}`,
+            ),
+            method: "PATCH",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.AutomationRuleEvaluatorUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PATCH /v1/private/automations/evaluators/{id}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * Get automation rule evaluator logs by id
+     *
+     * @param {string} id
+     * @param {OpikApi.GetEvaluatorLogsByIdRequest} request
+     * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.automationRuleEvaluators.getEvaluatorLogsById("id")
+     */
+    public async getEvaluatorLogsById(
+        id: string,
+        request: OpikApi.GetEvaluatorLogsByIdRequest = {},
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<OpikApi.LogPage> {
+        const { size } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (size != null) {
+            _queryParams["size"] = size.toString();
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/automations/evaluators/${encodeURIComponent(id)}/logs`,
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.LogPage.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/automations/evaluators/{id}/logs.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * Find project Evaluators Deprecated
+     *
+     * @param {string} projectId
+     * @param {OpikApi.FindEvaluatorsDeprecatedRequest} request
+     * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.automationRuleEvaluators.findEvaluatorsDeprecated("projectId")
+     */
+    public async findEvaluatorsDeprecated(
+        projectId: string,
+        request: OpikApi.FindEvaluatorsDeprecatedRequest = {},
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<OpikApi.AutomationRuleEvaluatorPagePublic> {
         const { name, page, size } = request;
@@ -132,18 +623,18 @@ export class AutomationRuleEvaluators {
     }
 
     /**
-     * Create automation rule evaluator
+     * Create automation rule evaluator Deprecated
      *
      * @param {string} projectId
      * @param {OpikApi.AutomationRuleEvaluatorWrite} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.automationRuleEvaluators.createAutomationRuleEvaluator("projectId", {
+     *     await client.automationRuleEvaluators.createAutomationRuleEvaluatorDeprecated("projectId", {
      *         type: "llm_as_judge"
      *     })
      */
-    public async createAutomationRuleEvaluator(
+    public async createAutomationRuleEvaluatorDeprecated(
         projectId: string,
         request: OpikApi.AutomationRuleEvaluatorWrite,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
@@ -204,18 +695,18 @@ export class AutomationRuleEvaluators {
     }
 
     /**
-     * Delete automation rule evaluators batch
+     * Delete automation rule evaluators batch Deprecated
      *
      * @param {string} projectId
      * @param {OpikApi.BatchDelete} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch("projectId", {
+     *     await client.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatchDeprecated("projectId", {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteAutomationRuleEvaluatorBatch(
+    public async deleteAutomationRuleEvaluatorBatchDeprecated(
         projectId: string,
         request: OpikApi.BatchDelete,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
@@ -276,16 +767,16 @@ export class AutomationRuleEvaluators {
     }
 
     /**
-     * Get automation rule by id
+     * Get automation rule by id Deprecated
      *
      * @param {string} projectId
      * @param {string} id
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.automationRuleEvaluators.getEvaluatorById("projectId", "id")
+     *     await client.automationRuleEvaluators.getEvaluatorByIdDeprecated("projectId", "id")
      */
-    public async getEvaluatorById(
+    public async getEvaluatorByIdDeprecated(
         projectId: string,
         id: string,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
@@ -350,7 +841,7 @@ export class AutomationRuleEvaluators {
     }
 
     /**
-     * update Automation Rule Evaluator by id
+     * update Automation Rule Evaluator by id Deprecated
      *
      * @param {string} id
      * @param {string} projectId
@@ -358,7 +849,7 @@ export class AutomationRuleEvaluators {
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.automationRuleEvaluators.updateAutomationRuleEvaluator("id", "projectId", {
+     *     await client.automationRuleEvaluators.updateAutomationRuleEvaluatorDeprecated("id", "projectId", {
      *         name: "name",
      *         code: {
      *             model: {
@@ -381,7 +872,7 @@ export class AutomationRuleEvaluators {
      *         samplingRate: 1.1
      *     })
      */
-    public async updateAutomationRuleEvaluator(
+    public async updateAutomationRuleEvaluatorDeprecated(
         id: string,
         projectId: string,
         request: OpikApi.AutomationRuleEvaluatorUpdate,
@@ -443,20 +934,20 @@ export class AutomationRuleEvaluators {
     }
 
     /**
-     * Get automation rule evaluator logs by id
+     * Get automation rule evaluator logs by id Deprecated
      *
      * @param {string} projectId
      * @param {string} id
-     * @param {OpikApi.GetEvaluatorLogsByIdRequest} request
+     * @param {OpikApi.GetEvaluatorLogsByIdDeprecatedRequest} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.automationRuleEvaluators.getEvaluatorLogsById("projectId", "id")
+     *     await client.automationRuleEvaluators.getEvaluatorLogsByIdDeprecated("projectId", "id")
      */
-    public async getEvaluatorLogsById(
+    public async getEvaluatorLogsByIdDeprecated(
         projectId: string,
         id: string,
-        request: OpikApi.GetEvaluatorLogsByIdRequest = {},
+        request: OpikApi.GetEvaluatorLogsByIdDeprecatedRequest = {},
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<OpikApi.LogPage> {
         const { size } = request;

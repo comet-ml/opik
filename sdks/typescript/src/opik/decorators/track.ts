@@ -11,7 +11,19 @@ type TrackContext =
     }
   | { span: Span; trace: Trace };
 
+const DEFAULT_TRACK_NAME = "track.decorator";
+
 const trackStorage = new AsyncLocalStorage<TrackContext>();
+
+export const getTrackContext = (): Required<TrackContext> | undefined => {
+  const { span, trace } = trackStorage.getStore() || {};
+
+  if (!span || !trace) {
+    return undefined;
+  }
+
+  return { span, trace };
+};
 
 function isPromise(obj: any): obj is Promise<any> {
   return (
@@ -35,6 +47,7 @@ function logSpan({
   type?: SpanType;
 }) {
   let spanTrace = trace;
+
   if (!spanTrace) {
     spanTrace = trackOpikClient.trace({
       name,
@@ -52,82 +65,177 @@ function logSpan({
   return { span, trace: spanTrace };
 }
 
-export function withTrack({
-  name,
-  projectName,
-  type,
+function logStart({
+  args,
+  span,
+  trace,
 }: {
-  name?: string;
-  projectName?: string;
-  type?: SpanType;
-} = {}) {
-  return function trackDecorator<T extends (...args: any[]) => any>(
-    originalFn: T
-  ): T {
-    const wrappedFn = function (...args: any[]): ReturnType<T> {
-      const context = trackStorage.getStore();
-      const { span, trace } = logSpan({
-        name: name ?? originalFn.name,
-        parentSpan: context?.span,
-        projectName,
-        trace: context?.trace,
-        type,
-      });
-      const isRootSpan = !context;
-      // @ts-ignore
-      const fnThis = this;
+  args: any[];
+  span: Span;
+  trace?: Trace;
+}) {
+  if (args.length === 0) {
+    return;
+  }
 
-      return trackStorage.run({ span, trace }, () => {
-        try {
-          const result = originalFn.apply(fnThis, args);
+  const input = { arguments: args };
 
-          if (isPromise(result)) {
-            return result.then(
-              (res: any) => {
-                span.end();
-                if (isRootSpan) {
-                  trace.end();
-                }
-                return res;
-              },
-              (err: any) => {
-                span.end();
-                if (isRootSpan) {
-                  trace.end();
-                }
-                throw err;
-              }
-            ) as ReturnType<T>;
-          }
+  span.update({ input });
 
-          span.end();
-          if (isRootSpan) {
-            trace.end();
-          }
-          return result;
-        } catch (e) {
-          if (isRootSpan) {
-            trace.end();
-          }
-          span.end();
-          throw e;
-        }
-      });
-    };
-
-    return wrappedFn as T;
-  };
+  if (trace) {
+    trace.update({ input });
+  }
 }
 
-export function track(
-  options: {
+function logSuccess({
+  result,
+  span,
+  trace,
+}: {
+  result: any;
+  span: Span;
+  trace?: Trace;
+}) {
+  const output = typeof result === "object" ? result : { result };
+  const endTime = new Date();
+
+  span.update({ endTime, output });
+
+  if (trace) {
+    trace.update({ endTime, output });
+  }
+}
+
+function logError({
+  span,
+  error,
+  trace,
+}: {
+  span: Span;
+  error: any;
+  trace?: Trace;
+}) {
+  if (error instanceof Error) {
+    span.update({
+      errorInfo: {
+        message: error.message,
+        exceptionType: error.name,
+        traceback: error.stack ?? "",
+      },
+    });
+  }
+  span.end();
+
+  if (trace) {
+    trace.update({
+      errorInfo: {
+        message: error.message,
+        exceptionType: error.name,
+        traceback: error.stack ?? "",
+      },
+    });
+    trace.end();
+  }
+}
+
+function executeTrack<T extends (...args: any[]) => any>(
+  {
+    name,
+    projectName,
+    type,
+  }: {
     name?: string;
     projectName?: string;
     type?: SpanType;
-  } = {}
+  } = {},
+  originalFn: T
+): T {
+  const wrappedFn = function (...args: any[]): ReturnType<T> {
+    const context = trackStorage.getStore();
+    const { span, trace } = logSpan({
+      name: name ?? (originalFn.name || DEFAULT_TRACK_NAME),
+      parentSpan: context?.span,
+      projectName,
+      trace: context?.trace,
+      type,
+    });
+    const isRootSpan = !context;
+    // @ts-ignore
+    const fnThis = this;
+
+    return trackStorage.run({ span, trace }, () => {
+      try {
+        logStart({ args, span, trace: isRootSpan ? trace : undefined });
+
+        const result = originalFn.apply(fnThis, args);
+
+        if (isPromise(result)) {
+          return result.then(
+            (res: any) => {
+              logSuccess({
+                span,
+                result: res,
+                trace: isRootSpan ? trace : undefined,
+              });
+              return res;
+            },
+            (err) => {
+              logError({
+                span,
+                error: err,
+                trace: isRootSpan ? trace : undefined,
+              });
+
+              throw err;
+            }
+          ) as ReturnType<T>;
+        }
+
+        logSuccess({
+          span,
+          result,
+          trace: isRootSpan ? trace : undefined,
+        });
+
+        return result;
+      } catch (error) {
+        logError({
+          span,
+          error,
+          trace: isRootSpan ? trace : undefined,
+        });
+        throw error;
+      }
+    });
+  };
+
+  return wrappedFn as T;
+}
+
+type TrackOptions = {
+  name?: string;
+  projectName?: string;
+  type?: SpanType;
+};
+
+type OriginalFunction = (...args: any[]) => any;
+
+export function track(
+  optionsOrOriginalFunction: TrackOptions | OriginalFunction,
+  originalFunction?: OriginalFunction
 ) {
+  if (typeof optionsOrOriginalFunction === "function") {
+    return executeTrack({}, optionsOrOriginalFunction);
+  }
+
+  const options = optionsOrOriginalFunction;
+
+  if (originalFunction) {
+    return executeTrack(options, originalFunction);
+  }
+
   return function (...args: any[]): any {
-    // New decorator API: ([value, context])
+    // New decorator API: (value, context)
     if (
       args.length === 2 &&
       typeof args[1] === "object" &&
@@ -143,7 +251,7 @@ export function track(
         throw new Error("track decorator is only applicable to methods");
       }
 
-      return withTrack(options)(originalMethod);
+      return executeTrack(options, originalMethod);
     }
 
     // Legacy decorator API: (target, propertyKey, descriptor)
@@ -158,7 +266,7 @@ export function track(
     }
 
     const originalMethod = descriptor.value;
-    descriptor.value = withTrack(options)(originalMethod);
+    descriptor.value = executeTrack(options, originalMethod);
     return descriptor;
   };
 }
