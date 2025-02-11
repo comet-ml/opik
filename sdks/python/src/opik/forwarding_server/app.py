@@ -144,7 +144,7 @@ def create_app(llm_server_host: str) -> FastAPI:
             except json.JSONDecodeError as e:
                 # Don't log the full traceback for expected errors
                 forward_logger.info(
-                    f"[dim]{request.state.request_id}[/] Invalid JSON received: {str(e)}
+                    f"[dim]{request.state.request_id}[/] Invalid JSON received: {str(e)}"
                 )
                 raise HTTPException(
                     status_code=400,
