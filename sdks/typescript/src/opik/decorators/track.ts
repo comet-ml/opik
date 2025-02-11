@@ -87,13 +87,12 @@ function logSuccess({
   trace?: Trace;
 }) {
   const output = typeof result === "object" ? result : { result };
+  const endTime = new Date();
 
-  span.update({ output });
-  span.end();
+  span.update({ endTime, output });
 
   if (trace) {
-    trace.update({ output });
-    trace.end();
+    trace.update({ endTime, output });
   }
 }
 
