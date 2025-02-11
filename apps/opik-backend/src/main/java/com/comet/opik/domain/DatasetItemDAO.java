@@ -180,7 +180,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM dataset_items
                     WHERE dataset_id = :datasetId
                     AND workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS lastRows
                 ;
@@ -209,7 +209,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM dataset_items
                     WHERE dataset_id = :datasetId
                     AND workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 ;
@@ -226,7 +226,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                  FROM dataset_items
                                  WHERE dataset_id IN :dataset_ids
                                    AND workspace_id = :workspace_id
-                                 ORDER BY id DESC, last_updated_at DESC
+                                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                                  LIMIT 1 BY id
                                  ) AS lastRows
                         GROUP BY dataset_id
@@ -248,7 +248,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     <if(dataset_item_filters)>
                     AND <dataset_item_filters>
                     <endif>
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS di
                 INNER JOIN (
@@ -274,20 +274,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 FROM feedback_scores
                                 WHERE entity_type = 'trace'
                                 AND workspace_id = :workspace_id
-                                ORDER BY entity_id DESC, last_updated_at DESC
+                                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                                 LIMIT 1 BY entity_id, name
                             )
                             GROUP BY entity_id
                             HAVING <feedback_scores_filters>
                         )
                         <endif>
-                        ORDER BY id DESC, last_updated_at DESC
+                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     ) AS tfs ON ei.trace_id = tfs.id
                     <endif>
                     WHERE experiment_id in :experimentIds
                     AND workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS ei ON di.id = ei.dataset_item_id
                 ;
@@ -295,11 +295,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String SELECT_DATASET_WORKSPACE_ITEMS = """
                 SELECT
-                    id, workspace_id
+                    DISTINCT id, workspace_id
                 FROM dataset_items
                 WHERE id IN :datasetItemIds
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
                 ;
             """;
 
@@ -348,7 +346,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN :experimentIds
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
             	LIMIT 1 BY id
             ), feedback_scores_final AS (
             	SELECT
@@ -366,7 +364,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 WHERE workspace_id = :workspace_id
                 AND entity_type = :entityType
                 AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                ORDER BY entity_id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ),  experiment_items_final AS (
             	SELECT
@@ -391,12 +389,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         HAVING <feedback_scores_filters>
                     )
                     <endif>
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
-            	LIMIT 1 BY id
             )
             SELECT
                 di.id AS id,
@@ -438,7 +435,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS t
                 LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
@@ -493,7 +490,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM dataset_items
                     WHERE workspace_id = :workspace_id
                     AND dataset_id = :dataset_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) as di
                 INNER JOIN (
@@ -506,7 +503,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     <if(experiment_ids)>
                     AND experiment_id in :experiment_ids
                     <endif>
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) as ei ON ei.dataset_item_id = di.id
                 INNER JOIN (
@@ -515,7 +512,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         output
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) as t ON t.id = ei.trace_id
                 ;

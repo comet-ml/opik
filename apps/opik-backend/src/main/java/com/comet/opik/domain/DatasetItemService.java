@@ -209,7 +209,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
-        return dao.getItems(datasetId, page, size, truncate);
+        return dao.getItems(datasetId, page, size, truncate)
+                .defaultIfEmpty(DatasetItemPage.empty(page));
     }
 
     @Override

@@ -160,7 +160,7 @@ class AutomationRuleEvaluatorServiceImplTest {
                         .projectId(projectId)
                         .build())
                 .map(e -> e.toBuilder()
-                        .id(evaluatorResourceClient.createEvaluator(e, projectId, WORKSPACE_NAME, API_KEY))
+                        .id(evaluatorResourceClient.createEvaluator(e, WORKSPACE_NAME, API_KEY))
                         .build())
                 .orElseThrow();
     }

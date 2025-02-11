@@ -23,6 +23,7 @@ from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
     AutomationRuleEvaluatorPublic_LlmAsJudge,
 )
+from .automation_rule_evaluator_update import AutomationRuleEvaluatorUpdate
 from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite,
     AutomationRuleEvaluatorWrite_LlmAsJudge,
@@ -243,6 +244,7 @@ __all__ = [
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
     "AutomationRuleEvaluator_LlmAsJudge",

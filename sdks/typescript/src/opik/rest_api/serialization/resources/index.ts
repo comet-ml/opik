@@ -10,8 +10,6 @@ export * as spans from "./spans";
 export * from "./spans/types";
 export * as experiments from "./experiments";
 export * as traces from "./traces";
-export * as automationRuleEvaluators from "./automationRuleEvaluators";
-export * from "./automationRuleEvaluators/client/requests";
 export * as chatCompletions from "./chatCompletions";
 export * from "./chatCompletions/client/requests";
 export * as datasets from "./datasets";

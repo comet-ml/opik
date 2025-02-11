@@ -7,6 +7,7 @@
  *     {}
  */
 export interface FindEvaluatorsRequest {
+    projectId?: string;
     name?: string;
     page?: number;
     size?: number;
