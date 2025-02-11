@@ -1,15 +1,12 @@
 from playwright.sync_api import Page, expect
 from typing import Literal, Optional
+from .BasePage import BasePage
 
 
-class FeedbackDefinitionsPage:
+class FeedbackDefinitionsPage(BasePage):
     def __init__(self, page: Page):
-        self.page = page
-        self.url = "/default/configuration?tab=feedback-definitions"
+        super().__init__(page, "configuration", "tab=feedback-definitions")
         self.search_bar = self.page.get_by_test_id("search-input")
-
-    def go_to_page(self):
-        self.page.goto(self.url)
 
     def search_feedback_by_name(self, feedback_name: str):
         self.search_bar.click()
