@@ -3,7 +3,7 @@ type CreateEntity = { id: string };
 const DEFAULT_DEBOUNCE_BATCH_DELAY = 300;
 const DEFAULT_BATCH_SIZE = 100;
 
-class ActionQueue<EntityData = {}> {
+class ActionQueue<EntityData = object> {
   private action: (map: Map<string, EntityData>) => Promise<void>;
   public batchSize: number;
   private delay: number;
@@ -79,7 +79,7 @@ class ActionQueue<EntityData = {}> {
   };
 }
 
-export abstract class BatchQueue<EntityData = {}> {
+export abstract class BatchQueue<EntityData = object> {
   private readonly createQueue;
   private readonly updateQueue;
   private readonly deleteQueue;

@@ -264,7 +264,7 @@ function hrTimeToMilliseconds(hrTime: [number, number]) {
 function safeParseJson(value: unknown): unknown {
   try {
     return JSON.parse(value as string) as Record<string, unknown>;
-  } catch (e) {
+  } catch {
     return value;
   }
 }
@@ -284,7 +284,7 @@ function tryParseJSON(input: unknown): Record<string, unknown> | undefined {
     ) {
       return parsed as Record<string, unknown>;
     }
-  } catch (error) {
+  } catch {
     return undefined;
   }
 
