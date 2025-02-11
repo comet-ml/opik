@@ -14,6 +14,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.util.UUID;
 
+import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,7 +29,7 @@ public class AutomationRuleEvaluatorResourceClient {
     public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName,
             String apiKey) {
         try (var actualResponse = createEvaluator(evaluator, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
 
             return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
@@ -61,13 +62,29 @@ public class AutomationRuleEvaluatorResourceClient {
                 .method(HttpMethod.PATCH, Entity.json(updatedEvaluator))) {
 
             if (isAuthorized) {
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(actualResponse.hasEntity()).isFalse();
             } else {
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                 assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                         .isEqualTo(errorMessage);
             }
+        }
+    }
+
+    public LogPage getLogs(UUID evaluatorId, String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(evaluatorId.toString())
+                .path("logs")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            return actualResponse.readEntity(LogPage.class);
         }
     }
 
