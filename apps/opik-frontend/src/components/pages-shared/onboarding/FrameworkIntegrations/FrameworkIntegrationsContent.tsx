@@ -15,10 +15,15 @@ import IntegrationTabs from "../IntegrationTabs/IntegrationTabs";
 export type FrameworkIntegrationsContentProps = {
   integrationList?: FrameworkIntegration[];
   apiKey?: string;
+  onRunCodeCallback?: () => void;
 };
 const FrameworkIntegrationsContent: React.FC<
   FrameworkIntegrationsContentProps
-> = ({ integrationList = QUICKSTART_INTEGRATIONS, apiKey }) => {
+> = ({
+  integrationList = QUICKSTART_INTEGRATIONS,
+  apiKey,
+  onRunCodeCallback,
+}) => {
   const [integrationIndex, setIntegrationIndex] = useState<number>(0);
   const integration = integrationList[integrationIndex];
 
@@ -68,6 +73,7 @@ const FrameworkIntegrationsContent: React.FC<
         executionUrl={integration.executionUrl}
         executionLogs={integration.executionLogs}
         withLineHighlights
+        onRunCodeCallback={onRunCodeCallback}
       />
     </IntegrationListLayout>
   );

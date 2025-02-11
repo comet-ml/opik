@@ -63,7 +63,7 @@ The `filter_string` parameter should follow the format `<column> <operator> <val
    - `start_time`
    - `end_time`
    - `metadata`
-   - `feedback_score`
+   - `feedback_scores`
    - `tags`
    - `usage.total_tokens`
    - `usage.prompt_tokens`

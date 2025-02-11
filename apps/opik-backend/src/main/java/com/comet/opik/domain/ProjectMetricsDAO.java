@@ -42,7 +42,6 @@ public interface ProjectMetricsDAO {
 
     @Builder
     record Entry(String name, Instant time, Number value) {
-
     }
 
     Mono<List<Entry>> getDuration(UUID projectId, ProjectMetricRequest request);
@@ -64,19 +63,25 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             TimeInterval.HOURLY, "toIntervalHour(1)");
 
     private static final String GET_TRACE_DURATION = """
-            SELECT <bucket> AS bucket,
-                   arrayMap(v ->
-                        toDecimal64(if(isNaN(v), 0, v), 9),
-                        quantiles(0.5, 0.9, 0.99)(if(end_time IS NOT NULL AND start_time IS NOT NULL
+            WITH traces_dedup AS (
+                SELECT
+                       id,
+                       start_time,
+                       if(end_time IS NOT NULL AND start_time IS NOT NULL
                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL))
-                   ) AS duration
-            FROM traces
-            WHERE project_id = :project_id
+                            NULL) AS duration
+                FROM traces
+                WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                 AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            SELECT <bucket> AS bucket,
+                   arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
+            FROM traces_dedup
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
@@ -111,7 +116,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND entity_type = 'trace'
-                ORDER BY entity_id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             )
             SELECT <bucket> AS bucket,
@@ -129,7 +134,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     private static final String GET_TOKEN_USAGE = """
-            WITH flat_usage AS (
+            WITH spans_dedup AS (
                 SELECT t.start_time as start_time,
                        name,
                        value
@@ -138,13 +143,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id, name
             )
             SELECT <bucket> AS bucket,
                     name,
                     nullIf(sum(value), 0) AS value
-            FROM flat_usage
+            FROM spans_dedup
             WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
                 AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY name, bucket
@@ -163,7 +168,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     JOIN traces t ON spans.trace_id = t.id
                 WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                ORDER BY s.id DESC, s.last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY s.id
             )
             SELECT <bucket> AS bucket,
