@@ -230,7 +230,8 @@ public class OnlineScoringLlmAsJudgeScorer implements Managed {
             try {
                 scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace);
             } catch (Exception e) {
-                userFacingLogger.error("Error preparing LLM request for traceId '{}'", trace.id());
+                userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}", trace.id(),
+                        e.getMessage());
                 throw e;
             }
 
@@ -243,8 +244,8 @@ public class OnlineScoringLlmAsJudgeScorer implements Managed {
                         message.workspaceId());
                 userFacingLogger.info("Received response for traceId '{}':\n\n{}", trace.id(), chatResponse);
             } catch (Exception e) {
-                userFacingLogger.error("Unexpected error while scoring traceId '{}' with rule '{}'", trace.id(),
-                        message.ruleName());
+                userFacingLogger.error("Unexpected error while scoring traceId '{}' with rule '{}': \n\n{}", trace.id(),
+                        message.ruleName(), e.getCause().getMessage());
                 throw e;
             }
 
