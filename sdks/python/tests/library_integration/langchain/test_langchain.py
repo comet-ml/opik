@@ -329,17 +329,21 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_langchain__openai_llm_is_used__async_astream__gpt4o__happyflow(
+def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged__happyflow(
     fake_backend,
     ensure_openai_configured,
 ):
+    """
+    In `astream` mode, the `token_usage` is not provided by langchain.
+    For trace `input` always will be = {"input": ""}
+    """
     callback = OpikTracer(
         tags=["tag3", "tag4"],
         metadata={"c": "d"},
     )
 
     model = langchain_openai.ChatOpenAI(
-        model_name="gpt-4o",
+        model="gpt-4o",
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
