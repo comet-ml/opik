@@ -553,6 +553,8 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         ],
     )
 
+    synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
+
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
