@@ -62,5 +62,7 @@ export class OpikClient {
   public flush = async () => {
     await this.traceBatchQueue.flush();
     await this.spanBatchQueue.flush();
+    await this.traceFeedbackScoresBatchQueue.flush();
+    await this.spanFeedbackScoresBatchQueue.flush();
   };
 }
