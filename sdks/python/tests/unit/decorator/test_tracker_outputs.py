@@ -19,11 +19,11 @@ from ...testlib import (
 
 
 def test_track__one_nested_function__happyflow(fake_backend):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_inner(x):
         return "inner-output"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_outer(x):
         f_inner("inner-input")
         return "outer-output"
@@ -137,16 +137,16 @@ def test_track__one_function_without_nesting__output_is_dict__output_is_wrapped_
 
 
 def test_track__two_nested_functions__happyflow(fake_backend):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_inner(z):
         return "inner-output"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_middle(y):
         f_inner("inner-input")
         return "middle-output"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_outer(x):
         f_middle("middle-input")
         return "outer-output"
@@ -202,15 +202,15 @@ def test_track__two_nested_functions__happyflow(fake_backend):
 def test_track__outer_function_has_two_separate_nested_function__happyflow(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_inner_1(y):
         return "inner-output-1"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_inner_2(y):
         return "inner-output-2"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_outer(x):
         f_inner_1("inner-input-1")
         f_inner_2("inner-input-2")
@@ -264,11 +264,11 @@ def test_track__outer_function_has_two_separate_nested_function__happyflow(
 
 
 def test_track__two_traces__happyflow(fake_backend):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_1(x):
         return "f1-output"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_2(x):
         return "f2-output"
 
@@ -327,7 +327,7 @@ def test_track__two_traces__happyflow(fake_backend):
 def test_track__one_function__error_raised__trace_and_span_finished_correctly__outputs_are_None(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f(x):
         raise Exception("error message")
 
@@ -432,7 +432,7 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
 def test_track__one_async_function__error_raised__trace_and_span_finished_correctly__outputs_are_None__error_info_is_added(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_f(x):
         await asyncio.sleep(0.01)
         raise Exception("error message")
@@ -480,7 +480,7 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
 def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backend):
     ID_STORAGE: Dict[str, str] = {}
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_inner(y, thread_id):
         ID_STORAGE[f"f_inner-trace-id-{thread_id}"] = (
             opik_context.get_current_trace_data().id
@@ -490,7 +490,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
         )
         return f"inner-output-from-{thread_id}"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_outer(x):
         ID_STORAGE["f_outer-trace-id"] = opik_context.get_current_trace_data().id
         ID_STORAGE["f_outer-span-id"] = opik_context.get_current_span_data().id
@@ -595,7 +595,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
 def test_track__single_generator_function_tracked__generator_exhausted__happyflow(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f(x):
         values = ["yielded-1", "yielded-2", "yielded-3"]
         for value in values:
@@ -686,20 +686,20 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
 def test_track__generator_function_tracked__generator_exhausted_in_another_tracked_function__generator_span_started_and_ended_with_generator_exhausting(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_inner(z, generator):
         for _ in generator:
             pass
 
         return "inner-output"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def gen_f(y):
         values = ["yielded-1", "yielded-2", "yielded-3"]
         for value in values:
             yield value
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_outer(x):
         generator = gen_f("generator-input")
         f_inner("inner-input", generator)
@@ -847,7 +847,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
 def test_track__single_async_function_tracked__happyflow(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_f(x):
         await asyncio.sleep(0.01)
         return "the-output"
@@ -884,12 +884,12 @@ def test_track__single_async_function_tracked__happyflow(
 def test_track__nested_async_function_tracked__happyflow(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_f_inner(y):
         await asyncio.sleep(0.01)
         return "inner-output"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_f_outer(x):
         await async_f_inner("inner-input")
         return "outer-output"
@@ -936,7 +936,7 @@ def test_track__nested_async_function_tracked__happyflow(
 def test_track__top_level_single_async_generator_function_tracked__generator_exhausted__happyflow(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_generator(x):
         await asyncio.sleep(0.01)
 
@@ -984,7 +984,7 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
     async def some_async_work():
         await asyncio.sleep(0.001)
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_generator(x):
         await some_async_work()
 
@@ -1037,14 +1037,14 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
 def test_track__async_generator_inside_another_tracked_function__happyflow(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_generator(y):
         await asyncio.sleep(0.01)
 
         for item in ["yielded-1", "yielded-2", "yielded-3"]:
             yield item
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_generator_user(x):
         async for _ in async_generator("generator-input"):
             pass
@@ -1097,14 +1097,14 @@ def test_track__async_generator_inside_another_tracked_function__another_tracked
     async def some_async_work():
         await asyncio.sleep(0.001)
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_generator(y):
         await some_async_work()
 
         for item in ["yielded-1", "yielded-2", "yielded-3"]:
             yield item
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     async def async_generator_user(x):
         async for _ in async_generator("generator-input"):
             pass
@@ -1163,7 +1163,7 @@ def test_track__async_generator_inside_another_tracked_function__another_tracked
 def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_threads__all_data_is_saved_in_1_trace_tree(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_remote(y, thread_id):
         return f"f-remote-output-from-{thread_id}"
 
@@ -1171,7 +1171,7 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
         f_remote(y, thread_id, opik_distributed_trace_headers=opik_headers)
         return "result-from-node-runner"
 
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f_outer(x):
         distributed_trace_headers = opik_context.get_distributed_trace_headers()
         t1 = threading.Thread(
@@ -1224,7 +1224,7 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
 def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_new_span_to_it__trace_is_not_popped_from_context_in_the_end(
     fake_backend,
 ):
-    @tracker.track(capture_output=True)
+    @tracker.track
     def f(x):
         return "f-output"
 
