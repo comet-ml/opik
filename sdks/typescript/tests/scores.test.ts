@@ -63,6 +63,19 @@ describe("Feedback scores", () => {
 
   it("add 2 scores to a trace (batching)", async () => {
     const trace = client.trace({ name: "test" });
+    const span = trace.span({ name: "test-span", type: "llm" });
+
+    span.score({
+      name: "test-span",
+      value: 1,
+    });
+    span.score({
+      name: "test-span-2",
+      value: 2,
+    });
+
+    span.end();
+
     trace.score({
       name: "test",
       value: 1,
@@ -73,11 +86,15 @@ describe("Feedback scores", () => {
       reason: "test-reason",
       value: 2,
     });
+
     trace.end();
     await client.flush();
 
     expect(createTracesSpy).toHaveBeenCalledTimes(1);
     expect(updateTracesSpy).toHaveBeenCalledTimes(0);
+    expect(createSpansSpy).toHaveBeenCalledTimes(1);
+    expect(updateSpansSpy).toHaveBeenCalledTimes(0);
     expect(createTracesFeedbackScoresSpy).toHaveBeenCalledTimes(1);
+    expect(createSpansFeedbackScoresSpy).toHaveBeenCalledTimes(1);
   });
 });
