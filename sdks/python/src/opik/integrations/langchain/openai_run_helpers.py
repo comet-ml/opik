@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, Optional, TYPE_CHECKING, Tuple, cast
 
-from opik import logging_messages
+from opik import _logging as opik_logging, logging_messages
 from opik.types import LLMUsageInfo, UsageDict
 from opik.validation import usage as usage_validator
 
@@ -46,6 +46,11 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
             )
             token_usage.update(token_usage_full)
         else:
+            opik_logging.log_once_at_level(
+                logging_level=logging.WARNING,
+                message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
+                logger=LOGGER,
+            )
             return None
 
         if usage_validator.UsageValidator(token_usage).validate().ok():
