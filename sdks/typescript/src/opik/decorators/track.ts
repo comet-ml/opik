@@ -15,6 +15,16 @@ const DEFAULT_TRACK_NAME = "track.decorator";
 
 const trackStorage = new AsyncLocalStorage<TrackContext>();
 
+export const getTrackContext = (): Required<TrackContext> | undefined => {
+  const { span, trace } = trackStorage.getStore() || {};
+
+  if (!span || !trace) {
+    return undefined;
+  }
+
+  return { span, trace };
+};
+
 function isPromise(obj: any): obj is Promise<any> {
   return (
     !!obj &&

@@ -1,5 +1,5 @@
 import { trackOpikClient } from "@/decorators/track";
-import { Opik, track } from "opik";
+import { Opik, track, getTrackContext } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
 
@@ -43,7 +43,7 @@ describe("Track decorator", () => {
     updateTracesSpy.mockRestore();
   });
 
-  it.skip("should maintain correct span hierarchy for mixed async/sync functions", async () => {
+  it("should maintain correct span hierarchy for mixed async/sync functions", async () => {
     const f111 = track({ name: "innerf111" }, () => "f111");
     const f11 = track(async function innerf11(a: number, b: number) {
       await advanceToDelay(10);
@@ -143,6 +143,50 @@ describe("Track decorator", () => {
     expect(spans[2]).toMatchObject({
       name: "translate",
       parentSpanId: spans[0]?.id,
+    });
+  });
+
+  it("tracked function can access to its context", async () => {
+    const llmCall = track(
+      { name: "llm-test", type: "llm" },
+      async () => "llm result"
+    );
+
+    const translate = track(
+      { name: "translate", type: "tool" },
+      async (text) => {
+        const context = getTrackContext();
+
+        if (context?.span) {
+          context.span.update({
+            tags: ["translate-tag"],
+          });
+        }
+
+        return `translated: ${text}`;
+      }
+    );
+
+    const execute = track(
+      { name: "initial", projectName: "track-decorator-test" },
+      async () => {
+        const result = await llmCall();
+        return translate(result);
+      }
+    );
+
+    await execute();
+    await trackOpikClient.flush();
+
+    expect(createTracesSpy).toHaveBeenCalledTimes(1);
+    expect(createSpansSpy).toHaveBeenCalledTimes(1);
+
+    const spans = createSpansSpy.mock.calls
+      .map((call) => call?.[0]?.spans ?? [])
+      .flat();
+
+    expect(spans[2]).toMatchObject({
+      tags: ["translate-tag"],
     });
   });
 });
