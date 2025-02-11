@@ -3,12 +3,12 @@ run-name: "TypeScript SDK Linter ${{ github.ref_name }} by @${{ github.actor }}"
 on:
   pull_request:
     paths:
-      - "sdks/typescript/src/**"
+      - "sdks/typescript/**"
   push:
     branches:
       - "main"
     paths:
-      - "sdks/typescript/src/**"
+      - "sdks/typescript/**"
   workflow_dispatch:
 jobs:
   lint:
