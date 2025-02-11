@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { OpikClient } from "@/client/Client";
 import { SpanType } from "@/rest_api/api/types/SpanType";
 import { Span } from "@/tracer/Span";
@@ -150,7 +151,7 @@ function executeTrack<T extends (...args: any[]) => any>(
   } = {},
   originalFn: T
 ): T {
-  const wrappedFn = function (...args: any[]): ReturnType<T> {
+  const wrappedFn = function (this: any, ...args: any[]): ReturnType<T> {
     const context = trackStorage.getStore();
     const { span, trace } = logSpan({
       name: name ?? (originalFn.name || DEFAULT_TRACK_NAME),
@@ -160,8 +161,7 @@ function executeTrack<T extends (...args: any[]) => any>(
       type,
     });
     const isRootSpan = !context;
-    // @ts-ignore
-    const fnThis = this;
+    const fnThis = this as any;
 
     return trackStorage.run({ span, trace }, () => {
       try {
@@ -255,7 +255,7 @@ export function track(
     }
 
     // Legacy decorator API: (target, propertyKey, descriptor)
-    const [target, propertyKey, descriptor] = args as [
+    const [, , descriptor] = args as [
       object,
       string | symbol,
       PropertyDescriptor,
