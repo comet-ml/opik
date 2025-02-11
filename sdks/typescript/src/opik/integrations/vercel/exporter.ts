@@ -44,7 +44,7 @@ export class OpikExporter implements SpanExporter {
         const parsedValue = tryParseJSON(attributes[key]);
 
         if (parsedValue) {
-          input = parsedValue;
+          input = { ...input, ...parsedValue };
         }
       }
 
@@ -61,6 +61,18 @@ export class OpikExporter implements SpanExporter {
       }
     });
 
+    if (Object.keys(input).length > 0) {
+      return input;
+    }
+
+    if ("ai.toolCall.name" in attributes) {
+      input.toolName = attributes["ai.toolCall.name"];
+    }
+
+    if ("ai.toolCall.args" in attributes) {
+      input.args = attributes["ai.toolCall.args"];
+    }
+
     return input;
   };
 
@@ -73,6 +85,10 @@ export class OpikExporter implements SpanExporter {
 
     if (attributes["ai.toolCall.result"]) {
       return { result: attributes["ai.toolCall.result"] };
+    }
+
+    if (attributes["ai.response.toolCalls"]) {
+      return { toolCalls: safeParseJson(attributes["ai.response.toolCalls"]) };
     }
 
     return {};
