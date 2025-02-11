@@ -1,4 +1,4 @@
-import { Opik } from "@opik";
+import { Opik } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
 

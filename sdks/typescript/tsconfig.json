@@ -8,14 +8,16 @@
     "sourceMap": true,
     "outDir": "dist",
     "strict": true,
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "types": ["vitest/globals"],
+    "baseUrl": ".",
     "paths": {
-      "@opik": ["./src/opik/index.ts"],
+      "opik": ["./src/opik/index.ts"],
+      "opik/vercel": ["./src/opik/integrations/vercel/index.ts"],
       "@/*": ["./src/opik/*"],
       "@tests/*": ["./tests/*"]
     }

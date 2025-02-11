@@ -19,18 +19,37 @@ You can install the `opik` package using your favorite package manager.
 npm install opik
 ```
 
-## Usage
+## Opik Configuration
+
+You can configure the Opik client using environment variables.
+
+```bash
+export OPIK_API_KEY="your-api-key"
+export OPIK_HOST="https://www.comet.com/opik/api"
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE_NAME="your-workspace-name"
+```
+
+Or you can pass the configuration to the Opik client constructor.
 
 ```typescript
 import { Opik } from "opik";
 
-// Create a new Opik client with your configuration
 const client = new Opik({
   apiKey: "<your-api-key>",
   host: "https://www.comet.com/opik/api",
   projectName: "<your-project-name>",
   workspaceName: "<your-workspace-name>",
 });
+```
+
+## Usage
+
+```typescript
+import { Opik } from "opik";
+
+// Create a new Opik client with your configuration
+const client = new Opik();
 
 // Log 10 traces
 for (let i = 0; i < 10; i++) {
@@ -71,6 +90,56 @@ for (let i = 0; i < 10; i++) {
 // Flush the client to send all traces and spans
 await client.flush();
 ```
+
+## Vercel AI SDK Integration
+
+Opik provides seamless integration with the Vercel AI SDK through OpenTelemetry instrumentation.
+
+### Installation
+
+Install the required dependencies:
+
+```bash
+npm install opik ai @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
+```
+
+### Usage
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { generateText } from "ai";
+import { OpikExporter } from "opik/vercel";
+
+const sdk = new NodeSDK({
+  traceExporter: new OpikExporter(),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+
+const { text } = await generateText({
+  model: openai("gpt-4o-mini"),
+  prompt: "What is love? Describe it in 10 words or less.",
+  experimental_telemetry: OpikExporter.getSettings({
+    name: "ai-sdk-integration",
+  }),
+});
+
+await sdk.shutdown();
+```
+
+This integration automatically captures:
+
+- Input prompts and messages
+- Model responses
+- Token usage statistics
+- Tool calls and their results
+- Timing information
+- Error states
+
+All this telemetry data is automatically sent to your Opik project for analysis and monitoring.
 
 ## Contributing
 
