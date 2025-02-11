@@ -1,5 +1,5 @@
 import { trackOpikClient } from "@/decorators/track";
-import { Opik, track, getTrackContext } from "opik";
+import { getTrackContext, track } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
 
@@ -8,11 +8,16 @@ async function mockAPIPromise<T>() {
 }
 
 describe("Track decorator", () => {
-  let client: Opik;
-  let createSpansSpy: MockInstance<typeof client.api.spans.createSpans>;
-  let updateSpansSpy: MockInstance<typeof client.api.spans.updateSpan>;
-  let createTracesSpy: MockInstance<typeof client.api.traces.createTraces>;
-  let updateTracesSpy: MockInstance<typeof client.api.traces.updateTrace>;
+  let createSpansSpy: MockInstance<
+    typeof trackOpikClient.api.spans.createSpans
+  >;
+  let updateSpansSpy: MockInstance<typeof trackOpikClient.api.spans.updateSpan>;
+  let createTracesSpy: MockInstance<
+    typeof trackOpikClient.api.traces.createTraces
+  >;
+  let updateTracesSpy: MockInstance<
+    typeof trackOpikClient.api.traces.updateTrace
+  >;
 
   beforeEach(() => {
     createSpansSpy = vi
@@ -47,22 +52,19 @@ describe("Track decorator", () => {
     const f111 = track({ name: "innerf111" }, () => "f111");
     const f11 = track(async function innerf11(a: number, b: number) {
       await advanceToDelay(10);
-      const result = f111();
+      f111();
       return a + b;
     });
     const f12 = track(function innerf12() {
       return "f12";
     });
     const f13 = track({ name: "innerf13" }, () => ({ hello: "world" }));
-    const f1 = track(
-      { projectName: "with-track" },
-      async function innerf1(message: string) {
-        const promise = f11(1, 2);
-        f12();
-        f13({ a: "b" });
-        return promise;
-      }
-    );
+    const f1 = track({ projectName: "with-track" }, async function innerf1() {
+      const promise = f11(1, 2);
+      f12();
+      f13({ a: "b" });
+      return promise;
+    });
 
     await f1("test:f1");
     await trackOpikClient.flush();
