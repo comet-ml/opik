@@ -1,13 +1,12 @@
 import logging
-from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING
-
-from opik.types import ErrorInfoDict, LLMUsageInfo
+from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING, cast
 
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 
 from opik import dict_utils, opik_context
 from opik.api_objects import opik_client, span, trace
+from opik.types import ErrorInfoDict, LLMUsageInfo
 from . import (
     base_llm_patcher,
     google_run_helpers,
@@ -28,12 +27,14 @@ opik_encoder_extension.register()
 
 language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 
+SpanType = Literal["llm", "tool", "general"]
 
-def _get_span_type(run: "Run") -> Literal["llm", "tool", "general"]:
-    if run.run_type in ["llm", "tool"]:
-        return run.run_type  # type: ignore[no-any-return]
 
-    return "general"
+def _get_span_type(run: Dict[str, Any]) -> SpanType:
+    if run.get("run_type") in ["llm", "tool"]:
+        return cast(SpanType, run.get("run_type"))
+
+    return cast(SpanType, "general")
 
 
 class OpikTracer(BaseTracer):
@@ -96,8 +97,6 @@ class OpikTracer(BaseTracer):
             error_info = None
 
         span_data = self._span_data_map[run.id]
-        span_data.init_end_time().update(output=output, error_info=error_info)
-        self._opik_client.span(**span_data.__dict__)
 
         if span_data.trace_id not in self._externally_created_traces_ids:
             trace_data = self._created_traces_data_map[run.id]
@@ -124,7 +123,7 @@ class OpikTracer(BaseTracer):
                 input=run_dict["inputs"],
                 metadata=run_dict["extra"],
                 name=run.name,
-                type=_get_span_type(run),
+                type=_get_span_type(run_dict),
                 project_name=project_name,
             )
 
@@ -178,6 +177,7 @@ class OpikTracer(BaseTracer):
             parent_span_id=None,
             name=run_dict["name"],
             input=run_dict["inputs"],
+            type=_get_span_type(run_dict),
             metadata=root_metadata,
             tags=self._trace_default_tags,
             project_name=self._project_name,
@@ -204,6 +204,7 @@ class OpikTracer(BaseTracer):
             metadata=root_metadata,
             tags=self._trace_default_tags,
             project_name=project_name,
+            type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(span_data.trace_id)
@@ -227,49 +228,42 @@ class OpikTracer(BaseTracer):
             metadata=root_metadata,
             tags=self._trace_default_tags,
             project_name=project_name,
+            type=_get_span_type(run_dict),
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(current_trace_data.id)
 
     def _process_end_span(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
-        if not run.parent_run_id:
-            pass
-            # Langchain will call _persist_run for us
-        else:
-            span_data = self._span_data_map[run.id]
-            usage_info: LLMUsageInfo = LLMUsageInfo()
+        span_data = self._span_data_map[run.id]
+        usage_info: LLMUsageInfo = LLMUsageInfo()
 
-            if openai_run_helpers.is_openai_run(run):
-                usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
-            elif google_run_helpers.is_google_run(run):
-                usage_info = google_run_helpers.get_llm_usage_info(run_dict)
+        if openai_run_helpers.is_openai_run(run):
+            usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
+        elif google_run_helpers.is_google_run(run):
+            usage_info = google_run_helpers.get_llm_usage_info(run_dict)
 
-            span_data.init_end_time().update(
-                output=run_dict["outputs"],
-                usage=usage_info.usage,
-                provider=usage_info.provider,
-                model=usage_info.model,
-            )
-            self._opik_client.span(**span_data.__dict__)
+        span_data.init_end_time().update(
+            output=run_dict["outputs"],
+            usage=usage_info.usage,
+            provider=usage_info.provider,
+            model=usage_info.model,
+        )
+        self._opik_client.span(**span_data.__dict__)
 
     def _process_end_span_with_error(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
-        if not run.parent_run_id:
-            pass
-            # Langchain will call _persist_run for us
-        else:
-            span_data = self._span_data_map[run.id]
-            error_info: ErrorInfoDict = {
-                "exception_type": "Exception",
-                "traceback": run_dict["error"],
-            }
+        span_data = self._span_data_map[run.id]
+        error_info: ErrorInfoDict = {
+            "exception_type": "Exception",
+            "traceback": run_dict["error"],
+        }
 
-            span_data.init_end_time().update(
-                output=None,
-                error_info=error_info,
-            )
-            self._opik_client.span(**span_data.__dict__)
+        span_data.init_end_time().update(
+            output=None,
+            error_info=error_info,
+        )
+        self._opik_client.span(**span_data.__dict__)
 
     def flush(self) -> None:
         """

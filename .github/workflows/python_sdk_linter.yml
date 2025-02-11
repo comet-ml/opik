@@ -21,4 +21,4 @@ jobs:
       - name: install pre-commit
         run: pip install pre-commit
       - name: linting
-        run: pre-commit run --all-files
+        run: pre-commit run --all-files --show-diff-on-failure
