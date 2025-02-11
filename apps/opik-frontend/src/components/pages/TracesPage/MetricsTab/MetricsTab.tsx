@@ -177,7 +177,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
               <MetricChart
                 chartId="duration_chart"
                 name="Duration"
-                description="Daily averages in seconds"
+                description="Daily quantiles in seconds"
                 metricName={METRIC_NAME_TYPE.DURATION}
                 interval={interval}
                 intervalStart={intervalStart}
