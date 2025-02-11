@@ -118,7 +118,7 @@ class SyncTrackedGenerator(BaseTrackedGenerator, Generic[YieldType]):
             self._ensure_span_and_trace_created()
             assert self._created_span_data is not None
 
-            with temporary_context(self._created_span_data, self._created_trace_data):
+            with context_storage.temporary_context(self._created_span_data, self._created_trace_data):
                 value = next(self._generator)
                 self._accumulated_values.append(value)
                 return value
@@ -155,7 +155,7 @@ class AsyncTrackedGenerator(BaseTrackedGenerator):
             self._ensure_span_and_trace_created()
             assert self._created_span_data is not None
 
-            with temporary_context(self._created_span_data, self._created_trace_data):
+            with context_storage.temporary_context(self._created_span_data, self._created_trace_data):
                 value = await self._generator.__anext__()
                 self._accumulated_values.append(value)
                 return value
@@ -185,20 +185,3 @@ def _try_aggregate_items(
         output = str(items)
 
     return output
-
-
-@contextlib.contextmanager
-def temporary_context(
-    span_data: span.SpanData, trace_data: Optional[trace.TraceData]
-) -> Generator[None, None, None]:
-    original_trace = context_storage.get_trace_data()
-
-    if trace is not None:
-        context_storage.set_trace_data(trace=trace_data)
-
-    context_storage.add_span_data(span_data)
-
-    yield
-
-    context_storage.set_trace_data(original_trace)
-    context_storage.pop_span_data()

@@ -1,6 +1,7 @@
 import contextvars
+import contextlib
 
-from typing import List, Optional
+from typing import List, Optional, Generator
 from opik.api_objects import span, trace
 
 _current_trace_data_context: contextvars.ContextVar[Optional[trace.TraceData]] = (
@@ -76,3 +77,25 @@ def set_trace_data(trace: Optional[trace.TraceData]) -> None:
 def clear_all() -> None:
     _current_trace_data_context.set(None)
     _spans_data_stack_context.set([])
+
+
+@contextlib.contextmanager
+def temporary_context(
+    span_data: span.SpanData, trace_data: Optional[trace.TraceData]
+) -> Generator[None, None, None]:
+    """
+    Temporary adds span and trace data passed to the context.
+    If trac_ data is None, it has no effect on the context.
+    """
+    try:
+        original_trace = get_trace_data()
+
+        if trace_data is not None:
+            set_trace_data(trace=trace_data)
+
+        add_span_data(span_data)
+
+        yield
+    finally:
+        set_trace_data(original_trace)
+        pop_span_data()
