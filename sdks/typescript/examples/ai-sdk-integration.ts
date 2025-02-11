@@ -14,9 +14,9 @@ sdk.start();
 const { text } = await generateText({
   model: openai("gpt-4o-mini"),
   prompt: "What is love? Describe it in 10 words or less.",
-  experimental_telemetry: {
-    isEnabled: true,
-  },
+  experimental_telemetry: OpikExporter.getSettings({
+    name: "ai-sdk-integration",
+  }),
 });
 
 console.log("Result:", text);
