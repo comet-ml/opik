@@ -1,5 +1,5 @@
 import { trackOpikClient } from "@/decorators/track";
-import { Opik, track, withTrack } from "opik";
+import { Opik, track } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
 
@@ -44,32 +44,25 @@ describe("Track decorator", () => {
   });
 
   it("should maintain correct span hierarchy for mixed async/sync functions", async () => {
-    const f111 = withTrack()(function innerf111() {
-      return "f111";
-    });
-
-    const f11 = withTrack()(async function innerf11(a: number, b: number) {
+    const f111 = track({ name: "innerf111" }, () => "f111");
+    const f11 = track(async function innerf11(a: number, b: number) {
       await advanceToDelay(10);
       const result = f111();
       return a + b;
     });
-
-    const f12 = withTrack()(function innerf12() {
+    const f12 = track(function innerf12() {
       return "f12";
     });
-
-    const f13 = withTrack()(function innerf13(obj: any) {
-      return { hello: "world" };
-    });
-
-    const f1 = withTrack({ projectName: "with-track" })(async function innerf1(
-      message: string
-    ) {
-      const promise = f11(1, 2);
-      f12();
-      f13({ a: "b" });
-      return promise;
-    });
+    const f13 = track({ name: "innerf13" }, () => ({ hello: "world" }));
+    const f1 = track(
+      { projectName: "with-track" },
+      async function innerf1(message: string) {
+        const promise = f11(1, 2);
+        f12();
+        f13({ a: "b" });
+        return promise;
+      }
+    );
 
     await f1("test:f1");
     await trackOpikClient.flush();
@@ -130,8 +123,8 @@ describe("Track decorator", () => {
 
     expect(createTracesSpy).toHaveBeenCalledTimes(1);
     expect(createSpansSpy).toHaveBeenCalledTimes(2);
-    expect(updateSpansSpy).toHaveBeenCalledTimes(3);
-    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+    expect(updateSpansSpy).toHaveBeenCalledTimes(6);
+    expect(updateTracesSpy).toHaveBeenCalledTimes(2);
 
     const spans = createSpansSpy.mock.calls
       .map((call) => call?.[0]?.spans ?? [])
