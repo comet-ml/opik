@@ -37,6 +37,7 @@ setup(
     ).read(),
     long_description_content_type="text/markdown",
     install_requires=[
+        "boto3-stubs[bedrock-runtime]>=1.34.110",
         "click",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
         "levenshtein<1.0.0",
