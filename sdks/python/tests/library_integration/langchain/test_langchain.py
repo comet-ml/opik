@@ -124,22 +124,40 @@ def test_langchain__happyflow(
 
 
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt",
+    "llm_model, expected_input_prompt, stream_usage",
     [
         (
             langchain_openai.OpenAI,
             "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            False,
         ),
         (
             langchain_openai.ChatOpenAI,
             "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            False,
+        ),
+        (
+            langchain_openai.ChatOpenAI,
+            "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            True,
         ),
     ],
 )
 def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_backend, ensure_openai_configured, llm_model, expected_input_prompt
+    fake_backend,
+    ensure_openai_configured,
+    llm_model,
+    expected_input_prompt,
+    stream_usage,
 ):
-    llm = llm_model(max_tokens=10, name="custom-openai-llm-name")
+    llm_args = {
+        "max_tokens": 10,
+        "name": "custom-openai-llm-name",
+    }
+    if stream_usage is True:
+        llm_args["stream_usage"] = stream_usage
+
+    llm = llm_model(**llm_args)
 
     template = "Given the title of play, write a synopsys for that. Title: {title}."
 
@@ -203,6 +221,106 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                         model=ANY_STRING(startswith="gpt-3.5-turbo"),
                     ),
                 ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert len(callback.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__happyflow(
+    fake_backend,
+    ensure_openai_configured,
+):
+    expected_input_prompt = "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
+
+    callback = OpikTracer(
+        tags=["tag3", "tag4"],
+        metadata={"c": "d"},
+        project_name="878",
+    )
+
+    model = langchain_openai.ChatOpenAI(
+        max_tokens=10,
+        name="custom-openai-llm-name",
+        callbacks=[callback],
+        stream_usage=True,
+    )
+
+    chunks = []
+    # for chunk in model.stream("what color is the sky?"):
+    for chunk in model.stream(
+        "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
+    ):
+        chunks.append(chunk)
+        # print(chunk.content, end="|", flush=True)
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="custom-openai-llm-name",
+        input={"prompts": [expected_input_prompt]},
+        output={
+            "generations": ANY_BUT_NONE,
+            "llm_output": None,
+            "run": None,
+            "type": "LLMResult",
+        },
+        tags=["tag3", "tag4"],
+        metadata={
+            "c": "d",
+            "ls_max_tokens": 10,
+            "ls_model_name": "gpt-3.5-turbo",
+            "ls_model_type": "chat",
+            "ls_provider": "openai",
+            "ls_temperature": None,
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="custom-openai-llm-name",
+                input={"prompts": [expected_input_prompt]},
+                output=ANY_BUT_NONE,
+                tags=["tag3", "tag4"],
+                metadata={
+                    "c": "d",
+                    "ls_max_tokens": 10,
+                    "ls_model_name": "gpt-3.5-turbo",
+                    "ls_model_type": "chat",
+                    "ls_provider": "openai",
+                    "ls_temperature": None,
+                    "usage": {
+                        "completion_tokens": ANY_BUT_NONE,
+                        "input_token_details": {
+                            "audio": ANY_BUT_NONE,
+                            "cache_read": ANY_BUT_NONE,
+                        },
+                        "input_tokens": ANY_BUT_NONE,
+                        "output_token_details": {
+                            "audio": ANY_BUT_NONE,
+                            "reasoning": ANY_BUT_NONE,
+                        },
+                        "output_tokens": ANY_BUT_NONE,
+                        "prompt_tokens": ANY_BUT_NONE,
+                        "total_tokens": ANY_BUT_NONE,
+                    },
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                type="llm",
+                model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                provider="openai",
+                usage={
+                    "completion_tokens": ANY_BUT_NONE,
+                    "prompt_tokens": ANY_BUT_NONE,
+                    "total_tokens": ANY_BUT_NONE,
+                },
             )
         ],
     )

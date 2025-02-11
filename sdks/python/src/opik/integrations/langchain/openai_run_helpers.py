@@ -23,8 +23,29 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
 
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
+    """
+    Attempts to extract and return the token usage from the given run dictionary.
+
+    Depending on the execution type (invoke, streaming mode, async etc.), or even the model name itself,
+    token usage info might be in different places, different formats or completely missing.
+    """
     try:
-        token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
+        if run_dict["outputs"]["llm_output"] is not None:
+            token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
+
+        # streaming mode handling (token usage data will be available at the end of streaming)
+        else:
+            token_usage_full = run_dict["outputs"]["generations"][-1][-1]["message"][
+                "kwargs"
+            ]["usage_metadata"]
+
+            token_usage = UsageDict(
+                completion_tokens=token_usage_full["output_tokens"],
+                prompt_tokens=token_usage_full["input_tokens"],
+                total_tokens=token_usage_full["total_tokens"],
+            )
+            token_usage.update(token_usage_full)
+
         if usage_validator.UsageValidator(token_usage).validate().ok():
             return cast(UsageDict, token_usage)
 
