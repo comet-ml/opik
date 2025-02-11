@@ -1,5 +1,5 @@
 import { trackOpikClient } from "@/decorators/track";
-import { Opik, track, withTrack } from "@opik";
+import { Opik, track, withTrack } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
 
