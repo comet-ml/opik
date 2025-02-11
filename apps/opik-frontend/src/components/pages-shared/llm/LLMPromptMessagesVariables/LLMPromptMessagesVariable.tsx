@@ -1,8 +1,8 @@
 import React from "react";
 import { DropdownOption } from "@/types/shared";
-import TracesPathsAutocomplete, {
+import TracesOrSpansPathsAutocomplete, {
   TRACE_AUTOCOMPLETE_ROOT_KEY,
-} from "@/components/pages-shared/traces/TracesPathsAutocomplete/TracesPathsAutocomplete";
+} from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import { Tag } from "@/components/ui/tag";
 import { FormErrorSkeleton } from "@/components/ui/form";
 
@@ -34,7 +34,7 @@ const LLMPromptMessagesVariable = ({
       </div>
       <div className="flex basis-1/2">
         <div className="w-full">
-          <TracesPathsAutocomplete
+          <TracesOrSpansPathsAutocomplete
             projectId={projectId}
             rootKeys={ROOT_KEYS}
             value={variable.value}

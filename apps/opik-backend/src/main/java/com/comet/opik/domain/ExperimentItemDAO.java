@@ -89,19 +89,15 @@ class ExperimentItemDAO {
 
     private static final String STREAM = """
             WITH experiment_items_scope as (
-                SELECT * FROM
-                (
-                    SELECT
+                SELECT
                     *
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND experiment_id IN :experiment_ids
-                    <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    LIMIT :limit
-                )
-                ORDER BY experiment_id DESC
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN :experiment_ids
+                <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+                LIMIT :limit
             ), feedback_scores_final AS (
             	SELECT
                 	entity_id,
@@ -117,7 +113,7 @@ class ExperimentItemDAO {
                 FROM feedback_scores
                 WHERE workspace_id = :workspace_id
                 AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                ORDER BY entity_id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ), comments_final AS (
                 SELECT
@@ -131,7 +127,7 @@ class ExperimentItemDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
             SELECT
@@ -163,7 +159,7 @@ class ExperimentItemDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_scope)
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS t
                 LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
@@ -173,6 +169,7 @@ class ExperimentItemDAO {
                     t.input,
                     t.output
             ) AS tfs ON ei.trace_id = tfs.id
+            ORDER BY ei.experiment_id DESC
             ;
             """;
 
