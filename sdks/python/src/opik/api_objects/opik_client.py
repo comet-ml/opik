@@ -222,79 +222,6 @@ class Opik:
             project_name=project_name,
         )
 
-    def _copy_traces_without_spans(
-        self, project_name: str, destination_project_name: str
-    ) -> Dict[str, str]:
-        trace_id_mapping = {}
-
-        traces = self.search_traces(project_name=project_name)
-
-        for trace_public_ in traces:
-            trace_data = trace.trace_public_to_trace_data(
-                project_name=destination_project_name, trace=trace_public_
-            )
-
-            if trace_data.start_time:
-                id = str(
-                    id_helpers.uuid4_to_uuid7(trace_data.start_time, str(uuid.uuid4()))
-                )
-            else:
-                id = helpers.generate_id()
-
-            trace_id_mapping[trace_data.id] = id
-            trace_data.id = id
-
-            self.trace(**trace_data.__dict__)
-
-        return trace_id_mapping
-
-    def _copy_spans_with_mapping(
-        self,
-        project_name: str,
-        destination_project_name: str,
-        trace_id_mapping: Dict[str, str],
-    ) -> Dict[str, str]:
-        spans = self.search_spans(project_name=project_name)
-
-        span_id_mapping = {}
-        span_list = []
-        for span_public_ in spans:
-            span_data = span.span_public_to_span_data(
-                project_name=destination_project_name, span=span_public_
-            )
-
-            # We need to compute the new ID and save it in the mapping
-            # so we can then change the parent span ID of all traces
-            if span_data.start_time:
-                id = str(
-                    id_helpers.uuid4_to_uuid7(span_data.start_time, str(uuid.uuid4()))
-                )
-            else:
-                id = helpers.generate_id()
-            span_id_mapping[span_data.id] = id
-            span_data.id = id
-
-            span_list.append(span_data)
-
-        for span_data in span_list:
-            if span_data.trace_id in trace_id_mapping:
-                span_data.trace_id = trace_id_mapping[span_data.trace_id]
-
-                if span_data.parent_span_id:
-                    span_data.parent_span_id = span_id_mapping.get(
-                        span_data.parent_span_id
-                    )
-
-                self.span(**span_data.__dict__)
-            else:
-                LOGGER.debug(
-                    "While copying a span to a new project, found orphan span with id: %s and trace id: %s",
-                    span_data.id,
-                    span_data.trace_id,
-                )
-
-        return span_id_mapping
-
     def copy_traces(
         self,
         project_name: str,
@@ -309,7 +236,8 @@ class Opik:
         process.
 
         Note: This method is not optimized for large projects, if you run into any issues please raise
-        an issue on GitHub.
+        an issue on GitHub. In addition, be aware that deleting traces that are linked to experiments
+        will lead to inconsistancies in the UI.
 
         Args:
             project_name: The name of the project to copy traces from.
