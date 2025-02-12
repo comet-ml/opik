@@ -11,9 +11,7 @@ from typing import (
     Optional,
     Callable,
     Tuple,
-    Generator,
     Union,
-    AsyncGenerator,
 )
 
 from ..types import SpanType, DistributedTraceHeadersDict, ErrorInfoDict

@@ -81,6 +81,4 @@ class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorat
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
     ) -> Optional[Union[Generator, AsyncGenerator]]:
-        return super()._streams_handler(
-            output, capture_output, generations_aggregator
-        )
+        return super()._streams_handler(output, capture_output, generations_aggregator)
