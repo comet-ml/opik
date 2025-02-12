@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY", "ghcr.io/comet-ml/opik")
 PYTHON_CODE_EXECUTOR_IMAGE_NAME = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
-PYTHON_CODE_EXECUTOR_IMAGE_TAG = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
+# TODO: temporarily hardcoding to 1.4.12, as the latest tag is not available as release asset yet
+PYTHON_CODE_EXECUTOR_IMAGE_TAG = "1.4.12"
 
 
 def run_scoring_in_docker_python_container(code, data):
