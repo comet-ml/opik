@@ -2,6 +2,7 @@ import functools
 import atexit
 import datetime
 import logging
+import uuid
 
 from typing import Optional, Any, Dict, List
 
@@ -35,6 +36,7 @@ from .. import (
     httpx_client,
     url_helpers,
     rest_client_configurator,
+    id_helpers,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -226,14 +228,22 @@ class Opik:
 
         traces = self.search_traces(project_name=project_name)
 
-        for trace_data in traces:
-            new_trace_data = helpers.trace_public_to_trace_dict(trace_data)
-            new_trace_id = helpers.generate_id()
-            trace_id_mapping[trace_data.id] = new_trace_id
-
-            self.trace(
-                **new_trace_data, project_name=destination_project_name, id=new_trace_id
+        for trace_public_ in traces:
+            trace_data = trace.trace_public_to_trace_data(
+                project_name=destination_project_name, trace=trace_public_
             )
+
+            if trace_data.start_time:
+                id = str(
+                    id_helpers.uuid4_to_uuid7(trace_data.start_time, str(uuid.uuid4()))
+                )
+            else:
+                id = helpers.generate_id()
+
+            trace_id_mapping[trace_data.id] = id
+            trace_data.id = id
+
+            self.trace(**trace_data.__dict__)
 
         return trace_id_mapping
 
@@ -247,26 +257,37 @@ class Opik:
 
         span_id_mapping = {}
         span_list = []
-        for span_data in spans:
-            new_span_data = helpers.span_public_to_span_dict(span_data)
-            span_list.append(new_span_data)
-            new_span_id = helpers.generate_id()
+        for span_public_ in spans:
+            span_data = span.span_public_to_span_data(
+                project_name=destination_project_name, span=span_public_
+            )
 
-            new_span_data["id"] = new_span_id
-            span_id_mapping[span_data.id] = new_span_id
+            # We need to compute the new ID and save it in the mapping
+            # so we can then change the parent span ID of all traces
+            if span_data.start_time:
+                id = str(
+                    id_helpers.uuid4_to_uuid7(span_data.start_time, str(uuid.uuid4()))
+                )
+            else:
+                id = helpers.generate_id()
+            span_id_mapping[span_data.id] = id
+            span_data.id = id
+
+            span_list.append(span_data)
 
         for span_data in span_list:
-            old_trace_id = span_data["trace_id"]
-            del span_data["trace_id"]
-            old_parent_span_id = span_data["parent_span_id"]
-            del span_data["parent_span_id"]
+            if span_data.trace_id in trace_id_mapping:
+                span_data.trace_id = trace_id_mapping[span_data.trace_id]
+                span_data.parent_span_id = span_id_mapping.get(
+                    span_data.parent_span_id, None
+                )
 
-            if old_trace_id in trace_id_mapping:
-                self.span(
-                    **span_data,
-                    project_name=destination_project_name,
-                    trace_id=trace_id_mapping[old_trace_id],
-                    parent_span_id=span_id_mapping.get(old_parent_span_id, None),
+                self.span(**span_data.__dict__)
+            else:
+                LOGGER.debug(
+                    "While copying a span to a new project, found orphan span with id: %s and trace id: %s",
+                    span_data.id,
+                    span_data.trace_id,
                 )
 
         return span_id_mapping

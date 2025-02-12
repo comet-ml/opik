@@ -1,28 +1,39 @@
-import dataclasses
 import datetime
+import dataclasses
 import logging
-from typing import Any, Dict, List, Optional
 
-from . import constants, helpers, span, validation_helpers
-from .. import datetime_helpers
-from ..message_processing import messages, streamer
-from ..types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict, ErrorInfoDict
+from typing import Optional, Any, List, Dict
+from ...types import (
+    SpanType,
+    UsageDict,
+    DistributedTraceHeadersDict,
+    FeedbackScoreDict,
+    ErrorInfoDict,
+)
+
+from ...message_processing import streamer, messages
+from ... import datetime_helpers
+from .. import helpers, validation_helpers, constants
 from opik import dict_utils
 
 LOGGER = logging.getLogger(__name__)
 
 
-class Trace:
+class Span:
     def __init__(
         self,
         id: str,
-        message_streamer: streamer.Streamer,
+        trace_id: str,
         project_name: str,
+        message_streamer: streamer.Streamer,
+        parent_span_id: Optional[str] = None,
     ):
         """
-        A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
+        A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Opik.span`) or another Span (:meth:`opik.Span.span`).
         """
         self.id = id
+        self.trace_id = trace_id
+        self.parent_span_id = parent_span_id
         self._streamer = message_streamer
         self._project_name = project_name
 
@@ -32,22 +43,26 @@ class Trace:
         metadata: Optional[Dict[str, Any]] = None,
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[UsageDict] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
     ) -> None:
         """
-        End the trace and update its attributes.
+        End the span and update its attributes.
 
         This method is similar to the `update` method, but it automatically computes
         the end time if not provided.
 
         Args:
-            end_time: The end time of the trace. If not provided, the current time will be used.
-            metadata: Additional metadata to be associated with the trace.
-            input: The input data for the trace.
-            output: The output data for the trace.
-            tags: A list of tags to be associated with the trace.
-            error_info: The dictionary with error information (typically used when the trace function has failed).
+            end_time: The end time of the span. If not provided, the current time will be used.
+            metadata: Additional metadata to be associated with the span.
+            input: The input data for the span.
+            output: The output data for the span.
+            tags: A list of tags to be associated with the span.
+            usage: Usage information for the span.
+            error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             None
@@ -62,7 +77,9 @@ class Trace:
             input=input,
             output=output,
             tags=tags,
+            usage=usage,
             error_info=error_info,
+            total_cost=total_cost,
         )
 
     def update(
@@ -71,39 +88,60 @@ class Trace:
         metadata: Optional[Dict[str, Any]] = None,
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[UsageDict] = None,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
     ) -> None:
         """
-        Update the trace attributes.
+        Update the span attributes.
 
         Args:
-            end_time: The end time of the trace.
-            metadata: Additional metadata to be associated with the trace.
-            input: The input data for the trace.
-            output: The output data for the trace.
-            tags: A list of tags to be associated with the trace.
-            error_info: The dictionary with error information (typically used when the trace function has failed).
+            end_time: The end time of the span.
+            metadata: Additional metadata to be associated with the span.
+            input: The input data for the span.
+            output: The output data for the span.
+            tags: A list of tags to be associated with the span.
+            usage: Usage information for the span.
+            model: The name of LLM.
+            provider: The provider of LLM.
+            error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
             None
         """
-        update_trace_message = messages.UpdateTraceMessage(
-            trace_id=self.id,
+        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        if parsed_usage.full_usage is not None:
+            metadata = (
+                {"usage": parsed_usage.full_usage}
+                if metadata is None
+                else {"usage": parsed_usage.full_usage, **metadata}
+            )
+
+        end_span_message = messages.UpdateSpanMessage(
+            span_id=self.id,
+            trace_id=self.trace_id,
+            parent_span_id=self.parent_span_id,
             project_name=self._project_name,
             end_time=end_time,
             metadata=metadata,
             input=input,
             output=output,
             tags=tags,
+            usage=parsed_usage.supported_usage,
+            model=model,
+            provider=provider,
             error_info=error_info,
+            total_cost=total_cost,
         )
-        self._streamer.put(update_trace_message)
+        self._streamer.put(end_span_message)
 
     def span(
         self,
         id: Optional[str] = None,
-        parent_span_id: Optional[str] = None,
         name: Optional[str] = None,
         type: SpanType = "general",
         start_time: Optional[datetime.datetime] = None,
@@ -117,13 +155,12 @@ class Trace:
         provider: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
-    ) -> span.Span:
+    ) -> "Span":
         """
-        Create a new span within the trace.
+        Create a new child span within the current span.
 
         Args:
             id: The ID of the span, should be in UUIDv7 format. If not provided, a new ID will be generated.
-            parent_span_id: The ID of the parent span, if any.
             name: The name of the span.
             type: The type of the span. Defaults to "general".
             start_time: The start time of the span. If not provided, current time will be used.
@@ -139,7 +176,7 @@ class Trace:
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
         Returns:
-            span.Span: The created span object.
+            Span: The created child span object.
         """
         span_id = id if id is not None else helpers.generate_id()
         start_time = (
@@ -155,9 +192,9 @@ class Trace:
 
         create_span_message = messages.CreateSpanMessage(
             span_id=span_id,
-            trace_id=self.id,
+            trace_id=self.trace_id,
             project_name=self._project_name,
-            parent_span_id=parent_span_id,
+            parent_span_id=self.id,
             name=name,
             type=type,
             start_time=start_time,
@@ -174,10 +211,10 @@ class Trace:
         )
         self._streamer.put(create_span_message)
 
-        return span.Span(
+        return Span(
             id=span_id,
-            parent_span_id=parent_span_id,
-            trace_id=self.id,
+            parent_span_id=self.id,
+            trace_id=self.trace_id,
             message_streamer=self._streamer,
             project_name=self._project_name,
         )
@@ -190,7 +227,7 @@ class Trace:
         reason: Optional[str] = None,
     ) -> None:
         """
-        Log a feedback score for the trace.
+        Log a feedback score for the span.
 
         Args:
             name: The name of the feedback score.
@@ -201,7 +238,7 @@ class Trace:
         Returns:
             None
         """
-        add_trace_feedback_batch_message = messages.AddTraceFeedbackScoresBatchMessage(
+        add_span_feedback_batch_message = messages.AddSpanFeedbackScoresBatchMessage(
             batch=[
                 messages.FeedbackScoreMessage(
                     id=self.id,
@@ -215,7 +252,14 @@ class Trace:
             ],
         )
 
-        self._streamer.put(add_trace_feedback_batch_message)
+        self._streamer.put(add_span_feedback_batch_message)
+
+    def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
+        """
+        Returns headers dictionary to be passed into tracked
+        function on remote node.
+        """
+        return {"opik_parent_span_id": self.id, "opik_trace_id": self.trace_id}
 
 
 # Engineer note:
@@ -226,13 +270,16 @@ class Trace:
 # strictly after positional ones (including the attributes from the parent class).
 # In python 3.10 @dataclass(kw_only=True) should help.
 @dataclasses.dataclass
-class TraceData:
+class SpanData:
     """
-    The TraceData object is returned when calling :func:`opik.opik_context.get_current_trace_data` from a tracked function.
+    The SpanData object is returned when calling :func:`opik.opik_context.get_current_span_data` from a tracked function.
     """
 
+    trace_id: str
     id: str = dataclasses.field(default_factory=helpers.generate_id)
+    parent_span_id: Optional[str] = None
     name: Optional[str] = None
+    type: SpanType = "general"
     start_time: Optional[datetime.datetime] = dataclasses.field(
         default_factory=datetime_helpers.local_timestamp
     )
@@ -241,12 +288,15 @@ class TraceData:
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
+    usage: Optional[UsageDict] = None
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
-    created_by: Optional[CreatedByType] = None
+    model: Optional[str] = None
+    provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
+    total_cost: Optional[float] = None
 
-    def update(self, **new_data: Any) -> "TraceData":
+    def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():
             if value is None:
                 continue
@@ -290,6 +340,7 @@ class TraceData:
         else:
             self.input = dict_utils.deepmerge(self.input, new_input)
 
-    def init_end_time(self) -> "TraceData":
+    def init_end_time(self) -> "SpanData":
         self.end_time = datetime_helpers.local_timestamp()
+
         return self
