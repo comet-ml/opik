@@ -78,7 +78,7 @@ def test_langchain__happyflow(
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        type="general",
+                        type="tool",
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output=ANY_DICT,
@@ -195,7 +195,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        type="general",
+                        type="tool",
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output={"output": ANY_BUT_NONE},
@@ -410,7 +410,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                         metadata={},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        type="general",
+                        type="tool",
                         model=None,
                         provider=None,
                         usage=None,
@@ -528,7 +528,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        type="general",
+                        type="tool",
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output={"output": ANY_BUT_NONE},
@@ -617,7 +617,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        type="general",
+                        type="tool",
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output={"output": ANY_BUT_NONE},
@@ -723,7 +723,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                         spans=[
                             SpanModel(
                                 id=ANY_BUT_NONE,
-                                type="general",
+                                type="tool",
                                 name="PromptTemplate",
                                 input={"title": "Documentary about Bigfoot in Paris"},
                                 output={"output": ANY_BUT_NONE},
@@ -835,7 +835,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        type="general",
+                        type="tool",
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output=ANY_DICT,
@@ -941,7 +941,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        type="general",
+                        type="tool",
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output={"output": ANY_BUT_NONE},
