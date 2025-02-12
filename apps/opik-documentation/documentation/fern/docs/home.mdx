@@ -11,7 +11,7 @@ The Opik platform allows you to log, view and evaluate your LLM traces during bo
 
 <Tip>
   Opik is Open Source! You can find the full source code on [GitHub](https://github.com/comet-ml/opik) and the complete
-  self-hosting guide can be found [here](/docs/self-host/local_deployment).
+  self-hosting guide can be found [here](/self-host/local_deployment).
 </Tip>
 
 ## Overview
@@ -24,21 +24,21 @@ During development, you can use the platform to log, view and debug your LLM tra
 
 1. Log traces using:
 
-   a. One of our [integrations](/docs/tracing/integrations/overview).
+   a. One of our [integrations](/tracing/integrations/overview).
 
-   b. The `@track` decorator for Python, learn more in the [Logging Traces](/docs/tracing/log_traces) guide.
+   b. The `@track` decorator for Python, learn more in the [Logging Traces](/tracing/log_traces) guide.
 
-   c. Using the Typescript Opik SDK, learn more in the [Logging Traces](/docs/tracing/log_traces.mdx#logging-with-the-js--ts-sdk) guide.
+   c. Using the Typescript Opik SDK, learn more in the [Logging Traces](/tracing/log_traces.mdx#logging-with-the-js--ts-sdk) guide.
 
-2. [Annotate and label traces](/docs/tracing/annotate_traces) through the SDK or the UI.
+2. [Annotate and label traces](/tracing/annotate_traces) through the SDK or the UI.
 
 ### Evaluation and Testing
 
 Evaluating the output of your LLM calls is critical to ensure that your application is working as expected and can be challenging. Using the Opik platformm, you can:
 
-1. Use one of our [LLM as a Judge evaluators](/docs/evaluation/metrics/overview) or [Heuristic evaluators](/docs/evaluation/metrics/heuristic_metrics) to score your traces and LLM calls
-2. [Store evaluation datasets](/docs/evaluation/manage_datasets) in the platform and [run evaluations](/docs/evaluation/evaluate_your_llm)
-3. Use our [pytest integration](/docs/testing/pytest_integration) to track unit test results and compare results between runs
+1. Use one of our [LLM as a Judge evaluators](/evaluation/metrics/overview) or [Heuristic evaluators](/evaluation/metrics/heuristic_metrics) to score your traces and LLM calls
+2. [Store evaluation datasets](/evaluation/manage_datasets) in the platform and [run evaluations](/evaluation/evaluate_your_llm)
+3. Use our [pytest integration](/testing/pytest_integration) to track unit test results and compare results between runs
 
 ### Production Monitoring
 
@@ -46,11 +46,11 @@ Opik has been designed from the ground up to support high volumes of traces maki
 
 Our goal is to make it easy for you to monitor your production LLM applications and easily identify any issues with your production LLM application, for this we have included:
 
-1. [Online evaluation metrics](/docs/production/rules) that allow you to score all your production traces and easily identify any issues with your production LLM application.
-2. [Production monitoring dashboards](/docs/production/production_monitoring) that allow you to review your feedback scores, trace count and tokens over time at both a daily and hourly granularity.
+1. [Online evaluation metrics](/production/rules) that allow you to score all your production traces and easily identify any issues with your production LLM application.
+2. [Production monitoring dashboards](/production/production_monitoring) that allow you to review your feedback scores, trace count and tokens over time at both a daily and hourly granularity.
 
 ## Getting Started
 
 [Comet](https://www.comet.com/site) provides a managed Cloud offering for Opik, simply [create an account](https://www.comet.com/signup?from=llm) to get started.
 
-You can also run Opik locally using our [local installer](/docs/self-host/local_deployment). If you are looking for a more production ready deployment, you can also use our [Kubernetes deployment option](/docs/self-host/kubernetes).
+You can also run Opik locally using our [local installer](/self-host/local_deployment). If you are looking for a more production ready deployment, you can also use our [Kubernetes deployment option](/self-host/kubernetes).

@@ -64,7 +64,7 @@ Once the evaluation is complete, you can view the responses in the Opik UI and s
 
 Manually reviewing each LLM output can be time-consuming and error-prone. The `evaluate_prompt` function allows you to specify a list of scoring metrics which allows you to score each LLM output. Opik has a set of built-in metrics that allow you to detect hallucinations, answer relevance, etc and if we don't have the metric you need, you can easily create your own.
 
-You can find a full list of all the Opik supported metrics in the [Metrics Overview](/docs/evaluation/metrics/overview) section or you can define your own metric using [Custom Metrics](/docs/evaluation/metrics/custom_metric) section.
+You can find a full list of all the Opik supported metrics in the [Metrics Overview](/evaluation/metrics/overview) section or you can define your own metric using [Custom Metrics](/evaluation/metrics/custom_metric) section.
 
 By adding the `scoring_metrics` parameter to the `evaluate_prompt` function, you can specify a list of metrics to use for scoring. We will update the example above to use the `Hallucination` metric for scoring:
 
@@ -123,4 +123,4 @@ evaluate_prompt(
 
 ## Next steps
 
-To evaluate complex LLM applications like RAG applications or agents, you can use the [`evaluate`](/docs/evaluation/evaluate_your_llm) function.
+To evaluate complex LLM applications like RAG applications or agents, you can use the [`evaluate`](/evaluation/evaluate_your_llm) function.

@@ -36,7 +36,7 @@ tabs:
   self-host:
     display-name: Self-hosting Opik
     icon: server
-  cookbooks:
+  cookbook:
     display-name: Cookbooks
     icon: book
   reference:
@@ -186,7 +186,7 @@ navigation:
         contents:
           - page: Anonymous usage statistics
             path: docs/self-host/configure/anonymous_usage_statistics.mdx
-  - tab: cookbooks
+  - tab: cookbook
     layout:
       - page: Overview
         path: docs/cookbook/overview.mdx
