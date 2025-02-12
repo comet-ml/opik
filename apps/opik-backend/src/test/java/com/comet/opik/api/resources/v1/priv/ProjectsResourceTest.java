@@ -117,7 +117,7 @@ class ProjectsResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
     public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
-            "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "usage"};
+            "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "usage", "traceCount"};
     public static final String[] IGNORED_FIELD_MIN = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt"};
 
@@ -1254,6 +1254,7 @@ class ProjectsResourceTest {
                             .usage(project.usage())
                             .feedbackScores(project.feedbackScores())
                             .projectId(project.id())
+                            .traceCount(project.traceCount())
                             .build())
                     .toList();
         }
@@ -1495,6 +1496,7 @@ class ProjectsResourceTest {
                         .collect(groupingBy(Map.Entry::getKey, averagingDouble(Map.Entry::getValue))))
                 .feedbackScores(getScoreAverages(traces))
                 .lastUpdatedTraceAt(traces.stream().map(Trace::lastUpdatedAt).max(Instant::compareTo).orElse(null))
+                .traceCount((long) traces.size())
                 .build();
     }
 

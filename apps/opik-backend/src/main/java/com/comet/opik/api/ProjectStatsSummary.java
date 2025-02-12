@@ -22,7 +22,8 @@ public record ProjectStatsSummary(List<ProjectStatsSummaryItem> content) {
             List<FeedbackScoreAverage> feedbackScores,
             ProjectStats.PercentageValues duration,
             Double totalEstimatedCost,
-            Map<String, Double> usage) {
+            Map<String, Double> usage,
+            Long traceCount) {
     }
 
 }

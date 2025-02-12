@@ -181,7 +181,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                             id
                         FROM experiments
                         WHERE workspace_id = :workspace_id
-                        ORDER BY id DESC, last_updated_at DESC
+                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     ) AS e
                     INNER JOIN (
@@ -193,13 +193,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                         <if(experiment_ids)>
                         AND experiment_id IN :experiment_ids
                         <endif>
-                        ORDER BY id DESC, last_updated_at DESC
+                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     ) ei ON e.id = ei.experiment_id
                 )
                 <endif>
                 AND entity_type = 'trace'
-                ORDER BY entity_id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ) AS names
             ;
@@ -216,7 +216,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 <if(project_ids)>
                 AND project_id IN :project_ids
                 <endif>
-                ORDER BY entity_id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ) AS names
             ;
@@ -239,12 +239,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND type = :type
-                    ORDER BY id DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
                 AND entity_type = 'span'
-                ORDER BY entity_id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ) AS names
             ;

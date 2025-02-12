@@ -24,6 +24,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dockerjava.api.exception.InternalServerErrorException;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
@@ -67,6 +68,8 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
+import static com.comet.opik.api.LogItem.LogLevel;
+import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -235,25 +238,13 @@ class OnlineScoringEngineTest {
         var mapper = JsonUtils.MAPPER;
         evaluatorCode = mapper.readValue(testEvaluator, LlmAsJudgeCode.class);
 
-        var evaluator = AutomationRuleEvaluatorLlmAsJudge.builder()
-                .projectId(projectId)
-                .name("evaluator-test-" + UUID.randomUUID())
-                .createdBy(USER_NAME)
-                .code(evaluatorCode)
-                .samplingRate(1.0f)
-                .build(); // lets make sure all traces are expected to be scored
+        var evaluator = createRule(projectId); // lets make sure all traces are expected to be scored
 
         log.info("Creating evaluator {}", evaluator);
-        evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
+        evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
         var traceId = UUID.randomUUID();
-        trace = Trace.builder()
-                .id(traceId)
-                .projectName(PROJECT_NAME)
-                .projectId(projectId)
-                .createdBy(USER_NAME)
-                .input(mapper.readTree(input))
-                .output(mapper.readTree(output)).build();
+        trace = createTrace(traceId, projectId);
         var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
 
         Mockito.doNothing().when(eventBus).register(Mockito.any());
@@ -288,6 +279,73 @@ class OnlineScoringEngineTest {
         assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
         assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
         assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);
+    }
+
+    @Test
+    @DisplayName("test User Facing log error when AI provider fails")
+    void testUserFacingLogErrorWhenAIProviderFails(OnlineScoringSampler onlineScoringSampler) throws Exception {
+
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        String projectName = factory.manufacturePojo(String.class);
+
+        UUID projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        evaluatorCode = JsonUtils.MAPPER.readValue(testEvaluator, LlmAsJudgeCode.class);
+
+        var evaluator = createRule(projectId);
+
+        UUID id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+        var traceId = UUID.randomUUID();
+        trace = createTrace(traceId, projectId);
+
+        var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        String providerErrorMessage = "LLM provider XXXXX";
+
+        Mockito.doThrow(
+                new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER,
+                        new RuntimeException(providerErrorMessage)))
+                .when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+
+        onlineScoringSampler.onTracesCreated(event);
+
+        Mono.delay(Duration.ofMillis(500)).block();
+
+        Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(captor.capture());
+
+        //Check user facing logs
+        LogPage logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+        String logMessage = "Unexpected error while scoring traceId '%s' with rule '%s': %n%n%s".formatted(traceId,
+                evaluator.getName(), providerErrorMessage);
+
+        assertThat(logPage.content())
+                .anyMatch(logItem -> logItem.level().equals(LogLevel.ERROR) && logItem.message().contains(logMessage));
+    }
+
+    private Trace createTrace(UUID traceId, UUID projectId) throws JsonProcessingException {
+        return Trace.builder()
+                .id(traceId)
+                .projectName(PROJECT_NAME)
+                .projectId(projectId)
+                .createdBy(USER_NAME)
+                .input(JsonUtils.MAPPER.readTree(input))
+                .output(JsonUtils.MAPPER.readTree(output)).build();
+    }
+
+    private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId) {
+        return AutomationRuleEvaluatorLlmAsJudge.builder()
+                .projectId(projectId)
+                .name("evaluator-test-" + UUID.randomUUID())
+                .createdBy(USER_NAME)
+                .code(evaluatorCode)
+                .samplingRate(1.0f)
+                .build();
     }
 
     @Test

@@ -19,8 +19,8 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
-import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import { formatNumericData } from "@/lib/utils";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
@@ -53,30 +53,19 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       },
     },
     {
-      id: "prompt",
-      label: "Prompt commit",
-      type: COLUMN_TYPE.list,
-      accessorFn: (row) => get(row, ["prompt_versions"], []),
-      cell: MultiResourceCell as never,
-      customMeta: {
-        nameKey: "commit",
-        idKey: "prompt_id",
-        resource: RESOURCE_TYPE.prompt,
-        getSearch: (data: Experiment) => ({
-          activeVersionId: get(data, "id", null),
-        }),
-      },
-    },
-    {
       id: "trace_count",
-      label: "Trace count",
+      label: "Nb of items",
       type: COLUMN_TYPE.number,
     },
     {
       id: "feedback_scores",
       label: "Feedback scores",
       type: COLUMN_TYPE.numberDictionary,
-      accessorFn: (row) => get(row, "feedback_scores", []),
+      accessorFn: (row) =>
+        get(row, "feedback_scores", []).map((score) => ({
+          ...score,
+          value: formatNumericData(score.value),
+        })),
       cell: FeedbackScoreListCell as never,
     },
     {
@@ -84,13 +73,6 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       label: "Created",
       type: COLUMN_TYPE.time,
       accessorFn: (row) => formatDate(row.created_at),
-      sortable: true,
-    },
-    {
-      id: "last_updated_at",
-      label: "Last updated",
-      type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.last_updated_at),
       sortable: true,
     },
   ],

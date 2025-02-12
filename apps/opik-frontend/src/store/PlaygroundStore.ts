@@ -10,22 +10,84 @@ import lodashSet from "lodash/set";
 interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
+  stale: boolean;
+}
+
+interface PlaygroundOutputWithDatasetItem {
+  datasetItemMap: {
+    [datasetItemId: string]: PlaygroundOutput;
+  };
 }
 
 interface PlaygroundOutputMap {
-  [promptId: string]:
-    | PlaygroundOutput
-    | {
-        datasetItemMap: {
-          [datasetItemId: string]: PlaygroundOutput;
-        };
-      };
+  [promptId: string]: PlaygroundOutput | PlaygroundOutputWithDatasetItem;
 }
+
+const isPlaygroundOutputWithDatasetItem = (
+  output: PlaygroundOutput | PlaygroundOutputWithDatasetItem,
+): output is PlaygroundOutputWithDatasetItem => {
+  return "datasetItemMap" in output;
+};
+
+const updateAllStaleStatusesForPromptOutput = (
+  promptId: string,
+  outputMap: PlaygroundOutputMap,
+  value: boolean,
+) => {
+  if (!outputMap[promptId]) {
+    return outputMap;
+  }
+
+  const promptOutput = outputMap[promptId];
+
+  if (!isPlaygroundOutputWithDatasetItem(promptOutput)) {
+    const currentStaleStatus = promptOutput.stale;
+    if (currentStaleStatus !== value) {
+      return {
+        ...outputMap,
+        [promptId]: {
+          ...promptOutput,
+          stale: value,
+        },
+      };
+    }
+    return outputMap;
+  }
+
+  const datasetItemMap = promptOutput.datasetItemMap;
+  const datasetItemIds = Object.keys(datasetItemMap);
+
+  const updatedDatasetItemMap = datasetItemIds.reduce<
+    PlaygroundOutputWithDatasetItem["datasetItemMap"]
+  >((updatedMap, datasetItemId) => {
+    const datasetItem = datasetItemMap[datasetItemId];
+    const currentStaleStatus = datasetItem.stale;
+
+    if (currentStaleStatus !== value) {
+      updatedMap[datasetItemId] = {
+        ...datasetItem,
+        stale: value,
+      };
+    } else {
+      updatedMap[datasetItemId] = datasetItem;
+    }
+
+    return updatedMap;
+  }, {});
+
+  return {
+    ...outputMap,
+    [promptId]: {
+      datasetItemMap: updatedDatasetItemMap,
+    },
+  };
+};
 
 export type PlaygroundStore = {
   promptIds: string[];
   promptMap: Record<string, PlaygroundPromptType>;
   outputMap: PlaygroundOutputMap;
+  datasetVariables: string[];
 
   setPromptMap: (
     promptIds: string[],
@@ -43,6 +105,7 @@ export type PlaygroundStore = {
     datasetItemId: string,
     changes: Partial<PlaygroundOutput>,
   ) => void;
+  setDatasetVariables: (variables: string[]) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -51,18 +114,26 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       promptIds: [],
       promptMap: {},
       outputMap: {},
+      datasetVariables: [],
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
+          const newPromptMap = {
+            ...state.promptMap,
+            [promptId]: {
+              ...state.promptMap[promptId],
+              ...changes,
+            },
+          };
+
           return {
             ...state,
-            promptMap: {
-              ...state.promptMap,
-              [promptId]: {
-                ...state.promptMap[promptId],
-                ...changes,
-              },
-            },
+            promptMap: newPromptMap,
+            outputMap: updateAllStaleStatusesForPromptOutput(
+              promptId,
+              state.outputMap,
+              true,
+            ),
           };
         });
       },
@@ -127,7 +198,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             : [promptId];
 
           const output = get(state.outputMap, key);
-          const newOutput = { ...output, ...changes };
+          const newOutput = { ...output, stale: false, ...changes };
           const newOutputMap = { ...state.outputMap };
 
           lodashSet(newOutputMap, key, newOutput);
@@ -135,6 +206,14 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           return {
             ...state,
             outputMap: newOutputMap,
+          };
+        });
+      },
+      setDatasetVariables: (variables) => {
+        set((state) => {
+          return {
+            ...state,
+            datasetVariables: variables,
           };
         });
       },
@@ -152,11 +231,15 @@ export const useOutputByPromptDatasetItemId = (
   usePlaygroundStore((state) => {
     const outputMapEntry = state.outputMap?.[promptId];
 
-    if (outputMapEntry && datasetItemId && "datasetItemMap" in outputMapEntry) {
+    if (
+      outputMapEntry &&
+      datasetItemId &&
+      isPlaygroundOutputWithDatasetItem(outputMapEntry)
+    ) {
       return outputMapEntry.datasetItemMap?.[datasetItemId] ?? null;
     }
 
-    if (outputMapEntry && !("datasetItemMap" in outputMapEntry)) {
+    if (outputMapEntry && !isPlaygroundOutputWithDatasetItem(outputMapEntry)) {
       return outputMapEntry;
     }
 
@@ -176,6 +259,15 @@ export const useOutputLoadingByPromptDatasetItemId = (
 ) => {
   return (
     useOutputByPromptDatasetItemId(promptId, datasetItemId)?.isLoading ?? false
+  );
+};
+
+export const useOutputStaleStatusByPromptDatasetItemId = (
+  promptId: string,
+  datasetItemId?: string,
+) => {
+  return (
+    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.stale ?? false
   );
 };
 
@@ -208,5 +300,11 @@ export const useResetOutputMap = () =>
 
 export const useUpdateOutput = () =>
   usePlaygroundStore((state) => state.updateOutput);
+
+export const useDatasetVariables = () =>
+  usePlaygroundStore((state) => state.datasetVariables);
+
+export const useSetDatasetVariables = () =>
+  usePlaygroundStore((state) => state.setDatasetVariables);
 
 export default usePlaygroundStore;

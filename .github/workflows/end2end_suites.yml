@@ -18,6 +18,7 @@ on:
                 - experiments
                 - prompts
                 - feedback_definitions
+                
     pull_request:
       paths:
         - 'sdks/code_generation/fern/openapi/openapi.yaml'
@@ -28,7 +29,7 @@ run-name: Appplication E2E tests - ${{ github.event.inputs.suite || 'all_feature
 jobs:
     run_suite:
         name: "Run suite: ${{ github.event.inputs.suite || 'all_features' }}"
-        runs-on: ubuntu-20.04
+        runs-on: ubuntu-latest
 
         steps:
             - name: Checkout repo
@@ -49,30 +50,34 @@ jobs:
                 pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
                 playwright install
 
-            - name: Install Opik
+            - name: Install Opik (Local)
               env:
                 OPIK_USAGE_REPORT_ENABLED: false
               run: |
                 cd ${{ github.workspace }}/deployment/docker-compose
                 docker compose up -d --build
                 
-            - name: Check Docker pods are up
+            - name: Check Docker pods are up (Local)
               run: |
                 chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
                 ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
               shell: bash
 
-            - name: Check backend health
+            - name: Check backend health (Local)
               run: |
                 chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
                 ./tests_end_to_end/installer_utils/check_backend.sh
               shell: bash
 
-            - name: Check app is up via the UI
+            - name: Check app is up via the UI (Local)
               run: |
                 pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
             
             - name: Run suite
+              env:
+                OPIK_BASE_URL: http://localhost:5173
+                OPIK_TEST_WORKSPACE: default
+                OPIK_TEST_PROJECT_NAME: automated_tests_project
               run: |
                 if [ "${{ github.event_name }}" == "pull_request" ]; then
                   SUITE="all_features"
@@ -83,25 +88,26 @@ jobs:
                 cd ${{ github.workspace }}/tests_end_to_end
                 export PYTHONPATH='.'
 
+                # Run the appropriate test suite
                 if [ "$SUITE" == "projects" ]; then
-                    pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --setup-show
                 elif [ "$SUITE" == "traces" ]; then
-                    pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --setup-show
                 elif [ "$SUITE" == "datasets" ]; then
-                    pytest -s tests/Datasets/ --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests/Datasets/ --browser chromium --setup-show
                 elif [ "$SUITE" == "experiments" ]; then
-                    pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium --setup-show
                 elif [ "$SUITE" == "prompts" ]; then
-                    pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium --setup-show
                 elif [ "$SUITE" == "feedback_definitions" ]; then
-                    pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium --setup-show
                 elif [ "$SUITE" == "sanity" ]; then
-                    pytest -s sanity --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s -m sanity --browser chromium --setup-show
                 elif [ "$SUITE" == "all_features" ]; then
-                    pytest -s tests --browser chromium --base-url http://localhost:5173 --setup-show
+                    pytest -s tests --browser chromium --setup-show
                 fi
 
-            - name: Stop Opik server
+            - name: Stop Opik server (Local)
               if: always()
               run: |
                 cd ${{ github.workspace }}/deployment/docker-compose
@@ -109,4 +115,3 @@ jobs:
                 cd -
 
         continue-on-error: ${{ github.event_name == 'pull_request' }}
-
