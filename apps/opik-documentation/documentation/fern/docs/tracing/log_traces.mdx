@@ -447,7 +447,107 @@ client = Opik()
 client.flush()
 ```
 
-## Logging traces with the REST API
+## Logging with the JS / TS SDK
+
+You can log your LLM calls using the Opik typescript SDK `opik`. We are actively adding functionality to the TypeScript SDK,
+if you have any suggestions on how we can improve it feel free to open an issue on [GitHub](https://github.com/comet-ml/opik).
+
+You can find the reference documentation for the `opik` typescript SDK [here](https://www.jsdocs.io/package/opik).
+
+### Using the low-level Opik client
+
+The easiest way to log your LLM calls is using the low-level Opik client. We do have support for decorators but this is currently considered experimental.
+
+#### Setting up the Opik client
+
+The first step is to install the Opik library:
+
+```bash
+npm install --save opik
+```
+
+Once the library is installed, you can use initialized the Opik client:
+
+```typescript
+import { Opik } from "opik";
+
+// Create a new Opik client with your configuration
+const client = new Opik({
+  apiKey: "<your-api-key>",
+  host: "https://www.comet.com/opik/api",
+  projectName: "<your-project-name>",
+  workspaceName: "<your-workspace-name>",
+});
+```
+
+:::tip
+
+If you are using the self-hosted Opik platform, you can replace the host with
+`http://localhost:5173/api` and remove the `workspaceName` parameter.
+
+:::
+
+#### Logging traces and spans
+
+Once the Opik client is set up, you can log your LLM calls by adding spans to the trace:
+
+```typescript
+// Log a trace with an LLM span
+const trace = client.trace({
+  name: `Trace`,
+  input: {
+    prompt: `Hello!`,
+  },
+  output: {
+    response: `Hello, world!`,
+  },
+});
+
+const span = trace.span({
+  name: `Span`,
+  type: "llm",
+  input: {
+    prompt: `Hello, world!`,
+  },
+  output: {
+    response: `Hello, world!`,
+  },
+});
+
+// Flush the client to send all traces and spans
+await client.flush();
+```
+
+### Decorators (experimental)
+
+TypeScript started supporting decorators from version 5 but it's use is still not widespread.
+The Opik typescript SDK also supports decorators but it's currently considered experimental.
+
+```typescript
+import { track } from "opik";
+
+class TranslationService {
+  @track({ type: "llm" })
+  async generateText() {
+    // Your LLM call here
+    return "Generated text";
+  }
+
+  @track({ name: "translate" })
+  async translate(text: string) {
+    // Your translation logic here
+    return `Translated: ${text}`;
+  }
+
+  @track({ name: "process", projectName: "translation-service" })
+  async process() {
+    const text = await this.generateText();
+    return this.translate(text);
+  }
+}
+```
+
+### Using the REST API
 
 <Warning>
   The Opik REST API is currently in beta and subject to change, if you encounter any issues please report them to the

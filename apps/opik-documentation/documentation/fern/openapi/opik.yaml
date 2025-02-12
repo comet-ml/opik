@@ -1,36 +1,26 @@
 openapi: 3.1.0
 info:
   title: Opik REST API
-  description: |
-    The Opik REST API is currently in beta and subject to change. If you have any questions or feedback about the APIs, please reach out on GitHub: https://github.com/comet-ml/opik.
-
-    All of the methods listed in this documentation are used by either the SDK or the UI to interact with the Opik server. As a result,
-    the methods have been optimized for these use-cases in mind. If you are looking for a method that is not listed above, please create
-    and issue on GitHub or raise a PR!
-
-    Opik includes two main deployment options that results in slightly different API usage:
-
-    - **Self-hosted Opik instance:** You will simply need to specify the URL as `http://localhost:5173/api/<endpoint_path>` or similar. This is the default option for the docs.
-    - **Opik Cloud:** You will need to specify the Opik API Key and Opik Workspace in the header. The format of the header should be:
-
-      ```
-      {
-        "Comet-Workspace": "your-workspace-name",
-        "authorization": "your-api-key"
-      }
-      ```
-
-      The full payload would therefore look like:
-      
-      ```
-      curl -X GET 'https://www.comet.com/opik/api/v1/private/projects' \
-      -H 'Accept: application/json' \
-      -H 'Comet-Workspace: <your-workspace-name>' \
-      -H 'authorization: <your-api-key>'
-      ```
-
-      Do take note here that the authorization header value does not include the `Bearer ` prefix. To switch to using the Opik Cloud in the documentation, you can
-      click on the edit button displayed when hovering over the `Base URL` displayed on the right hand side of the docs.
+  description: "The Opik REST API is currently in beta and subject to change. If you\
+    \ have any questions or feedback about the APIs, please reach out on GitHub: https://github.com/comet-ml/opik.\n\
+    \nAll of the methods listed in this documentation are used by either the SDK or\
+    \ the UI to interact with the Opik server. As a result,\nthe methods have been\
+    \ optimized for these use-cases in mind. If you are looking for a method that\
+    \ is not listed above, please create\nand issue on GitHub or raise a PR!\n\nOpik\
+    \ includes two main deployment options that results in slightly different API\
+    \ usage:\n\n- **Self-hosted Opik instance:** You will simply need to specify the\
+    \ URL as `http://localhost:5173/api/<endpoint_path>` or similar. This is the default\
+    \ option for the docs.\n- **Opik Cloud:** You will need to specify the Opik API\
+    \ Key and Opik Workspace in the header. The format of the header should be:\n\n\
+    \  ```\n  {\n    \"Comet-Workspace\": \"your-workspace-name\",\n    \"authorization\"\
+    : \"your-api-key\"\n  }\n  ```\n\n  The full payload would therefore look like:\n\
+    \  \n  ```\n  curl -X GET 'https://www.comet.com/opik/api/v1/private/projects'\
+    \ \\\n  -H 'Accept: application/json' \\\n  -H 'Comet-Workspace: <your-workspace-name>'\
+    \ \\\n  -H 'authorization: <your-api-key>'\n  ```\n\n  Do take note here that\
+    \ the authorization header value does not include the `Bearer ` prefix. To switch\
+    \ to using the Opik Cloud in the documentation, you can\n  click on the edit button\
+    \ displayed when hovering over the `Base URL` displayed on the right hand side\
+    \ of the docs.\n"
   contact:
     name: Github Repository
     url: https://github.com/comet-ml/opik
@@ -152,7 +142,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/automations/projects/{projectId}/evaluators:
+  /v1/private/automations/evaluators:
     get:
       tags:
         - Automation rule evaluators
@@ -160,9 +150,8 @@ paths:
       description: Find project Evaluators
       operationId: findEvaluators
       parameters:
-        - name: projectId
-          in: path
-          required: true
+        - name: project_id
+          in: query
           schema:
             type: string
             format: uuid
@@ -197,13 +186,6 @@ paths:
       summary: Create automation rule evaluator
       description: Create automation rule evaluator
       operationId: createAutomationRuleEvaluator
-      parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
       requestBody:
         content:
           application/json:
@@ -219,7 +201,7 @@ paths:
               schema:
                 type: string
               example: "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}"
-  /v1/private/automations/projects/{projectId}/evaluators/delete:
+  /v1/private/automations/evaluators/delete:
     post:
       tags:
         - Automation rule evaluators
@@ -227,8 +209,8 @@ paths:
       description: Delete automation rule evaluators batch
       operationId: deleteAutomationRuleEvaluatorBatch
       parameters:
-        - name: projectId
-          in: path
+        - name: project_id
+          in: query
           required: true
           schema:
             type: string
@@ -241,7 +223,7 @@ paths:
       responses:
         "204":
           description: No Content
-  /v1/private/automations/projects/{projectId}/evaluators/{id}:
+  /v1/private/automations/evaluators/{id}:
     get:
       tags:
         - Automation rule evaluators
@@ -249,9 +231,8 @@ paths:
       description: Get automation rule by id
       operationId: getEvaluatorById
       parameters:
-        - name: projectId
-          in: path
-          required: true
+        - name: project_id
+          in: query
           schema:
             type: string
             format: uuid
@@ -281,6 +262,175 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      responses:
+        "204":
+          description: No content
+  /v1/private/automations/evaluators/{id}/logs:
+    get:
+      tags:
+        - Automation rule evaluators
+      summary: Get automation rule evaluator logs by id
+      description: Get automation rule evaluator logs by id
+      operationId: getEvaluatorLogsById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1000
+      responses:
+        "200":
+          description: Automation rule evaluator logs resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogPage"
+  /v1/private/automations/projects/{projectId}/evaluators:
+    get:
+      tags:
+        - Automation rule evaluators
+      summary: Find project Evaluators Deprecated
+      description: Find project Evaluators Deprecated
+      operationId: findEvaluatorsDeprecated
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+      responses:
+        "200":
+          description: Evaluators resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRuleEvaluatorPage_Public"
+      deprecated: true
+    post:
+      tags:
+        - Automation rule evaluators
+      summary: Create automation rule evaluator Deprecated
+      description: Create automation rule evaluator Deprecated
+      operationId: createAutomationRuleEvaluatorDeprecated
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}"
+      deprecated: true
+  /v1/private/automations/projects/{projectId}/evaluators/delete:
+    post:
+      tags:
+        - Automation rule evaluators
+      summary: Delete automation rule evaluators Deprecated
+      description: Delete automation rule evaluators batch Deprecated
+      operationId: deleteAutomationRuleEvaluatorBatchDeprecated
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+      deprecated: true
+  /v1/private/automations/projects/{projectId}/evaluators/{id}:
+    get:
+      tags:
+        - Automation rule evaluators
+      summary: Get automation rule evaluator by id Deprecated
+      description: Get automation rule by id Deprecated
+      operationId: getEvaluatorByIdDeprecated
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Automation Rule resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+      deprecated: true
+    patch:
+      tags:
+        - Automation rule evaluators
+      summary: update Automation Rule Evaluator by id Deprecated
+      description: update Automation Rule Evaluator by id Deprecated
+      operationId: updateAutomationRuleEvaluatorDeprecated
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
         - name: projectId
           in: path
           required: true
@@ -295,13 +445,14 @@ paths:
       responses:
         "204":
           description: No content
+      deprecated: true
   /v1/private/automations/projects/{projectId}/evaluators/{id}/logs:
     get:
       tags:
         - Automation rule evaluators
-      summary: Get automation rule evaluator logs by id
-      description: Get automation rule evaluator logs by id
-      operationId: getEvaluatorLogsById
+      summary: Get automation rule evaluator logs by id Deprecated
+      description: Get automation rule evaluator logs by id Deprecated
+      operationId: getEvaluatorLogsByIdDeprecated
       parameters:
         - name: projectId
           in: path
@@ -329,6 +480,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LogPage"
+      deprecated: true
   /v1/private/chat/completions:
     post:
       tags:
@@ -2691,7 +2843,6 @@ components:
         project_id:
           type: string
           format: uuid
-          readOnly: true
         name:
           type: string
         sampling_rate:
@@ -2818,6 +2969,9 @@ components:
         - type
       type: object
       properties:
+        project_id:
+          type: string
+          format: uuid
         name:
           type: string
         sampling_rate:
@@ -2938,7 +3092,6 @@ components:
         project_id:
           type: string
           format: uuid
-          readOnly: true
         name:
           type: string
         sampling_rate:
@@ -3064,7 +3217,6 @@ components:
         project_id:
           type: string
           format: uuid
-          readOnly: true
         name:
           type: string
         sampling_rate:
@@ -3155,6 +3307,9 @@ components:
         sampling_rate:
           type: number
           format: float
+        project_id:
+          type: string
+          format: uuid
     AssistantMessage:
       type: object
       properties:
