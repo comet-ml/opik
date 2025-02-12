@@ -1,17 +1,15 @@
-type CreateEntity = { id: string };
-
 const DEFAULT_DEBOUNCE_BATCH_DELAY = 300;
 const DEFAULT_BATCH_SIZE = 100;
 
-class ActionQueue<EntityData = object> {
-  private action: (map: Map<string, EntityData>) => Promise<void>;
+class ActionQueue<EntityData = object, EntityId = string> {
+  private action: (map: Map<EntityId, EntityData>) => Promise<void>;
   public batchSize: number;
   private delay: number;
   private enableBatch: boolean;
   public name: string;
   private timerId: NodeJS.Timeout | null = null;
   private promise: Promise<void> = Promise.resolve();
-  public queue = new Map<string, EntityData>();
+  public queue = new Map<EntityId, EntityData>();
 
   constructor({
     action,
@@ -20,7 +18,7 @@ class ActionQueue<EntityData = object> {
     enableBatch,
     name = "ActionQueue",
   }: {
-    action: (map: Map<string, EntityData>) => Promise<void>;
+    action: (map: Map<EntityId, EntityData>) => Promise<void>;
     batchSize?: number;
     delay: number;
     enableBatch: boolean;
@@ -41,7 +39,7 @@ class ActionQueue<EntityData = object> {
     this.timerId = setTimeout(() => this.flush(), this.delay);
   };
 
-  public add = (id: string, entity: EntityData) => {
+  public add = (id: EntityId, entity: EntityData) => {
     this.queue.set(id, entity);
 
     if (!this.enableBatch) {
@@ -58,7 +56,7 @@ class ActionQueue<EntityData = object> {
     this.debounceFlush();
   };
 
-  public update = (id: string, updates: Partial<EntityData>) => {
+  public update = (id: EntityId, updates: Partial<EntityData>) => {
     const entity = this.queue.get(id);
 
     if (entity) {
@@ -79,7 +77,7 @@ class ActionQueue<EntityData = object> {
   };
 }
 
-export abstract class BatchQueue<EntityData = object> {
+export abstract class BatchQueue<EntityData = object, EntityId = string> {
   private readonly createQueue;
   private readonly updateQueue;
   private readonly deleteQueue;
@@ -98,7 +96,7 @@ export abstract class BatchQueue<EntityData = object> {
   }) {
     this.name = name;
 
-    this.createQueue = new ActionQueue<EntityData>({
+    this.createQueue = new ActionQueue<EntityData, EntityId>({
       action: async (map) => {
         await this.createEntities(Array.from(map.values()));
       },
@@ -107,7 +105,7 @@ export abstract class BatchQueue<EntityData = object> {
       name: `${name}:createQueue`,
     });
 
-    this.updateQueue = new ActionQueue<Partial<EntityData>>({
+    this.updateQueue = new ActionQueue<Partial<EntityData>, EntityId>({
       action: async (map) => {
         await this.createQueue.flush();
 
@@ -121,7 +119,7 @@ export abstract class BatchQueue<EntityData = object> {
       name: `${name}:updateQueue`,
     });
 
-    this.deleteQueue = new ActionQueue<void>({
+    this.deleteQueue = new ActionQueue<void, EntityId>({
       action: async (map) => {
         await this.createQueue.flush();
         await this.updateQueue.flush();
@@ -135,18 +133,20 @@ export abstract class BatchQueue<EntityData = object> {
   }
 
   protected abstract createEntities(entities: EntityData[]): Promise<void>;
-  protected abstract getEntity(id: string): Promise<EntityData | undefined>;
+  protected abstract getEntity(id: EntityId): Promise<EntityData | undefined>;
   protected abstract updateEntity(
-    id: string,
+    id: EntityId,
     updates: Partial<EntityData>
   ): Promise<void>;
-  protected abstract deleteEntities(ids: string[]): Promise<void>;
+  protected abstract deleteEntities(ids: EntityId[]): Promise<void>;
+  protected abstract getId(entity: EntityData): EntityId;
 
-  public create = (entity: CreateEntity & EntityData) => {
-    this.createQueue.add(entity.id, entity);
+  public create = (entity: EntityData) => {
+    const id = this.getId(entity);
+    this.createQueue.add(id, entity);
   };
 
-  public get = async (id: string) => {
+  public get = async (id: EntityId) => {
     const entity = this.createQueue.queue.get(id);
 
     if (entity) {
@@ -157,7 +157,7 @@ export abstract class BatchQueue<EntityData = object> {
     return this.getEntity(id);
   };
 
-  public update = (id: string, updates: Partial<EntityData>) => {
+  public update = (id: EntityId, updates: Partial<EntityData>) => {
     const entity = this.createQueue.queue.get(id);
 
     if (entity) {
@@ -168,7 +168,7 @@ export abstract class BatchQueue<EntityData = object> {
     this.updateQueue.add(id, updates);
   };
 
-  public delete = (id: string) => {
+  public delete = (id: EntityId) => {
     if (this.createQueue.queue.has(id)) {
       // is it needed to call the delete anyway?
       this.createQueue.queue.delete(id);
