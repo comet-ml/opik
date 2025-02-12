@@ -57,9 +57,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
 
-      # Setup Node.js for npm/yarn/pnpm
       - name: Set up Node.js
-        if: matrix.runtime == 'node-18' || matrix.runtime == 'node-20' || matrix.runtime == 'node-22'
         uses: actions/setup-node@v4.2.0
         with:
           node-version: ${{ matrix.node-version || '20' }}
@@ -90,26 +88,9 @@ jobs:
         with:
           bun-version: ${{ matrix.bun-version }}
 
-      # Install dependencies based on package manager
+      # Install dependencies (only npm is supported for now)
       - name: Install dependencies (npm)
-        if: matrix.package-manager == 'npm'
         run: npm ci
-
-      - name: Install dependencies (pnpm)
-        if: matrix.package-manager == 'pnpm'
-        run: pnpm install --frozen-lockfile
-
-      - name: Install dependencies (yarn)
-        if: matrix.package-manager == 'yarn'
-        run: yarn install --frozen-lockfile
-
-      - name: Install dependencies (deno)
-        if: matrix.package-manager == 'deno'
-        run: deno cache tests/**/*.ts
-
-      - name: Install dependencies (bun)
-        if: matrix.package-manager == 'bun'
-        run: bun install --frozen-lockfile
 
       # Run tests based on runtime and package manager
       - name: Run tests (npm)
