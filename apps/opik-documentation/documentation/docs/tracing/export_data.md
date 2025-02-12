@@ -2,6 +2,7 @@
 sidebar_label: Export Traces and Spans
 description: Describes how to export traces and spans from the Opik platform.
 toc_max_heading_level: 4
+pytest_codeblocks_skip: true
 ---
 
 # Exporting Traces and Spans
@@ -97,6 +98,28 @@ traces = client.search_traces(filter_string='usage.total_tokens > 1000')
 # Search for traces based on the model used
 traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
 ```
+
+:::tip
+
+If your feedback scores names contain spaces, you will need to wrap them in double quotes:
+
+```python
+
+import opik
+
+client = opik.Opik(
+    project_name="Default project"
+)
+
+# Search for traces where the input contains text
+traces = client.search_traces(
+  filter_string='feedback_score."My Score" > 0'
+)
+```
+
+If the feedback score contains both spaces and double quotes, you will need to escape the double quotes as `""`:
+`traces = client.search_traces(filter_string='feedback_score."Score ""with"" Quotes" > 0')`
+:::
 
 ### Exporting spans
 
