@@ -29,7 +29,7 @@ run-name: Appplication E2E tests - ${{ github.event.inputs.suite || 'all_feature
 jobs:
     run_suite:
         name: "Run suite: ${{ github.event.inputs.suite || 'all_features' }}"
-        runs-on: ubuntu-20.04
+        runs-on: ubuntu-latest
 
         steps:
             - name: Checkout repo
