@@ -1,4 +1,5 @@
 name: TypeScript SDK Publish
+run-name: "TypeScript SDK Publish from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
   workflow_dispatch:
@@ -23,7 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
