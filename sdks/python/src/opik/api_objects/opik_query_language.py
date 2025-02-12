@@ -5,7 +5,7 @@ simple filters without "and" or "or" operators.
 
 import json
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 COLUMNS = {
     "name": "string",
@@ -70,6 +70,38 @@ class OpikQueryLanguage:
         ):
             self._cursor += 1
 
+    def _check_escaped_key(self) -> Tuple[bool, str]:
+        if self.query_string[self._cursor] in ('"', "'"):
+            is_quoted_key = True
+            quote_type = self.query_string[self._cursor]
+            self._cursor += 1
+        else:
+            is_quoted_key = False
+            quote_type = ""
+
+        return is_quoted_key, quote_type
+
+    def _is_valid_escaped_key_char(self, quote_type: str, start: int) -> bool:
+        if self.query_string[self._cursor] != quote_type:
+            # Check this isn't the end of the string (means we missed the closing quote)
+            if self._cursor + 2 >= len(self.query_string):
+                raise ValueError(
+                    "Missing closing quote for: " + self.query_string[start - 1 :]
+                )
+
+            return True
+
+        # Check if it's an escaped quote (doubled quote)
+        if (
+            self._cursor + 1 < len(self.query_string)
+            and self.query_string[self._cursor + 1] == quote_type
+        ):
+            # Skip the second quote
+            self._cursor += 1
+            return True
+
+        return False
+
     def _parse_field(self) -> Dict[str, Any]:
         # Skip whitespace
         self._skip_whitespace()
@@ -84,13 +116,29 @@ class OpikQueryLanguage:
 
         # Parse the key if it exists
         if self.query_string[self._cursor] == ".":
+            # Skip the "."
             self._cursor += 1
+
+            # Check if the key is quoted
+            is_quoted_key, quote_type = self._check_escaped_key()
+
             start = self._cursor
-            while self._cursor < len(self.query_string) and self._is_valid_field_char(
-                self.query_string[self._cursor]
+            while self._cursor < len(self.query_string) and (
+                self._is_valid_field_char(self.query_string[self._cursor])
+                or (
+                    is_quoted_key and self._is_valid_escaped_key_char(quote_type, start)
+                )
             ):
                 self._cursor += 1
+
             key = self.query_string[start : self._cursor]
+
+            # If escaped key, skip the closing quote
+            if is_quoted_key:
+                key = key.replace(
+                    quote_type * 2, quote_type
+                )  # Replace doubled quotes with single quotes
+                self._cursor += 1
 
             # Keys are only supported for usage, feedback_scores and metadata
             if field not in ["usage", "feedback_scores", "metadata"]:
@@ -168,6 +216,8 @@ class OpikQueryLanguage:
         if self.query_string[self._cursor] == '"':
             self._cursor += 1
             start = self._cursor
+
+            # TODO: replace with new quote parser used in field parser
             while (
                 self._cursor < len(self.query_string)
                 and self.query_string[self._cursor] != '"'
