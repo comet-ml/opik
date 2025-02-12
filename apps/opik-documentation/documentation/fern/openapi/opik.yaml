@@ -1,0 +1,6442 @@
+openapi: 3.1.0
+info:
+  title: Opik REST API
+  description: |
+    The Opik REST API is currently in beta and subject to change. If you have any questions or feedback about the APIs, please reach out on GitHub: https://github.com/comet-ml/opik.
+
+    All of the methods listed in this documentation are used by either the SDK or the UI to interact with the Opik server. As a result,
+    the methods have been optimized for these use-cases in mind. If you are looking for a method that is not listed above, please create
+    and issue on GitHub or raise a PR!
+
+    Opik includes two main deployment options that results in slightly different API usage:
+
+    - **Self-hosted Opik instance:** You will simply need to specify the URL as `http://localhost:5173/api/<endpoint_path>` or similar. This is the default option for the docs.
+    - **Opik Cloud:** You will need to specify the Opik API Key and Opik Workspace in the header. The format of the header should be:
+
+      ```
+      {
+        "Comet-Workspace": "your-workspace-name",
+        "authorization": "your-api-key"
+      }
+      ```
+
+      The full payload would therefore look like:
+      
+      ```
+      curl -X GET 'https://www.comet.com/opik/api/v1/private/projects' \
+      -H 'Accept: application/json' \
+      -H 'Comet-Workspace: <your-workspace-name>' \
+      -H 'authorization: <your-api-key>'
+      ```
+
+      Do take note here that the authorization header value does not include the `Bearer ` prefix. To switch to using the Opik Cloud in the documentation, you can
+      click on the edit button displayed when hovering over the `Base URL` displayed on the right hand side of the docs.
+  contact:
+    name: Github Repository
+    url: https://github.com/comet-ml/opik
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+  - url: http://localhost:5173/api
+    description: Local server
+  - url: https://www.comet.com/opik/api
+    description: Opik Cloud
+tags:
+  - name: System usage
+    description: System usage related resource
+  - name: Check
+    description: Access check resources
+  - name: Automation rule evaluators
+    description: Automation rule evaluators resource
+  - name: Chat Completions
+    description: Chat Completions related resources
+  - name: Datasets
+    description: Dataset resources
+  - name: Experiments
+    description: Experiment resources
+  - name: Feedback-definitions
+    description: Feedback definitions related resources
+  - name: LlmProviderKey
+    description: LLM Provider Key
+  - name: Projects
+    description: Project related resources
+  - name: Prompts
+    description: Prompt resources
+  - name: Spans
+    description: Span related resources
+  - name: Traces
+    description: Trace related resources
+paths:
+  /v1/internal/usage/bi-datasets:
+    get:
+      tags:
+        - System usage
+      summary: Get datasets information for BI events
+      description: Get datasets information for BI events per user per workspace
+      operationId: getDatasetBiInfo
+      responses:
+        "200":
+          description: Datasets BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/bi-experiments:
+    get:
+      tags:
+        - System usage
+      summary: Get experiments information for BI events
+      description: Get experiments information for BI events per user per workspace
+      operationId: getExperimentBiInfo
+      responses:
+        "200":
+          description: Experiments BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/bi-traces:
+    get:
+      tags:
+        - System usage
+      summary: Get traces information for BI events
+      description: Get traces information for BI events per user per workspace
+      operationId: getTracesBiInfo
+      responses:
+        "200":
+          description: Traces BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/workspace-trace-counts:
+    get:
+      tags:
+        - System usage
+      summary: Get traces count on previous day for all available workspaces
+      description: Get traces count on previous day for all available workspaces
+      operationId: getTracesCountForWorkspaces
+      responses:
+        "200":
+          description: TraceCountResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceCountResponse"
+  /v1/private/auth:
+    post:
+      tags:
+        - Check
+      summary: Check user access to workspace
+      description: Check user access to workspace
+      operationId: checkAccess
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthDetailsHolder"
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/automations/projects/{projectId}/evaluators:
+    get:
+      tags:
+        - Automation rule evaluators
+      summary: Find project Evaluators
+      description: Find project Evaluators
+      operationId: findEvaluators
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+      responses:
+        "200":
+          description: Evaluators resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRuleEvaluatorPage_Public"
+    post:
+      tags:
+        - Automation rule evaluators
+      summary: Create automation rule evaluator
+      description: Create automation rule evaluator
+      operationId: createAutomationRuleEvaluator
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}"
+  /v1/private/automations/projects/{projectId}/evaluators/delete:
+    post:
+      tags:
+        - Automation rule evaluators
+      summary: Delete automation rule evaluators
+      description: Delete automation rule evaluators batch
+      operationId: deleteAutomationRuleEvaluatorBatch
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/automations/projects/{projectId}/evaluators/{id}:
+    get:
+      tags:
+        - Automation rule evaluators
+      summary: Get automation rule evaluator by id
+      description: Get automation rule by id
+      operationId: getEvaluatorById
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Automation Rule resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+    patch:
+      tags:
+        - Automation rule evaluators
+      summary: update Automation Rule Evaluator by id
+      description: update Automation Rule Evaluator by id
+      operationId: updateAutomationRuleEvaluator
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      responses:
+        "204":
+          description: No content
+  /v1/private/automations/projects/{projectId}/evaluators/{id}/logs:
+    get:
+      tags:
+        - Automation rule evaluators
+      summary: Get automation rule evaluator logs by id
+      description: Get automation rule evaluator logs by id
+      operationId: getEvaluatorLogsById
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1000
+      responses:
+        "200":
+          description: Automation rule evaluator logs resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogPage"
+  /v1/private/chat/completions:
+    post:
+      tags:
+        - Chat Completions
+      summary: Create chat completions
+      description: Create chat completions
+      operationId: createChatCompletions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCompletionRequest"
+      responses:
+        "200":
+          description: Chat completions response
+          content:
+            text/event-stream:
+              schema:
+                type: array
+                items:
+                  type: object
+                  anyOf:
+                    - $ref: "#/components/schemas/ChatCompletionResponse"
+                    - $ref: "#/components/schemas/ErrorMessage"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionResponse"
+  /v1/private/datasets:
+    get:
+      tags:
+        - Datasets
+      summary: Find datasets
+      description: Find datasets
+      operationId: findDatasets
+      parameters:
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: with_experiments_only
+          in: query
+          schema:
+            type: boolean
+        - name: prompt_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: sorting
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dataset resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetPage_Public"
+    post:
+      tags:
+        - Datasets
+      summary: Create dataset
+      description: Create dataset
+      operationId: createDataset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dataset_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/api/v1/private/datasets/{id}"
+  /v1/private/datasets/items:
+    put:
+      tags:
+        - Datasets
+      summary: Create/update dataset items
+      description: Create/update dataset items based on dataset item id
+      operationId: createOrUpdateDatasetItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItemBatch_Write"
+      responses:
+        "204":
+          description: No content
+  /v1/private/datasets/{id}:
+    get:
+      tags:
+        - Datasets
+      summary: Get dataset by id
+      description: Get dataset by id
+      operationId: getDatasetById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dataset resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dataset_Public"
+    put:
+      tags:
+        - Datasets
+      summary: Update dataset by id
+      description: Update dataset by id
+      operationId: updateDataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetUpdate"
+      responses:
+        "204":
+          description: No content
+    delete:
+      tags:
+        - Datasets
+      summary: Delete dataset by id
+      description: Delete dataset by id
+      operationId: deleteDataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: No content
+  /v1/private/datasets/delete:
+    post:
+      tags:
+        - Datasets
+      summary: Delete dataset by name
+      description: Delete dataset by name
+      operationId: deleteDatasetByName
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetIdentifier"
+      responses:
+        "204":
+          description: No content
+  /v1/private/datasets/items/delete:
+    post:
+      tags:
+        - Datasets
+      summary: Delete dataset items
+      description: Delete dataset items
+      operationId: deleteDatasetItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItemsDelete"
+      responses:
+        "204":
+          description: No content
+  /v1/private/datasets/delete-batch:
+    post:
+      tags:
+        - Datasets
+      summary: Delete datasets
+      description: Delete datasets batch
+      operationId: deleteDatasetsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No content
+  /v1/private/datasets/{id}/items/experiments/items:
+    get:
+      tags:
+        - Datasets
+      summary: Find dataset items with experiment items
+      description: Find dataset items with experiment items
+      operationId: findDatasetItemsWithExperimentItems
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: experiment_ids
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: filters
+          in: query
+          schema:
+            type: string
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: "Truncate image included in either input, output or metadata"
+      responses:
+        "200":
+          description: Dataset item resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetItemPage_Compare"
+  /v1/private/datasets/retrieve:
+    post:
+      tags:
+        - Datasets
+      summary: Get dataset by name
+      description: Get dataset by name
+      operationId: getDatasetByIdentifier
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetIdentifier_Public"
+      responses:
+        "200":
+          description: Dataset resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dataset_Public"
+  /v1/private/datasets/items/{itemId}:
+    get:
+      tags:
+        - Datasets
+      summary: Get dataset item by id
+      description: Get dataset item by id
+      operationId: getDatasetItemById
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dataset item resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetItem_Public"
+  /v1/private/datasets/{id}/items:
+    get:
+      tags:
+        - Datasets
+      summary: Get dataset items
+      description: Get dataset items
+      operationId: getDatasetItems
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: "Truncate image included in either input, output or metadata"
+      responses:
+        "200":
+          description: Dataset items resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetItemPage_Public"
+  /v1/private/datasets/{id}/items/experiments/items/output/columns:
+    get:
+      tags:
+        - Datasets
+      summary: Get dataset items output columns
+      description: Get dataset items output columns
+      operationId: getDatasetItemsOutputColumns
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: experiment_ids
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dataset item output columns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageColumns"
+  /v1/private/datasets/items/stream:
+    post:
+      tags:
+        - Datasets
+      summary: Stream dataset items
+      description: Stream dataset items
+      operationId: streamDatasetItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItemStreamRequest"
+      responses:
+        "200":
+          description: Dataset items stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                    - $ref: "#/components/schemas/DatasetItem"
+                    - $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/experiments:
+    get:
+      tags:
+        - Experiments
+      summary: Find experiments
+      description: Find experiments
+      operationId: findExperiments
+      parameters:
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: datasetId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: dataset_deleted
+          in: query
+          schema:
+            type: boolean
+        - name: prompt_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Experiments resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentPage_Public"
+    post:
+      tags:
+        - Experiments
+      summary: Create experiment
+      description: Create experiment
+      operationId: createExperiment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Experiment_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/experiments/{id}"
+  /v1/private/experiments/items:
+    post:
+      tags:
+        - Experiments
+      summary: Create experiment items
+      description: Create experiment items
+      operationId: createExperimentItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentItemsBatch"
+      responses:
+        "204":
+          description: No content
+  /v1/private/experiments/items/delete:
+    post:
+      tags:
+        - Experiments
+      summary: Delete experiment items
+      description: Delete experiment items
+      operationId: deleteExperimentItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentItemsDelete"
+      responses:
+        "204":
+          description: No content
+  /v1/private/experiments/delete:
+    post:
+      tags:
+        - Experiments
+      summary: Delete experiments by id
+      description: Delete experiments by id
+      operationId: deleteExperimentsById
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentsDelete"
+      responses:
+        "204":
+          description: No content
+  /v1/private/experiments/feedback-scores/names:
+    get:
+      tags:
+        - Experiments
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames
+      parameters:
+        - name: experiment_ids
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /v1/private/experiments/{id}:
+    get:
+      tags:
+        - Experiments
+      summary: Get experiment by id
+      description: Get experiment by id
+      operationId: getExperimentById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Experiment resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Experiment_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/experiments/retrieve:
+    post:
+      tags:
+        - Experiments
+      summary: Get experiment by name
+      description: Get experiment by name
+      operationId: getExperimentByName
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Identifier_Public"
+      responses:
+        "200":
+          description: Experiments resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Experiment_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/experiments/items/{id}:
+    get:
+      tags:
+        - Experiments
+      summary: Get experiment item by id
+      description: Get experiment item by id
+      operationId: getExperimentItemById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Experiment item resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentItem_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/experiments/items/stream:
+    post:
+      tags:
+        - Experiments
+      summary: Stream experiment items
+      description: Stream experiment items
+      operationId: streamExperimentItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentItemStreamRequest"
+      responses:
+        "200":
+          description: Experiment items stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                    - $ref: "#/components/schemas/ExperimentItem"
+                    - $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/feedback-definitions:
+    get:
+      tags:
+        - Feedback-definitions
+      summary: Find Feedback definitions
+      description: Find Feedback definitions
+      operationId: findFeedbackDefinitions
+      parameters:
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - numerical
+              - categorical
+      responses:
+        "200":
+          description: Feedback definitions resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackDefinitionPage_Public"
+    post:
+      tags:
+        - Feedback-definitions
+      summary: Create feedback definition
+      description: Get feedback definition
+      operationId: createFeedbackDefinition
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Feedback_Create"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/feedback-definitions/{feedbackId}"
+  /v1/private/feedback-definitions/{id}:
+    get:
+      tags:
+        - Feedback-definitions
+      summary: Get feedback definition by id
+      description: Get feedback definition by id
+      operationId: getFeedbackDefinitionById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Feedback definition resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feedback_Public"
+    put:
+      tags:
+        - Feedback-definitions
+      summary: Update feedback definition by id
+      description: Update feedback definition by id
+      operationId: updateFeedbackDefinition
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Feedback_Update"
+      responses:
+        "204":
+          description: No Content
+    delete:
+      tags:
+        - Feedback-definitions
+      summary: Delete feedback definition by id
+      description: Delete feedback definition by id
+      operationId: deleteFeedbackDefinitionById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: No Content
+  /v1/private/feedback-definitions/delete:
+    post:
+      tags:
+        - Feedback-definitions
+      summary: Delete feedback definitions
+      description: Delete feedback definitions batch
+      operationId: deleteFeedbackDefinitionsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/llm-provider-key/delete:
+    post:
+      tags:
+        - LlmProviderKey
+      summary: Delete LLM Provider's ApiKeys
+      description: Delete LLM Provider's ApiKeys batch
+      operationId: deleteLlmProviderApiKeysBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/llm-provider-key:
+    get:
+      tags:
+        - LlmProviderKey
+      summary: Find LLM Provider's ApiKeys
+      description: Find LLM Provider's ApiKeys
+      operationId: findLlmProviderKeys
+      responses:
+        "200":
+          description: LLMProviderApiKey resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectPage_Public"
+    post:
+      tags:
+        - LlmProviderKey
+      summary: Store LLM Provider's ApiKey
+      description: Store LLM Provider's ApiKey
+      operationId: storeLlmProviderApiKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderApiKey_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/proxy/api_key/{apiKeyId}"
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/llm-provider-key/{id}:
+    get:
+      tags:
+        - LlmProviderKey
+      summary: Get LLM Provider's ApiKey by id
+      description: Get LLM Provider's ApiKey by id
+      operationId: getLlmProviderApiKeyById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: LLMProviderApiKey resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderApiKey_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    patch:
+      tags:
+        - LlmProviderKey
+      summary: Update LLM Provider's ApiKey
+      description: Update LLM Provider's ApiKey
+      operationId: updateLlmProviderApiKey
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderApiKeyUpdate"
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/projects:
+    get:
+      tags:
+        - Projects
+      summary: Find projects
+      description: Find projects
+      operationId: findProjects
+      parameters:
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: sorting
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectPage_Public"
+    post:
+      tags:
+        - Projects
+      summary: Create project
+      description: Create project
+      operationId: createProject
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Project_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/projects/{projectId}"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/projects/{id}:
+    get:
+      tags:
+        - Projects
+      summary: Get project by id
+      description: Get project by id
+      operationId: getProjectById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project_Public"
+    delete:
+      tags:
+        - Projects
+      summary: Delete project by id
+      description: Delete project by id
+      operationId: deleteProjectById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: No Content
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    patch:
+      tags:
+        - Projects
+      summary: Update project by id
+      description: Update project by id
+      operationId: updateProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "204":
+          description: No Content
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/projects/delete:
+    post:
+      tags:
+        - Projects
+      summary: Delete projects
+      description: Delete projects batch
+      operationId: deleteProjectsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/projects/feedback-scores/names:
+    get:
+      tags:
+        - Projects
+      summary: Find Feedback Score names By Project Ids
+      description: Find Feedback Score names By Project Ids
+      operationId: findFeedbackScoreNamesByProjectIds
+      parameters:
+        - name: project_ids
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackScoreNames"
+  /v1/private/projects/{id}/metrics:
+    post:
+      tags:
+        - Projects
+      summary: Get Project Metrics
+      description: Gets specified metrics for a project
+      operationId: getProjectMetrics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectMetricRequest_Public"
+      responses:
+        "200":
+          description: Project Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMetricResponse_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/projects/stats:
+    get:
+      tags:
+        - Projects
+      summary: Get Project Stats
+      description: Get Project Stats
+      operationId: getProjectStats
+      parameters:
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: sorting
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStatsSummary"
+  /v1/private/projects/retrieve:
+    post:
+      tags:
+        - Projects
+      summary: Retrieve project
+      description: Retrieve project
+      operationId: retrieveProject
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectRetrieve_Detailed"
+      responses:
+        "200":
+          description: Project resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project_Detailed"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detailed"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detailed"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detailed"
+  /v1/private/prompts:
+    get:
+      tags:
+        - Prompts
+      summary: Get prompts
+      description: Get prompts
+      operationId: getPrompts
+      parameters:
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: name
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptPage_Public"
+    post:
+      tags:
+        - Prompts
+      summary: Create prompt
+      description: Create prompt
+      operationId: createPrompt
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Prompt_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/prompts/{promptId}"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/prompts/versions:
+    post:
+      tags:
+        - Prompts
+      summary: Create prompt version
+      description: Create prompt version
+      operationId: createPromptVersion
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePromptVersion_Detail"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersion_Detail"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/{id}:
+    get:
+      tags:
+        - Prompts
+      summary: Get prompt by id
+      description: Get prompt by id
+      operationId: getPromptById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Prompt resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+    put:
+      tags:
+        - Prompts
+      summary: Update prompt
+      description: Update prompt
+      operationId: updatePrompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Prompt_Updatable"
+      responses:
+        "204":
+          description: No content
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+        - Prompts
+      summary: Delete prompt
+      description: Delete prompt
+      operationId: deletePrompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: No content
+  /v1/private/prompts/delete:
+    post:
+      tags:
+        - Prompts
+      summary: Delete prompts
+      description: Delete prompts batch
+      operationId: deletePromptsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/prompts/versions/{versionId}:
+    get:
+      tags:
+        - Prompts
+      summary: Get prompt version by id
+      description: Get prompt version by id
+      operationId: getPromptVersionById
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Prompt version resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersion_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/{id}/versions:
+    get:
+      tags:
+        - Prompts
+      summary: Get prompt versions
+      description: Get prompt versions
+      operationId: getPromptVersions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersionPage_Public"
+  /v1/private/prompts/versions/retrieve:
+    post:
+      tags:
+        - Prompts
+      summary: Retrieve prompt version
+      description: Retrieve prompt version
+      operationId: retrievePromptVersion
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionRetrieve_Detail"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersion_Detail"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/spans/{id}/comments:
+    post:
+      tags:
+        - Spans
+      summary: Add span comment
+      description: Add span comment
+      operationId: addSpanComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/spans/{spanId}/comments/{commentId}"
+  /v1/private/spans/{id}/feedback-scores:
+    put:
+      tags:
+        - Spans
+      summary: Add span feedback score
+      description: Add span feedback score
+      operationId: addSpanFeedbackScore
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackScore"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/spans:
+    get:
+      tags:
+        - Spans
+      summary: Get spans by project_name or project_id and optionally by trace_id
+        and/or type
+      description: Get spans by project_name or project_id and optionally by trace_id
+        and/or type
+      operationId: getSpansByProject
+      parameters:
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: trace_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - general
+              - tool
+              - llm
+        - name: filters
+          in: query
+          schema:
+            type: string
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: "Truncate image included in either input, output or metadata"
+      responses:
+        "200":
+          description: Spans resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpanPage_Public"
+    post:
+      tags:
+        - Spans
+      summary: Create span
+      description: Create span
+      operationId: createSpan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Span_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/spans/{spanId}"
+  /v1/private/spans/batch:
+    post:
+      tags:
+        - Spans
+      summary: Create spans
+      description: Create spans
+      operationId: createSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpanBatch_Write"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/spans/{id}:
+    get:
+      tags:
+        - Spans
+      summary: Get span by id
+      description: Get span by id
+      operationId: getSpanById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Span resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Span_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Span_Public"
+    delete:
+      tags:
+        - Spans
+      summary: Delete span by id
+      description: Delete span by id
+      operationId: deleteSpanById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Not implemented
+        "204":
+          description: No Content
+    patch:
+      tags:
+        - Spans
+      summary: Update span by id
+      description: Update span by id
+      operationId: updateSpan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpanUpdate"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+  /v1/private/spans/comments/delete:
+    post:
+      tags:
+        - Spans
+      summary: Delete span comments
+      description: Delete span comments
+      operationId: deleteSpanComments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/spans/{id}/feedback-scores/delete:
+    post:
+      tags:
+        - Spans
+      summary: Delete span feedback score
+      description: Delete span feedback score
+      operationId: deleteSpanFeedbackScore
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteFeedbackScore"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/spans/feedback-scores/names:
+    get:
+      tags:
+        - Spans
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames_1
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - general
+              - tool
+              - llm
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /v1/private/spans/{spanId}/comments/{commentId}:
+    get:
+      tags:
+        - Spans
+      summary: Get span comment
+      description: Get span comment
+      operationId: getSpanComment
+      parameters:
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: spanId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Comment resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/spans/stats:
+    get:
+      tags:
+        - Spans
+      summary: Get span stats
+      description: Get span stats
+      operationId: getSpanStats
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: trace_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - general
+              - tool
+              - llm
+        - name: filters
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Span stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
+  /v1/private/spans/feedback-scores:
+    put:
+      tags:
+        - Spans
+      summary: Batch feedback scoring for spans
+      description: Batch feedback scoring for spans
+      operationId: scoreBatchOfSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackScoreBatch"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/spans/search:
+    post:
+      tags:
+        - Spans
+      summary: Search spans
+      description: Search spans
+      operationId: searchSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpanSearchStreamRequest_Public"
+      responses:
+        "200":
+          description: Spans stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                    - $ref: "#/components/schemas/Span_Public"
+                    - $ref: "#/components/schemas/ErrorMessage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/spans/comments/{commentId}:
+    patch:
+      tags:
+        - Spans
+      summary: Update span comment by id
+      description: Update span comment by id
+      operationId: updateSpanComment
+      parameters:
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+  /v1/private/traces/{id}/comments:
+    post:
+      tags:
+        - Traces
+      summary: Add trace comment
+      description: Add trace comment
+      operationId: addTraceComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/traces/{traceId}/comments/{commentId}"
+  /v1/private/traces/{id}/feedback-scores:
+    put:
+      tags:
+        - Traces
+      summary: Add trace feedback score
+      description: Add trace feedback score
+      operationId: addTraceFeedbackScore
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackScore"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/traces:
+    get:
+      tags:
+        - Traces
+      summary: Get traces by project_name or project_id
+      description: Get traces by project_name or project_id
+      operationId: getTracesByProject
+      parameters:
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: filters
+          in: query
+          schema:
+            type: string
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: "Truncate image included in either input, output or metadata"
+      responses:
+        "200":
+          description: Trace resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TracePage_Public"
+    post:
+      tags:
+        - Traces
+      summary: Create trace
+      description: Get trace
+      operationId: createTrace
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Trace_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/traces/{traceId}"
+  /v1/private/traces/batch:
+    post:
+      tags:
+        - Traces
+      summary: Create traces
+      description: Create traces
+      operationId: createTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceBatch_Write"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/traces/{id}:
+    get:
+      tags:
+        - Traces
+      summary: Get trace by id
+      description: Get trace by id
+      operationId: getTraceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Trace resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trace_Public"
+    delete:
+      tags:
+        - Traces
+      summary: Delete trace by id
+      description: Delete trace by id
+      operationId: deleteTraceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: No Content
+    patch:
+      tags:
+        - Traces
+      summary: Update trace by id
+      description: Update trace by id
+      operationId: updateTrace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceUpdate"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/traces/comments/delete:
+    post:
+      tags:
+        - Traces
+      summary: Delete trace comments
+      description: Delete trace comments
+      operationId: deleteTraceComments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/traces/{id}/feedback-scores/delete:
+    post:
+      tags:
+        - Traces
+      summary: Delete trace feedback score
+      description: Delete trace feedback score
+      operationId: deleteTraceFeedbackScore
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteFeedbackScore"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/traces/delete:
+    post:
+      tags:
+        - Traces
+      summary: Delete traces
+      description: Delete traces
+      operationId: deleteTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/traces/feedback-scores/names:
+    get:
+      tags:
+        - Traces
+      summary: Find Feedback Score names
+      description: Find Feedback Score names
+      operationId: findFeedbackScoreNames_2
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /v1/private/traces/stats:
+    get:
+      tags:
+        - Traces
+      summary: Get trace stats
+      description: Get trace stats
+      operationId: getTraceStats
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: filters
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trace stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
+  /v1/private/traces/{traceId}/comments/{commentId}:
+    get:
+      tags:
+        - Traces
+      summary: Get trace comment
+      description: Get trace comment
+      operationId: getTraceComment
+      parameters:
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: traceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Comment resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/traces/feedback-scores:
+    put:
+      tags:
+        - Traces
+      summary: Batch feedback scoring for traces
+      description: Batch feedback scoring for traces
+      operationId: scoreBatchOfTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackScoreBatch"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/traces/comments/{commentId}:
+    patch:
+      tags:
+        - Traces
+      summary: Update trace comment by id
+      description: Update trace comment by id
+      operationId: updateTraceComment
+      parameters:
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+  /is-alive/ping:
+    get:
+      operationId: isAlive
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+  /is-alive/ver:
+    get:
+      operationId: version
+      responses:
+        default:
+          description: default response
+          content:
+            application/json: {}
+components:
+  schemas:
+    BiInformation:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        user:
+          type: string
+        count:
+          type: integer
+          format: int64
+    BiInformationResponse:
+      type: object
+      properties:
+        bi_information:
+          type: array
+          items:
+            $ref: "#/components/schemas/BiInformation"
+    TraceCountResponse:
+      type: object
+      properties:
+        workspaces_traces_count:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceTraceCount"
+    WorkspaceTraceCount:
+      type: object
+      properties:
+        workspace:
+          type: string
+        trace_count:
+          type: integer
+          format: int32
+    ErrorMessage:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    AuthDetailsHolder:
+      type: object
+    AutomationRuleEvaluator:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        sampling_rate:
+          type: number
+          format: float
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+            - llm_as_judge
+        action:
+          type: string
+          enum:
+            - evaluator
+      discriminator:
+        propertyName: type
+        mapping:
+          llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge"
+    AutomationRuleEvaluatorLlmAsJudge:
+      required:
+        - code
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/AutomationRuleEvaluator"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/LlmAsJudgeCode"
+    LlmAsJudgeCode:
+      required:
+        - messages
+        - model
+        - schema
+        - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
+    LlmAsJudgeMessage:
+      required:
+        - content
+        - role
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - SYSTEM
+            - USER
+            - AI
+            - TOOL_EXECUTION_RESULT
+        content:
+          type: string
+    LlmAsJudgeModelParameters:
+      required:
+        - name
+        - temperature
+      type: object
+      properties:
+        name:
+          type: string
+        temperature:
+          type: number
+          format: double
+    LlmAsJudgeOutputSchema:
+      required:
+        - description
+        - name
+        - type
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - BOOLEAN
+            - INTEGER
+            - DOUBLE
+        description:
+          type: string
+    AutomationRuleEvaluatorLlmAsJudge_Write:
+      required:
+        - code
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/LlmAsJudgeCode_Write"
+    AutomationRuleEvaluator_Write:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        name:
+          type: string
+        sampling_rate:
+          type: number
+          format: float
+        type:
+          type: string
+          enum:
+            - llm_as_judge
+        action:
+          type: string
+          enum:
+            - evaluator
+      discriminator:
+        propertyName: type
+        mapping:
+          llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Write"
+    LlmAsJudgeCode_Write:
+      required:
+        - messages
+        - model
+        - schema
+        - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Write"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Write"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
+    LlmAsJudgeMessage_Write:
+      required:
+        - content
+        - role
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - SYSTEM
+            - USER
+            - AI
+            - TOOL_EXECUTION_RESULT
+        content:
+          type: string
+    LlmAsJudgeModelParameters_Write:
+      required:
+        - name
+        - temperature
+      type: object
+      properties:
+        name:
+          type: string
+        temperature:
+          type: number
+          format: double
+    LlmAsJudgeOutputSchema_Write:
+      required:
+        - description
+        - name
+        - type
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - BOOLEAN
+            - INTEGER
+            - DOUBLE
+        description:
+          type: string
+    BatchDelete:
+      required:
+        - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+    AutomationRuleEvaluatorLlmAsJudge_Public:
+      required:
+        - code
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/LlmAsJudgeCode_Public"
+    AutomationRuleEvaluatorObject_Public:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        sampling_rate:
+          type: number
+          format: float
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+            - llm_as_judge
+        action:
+          type: string
+          enum:
+            - evaluator
+      discriminator:
+        propertyName: type
+        mapping:
+          llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public"
+    AutomationRuleEvaluatorPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
+    LlmAsJudgeCode_Public:
+      required:
+        - messages
+        - model
+        - schema
+        - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Public"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Public"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
+    LlmAsJudgeMessage_Public:
+      required:
+        - content
+        - role
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - SYSTEM
+            - USER
+            - AI
+            - TOOL_EXECUTION_RESULT
+        content:
+          type: string
+    LlmAsJudgeModelParameters_Public:
+      required:
+        - name
+        - temperature
+      type: object
+      properties:
+        name:
+          type: string
+        temperature:
+          type: number
+          format: double
+    LlmAsJudgeOutputSchema_Public:
+      required:
+        - description
+        - name
+        - type
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - BOOLEAN
+            - INTEGER
+            - DOUBLE
+        description:
+          type: string
+    AutomationRuleEvaluator_Public:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        sampling_rate:
+          type: number
+          format: float
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+            - llm_as_judge
+        action:
+          type: string
+          enum:
+            - evaluator
+      discriminator:
+        propertyName: type
+        mapping:
+          llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorLlmAsJudge_Public"
+    LogItem:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        rule_id:
+          type: string
+          format: uuid
+          readOnly: true
+        level:
+          type: string
+          readOnly: true
+          enum:
+            - INFO
+            - WARN
+            - ERROR
+            - DEBUG
+            - TRACE
+        message:
+          type: string
+          readOnly: true
+        markers:
+          type: object
+          additionalProperties:
+            type: string
+            readOnly: true
+          readOnly: true
+    LogPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogItem"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    AutomationRuleEvaluatorUpdate:
+      required:
+        - code
+        - name
+        - sampling_rate
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          $ref: "#/components/schemas/LlmAsJudgeCode"
+        sampling_rate:
+          type: number
+          format: float
+    AssistantMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - system
+            - user
+            - assistant
+            - tool
+            - function
+        content:
+          type: string
+        name:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolCall"
+        refusal:
+          type: boolean
+        function_call:
+          $ref: "#/components/schemas/FunctionCall"
+    ChatCompletionChoice:
+      type: object
+      properties:
+        index:
+          type: integer
+          format: int32
+        message:
+          $ref: "#/components/schemas/AssistantMessage"
+        delta:
+          $ref: "#/components/schemas/Delta"
+        finish_reason:
+          type: string
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        created:
+          type: integer
+          format: int32
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatCompletionChoice"
+        usage:
+          $ref: "#/components/schemas/Usage"
+        system_fingerprint:
+          type: string
+    CompletionTokensDetails:
+      type: object
+      properties:
+        reasoning_tokens:
+          type: integer
+          format: int32
+    Delta:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - system
+            - user
+            - assistant
+            - tool
+            - function
+        content:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolCall"
+        function_call:
+          $ref: "#/components/schemas/FunctionCall"
+    FunctionCall:
+      type: object
+      properties:
+        name:
+          type: string
+        arguments:
+          type: string
+    ToolCall:
+      type: object
+      properties:
+        id:
+          type: string
+        index:
+          type: integer
+          format: int32
+        type:
+          type: string
+          enum:
+            - function
+        function:
+          $ref: "#/components/schemas/FunctionCall"
+    Usage:
+      type: object
+      properties:
+        total_tokens:
+          type: integer
+          format: int32
+        prompt_tokens:
+          type: integer
+          format: int32
+        completion_tokens:
+          type: integer
+          format: int32
+        completion_tokens_details:
+          $ref: "#/components/schemas/CompletionTokensDetails"
+    ChatCompletionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        temperature:
+          type: number
+          format: double
+        top_p:
+          type: number
+          format: double
+        "n":
+          type: integer
+          format: int32
+        stream:
+          type: boolean
+        stream_options:
+          $ref: "#/components/schemas/StreamOptions"
+        stop:
+          type: array
+          items:
+            type: string
+        max_tokens:
+          type: integer
+          format: int32
+        max_completion_tokens:
+          type: integer
+          format: int32
+        presence_penalty:
+          type: number
+          format: double
+        frequency_penalty:
+          type: number
+          format: double
+        logit_bias:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        user:
+          type: string
+        response_format:
+          $ref: "#/components/schemas/ResponseFormat"
+        seed:
+          type: integer
+          format: int32
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tool"
+        tool_choice:
+          type: object
+        parallel_tool_calls:
+          type: boolean
+        functions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Function"
+        function_call:
+          $ref: "#/components/schemas/FunctionCall"
+    Function:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        strict:
+          type: boolean
+        parameters:
+          $ref: "#/components/schemas/JsonObjectSchema"
+    JsonObjectSchema:
+      type: object
+      properties:
+        type:
+          type: string
+        description:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/JsonSchemaElement"
+        required:
+          type: array
+          items:
+            type: string
+        additionalProperties:
+          type: boolean
+        $defs:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/JsonSchemaElement"
+    JsonSchema:
+      type: object
+      properties:
+        name:
+          type: string
+        strict:
+          type: boolean
+        schema:
+          $ref: "#/components/schemas/JsonObjectSchema"
+    JsonSchemaElement:
+      type: object
+      properties:
+        type:
+          type: string
+    Message:
+      type: object
+    ResponseFormat:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - text
+            - json_object
+            - json_schema
+        json_schema:
+          $ref: "#/components/schemas/JsonSchema"
+    StreamOptions:
+      type: object
+      properties:
+        include_usage:
+          type: boolean
+    Tool:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - function
+        function:
+          $ref: "#/components/schemas/Function"
+    Dataset:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        experiment_count:
+          type: integer
+          format: int64
+          readOnly: true
+        dataset_items_count:
+          type: integer
+          format: int64
+          readOnly: true
+        most_recent_experiment_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_created_experiment_at:
+          type: string
+          format: date-time
+          readOnly: true
+    Dataset_Write:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+    Comment:
+      required:
+        - text
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    DatasetItem:
+      required:
+        - data
+        - source
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        span_id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+            - manual
+            - trace
+            - span
+            - sdk
+        data:
+          $ref: "#/components/schemas/JsonNode"
+        experiment_items:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ExperimentItem"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    DatasetItemBatch:
+      required:
+        - items
+      type: object
+      properties:
+        dataset_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, dataset_id must be provided"
+        dataset_id:
+          type: string
+          description: "If null, dataset_name must be provided"
+          format: uuid
+        items:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasetItem"
+    ExperimentItem:
+      required:
+        - dataset_item_id
+        - experiment_id
+        - trace_id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        experiment_id:
+          type: string
+          format: uuid
+        dataset_item_id:
+          type: string
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        input:
+          $ref: "#/components/schemas/JsonNode"
+        output:
+          $ref: "#/components/schemas/JsonNode"
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    FeedbackScore:
+      required:
+        - name
+        - source
+        - value
+      type: object
+      properties:
+        name:
+          type: string
+        category_name:
+          type: string
+        value:
+          maximum: 999999999.999999999
+          exclusiveMaximum: false
+          minimum: -999999999.999999999
+          exclusiveMinimum: false
+          type: number
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+            - ui
+            - sdk
+            - online_scoring
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+      readOnly: true
+    JsonNode:
+      type: object
+    DatasetItemBatch_Write:
+      required:
+        - items
+      type: object
+      properties:
+        dataset_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, dataset_id must be provided"
+        dataset_id:
+          type: string
+          description: "If null, dataset_name must be provided"
+          format: uuid
+        items:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasetItem_Write"
+    DatasetItem_Write:
+      required:
+        - data
+        - source
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        span_id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+            - manual
+            - trace
+            - span
+            - sdk
+        data:
+          $ref: "#/components/schemas/JsonNode"
+    DatasetIdentifier:
+      required:
+        - dataset_name
+      type: object
+      properties:
+        dataset_name:
+          type: string
+    DatasetItemsDelete:
+      required:
+        - item_ids
+      type: object
+      properties:
+        item_ids:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            type: string
+            format: uuid
+    Column_Compare:
+      type: object
+      properties:
+        name:
+          type: string
+        types:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+              - string
+              - number
+              - object
+              - boolean
+              - array
+              - "null"
+        filter_field_prefix:
+          type: string
+        filterField:
+          type: string
+          description: The field to use for filtering
+          readOnly: true
+    Comment_Compare:
+      required:
+        - text
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+      readOnly: true
+    DatasetItemPage_Compare:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasetItem_Compare"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        columns:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: "#/components/schemas/Column_Compare"
+    DatasetItem_Compare:
+      required:
+        - data
+        - source
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        span_id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+            - manual
+            - trace
+            - span
+            - sdk
+        data:
+          $ref: "#/components/schemas/JsonNode"
+        experiment_items:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ExperimentItem_Compare"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    ExperimentItem_Compare:
+      required:
+        - dataset_item_id
+        - experiment_id
+        - trace_id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        experiment_id:
+          type: string
+          format: uuid
+        dataset_item_id:
+          type: string
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        input:
+          $ref: "#/components/schemas/JsonNode_Compare"
+        output:
+          $ref: "#/components/schemas/JsonNode_Compare"
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore_Compare"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment_Compare"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+      readOnly: true
+    FeedbackScore_Compare:
+      required:
+        - name
+        - source
+        - value
+      type: object
+      properties:
+        name:
+          type: string
+        category_name:
+          type: string
+        value:
+          maximum: 999999999.999999999
+          exclusiveMaximum: false
+          minimum: -999999999.999999999
+          exclusiveMinimum: false
+          type: number
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+            - ui
+            - sdk
+            - online_scoring
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+      readOnly: true
+    JsonNode_Compare:
+      type: object
+      readOnly: true
+    DatasetPage_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dataset_Public"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    Dataset_Public:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        experiment_count:
+          type: integer
+          format: int64
+          readOnly: true
+        dataset_items_count:
+          type: integer
+          format: int64
+          readOnly: true
+        most_recent_experiment_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_created_experiment_at:
+          type: string
+          format: date-time
+          readOnly: true
+    DatasetIdentifier_Public:
+      required:
+        - dataset_name
+      type: object
+      properties:
+        dataset_name:
+          type: string
+    DatasetItem_Public:
+      required:
+        - data
+        - source
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        span_id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+            - manual
+            - trace
+            - span
+            - sdk
+        data:
+          $ref: "#/components/schemas/JsonNode"
+        experiment_items:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/ExperimentItem_Public"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    ExperimentItem_Public:
+      required:
+        - dataset_item_id
+        - experiment_id
+        - trace_id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        experiment_id:
+          type: string
+          format: uuid
+        dataset_item_id:
+          type: string
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    Column_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        types:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+              - string
+              - number
+              - object
+              - boolean
+              - array
+              - "null"
+        filter_field_prefix:
+          type: string
+        filterField:
+          type: string
+          description: The field to use for filtering
+          readOnly: true
+    DatasetItemPage_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasetItem_Public"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        columns:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: "#/components/schemas/Column_Public"
+    Column:
+      type: object
+      properties:
+        name:
+          type: string
+        types:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+              - string
+              - number
+              - object
+              - boolean
+              - array
+              - "null"
+        filter_field_prefix:
+          type: string
+        filterField:
+          type: string
+          description: The field to use for filtering
+          readOnly: true
+    PageColumns:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/Column"
+    ChunkedOutputJsonNode:
+      type: object
+      properties:
+        type:
+          type: object
+          properties:
+            typeName:
+              type: string
+        closed:
+          type: boolean
+    DatasetItemStreamRequest:
+      required:
+        - dataset_name
+      type: object
+      properties:
+        dataset_name:
+          type: string
+        last_retrieved_id:
+          type: string
+          format: uuid
+        steam_limit:
+          type: integer
+          format: int32
+    DatasetUpdate:
+      required:
+        - name
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+    Experiment:
+      required:
+        - dataset_name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dataset_name:
+          type: string
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment"
+        trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        prompt_version:
+          $ref: "#/components/schemas/PromptVersionLink"
+        prompt_versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromptVersionLink"
+    FeedbackScoreAverage:
+      required:
+        - name
+        - value
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+    PromptVersionLink:
+      required:
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        commit:
+          type: string
+          readOnly: true
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+    Experiment_Write:
+      required:
+        - dataset_name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dataset_name:
+          type: string
+        name:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+        prompt_version:
+          $ref: "#/components/schemas/PromptVersionLink_Write"
+        prompt_versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromptVersionLink_Write"
+    JsonNode_Write:
+      type: object
+    PromptVersionLink_Write:
+      required:
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+    ExperimentItemsBatch:
+      required:
+        - experiment_items
+      type: object
+      properties:
+        experiment_items:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentItem"
+    ExperimentItemsDelete:
+      required:
+        - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+    ExperimentsDelete:
+      required:
+        - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+    Comment_Public:
+      required:
+        - text
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+      readOnly: true
+    ExperimentPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Experiment_Public"
+    Experiment_Public:
+      required:
+        - dataset_name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dataset_name:
+          type: string
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Public"
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage_Public"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment_Public"
+        trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        prompt_version:
+          $ref: "#/components/schemas/PromptVersionLink_Public"
+        prompt_versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromptVersionLink_Public"
+    FeedbackScoreAverage_Public:
+      required:
+        - name
+        - value
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+      readOnly: true
+    JsonNode_Public:
+      type: object
+    PromptVersionLink_Public:
+      required:
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        commit:
+          type: string
+          readOnly: true
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+    ErrorMessage_Public:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    Identifier_Public:
+      required:
+        - name
+      type: object
+      properties:
+        name:
+          type: string
+    ExperimentItemStreamRequest:
+      required:
+        - experiment_name
+      type: object
+      properties:
+        experiment_name:
+          type: string
+        limit:
+          type: integer
+          format: int32
+        last_retrieved_id:
+          type: string
+          format: uuid
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
+    CategoricalFeedbackDefinition:
+      required:
+        - details
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Feedback"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/CategoricalFeedbackDetail"
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+            created_by:
+              type: string
+              readOnly: true
+            last_updated_at:
+              type: string
+              format: date-time
+              readOnly: true
+            last_updated_by:
+              type: string
+              readOnly: true
+    CategoricalFeedbackDetail:
+      required:
+        - categories
+      type: object
+      properties:
+        categories:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    Feedback:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        createdBy:
+          type: string
+          readOnly: true
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        lastUpdatedBy:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+            - numerical
+            - categorical
+      discriminator:
+        propertyName: type
+        mapping:
+          numerical: "#/components/schemas/NumericalFeedbackDefinition"
+          categorical: "#/components/schemas/CategoricalFeedbackDefinition"
+    NumericalFeedbackDefinition:
+      required:
+        - details
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Feedback"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/NumericalFeedbackDetail"
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+            created_by:
+              type: string
+              readOnly: true
+            last_updated_at:
+              type: string
+              format: date-time
+              readOnly: true
+            last_updated_by:
+              type: string
+              readOnly: true
+    NumericalFeedbackDetail:
+      required:
+        - max
+        - min
+      type: object
+      properties:
+        max:
+          type: number
+        min:
+          type: number
+    CategoricalFeedbackDefinition_Create:
+      required:
+        - details
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Feedback_Create"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/CategoricalFeedbackDetail_Create"
+    CategoricalFeedbackDetail_Create:
+      required:
+        - categories
+      type: object
+      properties:
+        categories:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    Feedback_Create:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - numerical
+            - categorical
+      discriminator:
+        propertyName: type
+        mapping:
+          numerical: "#/components/schemas/NumericalFeedbackDefinition_Create"
+          categorical: "#/components/schemas/CategoricalFeedbackDefinition_Create"
+    NumericalFeedbackDefinition_Create:
+      required:
+        - details
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Feedback_Create"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/NumericalFeedbackDetail_Create"
+    NumericalFeedbackDetail_Create:
+      required:
+        - max
+        - min
+      type: object
+      properties:
+        max:
+          type: number
+        min:
+          type: number
+    CategoricalFeedbackDefinition_Public:
+      required:
+        - details
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Feedback_Public"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/CategoricalFeedbackDetail_Public"
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+            created_by:
+              type: string
+              readOnly: true
+            last_updated_at:
+              type: string
+              format: date-time
+              readOnly: true
+            last_updated_by:
+              type: string
+              readOnly: true
+    CategoricalFeedbackDetail_Public:
+      required:
+        - categories
+      type: object
+      properties:
+        categories:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    FeedbackDefinitionPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackObject_Public"
+    FeedbackObject_Public:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        createdBy:
+          type: string
+          readOnly: true
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        lastUpdatedBy:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+            - numerical
+            - categorical
+      discriminator:
+        propertyName: type
+        mapping:
+          numerical: "#/components/schemas/NumericalFeedbackDefinition_Public"
+          categorical: "#/components/schemas/CategoricalFeedbackDefinition_Public"
+    NumericalFeedbackDefinition_Public:
+      required:
+        - details
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Feedback_Public"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/NumericalFeedbackDetail_Public"
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+            created_by:
+              type: string
+              readOnly: true
+            last_updated_at:
+              type: string
+              format: date-time
+              readOnly: true
+            last_updated_by:
+              type: string
+              readOnly: true
+    NumericalFeedbackDetail_Public:
+      required:
+        - max
+        - min
+      type: object
+      properties:
+        max:
+          type: number
+        min:
+          type: number
+    Feedback_Public:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        createdBy:
+          type: string
+          readOnly: true
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        lastUpdatedBy:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          enum:
+            - numerical
+            - categorical
+      discriminator:
+        propertyName: type
+        mapping:
+          numerical: "#/components/schemas/NumericalFeedbackDefinition_Public"
+          categorical: "#/components/schemas/CategoricalFeedbackDefinition_Public"
+    CategoricalFeedbackDefinition_Update:
+      required:
+        - details
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Feedback_Update"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/CategoricalFeedbackDetail_Update"
+    CategoricalFeedbackDetail_Update:
+      required:
+        - categories
+      type: object
+      properties:
+        categories:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    Feedback_Update:
+      required:
+        - name
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - numerical
+            - categorical
+      discriminator:
+        propertyName: type
+        mapping:
+          numerical: "#/components/schemas/NumericalFeedbackDefinition_Update"
+          categorical: "#/components/schemas/CategoricalFeedbackDefinition_Update"
+    NumericalFeedbackDefinition_Update:
+      required:
+        - details
+        - name
+        - type
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Feedback_Update"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/NumericalFeedbackDetail_Update"
+    NumericalFeedbackDetail_Update:
+      required:
+        - max
+        - min
+      type: object
+      properties:
+        max:
+          type: number
+        min:
+          type: number
+    ProjectPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
+    ProviderApiKey_Public:
+      required:
+        - api_key
+        - provider
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - gemini
+        api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    ProviderApiKey:
+      required:
+        - api_key
+        - provider
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - gemini
+        api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    ProviderApiKey_Write:
+      required:
+        - api_key
+        - provider
+      type: object
+      properties:
+        provider:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - gemini
+        api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+    ProviderApiKeyUpdate:
+      required:
+        - api_key
+      type: object
+      properties:
+        api_key:
+          type: string
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+    PercentageValues:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+    Project:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_trace_at:
+          type: string
+          format: date-time
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+        duration:
+          $ref: "#/components/schemas/PercentageValues"
+        total_estimated_cost:
+          type: number
+          format: double
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            readOnly: true
+          readOnly: true
+    Project_Write:
+      required:
+        - name
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    Project_Public:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_trace_at:
+          type: string
+          format: date-time
+          readOnly: true
+    FeedbackScoreNames:
+      type: object
+      properties:
+        scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreName"
+    ScoreName:
+      type: object
+      properties:
+        name:
+          type: string
+    DataPointNumber_Public:
+      required:
+        - time
+      type: object
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
+          type: number
+    ProjectMetricResponse_Public:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        metric_type:
+          type: string
+          enum:
+            - FEEDBACK_SCORES
+            - TRACE_COUNT
+            - TOKEN_USAGE
+            - DURATION
+            - COST
+        interval:
+          type: string
+          enum:
+            - HOURLY
+            - DAILY
+            - WEEKLY
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResultsNumber_Public"
+    ResultsNumber_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPointNumber_Public"
+    ProjectMetricRequest_Public:
+      type: object
+      properties:
+        metric_type:
+          type: string
+          enum:
+            - FEEDBACK_SCORES
+            - TRACE_COUNT
+            - TOKEN_USAGE
+            - DURATION
+            - COST
+        interval:
+          type: string
+          enum:
+            - HOURLY
+            - DAILY
+            - WEEKLY
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+    ProjectStatsSummary:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectStatsSummaryItem"
+    ProjectStatsSummaryItem:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        feedback_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+        duration:
+          $ref: "#/components/schemas/PercentageValues"
+        total_estimated_cost:
+          type: number
+          format: double
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    FeedbackScoreAverage_Detailed:
+      required:
+        - name
+        - value
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+      readOnly: true
+    PercentageValues_Detailed:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+      readOnly: true
+    Project_Detailed:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_trace_at:
+          type: string
+          format: date-time
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage_Detailed"
+        duration:
+          $ref: "#/components/schemas/PercentageValues_Detailed"
+        total_estimated_cost:
+          type: number
+          format: double
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            readOnly: true
+          readOnly: true
+    ErrorMessage_Detailed:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+    ProjectRetrieve_Detailed:
+      required:
+        - name
+      type: object
+      properties:
+        name:
+          type: string
+    ProjectUpdate:
+      type: object
+      properties:
+        name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        description:
+          type: string
+    Prompt:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        template:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        change_description:
+          type: string
+        type:
+          type: string
+          enum:
+            - mustache
+            - jinja2
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        version_count:
+          type: integer
+          format: int64
+          readOnly: true
+        latest_version:
+          $ref: "#/components/schemas/PromptVersion"
+    PromptVersion:
+      required:
+        - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        type:
+          type: string
+          enum:
+            - mustache
+            - jinja2
+        change_description:
+          type: string
+        variables:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+      readOnly: true
+    Prompt_Write:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        template:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+        change_description:
+          type: string
+        type:
+          type: string
+          enum:
+            - mustache
+            - jinja2
+    JsonNode_Detail:
+      type: object
+    PromptVersion_Detail:
+      required:
+        - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Detail"
+        type:
+          type: string
+          enum:
+            - mustache
+            - jinja2
+        change_description:
+          type: string
+        variables:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+    ErrorMessage_Detail:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    CreatePromptVersion_Detail:
+      required:
+        - name
+        - version
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          $ref: "#/components/schemas/PromptVersion_Detail"
+    Prompt_Detail:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        version_count:
+          type: integer
+          format: int64
+          readOnly: true
+        latest_version:
+          $ref: "#/components/schemas/PromptVersion_Detail"
+    PromptVersionPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromptVersion_Public"
+    PromptVersion_Public:
+      required:
+        - template
+      type: object
+      properties:
+        id:
+          type: string
+          description: "version unique identifier, generated if absent"
+          format: uuid
+        prompt_id:
+          type: string
+          format: uuid
+          readOnly: true
+        commit:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+          description: "version short unique identifier, generated if absent. it must\
+            \ be 8 characters long"
+        template:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Public"
+        type:
+          type: string
+          enum:
+            - mustache
+            - jinja2
+        change_description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+    PromptPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Prompt_Public"
+    Prompt_Public:
+      required:
+        - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        version_count:
+          type: integer
+          format: int64
+          readOnly: true
+    PromptVersionRetrieve_Detail:
+      required:
+        - name
+      type: object
+      properties:
+        name:
+          type: string
+        commit:
+          type: string
+    Prompt_Updatable:
+      required:
+        - name
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+    ErrorInfo:
+      required:
+        - exception_type
+        - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
+          type: string
+    Span:
+      required:
+        - name
+        - start_time
+        - trace_id
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - general
+            - tool
+            - llm
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonNode"
+        output:
+          $ref: "#/components/schemas/JsonNode"
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment"
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        total_estimated_cost_version:
+          type: string
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
+    ErrorInfo_Write:
+      required:
+        - exception_type
+        - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
+          type: string
+    Span_Write:
+      required:
+        - name
+        - start_time
+        - trace_id
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - general
+            - tool
+            - llm
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonNode_Write"
+        output:
+          $ref: "#/components/schemas/JsonNode_Write"
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Write"
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        total_estimated_cost_version:
+          type: string
+    SpanBatch:
+      required:
+        - spans
+      type: object
+      properties:
+        spans:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/Span"
+    SpanBatch_Write:
+      required:
+        - spans
+      type: object
+      properties:
+        spans:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/Span_Write"
+    DeleteFeedbackScore:
+      required:
+        - name
+      type: object
+      properties:
+        name:
+          type: string
+    ErrorInfo_Public:
+      required:
+        - exception_type
+        - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
+          type: string
+    FeedbackScore_Public:
+      required:
+        - name
+        - source
+        - value
+      type: object
+      properties:
+        name:
+          type: string
+        category_name:
+          type: string
+        value:
+          maximum: 999999999.999999999
+          exclusiveMaximum: false
+          minimum: -999999999.999999999
+          exclusiveMinimum: false
+          type: number
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+            - ui
+            - sdk
+            - online_scoring
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+      readOnly: true
+    Span_Public:
+      required:
+        - name
+        - start_time
+        - trace_id
+        - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - general
+            - tool
+            - llm
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonNode_Public"
+        output:
+          $ref: "#/components/schemas/JsonNode_Public"
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Public"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Public"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore_Public"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment_Public"
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        total_estimated_cost_version:
+          type: string
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
+    SpanPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Span_Public"
+    AvgValueStat_Public:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              type: number
+              format: double
+    CountValueStat_Public:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              type: integer
+              format: int64
+    PercentageValueStat_Public:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              $ref: "#/components/schemas/PercentageValues_Public"
+    PercentageValues_Public:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+    ProjectStatItemObject_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - COUNT
+            - PERCENTAGE
+            - AVG
+      discriminator:
+        propertyName: type
+        mapping:
+          PERCENTAGE: "#/components/schemas/PercentageValueStat_Public"
+          COUNT: "#/components/schemas/CountValueStat_Public"
+          AVG: "#/components/schemas/AvgValueStat_Public"
+    ProjectStats_Public:
+      type: object
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectStatItemObject_Public"
+    FeedbackScoreBatch:
+      required:
+        - scores
+      type: object
+      properties:
+        scores:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreBatchItem"
+    FeedbackScoreBatchItem:
+      required:
+        - id
+        - name
+        - source
+        - value
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        name:
+          type: string
+        category_name:
+          type: string
+        value:
+          maximum: 999999999.999999999
+          exclusiveMaximum: false
+          minimum: -999999999.999999999
+          exclusiveMinimum: false
+          type: number
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+            - ui
+            - sdk
+            - online_scoring
+    ChunkedOutputJsonNode_Public:
+      type: object
+      properties:
+        type:
+          type: object
+          properties:
+            typeName:
+              type: string
+        closed:
+          type: boolean
+    SpanFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+            - contains
+            - not_contains
+            - starts_with
+            - ends_with
+            - =
+            - "!="
+            - ">"
+            - ">="
+            - <
+            - <=
+        key:
+          type: string
+        value:
+          type: string
+    SpanSearchStreamRequest_Public:
+      type: object
+      properties:
+        trace_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - general
+            - tool
+            - llm
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpanFilter_Public"
+        limit:
+          type: integer
+          format: int32
+        last_retrieved_id:
+          type: string
+          format: uuid
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
+    SpanUpdate:
+      required:
+        - trace_id
+      type: object
+      properties:
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null and project_id not specified, Default Project is assumed"
+        project_id:
+          type: string
+          description: "If null and project_name not specified, Default Project is\
+            \ assumed"
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonNode"
+        output:
+          $ref: "#/components/schemas/JsonNode"
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
+    Trace:
+      required:
+        - name
+        - start_time
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonNode"
+        output:
+          $ref: "#/components/schemas/JsonNode"
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+            readOnly: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment"
+        total_estimated_cost:
+          type: number
+          readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
+    Trace_Write:
+      required:
+        - name
+        - start_time
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonNode_Write"
+        output:
+          $ref: "#/components/schemas/JsonNode_Write"
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Write"
+    TraceBatch:
+      required:
+        - traces
+      type: object
+      properties:
+        traces:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/Trace"
+    TraceBatch_Write:
+      required:
+        - traces
+      type: object
+      properties:
+        traces:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/Trace_Write"
+    Trace_Public:
+      required:
+        - name
+        - start_time
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonNode_Public"
+        output:
+          $ref: "#/components/schemas/JsonNode_Public"
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Public"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Public"
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+            readOnly: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore_Public"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment_Public"
+        total_estimated_cost:
+          type: number
+          readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
+    TracePage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Trace_Public"
+    TraceUpdate:
+      type: object
+      properties:
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null and project_id not specified, Default Project is assumed"
+        project_id:
+          type: string
+          description: "If null and project_name not specified, Default Project is\
+            \ assumed"
+          format: uuid
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonNode"
+        output:
+          $ref: "#/components/schemas/JsonNode"
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
