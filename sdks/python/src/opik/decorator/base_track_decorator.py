@@ -138,17 +138,20 @@ class BaseTrackDecorator(abc.ABC):
 
             * Regular sync and async functions/methods: start the span when the
         function is called, end the span when the function is finished. While the
-        function is working, span is kept in opik context.
+        function is working, span is kept in opik context, so it can be a parent for the
+        spans created by nested tracked functions.
 
             * Generators and async generators: start the span when generator started
         yielding values, end the trace when generator finished yielding values.
         Span is kept in the opik context only while __next__ or __anext__ method is working.
+        It means that the span can be a parent only for spans created by tracked functions
+        called inside __next__ or __anext__.
 
             * Sync and async functions that return a stream or stream manager object
         recognizable by `_streams_handler`: span is started when the function is called,
         finished when the stream chunks are exhausted. Span is NOT kept inside the opik context.
         So these spans can't be parents for other spans. This is usually the case LLM API calls
-        with `stream=True` option.
+        with `stream=True`.
         """
         if inspect.isgeneratorfunction(func):
             return self._tracked_sync_generator(func=func, track_options=track_options)
