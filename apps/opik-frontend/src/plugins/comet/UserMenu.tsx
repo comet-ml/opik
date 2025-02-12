@@ -94,6 +94,10 @@ const UserMenu = () => {
   const organizationWorkspaces = workspaces.filter(
     (workspace) => workspace.organizationId === organization?.id,
   );
+  const teamNames = user.getTeams.teams.map((team) => team.teamName);
+  const organizationWorkspacesAsMember = organizationWorkspaces.filter(
+    (workspace) => teamNames.includes(workspace.workspaceName),
+  );
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
   const workspacePermissions = userPermissions.find(
@@ -189,24 +193,25 @@ const UserMenu = () => {
               <DropdownMenuPortal>
                 <DropdownMenuSubContent className="w-60">
                   <div className="max-h-[200px] overflow-auto">
-                    {sortBy(organizationWorkspaces, "workspaceName").map(
-                      (workspace) => (
-                        <Link
-                          key={workspace.workspaceName}
-                          to={`/${workspace.workspaceName}`}
+                    {sortBy(
+                      organizationWorkspacesAsMember,
+                      "workspaceName",
+                    ).map((workspace) => (
+                      <Link
+                        key={workspace.workspaceName}
+                        to={`/${workspace.workspaceName}`}
+                      >
+                        <DropdownMenuCheckboxItem
+                          checked={workspaceName === workspace.workspaceName}
                         >
-                          <DropdownMenuCheckboxItem
-                            checked={workspaceName === workspace.workspaceName}
-                          >
-                            <TooltipWrapper content={workspace.workspaceName}>
-                              <span className="truncate">
-                                {workspace.workspaceName}
-                              </span>
-                            </TooltipWrapper>
-                          </DropdownMenuCheckboxItem>
-                        </Link>
-                      ),
-                    )}
+                          <TooltipWrapper content={workspace.workspaceName}>
+                            <span className="truncate">
+                              {workspace.workspaceName}
+                            </span>
+                          </TooltipWrapper>
+                        </DropdownMenuCheckboxItem>
+                      </Link>
+                    ))}
                   </div>
                   <DropdownMenuSeparator />
                   <a
