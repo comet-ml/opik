@@ -242,6 +242,7 @@ class ProjectServiceImpl implements ProjectService {
                 .duration(StatsMapper.getStatsDuration(projectStats))
                 .totalEstimatedCost(StatsMapper.getStatsTotalEstimatedCost(projectStats))
                 .usage(StatsMapper.getStatsUsage(projectStats))
+                .traceCount(StatsMapper.getStatsTraceCount(projectStats))
                 .build();
     }
 
@@ -490,6 +491,7 @@ class ProjectServiceImpl implements ProjectService {
                                 .duration(StatsMapper.getStatsDuration(projectStats.get(project.id())))
                                 .totalEstimatedCost(
                                         StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
+                                .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
                                 .build();
                     })
                     .orElseThrow(this::createNotFoundError);
