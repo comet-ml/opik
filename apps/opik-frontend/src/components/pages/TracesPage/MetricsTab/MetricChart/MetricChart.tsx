@@ -101,7 +101,7 @@ const MetricChart = ({
   );
 
   const [data, lines, values] = useMemo(() => {
-    if (!traces?.length) {
+    if (!traces?.filter((trace) => !!trace.name).length) {
       return [[], [], []];
     }
 
@@ -145,7 +145,7 @@ const MetricChart = ({
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       return (
-        <div className="comet-body-xs mb-1 text-light-slate">
+        <div className="comet-body-xs text-light-slate mb-1">
           {formatDate(payload?.[0]?.payload?.time, true)} UTC
         </div>
       );
@@ -166,7 +166,9 @@ const MetricChart = ({
 
   const renderContent = () => {
     const isSingleLine = lines.length === 1;
-    const isSinglePoint = values.filter((v) => v !== null).length === 1;
+    const isSinglePoint =
+      data.filter((point) => lines.every((line) => point[line] !== null))
+        .length === 1;
 
     const [firstLine] = lines;
 
@@ -264,9 +266,14 @@ const MetricChart = ({
                 activeDot={activeDot}
                 dot={
                   isSinglePoint
-                    ? { fill: config[firstLine].color, strokeWidth: 0 }
+                    ? {
+                        fill: config[firstLine].color,
+                        strokeWidth: 0,
+                        fillOpacity: 1,
+                      }
                     : false
                 }
+                strokeOpacity={1}
               />
             </>
           ) : (
