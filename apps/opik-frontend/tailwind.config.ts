@@ -95,5 +95,19 @@ module.exports = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    function ({ addVariant, e }) {
+      addVariant(
+        "group-hover-except-self",
+        ({ modifySelectors, separator }) => {
+          modifySelectors(({ className }) => {
+            return `.group:hover .${e(
+              `group-hover-except-self${separator}${className}`,
+            )}:not(:hover)`;
+          });
+        },
+      );
+    },
+  ],
 };

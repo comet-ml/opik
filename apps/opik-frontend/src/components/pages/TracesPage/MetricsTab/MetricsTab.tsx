@@ -146,7 +146,9 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
               <MetricChart
+                chartId="feedback_scores_chart"
                 name="Feedback scores"
+                description="Daily averages"
                 metricName={METRIC_NAME_TYPE.FEEDBACK_SCORES}
                 interval={interval}
                 intervalStart={intervalStart}
@@ -157,7 +159,9 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
             </div>
             <div className="flex-1">
               <MetricChart
+                chartId="number_of_traces_chart"
                 name="Number of traces"
+                description="Daily totals"
                 metricName={METRIC_NAME_TYPE.TRACE_COUNT}
                 interval={interval}
                 intervalStart={intervalStart}
@@ -171,7 +175,9 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
               <MetricChart
+                chartId="duration_chart"
                 name="Duration"
+                description="Daily quantiles in seconds"
                 metricName={METRIC_NAME_TYPE.DURATION}
                 interval={interval}
                 intervalStart={intervalStart}
@@ -186,7 +192,9 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
 
             <div className="flex-1">
               <MetricChart
+                chartId="token_usage_chart"
                 name="Token usage"
+                description="Daily totals"
                 metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
                 interval={interval}
                 intervalStart={intervalStart}
@@ -199,7 +207,9 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
               <MetricChart
+                chartId="estimated_cost_chart"
                 name="Estimated cost"
+                description="Total daily cost in USD"
                 metricName={METRIC_NAME_TYPE.COST}
                 interval={interval}
                 intervalStart={intervalStart}

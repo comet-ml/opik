@@ -1,15 +1,26 @@
-import React, { useCallback, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useCallback, useMemo, useState } from "react";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { ProjectMetricValue } from "@/types/projects";
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartTooltip,
+} from "@/components/ui/chart";
 import dayjs from "dayjs";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
@@ -25,12 +36,15 @@ import ChartTooltipContent, {
 import { formatDate } from "@/lib/date";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
+import MetricChartLegendContent from "./MetricChartLegendContent";
+import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 
 const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
   value;
 
 interface MetricChartProps {
   name: string;
+  description: string;
   projectId: string;
   interval: INTERVAL_TYPE;
   intervalStart: string;
@@ -40,13 +54,26 @@ interface MetricChartProps {
   renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
   labelsMap?: Record<string, string>;
   customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
+  chartId: string;
 }
 
 type TransformedDataValueType = null | number | string;
 type TransformedData = { [key: string]: TransformedDataValueType };
 
+const predefinedColorMap = {
+  traces: TAG_VARIANTS_COLOR_MAP.purple,
+  cost: TAG_VARIANTS_COLOR_MAP.purple,
+  "duration.p50": TAG_VARIANTS_COLOR_MAP.turquoise,
+  "duration.p90": TAG_VARIANTS_COLOR_MAP.burgundy,
+  "duration.p99": TAG_VARIANTS_COLOR_MAP.purple,
+  completion_tokens: TAG_VARIANTS_COLOR_MAP.turquoise,
+  prompt_tokens: TAG_VARIANTS_COLOR_MAP.burgundy,
+  total_tokens: TAG_VARIANTS_COLOR_MAP.purple,
+};
+
 const MetricChart = ({
   name,
+  description,
   metricName,
   projectId,
   interval,
@@ -56,7 +83,9 @@ const MetricChart = ({
   renderValue = renderTooltipValue,
   labelsMap,
   customYTickFormatter,
+  chartId,
 }: MetricChartProps) => {
+  const [activeLine, setActiveLine] = useState<string | null>(null);
   const { data: traces, isPending } = useProjectMetric(
     {
       projectId,
@@ -72,7 +101,7 @@ const MetricChart = ({
   );
 
   const [data, lines, values] = useMemo(() => {
-    if (!traces?.length) {
+    if (!traces?.filter((trace) => !!trace.name).length) {
       return [[], [], []];
     }
 
@@ -96,7 +125,11 @@ const MetricChart = ({
   }, [traces]);
 
   const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(lines, labelsMap);
+    return getDefaultHashedColorsChartConfig(
+      lines,
+      labelsMap,
+      predefinedColorMap,
+    );
   }, [lines, labelsMap]);
 
   const {
@@ -132,6 +165,15 @@ const MetricChart = ({
   );
 
   const renderContent = () => {
+    const isSingleLine = lines.length === 1;
+    const isSinglePoint =
+      data.filter((point) => lines.every((line) => point[line] !== null))
+        .length === 1;
+
+    const [firstLine] = lines;
+
+    const activeDot = { strokeWidth: 1.5, r: 4, stroke: "white" };
+
     if (isPending) {
       return (
         <div className="flex h-[var(--chart-height)] w-full  items-center justify-center">
@@ -145,7 +187,7 @@ const MetricChart = ({
         config={config}
         className="h-[var(--chart-height)] w-full"
       >
-        <LineChart
+        <ComposedChart
           data={data}
           margin={{
             top: 5,
@@ -173,7 +215,6 @@ const MetricChart = ({
             interval={yTickInterval}
           />
           <ChartTooltip
-            cursor={false}
             isAnimationActive={false}
             content={
               <ChartTooltipContent
@@ -184,28 +225,100 @@ const MetricChart = ({
           />
           <Tooltip />
 
-          {lines.map((line) => (
-            <Line
-              key={line}
-              type="bump"
-              dataKey={line}
-              stroke={config[line].color || ""}
-              isAnimationActive={false}
-              dot={{ strokeWidth: 1, r: 1 }}
-              activeDot={{ strokeWidth: 1, r: 3 }}
-            />
-          ))}
-        </LineChart>
+          <ChartLegend
+            content={
+              <MetricChartLegendContent
+                setActiveLine={setActiveLine}
+                chartId={chartId}
+              />
+            }
+          />
+
+          {isSingleLine ? (
+            <>
+              <defs>
+                <linearGradient
+                  id={`chart-area-gradient-${firstLine}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor={config[firstLine].color}
+                    stopOpacity={0.3}
+                  ></stop>
+                  <stop
+                    offset="50%"
+                    stopColor={config[firstLine].color}
+                    stopOpacity={0}
+                  ></stop>
+                </linearGradient>
+              </defs>
+              <Area
+                type="monotone"
+                dataKey={firstLine}
+                stroke={config[firstLine].color}
+                fill={`url(#chart-area-gradient-${firstLine})`}
+                connectNulls
+                strokeWidth={1.5}
+                activeDot={activeDot}
+                dot={
+                  isSinglePoint
+                    ? {
+                        fill: config[firstLine].color,
+                        strokeWidth: 0,
+                        fillOpacity: 1,
+                      }
+                    : false
+                }
+                strokeOpacity={1}
+              />
+            </>
+          ) : (
+            lines.map((line) => {
+              const isActive = line === activeLine;
+
+              let strokeOpacity = 1;
+
+              if (activeLine) {
+                strokeOpacity = isActive ? 1 : 0.4;
+              }
+
+              return (
+                <Line
+                  key={line}
+                  type="linear"
+                  dataKey={line}
+                  stroke={config[line].color || ""}
+                  dot={
+                    isSinglePoint
+                      ? { fill: config[line].color, strokeWidth: 0 }
+                      : false
+                  }
+                  activeDot={activeDot}
+                  connectNulls
+                  strokeWidth={1.5}
+                  strokeOpacity={strokeOpacity}
+                />
+              );
+            })
+          )}
+        </ComposedChart>
       </ChartContainer>
     );
   };
 
   return (
     <Card>
-      <CardHeader className="mb-2">
-        <CardTitle>{name}</CardTitle>
+      <CardHeader className="space-y-0.5 p-5">
+        <CardTitle className="comet-body-s-accented">{name}</CardTitle>
+        <CardDescription className="comet-body-xs text-xs">
+          {description}
+        </CardDescription>
       </CardHeader>
-      <CardContent>{renderContent()}</CardContent>
+      <CardContent className="p-5">{renderContent()}</CardContent>
     </Card>
   );
 };
