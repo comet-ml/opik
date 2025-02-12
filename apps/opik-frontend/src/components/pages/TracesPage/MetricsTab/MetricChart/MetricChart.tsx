@@ -166,9 +166,11 @@ const MetricChart = ({
 
   const renderContent = () => {
     const isSingleLine = lines.length === 1;
-    const isSinglePoint = data.length === 1;
+    const isSinglePoint = values.filter((v) => v !== null).length === 1;
 
     const [firstLine] = lines;
+
+    const activeDot = { strokeWidth: 1.5, r: 4, stroke: "white" };
 
     if (isPending) {
       return (
@@ -259,6 +261,12 @@ const MetricChart = ({
                 fill={`url(#chart-area-gradient-${firstLine})`}
                 connectNulls
                 strokeWidth={1.5}
+                activeDot={activeDot}
+                dot={
+                  isSinglePoint
+                    ? { fill: config[firstLine].color, strokeWidth: 0 }
+                    : false
+                }
               />
             </>
           ) : (
@@ -282,7 +290,7 @@ const MetricChart = ({
                       ? { fill: config[line].color, strokeWidth: 0 }
                       : false
                   }
-                  activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}
+                  activeDot={activeDot}
                   connectNulls
                   strokeWidth={1.5}
                   strokeOpacity={strokeOpacity}
