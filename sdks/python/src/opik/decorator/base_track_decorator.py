@@ -280,13 +280,13 @@ class BaseTrackDecorator(abc.ABC):
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                generator_or_generator_container = self._generators_handler(
+                stream_or_stream_manager = self._streams_handler(
                     result,
                     track_options.capture_output,
                     track_options.generations_aggregator,
                 )
-                if generator_or_generator_container is not None:
-                    return generator_or_generator_container
+                if stream_or_stream_manager is not None:
+                    return stream_or_stream_manager
 
                 self._after_call(
                     output=result,
@@ -319,7 +319,7 @@ class BaseTrackDecorator(abc.ABC):
             try:
                 result = await func(*args, **kwargs)
             except Exception as exception:
-                LOGGER.error(
+                LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
                     func.__name__,
                     (args, kwargs),
@@ -329,13 +329,13 @@ class BaseTrackDecorator(abc.ABC):
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                generator = self._generators_handler(
+                stream_or_stream_manager = self._streams_handler(
                     result,
                     track_options.capture_output,
                     track_options.generations_aggregator,
                 )
-                if generator is not None:  # TODO: test this flow for async generators
-                    return generator
+                if stream_or_stream_manager is not None:
+                    return stream_or_stream_manager
 
                 self._after_call(
                     output=result,
@@ -449,27 +449,24 @@ class BaseTrackDecorator(abc.ABC):
             )
 
     @abc.abstractmethod
-    def _generators_handler(
+    def _streams_handler(
         self,
         output: Any,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Union[Generator, AsyncGenerator]]:
+    ) -> Optional[Any]:
         """
-        Subclasses must override this method to customize generator objects handling
-        This is the implementation for regular generators and async generators that
-        uses aggregator function passed to track.
+        Subclasses must override this method to customize stream-like objects handling.
+        Stream objects are usually the objects returned by LLM providers when invoking their API with
+        `stream=True` option.
 
-        However, sometimes the function might return an instance of some specific class which
-        is not a python generator itself, but implements some API for iterating through data chunks.
-        In that case `_generators_handler` must be fully overridden in the subclass.
-
-        This is usually the case when creating an integration with some LLM library.
+        Opik's approach for such stream objects is to start the span when the API call is made and
+        finish the span when the stream chunks are exhausted.
         """
 
-        NOT_A_GENERATOR = None
+        NO_STREAM_DETECTED = None
 
-        return NOT_A_GENERATOR
+        return NO_STREAM_DETECTED
 
     @abc.abstractmethod
     def _start_span_inputs_preprocessor(

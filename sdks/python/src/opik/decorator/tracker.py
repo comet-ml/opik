@@ -57,7 +57,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _generators_handler(
+    def _streams_handler(
         self,
         output: Any,
         capture_output: bool,
@@ -67,7 +67,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         base_track_decorator.AsyncGenerator[Any, None],
         None,
     ]:
-        return super()._generators_handler(
+        return super()._streams_handler(
             output, capture_output, generations_aggregator
         )
 
