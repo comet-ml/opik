@@ -3833,9 +3833,7 @@ class TracesResourceTest {
         }
 
         Stream<Arguments> batch__whenCreateTraces__thenReturnNoContent() {
-            return Stream.of(
-                    arguments(Function.identity()),
-                    arguments((Function<String, String>) String::toUpperCase));
+            return getProjectNameModifierArgs();
         }
 
         @Test
@@ -3940,6 +3938,12 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
         }
+    }
+
+    private Stream<Arguments> getProjectNameModifierArgs() {
+        return Stream.of(
+                arguments(Function.identity()),
+                arguments((Function<String, String>) String::toUpperCase));
     }
 
     private void batchCreateSpansAndAssert(List<Span> expectedSpans, String apiKey, String workspaceName) {
@@ -5432,6 +5436,66 @@ class TracesResourceTest {
                         .contains("trace id must be a version 7 UUID");
             }
         }
+
+        @ParameterizedTest
+        @MethodSource
+        void feedback__whenLinkingByProjectName__thenReturnNoContent(Function<String, String> projectNameModifier) {
+
+            String projectName = UUID.randomUUID().toString();
+
+            createProject(projectName.toUpperCase(), TEST_WORKSPACE, API_KEY);
+
+            var traces = IntStream.range(0, 10)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectId(null)
+                            .projectName(projectNameModifier.apply(projectName))
+                            .feedbackScores(null)
+                            .comments(null)
+                            .usage(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+            var scores = traces.stream()
+                    .map(trace -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(trace.id())
+                            .projectName(projectNameModifier.apply(projectName))
+                            .build())
+                    .toList();
+
+            traceResourceClient.feedbackScores(scores, API_KEY, TEST_WORKSPACE);
+
+            var expectedTracesWithScores = traces.stream()
+                    .map(trace -> {
+                        FeedbackScoreBatchItem feedbackScoreBatchItem = scores.stream()
+                                .filter(score -> score.id().equals(trace.id()))
+                                .findFirst()
+                                .orElseThrow();
+
+                        return trace.toBuilder()
+                                .feedbackScores(List.of(mapFeedbackScore(feedbackScoreBatchItem)))
+                                .build();
+                    })
+                    .toList();
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), expectedTracesWithScores.reversed(),
+                    expectedTracesWithScores.reversed(), List.of(), API_KEY);
+        }
+
+        Stream<Arguments> feedback__whenLinkingByProjectName__thenReturnNoContent() {
+            return getProjectNameModifierArgs();
+        }
+    }
+
+    private FeedbackScore mapFeedbackScore(FeedbackScoreBatchItem feedbackScoreBatchItem) {
+        return FeedbackScore.builder()
+                .name(feedbackScoreBatchItem.name())
+                .value(feedbackScoreBatchItem.value())
+                .source(feedbackScoreBatchItem.source())
+                .categoryName(feedbackScoreBatchItem.categoryName())
+                .reason(feedbackScoreBatchItem.reason())
+                .build();
     }
 
     @Nested
