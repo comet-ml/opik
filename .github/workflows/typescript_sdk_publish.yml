@@ -1,4 +1,4 @@
-name: Publish TypeScript SDK
+name: TypeScript SDK Publish
 
 on:
   workflow_dispatch:
