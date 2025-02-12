@@ -1,7 +1,6 @@
 """FastAPI server for forwarding requests to Ollama."""
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import AsyncGenerator, Dict, Callable, Any
 import json
@@ -11,6 +10,8 @@ import time
 from rich.logging import RichHandler
 from rich.console import Console
 import uuid
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 # Configure rich console
 console = Console()
@@ -115,20 +116,37 @@ async def stream_generator(
         yield f"data: {json.dumps(chunk.model_dump())}\n\n"
 
 
+class DynamicCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        origin = request.headers.get('origin')
+        
+        if request.method == 'OPTIONS':
+            response = Response(status_code=200)
+            if origin:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Allow-Methods'] = '*'
+                response.headers['Access-Control-Allow-Headers'] = 'content-type, authorization, comet-workspace, *'
+                response.headers['Access-Control-Max-Age'] = '600'  # Cache preflight for 10 minutes
+            return response
+            
+        response: Response = await call_next(request)
+        
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = '*'
+            response.headers['Access-Control-Allow-Headers'] = 'content-type, authorization, comet-workspace, *'
+                
+        return response
+
+
 def create_app(llm_server_host: str) -> FastAPI:
     app = FastAPI(title="Opik Ollama Proxy")
 
     # Add middleware
     app.middleware("http")(log_request_middleware)
-
-    # Configure CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    app.add_middleware(DynamicCORSMiddleware)
 
     # Create OpenAI client
     client = AsyncOpenAI(

@@ -49,7 +49,7 @@ def print_server_startup_message(
     )
     content.append("your new AI provider!\n\n")
     content.append("🚀 Proxy server running at:\n")
-    content.append(f"   - {local_url}\n")
+    content.append(f"   - {local_url}/v1/chat/completions\n")
     content.append("\n")
     content.append("📚 Documentation:\n")
     content.append("   - https://www.comet.com/docs/opik/playground\n")
