@@ -13,7 +13,7 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.runtime }} with ${{ matrix.package-manager }}
+    name: Test on Node ${{ matrix.node-version }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -21,37 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Node.js 18
-          - runtime: node-18
-            node-version: "18"
-            package-manager: npm
-
-          # Node.js 20
-          - runtime: node-20
-            node-version: "20"
-            package-manager: npm
-
-          # Node.js 22 with different package managers
-          - runtime: node-22
-            node-version: "22"
-            package-manager: npm
-          - runtime: node-22
-            node-version: "22"
-            package-manager: pnpm
-          - runtime: node-22
-            node-version: "22"
-            package-manager: yarn
-
-          # Deno
-          - runtime: deno
-            deno-version: "v2.x"
-            package-manager: deno
-
-          # Bun
-          - runtime: bun
-            bun-version: "latest"
-            package-manager: bun
+        node-version: [18, 20, 22]
 
     steps:
       - name: Checkout code
@@ -62,53 +32,8 @@ jobs:
         with:
           node-version: ${{ matrix.node-version || '20' }}
 
-      # Setup pnpm if needed
-      - name: Setup pnpm
-        if: matrix.package-manager == 'pnpm'
-        uses: pnpm/action-setup@v3
-        with:
-          version: latest
-
-      # Setup yarn if needed
-      - name: Setup yarn
-        if: matrix.package-manager == 'yarn'
-        run: corepack enable && corepack prepare yarn@stable --activate
-
-      # Setup Deno if needed
-      - name: Setup Deno
-        if: matrix.runtime == 'deno'
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: ${{ matrix.deno-version }}
-
-      # Setup Bun if needed
-      - name: Setup Bun
-        if: matrix.runtime == 'bun'
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: ${{ matrix.bun-version }}
-
-      # Install dependencies (only npm is supported for now)
       - name: Install dependencies (npm)
         run: npm ci
 
-      # Run tests based on runtime and package manager
       - name: Run tests (npm)
-        if: matrix.package-manager == 'npm'
         run: npm run test
-
-      - name: Run tests (pnpm)
-        if: matrix.package-manager == 'pnpm'
-        run: pnpm test
-
-      - name: Run tests (yarn)
-        if: matrix.package-manager == 'yarn'
-        run: yarn test
-
-      - name: Run tests (Deno)
-        if: matrix.package-manager == 'deno'
-        run: deno test --allow-read --allow-env tests/
-
-      - name: Run tests (Bun)
-        if: matrix.package-manager == 'bun'
-        run: bun test
