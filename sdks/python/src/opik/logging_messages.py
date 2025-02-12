@@ -58,5 +58,5 @@ PARSE_API_KEY_TOO_MANY_PARTS = "Too many parts (%d) found in the Opik API key: %
 LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION = "LLM provider rate limit error detected. We recommend reducing the amount of parallel requests by setting `task_threads` evaluation parameter to a smaller number"
 
 WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = (
-    "Token usage data is not available for .astream() method."
+    "You didn't specify argument `stream_usage`=True during LLM initialization. Token usage data is not available for .stream() or .astream() methods."
 )
