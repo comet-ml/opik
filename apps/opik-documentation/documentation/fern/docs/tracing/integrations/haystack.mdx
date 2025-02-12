@@ -17,7 +17,7 @@ pip install opik haystack-ai
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
-```bash pytest_codeblocks_skip=true
+```bash {pytest_codeblocks_skip=true}
 opik configure
 ```
 
@@ -115,7 +115,7 @@ Disabling this feature may result in data loss if the program crashes before the
 
 The `OpikConnector` returns the logged trace ID in the pipeline run response. You can use this ID to update the trace with feedback scores or other metadata:
 
-```python pytest_codeblocks_skip=true
+```python {pytest_codeblocks_skip=true}
 import opik
 
 response = pipe.run(

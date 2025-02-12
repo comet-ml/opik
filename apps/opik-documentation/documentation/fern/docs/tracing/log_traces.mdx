@@ -44,7 +44,7 @@ opik configure
     </Tab>
     <Tab value="Jupyter Notebook" title="Jupyter Notebook">
 
-```python pytest_codeblocks_skip=true
+```python {pytest_codeblocks_skip=true}
 %pip install --quiet --upgrade opik
 
 # Configure the SDK
@@ -297,7 +297,7 @@ You can learn more about the `opik_context` module in the [opik_context referenc
 
 You can configure the project you want the trace to be logged to using the `project_name` parameter of the `@track` decorator:
 
-```python pytest_codeblocks_skip=true
+```python {pytest_codeblocks_skip=true}
 import opik
 
 @opik.track(project_name="my_project")

@@ -34,7 +34,7 @@ You can also create your own custom metric, learn more about it in the [Custom M
 
 By default, Opik uses GPT-4o from OpenAI as the LLM to evaluate the output of other LLMs. However, you can easily switch to another LLM provider by specifying a different `model` in the `model_name` parameter of each LLM as a Judge metric.
 
-```python pytest_codeblocks_skip=true
+```python {pytest_codeblocks_skip=true}
 from opik.evaluation.metrics import Hallucination
 
 metric = Hallucination(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
