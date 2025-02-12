@@ -361,7 +361,6 @@ class Opik:
         provider: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
-        **ignored_kwargs: Any,
     ) -> span.Span:
         """
         Create and log a new span.
