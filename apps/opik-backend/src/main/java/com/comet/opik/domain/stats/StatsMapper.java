@@ -26,6 +26,7 @@ public class StatsMapper {
     public static final String OUTPUT = "output";
     public static final String METADATA = "metadata";
     public static final String TAGS = "tags";
+    public static final String TRACE_COUNT = "trace_count";
 
     public static ProjectStats mapProjectStats(Row row, String entityCountLabel) {
 
@@ -109,6 +110,12 @@ public class StatsMapper {
     public static PercentageValues getStatsDuration(Map<String, ?> stats) {
         return Optional.ofNullable(stats)
                 .map(map -> (PercentageValues) map.get(DURATION))
+                .orElse(null);
+    }
+
+    public static Long getStatsTraceCount(Map<String, Object> projectStats) {
+        return Optional.ofNullable(projectStats)
+                .map(map -> (Long) map.get(TRACE_COUNT))
                 .orElse(null);
     }
 }
