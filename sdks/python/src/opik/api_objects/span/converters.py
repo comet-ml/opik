@@ -2,16 +2,15 @@ from ...rest_api.types import span_public
 from .. import feedback_score
 from . import span as span_
 
+
 # TODO: project_name has to be passed as only the project_id is part of TracePublic and
 # we want to avoid an API call to get it. This should be improved
 def span_public_to_span_data(
-    project_name: str,
-    span: span_public.SpanPublic
+    project_name: str, span: span_public.SpanPublic
 ) -> span_.SpanData:
-    
     feedback_scores = span.feedback_scores or []
-    feedback_scores_dict = feedback_score.feedback_scores_public_to_feedback_scores_dict(
-        feedback_scores
+    feedback_scores_dict = (
+        feedback_score.feedback_scores_public_to_feedback_scores_dict(feedback_scores)
     )
 
     return span_.SpanData(

@@ -20,6 +20,7 @@ from . import (
     constants,
     validation_helpers,
 )
+from .trace import helpers as trace_helpers
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from .dataset import rest_operations as dataset_rest_operations
@@ -278,9 +279,11 @@ class Opik:
         for span_data in span_list:
             if span_data.trace_id in trace_id_mapping:
                 span_data.trace_id = trace_id_mapping[span_data.trace_id]
-                span_data.parent_span_id = span_id_mapping.get(
-                    span_data.parent_span_id, None
-                )
+
+                if span_data.parent_span_id:
+                    span_data.parent_span_id = span_id_mapping.get(
+                        span_data.parent_span_id
+                    )
 
                 self.span(**span_data.__dict__)
             else:
@@ -322,24 +325,37 @@ class Opik:
                 "In order to use this method, you must enable batching using opik.Opik(_use_batching=True)."
             )
 
-        # Get traces
-        trace_id_mapping = self._copy_traces_without_spans(
-            project_name, destination_project_name
-        )
-        self._copy_spans_with_mapping(
-            project_name, destination_project_name, trace_id_mapping
+        traces_public = self.search_traces(project_name=project_name)
+        spans_public = self.search_spans(project_name=project_name)
+
+        trace_data = [
+            trace.trace_public_to_trace_data(
+                project_name=project_name, trace=trace_public_
+            )
+            for trace_public_ in traces_public
+        ]
+        span_data = [
+            span.span_public_to_span_data(project_name=project_name, span=span_public_)
+            for span_public_ in spans_public
+        ]
+
+        new_trace_data, new_span_data = trace_helpers.prepare_traces_and_spans_for_copy(
+            destination_project_name, trace_data, span_data
         )
 
-        # Delete traces
+        for trace_data_ in new_trace_data:
+            self.trace(**trace_data_.__dict__)
+
+        for span_data_ in new_span_data:
+            self.span(**span_data_.__dict__)
+
         if delete_original_project:
-            DELETE_BATCH_SIZE = 1_000
-
-            trace_ids = list(trace_id_mapping.keys())
+            trace_ids = [trace_.id for trace_ in trace_data]
             while trace_ids:
                 self._rest_client.traces.delete_traces(
-                    ids=trace_ids[:DELETE_BATCH_SIZE]
+                    ids=trace_ids[: constants.DELETE_TRACE_BATCH_SIZE]
                 )
-                trace_ids = trace_ids[DELETE_BATCH_SIZE:]
+                trace_ids = trace_ids[constants.DELETE_TRACE_BATCH_SIZE :]
 
     def span(
         self,

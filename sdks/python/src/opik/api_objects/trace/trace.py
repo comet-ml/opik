@@ -6,7 +6,13 @@ from typing import Any, Dict, List, Optional
 from .. import constants, helpers, span, validation_helpers
 from ... import datetime_helpers
 from ...message_processing import messages, streamer
-from ...types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict, ErrorInfoDict
+from ...types import (
+    CreatedByType,
+    FeedbackScoreDict,
+    SpanType,
+    UsageDict,
+    ErrorInfoDict,
+)
 from opik import dict_utils
 
 LOGGER = logging.getLogger(__name__)
