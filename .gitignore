@@ -12,6 +12,9 @@ target/
 # BE related
 /apps/opik-backend/redoc/openapi.yaml
 
+# Python BE related
+/apps/opik-python-backend/images/
+
 # FE related
 /apps/opik-frontend/dist
 /apps/opik-frontend/build
