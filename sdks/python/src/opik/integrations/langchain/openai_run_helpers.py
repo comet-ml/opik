@@ -107,8 +107,10 @@ def _get_provider_and_model(
     if llm_output := run_dict["outputs"].get("llm_output"):
         model = llm_output.get("model_name", model)
     # streaming mode
-    elif generation_info := run_dict['outputs']['generations'][-1][-1]["generation_info"]:
-        model = generation_info.get('model_name', model)
+    elif generation_info := run_dict["outputs"]["generations"][-1][-1][
+        "generation_info"
+    ]:
+        model = generation_info.get("model_name", model)
 
     # provider: check base url
     if base_url := run_dict["extra"].get("invocation_params", {}).get("base_url"):
