@@ -10,12 +10,19 @@ on:
     paths:
       - "sdks/typescript/**"
   workflow_dispatch:
+
 jobs:
-  lint:
+  test:
+    name: Test on Node ${{ matrix.node-version }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: sdks/typescript
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
@@ -23,10 +30,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4.2.0
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node-version || '20' }}
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies (npm)
+        run: npm ci
 
-      - name: Unit tests
+      - name: Run tests (npm)
         run: npm run test

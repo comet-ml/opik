@@ -10,6 +10,10 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
     super({ delay, name: "TraceBatchQueue" });
   }
 
+  protected getId(entity: SavedTrace) {
+    return entity.id;
+  }
+
   protected async createEntities(traces: SavedTrace[]) {
     await this.api.traces.createTraces({ traces });
   }

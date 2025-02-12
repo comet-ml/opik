@@ -27,6 +27,20 @@ export class Trace {
     return this.update({ endTime: new Date() });
   };
 
+  public score = (score: {
+    name: string;
+    categoryName?: string;
+    value: number;
+    reason?: string;
+  }) => {
+    this.opik.traceFeedbackScoresBatchQueue.create({
+      ...score,
+      projectName: this.data.projectName ?? this.opik.config.projectName,
+      id: this.data.id,
+      source: "sdk",
+    });
+  };
+
   public span = (spanData: SpanData) => {
     const projectName =
       this.data.projectName ??
