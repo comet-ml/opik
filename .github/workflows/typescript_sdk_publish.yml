@@ -1,4 +1,4 @@
-name: Publish TypeScript SDK
+name: TypeScript SDK Publish
 
 on:
   workflow_dispatch:
@@ -42,10 +42,10 @@ jobs:
 
       - name: Commit version changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "github-actions"
           git add package.json package-lock.json
-          git commit -m "chore: bump typescript sdk version to $(node -p "require('./package.json').version")"
+          git commit -m "Update TypeScript SDK version to $(node -p "require('./package.json').version")"
 
       - name: Publish to NPM
         run: npm publish
@@ -53,4 +53,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Push changes
-        run: git push
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          branch: ${{ github.ref }}
+          force_with_lease: true
