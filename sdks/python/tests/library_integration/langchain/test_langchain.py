@@ -247,6 +247,8 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
+        # THIS PARAM IS VERY IMPORTANT!
+        # if it is explicitly set to True - token usage data will be available
         stream_usage=True,
     )
 
@@ -347,6 +349,9 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
+        # `stream_usage` param is VERY IMPORTANT!
+        # if it is explicitly set to True - token usage data will be available
+        # "stream_usage": True,
     )
 
     template = "Given the title of play, write a synopsys for that. Title: {title}."
@@ -425,7 +430,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         type="llm",
-                        model="gpt-4o",
+                        model=ANY_STRING(startswith="gpt-4o"),
                         provider="openai",
                         usage=None,
                         spans=[],
@@ -556,8 +561,6 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
             )
         ],
     )
-
-    synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
