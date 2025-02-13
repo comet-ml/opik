@@ -54,15 +54,14 @@ Please see instructions in `deployment/docker-compose/README.md`
 
 ### Contributing to the documentation
 
-The documentation is made up of three main parts:
+The documentation is made up of two main parts:
 
 1. `apps/opik-documentation/documentation`: The Opik documentation website
 2. `apps/opik-documentation/python-sdk-docs`: The Python reference documentation
-3. `apps/opik-documentation/rest-api-docs`: The REST API reference documentation
 
 #### Contributing to the documentation website
 
-The documentation website is built using [Docusaurus](https://docusaurus.io/) and is located in `apps/opik-documentation/documentation`.
+The documentation website is built using [Fern](https://www.buildwithfern.com/) and is located in `apps/opik-documentation/documentation`.
 
 In order to run the documentation website locally, you need to have `npm` installed. Once installed, you can run the documentation locally using the following command:
 
@@ -77,6 +76,12 @@ npm run dev
 ```
 
 You can then access the documentation website at `http://localhost:3000`. Any change you make to the documentation will be updated in real-time.
+
+When updating the documentation, you will need to update either:
+
+- `docs/cookbook`: This is where all our cookbooks are located.
+- `fern/docs`: This is where all the markdown code is stored and where the majority of the documentation is located.
+
 
 #### Contributing to the Python SDK reference documentation
 
