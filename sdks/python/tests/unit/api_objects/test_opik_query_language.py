@@ -48,7 +48,7 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
         ),
         # Test cases for AND:
         (
-            'name = "test" && tags contains "important"  ',
+            'name = "test" AND tags contains "important"  ',
             [
                 {"field": "name", "operator": "=", "value": "test"},
                 {"field": "tags", "operator": "contains", "value": "important"},
@@ -97,6 +97,10 @@ def test_valid_oql_expressions(filter_string, expected):
         (
             'name = "test" and name = "other" extra_stuff',
             r"Invalid filter string, trailing characters.*",
+        ),
+        (
+            'name = "test" OR name = "other"',
+            r"Invalid filter string, OR is not currently supported",
         ),
     ],
 )

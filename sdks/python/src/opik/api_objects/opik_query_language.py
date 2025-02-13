@@ -64,7 +64,7 @@ class OpikQueryLanguage:
         return char.isalnum() or char == "_"
 
     def _is_valid_connector_char(self, char: str) -> bool:
-        return char in "&and"
+        return char.isalpha()
 
     def _skip_whitespace(self) -> None:
         while (
@@ -283,8 +283,12 @@ class OpikQueryLanguage:
                 position = self._cursor
                 connector = self._parse_connector()
 
-                if connector.lower() in ["&&", "&", "and"]:
+                if connector.lower() == "and":
                     continue
+                elif connector.lower() == "or":
+                    raise ValueError(
+                        "Invalid filter string, OR is not currently supported"
+                    )
                 else:
                     raise ValueError(
                         f"Invalid filter string, trailing characters {self.query_string[position:]}"
