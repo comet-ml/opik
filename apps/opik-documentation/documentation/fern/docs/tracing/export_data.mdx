@@ -1,6 +1,6 @@
 ---
 subtitle: Describes how to export traces and spans from the Opik platform.
-slug: /tracing/export_data
+
 toc_max_heading_level: 4
 pytest_codeblocks_skip: true
 ---
@@ -10,7 +10,7 @@ When working with Opik, it is important to be able to export traces and spans so
 You can export the traces you have logged to the Opik platform using:
 
 1. Using the Opik SDK: You can use the [`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces) and [`Opik.search_spans`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_spans) methods to export traces and spans.
-2. Using the Opik REST API: You can use the [`/traces`](/reference/rest-api/api-reference/traces/get-traces-by-project) and [`/spans`](/reference/rest-api/api-reference/spans/get-spans-by-project) endpoints to export traces and spans.
+2. Using the Opik REST API: You can use the [`/traces`](/reference/rest-api/traces/get-traces-by-project) and [`/spans`](/reference/rest-api/spans/get-spans-by-project) endpoints to export traces and spans.
 3. Using the UI: Once you have selected the traces or spans you want to export, you can click on the `Export CSV` button in the `Actions` dropdown.
 
 <Tip>
@@ -163,7 +163,7 @@ spans = client.search_spans(
 
 ## Using the Opik REST API
 
-To export traces using the Opik REST API, you can use the [`/traces`](/reference/rest-api/api-reference/traces/get-traces-by-project) endpoint and the [`/spans`](/reference/rest-api/api-reference/spans/get-spans-by-project) endpoint. These endpoints are paginated so you will need to make multiple requests to retrieve all the traces or spans you want.
+To export traces using the Opik REST API, you can use the [`/traces`](/reference/rest-api/traces/get-traces-by-project) endpoint and the [`/spans`](/reference/rest-api/spans/get-spans-by-project) endpoint. These endpoints are paginated so you will need to make multiple requests to retrieve all the traces or spans you want.
 
 To search for specific traces or spans, you can use the `filter` parameter. While this is a string parameter, it does not follow the same format as the `filter_string` parameter in the Opik SDK. Instead it is a list of json objects with the following format:
 
