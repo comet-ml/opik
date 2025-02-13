@@ -41,12 +41,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -89,7 +89,7 @@ import static org.mockito.Mockito.when;
 @DisplayName("Automation Rule Evaluators Resource Test")
 class AutomationRuleEvaluatorsResourceTest {
 
-    private static final String URL_TEMPLATE = "%s/v1/private/automations/projects/%s/evaluators/";
+    private static final String URL_TEMPLATE = "%s/v1/private/automations/evaluators/";
 
     private static final String messageToTest = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
     private static final String testEvaluator = """
@@ -253,7 +253,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             mockTargetWorkspace(okApikey, WORKSPACE_NAME, WORKSPACE_ID);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, ruleEvaluator.getProjectId()))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -289,13 +289,14 @@ class AutomationRuleEvaluatorsResourceTest {
 
             IntStream.range(0, samplesToCreate).forEach(i -> {
                 var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
-                        .toBuilder().id(null).projectId(null).build();
+                        .toBuilder().id(null).projectId(projectId).build();
 
-                evaluatorsResourceClient.createEvaluator(evaluator, projectId, workspaceName, okApikey);
+                evaluatorsResourceClient.createEvaluator(evaluator, workspaceName, okApikey);
             });
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("size", samplesToCreate)
+                    .queryParam("project_id", projectId)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -319,13 +320,13 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
         @DisplayName("search project evaluators: when searching by name, then return evaluators")
-        void find__whenSearchingByName__thenReturnEvaluators() {
+        void find__whenSearchingByName__thenReturnEvaluators(boolean withProjectId) {
 
             var workspaceName = "workspace-" + UUID.randomUUID();
             var workspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
@@ -333,14 +334,14 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder().id(null)
-                    .projectId(null)
                     .name(name)
                     .build();
 
-            evaluatorsResourceClient.createEvaluator(evaluator, projectId, workspaceName, apiKey);
+            evaluatorsResourceClient.createEvaluator(evaluator, workspaceName, apiKey);
 
-            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("name", "aluator")
+                    .queryParam("project_id", withProjectId ? evaluator.getProjectId() : null)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
@@ -358,42 +359,35 @@ class AutomationRuleEvaluatorsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @ValueSource(booleans = {true, false})
         @DisplayName("get evaluator by id: when api key is present, then return proper response")
-        void getAutomationRuleEvaluatorById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean isAuthorized, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
-                    .toBuilder().id(null).projectId(null).build();
+        void getAutomationRuleEvaluatorById__whenApiKeyIsPresent__thenReturnProperResponse(boolean withProjectId) {
 
             String workspaceName = "workspace-" + UUID.randomUUID();
             String workspaceId = UUID.randomUUID().toString();
-            UUID projectId = UUID.randomUUID();
+
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder().id(null).build();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, workspaceName, okApikey);
+            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, workspaceName, okApikey);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
+                    .queryParam("project_id", withProjectId ? evaluator.getProjectId() : null)
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (isAuthorized) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
 
-                    var ruleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
-                    assertThat(ruleEvaluator.getId()).isEqualTo(id);
-                    assertThat(ruleEvaluator.getProjectId()).isEqualTo(projectId);
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
-                }
+                var ruleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(ruleEvaluator.getId()).isEqualTo(id);
+                assertThat(ruleEvaluator.getProjectId()).isEqualTo(evaluator.getProjectId());
             }
         }
 
@@ -403,20 +397,22 @@ class AutomationRuleEvaluatorsResourceTest {
         void updateAutomationRuleEvaluator__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
                 boolean isAuthorized, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
+            String workspaceName = "workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null)
                     .build();
 
-            String workspaceName = "workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            UUID projectId = UUID.randomUUID();
-
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, workspaceName, okApikey);
+            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, workspaceName, okApikey);
 
-            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdate.class);
+            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdate.class)
+                    .toBuilder()
+                    .projectId(evaluator.getProjectId())
+                    .build();
 
-            evaluatorsResourceClient.updateEvaluator(id, projectId, workspaceName, updatedEvaluator,
+            evaluatorsResourceClient.updateEvaluator(id, workspaceName, updatedEvaluator,
                     apiKey, isAuthorized, errorMessage);
         }
 
@@ -431,16 +427,16 @@ class AutomationRuleEvaluatorsResourceTest {
 
             String workspaceName = "workspace-" + UUID.randomUUID();
             String workspaceId = UUID.randomUUID().toString();
-            UUID projectId = UUID.randomUUID();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, workspaceName, okApikey);
+            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, workspaceName, okApikey);
 
             var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("delete")
+                    .queryParam("project_id", evaluator.getProjectId())
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -470,22 +466,23 @@ class AutomationRuleEvaluatorsResourceTest {
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
-                    .toBuilder().id(null).build();
-            var evalId1 = evaluatorsResourceClient.createEvaluator(evaluator1, projectId, workspaceName, okApikey);
+                    .toBuilder().id(null).projectId(projectId).build();
+            var evalId1 = evaluatorsResourceClient.createEvaluator(evaluator1, workspaceName, okApikey);
 
             var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
-                    .toBuilder().id(null).build();
-            var evalId2 = evaluatorsResourceClient.createEvaluator(evaluator2, projectId, workspaceName, okApikey);
+                    .toBuilder().id(null).projectId(projectId).build();
+            var evalId2 = evaluatorsResourceClient.createEvaluator(evaluator2, workspaceName, okApikey);
 
             var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
-                    .toBuilder().id(null).build();
-            evaluatorsResourceClient.createEvaluator(evaluator3, projectId, workspaceName, okApikey);
+                    .toBuilder().id(null).projectId(projectId).build();
+            evaluatorsResourceClient.createEvaluator(evaluator3, workspaceName, okApikey);
 
             var evalIds1and2 = Set.of(evalId1, evalId2);
             var deleteMethod = BatchDelete.builder().ids(evalIds1and2).build();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("delete")
+                    .queryParam("project_id", projectId)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -503,7 +500,8 @@ class AutomationRuleEvaluatorsResourceTest {
             }
 
             // we shall see a single evaluators for the project now
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("project_id", projectId)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -559,6 +557,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .id(null)
                     .code(mapper.readValue(testEvaluator, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
                     .samplingRate(1f)
+                    .projectId(projectId)
                     .build();
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -567,14 +566,14 @@ class AutomationRuleEvaluatorsResourceTest {
                     .output(mapper.readTree(output))
                     .build();
 
-            var id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, workspaceName, okApikey);
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, workspaceName, okApikey);
 
             Instant startTime = Instant.now();
             traceResourceClient.createTrace(trace, okApikey, workspaceName);
 
             Awaitility.await().untilAsserted(() -> {
 
-                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                         .path(id.toString())
                         .path("logs")
                         .request()
@@ -671,9 +670,10 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var projectId = UUID.randomUUID();
             var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null)
+                    .projectId(projectId)
                     .build();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -714,11 +714,12 @@ class AutomationRuleEvaluatorsResourceTest {
             IntStream.range(0, samplesToCreate).forEach(i -> {
                 var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                         .toBuilder().id(null).projectId(projectId).build();
-                evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
+                evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
             });
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("size", samplesToCreate)
+                    .queryParam("project_id", projectId)
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -752,11 +753,11 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null)
                     .build();
 
-            var projectId = UUID.randomUUID();
-            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
+            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
+                    .queryParam("project_id", evaluator.getProjectId())
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -787,12 +788,12 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null)
                     .build();
 
-            UUID projectId = UUID.randomUUID();
-            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
+            UUID id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
-            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdate.class);
+            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdate.class).toBuilder()
+                    .projectId(evaluator.getProjectId()).build();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
@@ -821,12 +822,12 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null)
                     .build();
 
-            var projectId = UUID.randomUUID();
-            var id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
             var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("delete")
+                    .queryParam("project_id", evaluator.getProjectId())
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -856,21 +857,22 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectId(projectId).build();
-            var evalId1 = evaluatorsResourceClient.createEvaluator(evaluator1, projectId, WORKSPACE_NAME, API_KEY);
+            var evalId1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
 
             var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectId(projectId).build();
-            var evalId2 = evaluatorsResourceClient.createEvaluator(evaluator2, projectId, WORKSPACE_NAME, API_KEY);
+            var evalId2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
 
             var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectId(projectId).build();
-            evaluatorsResourceClient.createEvaluator(evaluator3, projectId, WORKSPACE_NAME, API_KEY);
+            evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
 
             var evalIds1and2 = Set.of(evalId1, evalId2);
             var deleteMethod = BatchDelete.builder().ids(evalIds1and2).build();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("delete")
+                    .queryParam("project_id", projectId)
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -888,7 +890,8 @@ class AutomationRuleEvaluatorsResourceTest {
             }
 
             // we shall see a single evaluators for the project now
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("project_id", projectId)
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -939,6 +942,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .id(null)
                     .code(mapper.readValue(testEvaluator, AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
                     .samplingRate(1f)
+                    .projectId(projectId)
                     .build();
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -947,14 +951,14 @@ class AutomationRuleEvaluatorsResourceTest {
                     .output(mapper.readTree(output))
                     .build();
 
-            var id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             Instant startTime = Instant.now();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             Awaitility.await().untilAsserted(() -> {
 
-                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                         .path(id.toString())
                         .path("logs")
                         .request()

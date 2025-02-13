@@ -492,7 +492,7 @@ class SpanDAO {
                 FROM spans
                 WHERE id = :id
                 AND workspace_id = :workspace_id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s
             LEFT JOIN (
@@ -507,7 +507,7 @@ class SpanDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND entity_id = :id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS c ON s.id = c.entity_id
             GROUP BY
@@ -516,49 +516,7 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH span_ids AS (
-              SELECT
-                  id
-              FROM (
-                    SELECT
-                        *
-                    FROM (
-                      SELECT
-                          id,
-                          if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                   AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                               (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                               NULL) AS duration_millis,
-                           row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
-                      FROM spans
-                      WHERE project_id = :project_id
-                      AND workspace_id = :workspace_id
-                      <if(last_received_span_id)> AND id > :last_received_span_id <endif>
-                      <if(trace_id)> AND trace_id = :trace_id <endif>
-                      <if(type)> AND type = :type <endif>
-                      <if(filters)> AND <filters> <endif>
-                      <if(feedback_scores_filters)>
-                      AND id in (
-                          SELECT
-                              entity_id
-                          FROM (
-                              SELECT *
-                              FROM feedback_scores
-                              WHERE entity_type = 'span'
-                              AND project_id = :project_id
-                              ORDER BY entity_id DESC, last_updated_at DESC
-                              LIMIT 1 BY entity_id, name
-                          )
-                          GROUP BY entity_id
-                          HAVING <feedback_scores_filters>
-                      )
-                      <endif>
-                    ) WHERE latest = 1
-                    ORDER BY id DESC
-                    LIMIT :limit
-                    <if(offset)>OFFSET :offset <endif>
-                )
-            ), comments_final AS (
+            WITH comments_final AS (
               SELECT
                    id AS comment_id,
                    text,
@@ -570,7 +528,7 @@ class SpanDAO {
               FROM comments
               WHERE workspace_id = :workspace_id
               AND project_id = :project_id
-              ORDER BY id DESC, last_updated_at DESC
+              ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
               LIMIT 1 BY id
             )
             SELECT
@@ -602,19 +560,45 @@ class SpanDAO {
                         NULL) AS duration_millis,
                groupArray(tuple(c.*)) AS comments
             FROM (
-            	SELECT
-            		*,
-            		row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
-            	FROM spans
-            	WHERE id IN (SELECT id FROM span_ids)
+                SELECT
+                      *,
+                      if(end_time IS NOT NULL AND start_time IS NOT NULL
+                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                           NULL) AS duration_millis
+                FROM spans
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                <if(last_received_span_id)> AND id > :last_received_span_id <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(feedback_scores_filters)>
+                AND id in (
+                  SELECT
+                      entity_id
+                  FROM (
+                      SELECT *
+                      FROM feedback_scores
+                      WHERE entity_type = 'span'
+                      AND project_id = :project_id
+                      ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                      LIMIT 1 BY entity_id, name
+                  )
+                  GROUP BY entity_id
+                  HAVING <feedback_scores_filters>
+                )
+                <endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+                LIMIT :limit
+                <if(offset)>OFFSET :offset <endif>
             ) AS s
             LEFT JOIN comments_final AS c ON s.id = c.entity_id
-            WHERE s.latest = 1
             GROUP BY
-              s.*,
-              duration_millis
+              s.*
             ORDER BY s.id DESC
-            SETTINGS join_algorithm='auto'
+            SETTINGS join_algorithm='full_sorting_merge'
             ;
             """;
 
@@ -628,8 +612,7 @@ class SpanDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                                          AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                      (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration_millis,
-                    row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
+                                     NULL) AS duration_millis
                 FROM spans
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -645,15 +628,16 @@ class SpanDAO {
                         FROM feedback_scores
                         WHERE entity_type = 'span'
                         AND project_id = :project_id
-                        ORDER BY entity_id DESC, last_updated_at DESC
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                         LIMIT 1 BY entity_id, name
                     )
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
                 )
                 <endif>
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ) AS latest_rows
-            WHERE latest = 1
             ;
             """;
 
@@ -663,122 +647,112 @@ class SpanDAO {
 
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
             SELECT
-                id, workspace_id
+                DISTINCT id, workspace_id
             FROM spans
             WHERE id IN :spanIds
-            ORDER BY last_updated_at DESC
-            LIMIT 1 BY id
             ;
             """;
 
     public static final String SELECT_PROJECT_ID_FROM_SPAN = """
             SELECT
-                  project_id
+                  DISTINCT project_id
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
             """;
 
     private static final String SELECT_SPANS_STATS = """
-            SELECT
-                *
-            FROM (
+            WITH feedback_scores_agg AS (
                 SELECT
-                    project_id as project_id,
-                    count(DISTINCT span_id) as span_count,
-                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
-                    sum(input_count) as input,
-                    sum(output_count) as output,
-                    sum(metadata_count) as metadata,
-                    avg(tags_count) as tags,
-                    avgMap(usage) as usage,
-                    avgMap(feedback_scores) AS feedback_scores,
-                    avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                    toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) as feedback_scores
                 FROM (
                     SELECT
-                        s.workspace_id as workspace_id,
-                        s.project_id as project_id,
-                        s.id as span_id,
-                        s.duration_millis as duration,
-                        s.input_count as input_count,
-                        s.output_count as output_count,
-                        s.metadata_count as metadata_count,
-                        s.tags_count as tags_count,
-                        s.usage as usage,
-                        f.feedback_scores as feedback_scores,
-                        s.total_estimated_cost as total_estimated_cost
-                    FROM (
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        value
+                    FROM feedback_scores
+                    WHERE entity_type = 'span'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                ) GROUP BY workspace_id, project_id, entity_id
+            )
+            SELECT
+                project_id as project_id,
+                count(DISTINCT span_id) as span_count,
+                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                sum(input_count) as input,
+                sum(output_count) as output,
+                sum(metadata_count) as metadata,
+                avg(tags_count) as tags,
+                avgMap(usage) as usage,
+                avgMap(feedback_scores) AS feedback_scores,
+                avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
+            FROM (
+                SELECT
+                    s.workspace_id as workspace_id,
+                    s.project_id as project_id,
+                    s.id as span_id,
+                    s.duration_millis as duration,
+                    s.input_count as input_count,
+                    s.output_count as output_count,
+                    s.metadata_count as metadata_count,
+                    s.tags_count as tags_count,
+                    s.usage as usage,
+                    f.feedback_scores as feedback_scores,
+                    s.total_estimated_cost as total_estimated_cost
+                FROM (
+                    SELECT
+                         workspace_id,
+                         project_id,
+                         id,
+                         if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                     AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                 (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                 NULL) AS duration_millis,
+                         if(length(input) > 0, 1, 0) as input_count,
+                         if(length(output) > 0, 1, 0) as output_count,
+                         if(length(metadata) > 0, 1, 0) as metadata_count,
+                         length(tags) as tags_count,
+                         usage,
+                         total_estimated_cost
+                    FROM spans
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    <if(trace_id)> AND trace_id = :trace_id <endif>
+                    <if(type)> AND type = :type <endif>
+                    <if(filters)> AND <filters> <endif>
+                    <if(feedback_scores_filters)>
+                    AND id in (
                         SELECT
-                            *
+                            entity_id
                         FROM (
-                            SELECT
-                                 workspace_id,
-                                 project_id,
-                                 id,
-                                 if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                         NULL) AS duration_millis,
-                                 if(length(input) > 0, 1, 0) as input_count,
-                                 if(length(output) > 0, 1, 0) as output_count,
-                                 if(length(metadata) > 0, 1, 0) as metadata_count,
-                                 length(tags) as tags_count,
-                                 usage,
-                                 total_estimated_cost,
-                                 row_number() OVER (PARTITION BY id ORDER BY last_updated_at DESC) AS latest
-                            FROM spans
-                            WHERE project_id = :project_id
-                            AND workspace_id = :workspace_id
-                            <if(trace_id)> AND trace_id = :trace_id <endif>
-                            <if(type)> AND type = :type <endif>
-                            <if(filters)> AND <filters> <endif>
-                            <if(feedback_scores_filters)>
-                            AND id in (
-                                SELECT
-                                    entity_id
-                                FROM (
-                                    SELECT *
-                                    FROM feedback_scores
-                                    WHERE entity_type = 'span'
-                                    AND project_id = :project_id
-                                    AND workspace_id = :workspace_id
-                                    ORDER BY entity_id DESC, last_updated_at DESC
-                                    LIMIT 1 BY entity_id, name
-                                )
-                                GROUP BY entity_id
-                                HAVING <feedback_scores_filters>
-                            )
-                            <endif>
-                        ) WHERE latest = 1
-                    ) AS s
-                    LEFT JOIN (
-                        SELECT
-                            project_id,
-                            entity_id,
-                            mapFromArrays(
-                                groupArray(name),
-                                groupArray(value)
-                            ) as feedback_scores
-                        FROM (
-                            SELECT
-                                project_id,
-                                entity_id,
-                                name,
-                                value
+                            SELECT *
                             FROM feedback_scores
                             WHERE entity_type = 'span'
-                            AND workspace_id = :workspace_id
                             AND project_id = :project_id
-                            ORDER BY entity_id DESC, last_updated_at DESC
+                            AND workspace_id = :workspace_id
+                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                             LIMIT 1 BY entity_id, name
-                        ) GROUP BY  project_id, entity_id
-                    ) as f ON s.id = f.entity_id
-                )
-                GROUP BY project_id
-            ) AS stats
+                        )
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
+                    )
+                    <endif>
+                ) AS s
+                LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
+            )
+            GROUP BY project_id
             SETTINGS join_algorithm='auto'
             ;
             """;

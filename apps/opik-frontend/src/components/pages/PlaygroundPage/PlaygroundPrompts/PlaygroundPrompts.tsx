@@ -16,12 +16,14 @@ interface PlaygroundPromptsState {
   workspaceName: string;
   providerKeys: PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
+  onResetHeight: () => void;
 }
 
 const PlaygroundPrompts = ({
   workspaceName,
   providerKeys,
   isPendingProviderKeys,
+  onResetHeight,
 }: PlaygroundPromptsState) => {
   const promptCount = usePromptCount();
   const addPrompt = useAddPrompt();
@@ -45,7 +47,8 @@ const PlaygroundPrompts = ({
       lastPickedModel,
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
-  }, [setPromptMap, providerKeys, lastPickedModel]);
+    onResetHeight();
+  }, [setPromptMap, providerKeys, lastPickedModel, onResetHeight]);
 
   useEffect(() => {
     // hasn't been initialized yet or the last prompt is removed
@@ -72,7 +75,7 @@ const PlaygroundPrompts = ({
         </div>
       </div>
 
-      <div className="mb-6 flex min-h-[50%] w-full gap-[var(--item-gap)]">
+      <div className="flex size-full gap-[var(--item-gap)]">
         {promptIds.map((promptId, idx) => (
           <PlaygroundPrompt
             workspaceName={workspaceName}

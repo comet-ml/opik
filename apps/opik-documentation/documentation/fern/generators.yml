@@ -1,0 +1,3 @@
+api:
+  path: ./openapi/opik.yaml
+  overrides: ./openapi/overrides.yml

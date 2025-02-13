@@ -14,30 +14,31 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.util.UUID;
 
+import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
 public class AutomationRuleEvaluatorResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/automations/projects/%s/evaluators/";
+    private static final String RESOURCE_PATH = "%s/v1/private/automations/evaluators/";
 
     private final ClientSupport client;
     private final String baseURI;
 
-    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, UUID projectId, String workspaceName,
+    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName,
             String apiKey) {
-        try (var actualResponse = createEvaluator(evaluator, projectId, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+        try (var actualResponse = createEvaluator(evaluator, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
 
             return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
     }
 
-    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, UUID projectId, String workspaceName,
+    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName,
             String apiKey,
             int expectedStatus) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -49,10 +50,10 @@ public class AutomationRuleEvaluatorResourceClient {
         return actualResponse;
     }
 
-    public void updateEvaluator(UUID evaluatorId, UUID projectId, String workspaceName,
+    public void updateEvaluator(UUID evaluatorId, String workspaceName,
             AutomationRuleEvaluatorUpdate updatedEvaluator, String apiKey, boolean isAuthorized,
             io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI, projectId))
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(evaluatorId.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -61,13 +62,29 @@ public class AutomationRuleEvaluatorResourceClient {
                 .method(HttpMethod.PATCH, Entity.json(updatedEvaluator))) {
 
             if (isAuthorized) {
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(actualResponse.hasEntity()).isFalse();
             } else {
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                 assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                         .isEqualTo(errorMessage);
             }
+        }
+    }
+
+    public LogPage getLogs(UUID evaluatorId, String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(evaluatorId.toString())
+                .path("logs")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            return actualResponse.readEntity(LogPage.class);
         }
     }
 
