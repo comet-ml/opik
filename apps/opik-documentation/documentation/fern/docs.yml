@@ -22,7 +22,7 @@ navbar-links:
     href: "https://github.com/comet-ml/opik"
   - type: filled
     text: "Go to App"
-    href: "https://www.comet.com/"
+    href: "https://www.comet.com/opik"
 tabs:
   documentation:
     display-name: Documentation
