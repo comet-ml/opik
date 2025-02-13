@@ -185,6 +185,6 @@ def _try_aggregate_items(
             )
             output = str(items)
     else:
-        output = str(items)
+        output = "".join([str(item) for item in items])
 
     return output

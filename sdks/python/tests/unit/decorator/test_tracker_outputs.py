@@ -597,7 +597,7 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
 ):
     @tracker.track
     def f(x):
-        values = ["yielded-1", "yielded-2", "yielded-3"]
+        values = ["yielded-1", " yielded-2", " yielded-3"]
         for value in values:
             yield value
 
@@ -611,7 +611,7 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
         id=ANY_BUT_NONE,
         name="f",
         input={"x": "generator-input"},
-        output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+        output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         spans=[
@@ -619,7 +619,7 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
                 id=ANY_BUT_NONE,
                 name="f",
                 input={"x": "generator-input"},
-                output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+                output={"output": "yielded-1 yielded-2 yielded-3"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -695,7 +695,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
 
     @tracker.track
     def gen_f(y):
-        values = ["yielded-1", "yielded-2", "yielded-3"]
+        values = ["yielded-1", " yielded-2", " yielded-3"]
         for value in values:
             yield value
 
@@ -737,7 +737,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                                 name="gen_f",
                                 input={"y": "generator-input"},
                                 output={
-                                    "output": "['yielded-1', 'yielded-2', 'yielded-3']"
+                                    "output": "yielded-1 yielded-2 yielded-3"
                                 },
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -772,7 +772,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
     @tracker.track
     def gen_f(y):
         f_called_inside_generator()
-        values = ["yielded-1", "yielded-2", "yielded-3"]
+        values = ["yielded-1", " yielded-2", " yielded-3"]
         for value in values:
             yield value
 
@@ -814,7 +814,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                                 name="gen_f",
                                 input={"y": "generator-input"},
                                 output={
-                                    "output": "['yielded-1', 'yielded-2', 'yielded-3']"
+                                    "output": "yielded-1 yielded-2 yielded-3"
                                 },
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -940,7 +940,7 @@ def test_track__top_level_single_async_generator_function_tracked__generator_exh
     async def async_generator(x):
         await asyncio.sleep(0.01)
 
-        for item in ["yielded-1", "yielded-2", "yielded-3"]:
+        for item in ["yielded-1", " yielded-2", " yielded-3"]:
             yield item
 
     async def async_generator_user():
@@ -956,7 +956,7 @@ def test_track__top_level_single_async_generator_function_tracked__generator_exh
         id=ANY_BUT_NONE,
         name="async_generator",
         input={"x": "generator-input"},
-        output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+        output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         spans=[
@@ -964,7 +964,7 @@ def test_track__top_level_single_async_generator_function_tracked__generator_exh
                 id=ANY_BUT_NONE,
                 name="async_generator",
                 input={"x": "generator-input"},
-                output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+                output={"output": "yielded-1 yielded-2 yielded-3"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -988,7 +988,7 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
     async def async_generator(x):
         await some_async_work()
 
-        for item in ["yielded-1", "yielded-2", "yielded-3"]:
+        for item in ["yielded-1", " yielded-2", " yielded-3"]:
             yield item
 
     async def async_generator_user():
@@ -1004,7 +1004,7 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
         id=ANY_BUT_NONE,
         name="async_generator",
         input={"x": "generator-input"},
-        output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+        output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         spans=[
@@ -1012,7 +1012,7 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
                 id=ANY_BUT_NONE,
                 name="async_generator",
                 input={"x": "generator-input"},
-                output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+                output={"output": "yielded-1 yielded-2 yielded-3"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[
@@ -1041,7 +1041,7 @@ def test_track__async_generator_inside_another_tracked_function__happyflow(
     async def async_generator(y):
         await asyncio.sleep(0.01)
 
-        for item in ["yielded-1", "yielded-2", "yielded-3"]:
+        for item in ["yielded-1", " yielded-2", " yielded-3"]:
             yield item
 
     @tracker.track
@@ -1075,7 +1075,7 @@ def test_track__async_generator_inside_another_tracked_function__happyflow(
                         id=ANY_BUT_NONE,
                         name="async_generator",
                         input={"y": "generator-input"},
-                        output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+                        output={"output": "yielded-1 yielded-2 yielded-3"},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
@@ -1101,7 +1101,7 @@ def test_track__async_generator_inside_another_tracked_function__another_tracked
     async def async_generator(y):
         await some_async_work()
 
-        for item in ["yielded-1", "yielded-2", "yielded-3"]:
+        for item in ["yielded-1", " yielded-2", " yielded-3"]:
             yield item
 
     @tracker.track
@@ -1135,7 +1135,7 @@ def test_track__async_generator_inside_another_tracked_function__another_tracked
                         id=ANY_BUT_NONE,
                         name="async_generator",
                         input={"y": "generator-input"},
-                        output={"output": "['yielded-1', 'yielded-2', 'yielded-3']"},
+                        output={"output": "yielded-1 yielded-2 yielded-3"},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[
