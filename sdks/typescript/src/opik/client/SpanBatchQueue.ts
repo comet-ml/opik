@@ -12,6 +12,10 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
     super({ delay, enableDeleteBatch: false, name: "SpanBatchQueue" });
   }
 
+  protected getId(entity: SavedSpan) {
+    return entity.id;
+  }
+
   protected async createEntities(spans: SavedSpan[]) {
     await this.api.spans.createSpans({ spans });
   }

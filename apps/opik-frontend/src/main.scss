@@ -274,3 +274,11 @@
     background: hsl(var(--secondary));
   }
 }
+
+.comet-markdown ul {
+  @apply list-disc pl-6;
+}
+
+.comet-markdown ol {
+  @apply list-decimal pl-6;
+}

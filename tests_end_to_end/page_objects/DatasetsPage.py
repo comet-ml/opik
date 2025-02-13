@@ -1,13 +1,10 @@
 from playwright.sync_api import Page, expect
+from .BasePage import BasePage
 
 
-class DatasetsPage:
+class DatasetsPage(BasePage):
     def __init__(self, page: Page):
-        self.page = page
-        self.url = "/default/datasets"
-
-    def go_to_page(self):
-        self.page.goto(self.url)
+        super().__init__(page, "datasets")
 
     def create_dataset_by_name(self, dataset_name: str):
         self.page.get_by_role("button", name="Create new dataset").first.click()
