@@ -190,7 +190,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     value={field.value}
                     onChange={field.onChange}
                     id="sampling_rate"
-                    label="Samping rate"
+                    label="Sampling rate"
                     tooltip="Percentage of traces to evaluate"
                   />
                 )}
