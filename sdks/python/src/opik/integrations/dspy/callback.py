@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Union
 import dspy
 from dspy.utils.callback import BaseCallback
 
-from opik import opik_context
+from opik import opik_context, types
 from opik.api_objects import helpers, span, trace
 from opik.api_objects.opik_client import get_client_cached
 from opik.decorator import error_info_collector
@@ -238,7 +238,7 @@ class OpikCallback(BaseCallback):
         token = self._current_callback_context.set(value)
         self._map_span_id_or_trace_id_to_token[value.id] = token
 
-    def _get_span_type(self, instance: Any) -> span.SpanType:
+    def _get_span_type(self, instance: Any) -> types.SpanType:
         if isinstance(instance, dspy.Predict):
             return "llm"
         elif isinstance(instance, dspy.LM):
