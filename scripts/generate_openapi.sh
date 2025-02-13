@@ -19,7 +19,7 @@ cd -
 cp $OPENAPI_YML_PATH sdks/code_generation/fern/openapi/
 
 # Copy openapi.yaml for the documentation
-cp $OPENAPI_YML_PATH apps/opik-documentation/documentation/rest_api/opik.yaml
+cp $OPENAPI_YML_PATH apps/opik-documentation/documentation/fern/openapi/opik.yaml
 
 # Generate SDKs with Fern from copied openapi.yaml
 cd sdks/code_generation
