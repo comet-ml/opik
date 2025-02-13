@@ -2,9 +2,8 @@ import datetime
 import logging
 from typing import Optional
 
-
 from .. import config, datetime_helpers, logging_messages
-from ..id_helpers import generate_id  # noqa: F401
+from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
 
 LOGGER = logging.getLogger(__name__)
 
