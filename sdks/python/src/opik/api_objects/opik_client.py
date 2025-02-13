@@ -267,8 +267,10 @@ class Opik:
             for span_public_ in spans_public
         ]
 
-        new_trace_data, new_span_data = trace_migration.prepare_traces_and_spans_for_copy(
-            destination_project_name, trace_data, span_data
+        new_trace_data, new_span_data = (
+            trace_migration.prepare_traces_and_spans_for_copy(
+                destination_project_name, trace_data, span_data
+            )
         )
 
         for trace_data_ in new_trace_data:
