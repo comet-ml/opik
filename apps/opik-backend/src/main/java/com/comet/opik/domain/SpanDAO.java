@@ -554,11 +554,8 @@ class SpanDAO {
                 s.last_updated_at as last_updated_at,
                 s.created_by as created_by,
                 s.last_updated_by as last_updated_by,
-                if(s.end_time IS NOT NULL AND s.start_time IS NOT NULL
-                            AND notEquals(s.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                        (dateDiff('microsecond', s.start_time, s.end_time) / 1000.0),
-                        NULL) AS duration_millis,
-               groupArray(tuple(c.*)) AS comments
+                s.duration_millis as duration_millis,
+                groupArray(tuple(c.*)) AS comments
             FROM (
                 SELECT
                       *,
@@ -589,10 +586,9 @@ class SpanDAO {
                   HAVING <feedback_scores_filters>
                 )
                 <endif>
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
-                LIMIT :limit
-                <if(offset)>OFFSET :offset <endif>
+                LIMIT :limit <if(offset)>OFFSET :offset <endif>
             ) AS s
             LEFT JOIN comments_final AS c ON s.id = c.entity_id
             GROUP BY
@@ -749,6 +745,8 @@ class SpanDAO {
                         HAVING <feedback_scores_filters>
                     )
                     <endif>
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 ) AS s
                 LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
             )
