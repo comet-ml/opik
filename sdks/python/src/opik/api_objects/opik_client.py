@@ -15,10 +15,10 @@ from . import (
     trace,
     dataset,
     experiment,
-    helpers,
     constants,
     validation_helpers,
 )
+from .trace import migration as trace_migration
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from .dataset import rest_operations as dataset_rest_operations
@@ -35,6 +35,7 @@ from .. import (
     httpx_client,
     url_helpers,
     rest_client_configurator,
+    id_helpers,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ class Opik:
         self._project_name: str = config_.project_name
         self._flush_timeout: Optional[int] = config_.default_flush_timeout
         self._project_name_most_recent_trace: Optional[str] = None
+        self._use_batching = _use_batching
 
         self._initialize_streamer(
             base_url=config_.url_override,
@@ -183,7 +185,7 @@ class Opik:
         Returns:
             trace.Trace: The created trace object.
         """
-        id = id if id is not None else helpers.generate_id()
+        id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
@@ -217,6 +219,73 @@ class Opik:
             message_streamer=self._streamer,
             project_name=project_name,
         )
+
+    def copy_traces(
+        self,
+        project_name: str,
+        destination_project_name: str,
+        delete_original_project: bool = False,
+    ) -> None:
+        """
+        Copy traces from one project to another. This method will copy all traces in a source project
+        to the destination project. Optionally, you can also delete these traces from the source project.
+
+        As the traces are copied, the IDs for both traces and spans will be updated as part of the copy
+        process.
+
+        Note: This method is not optimized for large projects, if you run into any issues please raise
+        an issue on GitHub. In addition, be aware that deleting traces that are linked to experiments
+        will lead to inconsistancies in the UI.
+
+        Args:
+            project_name: The name of the project to copy traces from.
+            destination_project_name: The name of the project to copy traces to.
+            delete_original_project: Whether to delete the original project. Defaults to False.
+
+        Returns:
+            None
+        """
+
+        if not self._use_batching:
+            raise exceptions.OpikException(
+                "In order to use this method, you must enable batching using opik.Opik(_use_batching=True)."
+            )
+
+        traces_public = self.search_traces(project_name=project_name)
+        spans_public = self.search_spans(project_name=project_name)
+
+        trace_data = [
+            trace.trace_public_to_trace_data(
+                project_name=project_name, trace_public=trace_public_
+            )
+            for trace_public_ in traces_public
+        ]
+        span_data = [
+            span.span_public_to_span_data(
+                project_name=project_name, span_public_=span_public_
+            )
+            for span_public_ in spans_public
+        ]
+
+        new_trace_data, new_span_data = (
+            trace_migration.prepare_traces_and_spans_for_copy(
+                destination_project_name, trace_data, span_data
+            )
+        )
+
+        for trace_data_ in new_trace_data:
+            self.trace(**trace_data_.__dict__)
+
+        for span_data_ in new_span_data:
+            self.span(**span_data_.__dict__)
+
+        if delete_original_project:
+            trace_ids = [trace_.id for trace_ in trace_data]
+            for batch in sequence_splitter.split_into_batches(
+                trace_ids,
+                max_length=constants.DELETE_TRACE_BATCH_SIZE,
+            ):
+                self._rest_client.traces.delete_traces(ids=batch)
 
     def span(
         self,
@@ -266,7 +335,7 @@ class Opik:
         Returns:
             span.Span: The created span object.
         """
-        id = id if id is not None else helpers.generate_id()
+        id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
@@ -287,7 +356,7 @@ class Opik:
             project_name = self._project_name
 
         if trace_id is None:
-            trace_id = helpers.generate_id()
+            trace_id = id_helpers.generate_id()
             # TODO: decide what needs to be passed to CreateTraceMessage.
             # This version is likely not final.
             create_trace_message = messages.CreateTraceMessage(
@@ -571,7 +640,7 @@ class Opik:
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
-        id = helpers.generate_id()
+        id = id_helpers.generate_id()
 
         checked_prompts = experiment_helpers.handle_prompt_args(
             prompt=prompt,

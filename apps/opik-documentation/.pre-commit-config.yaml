@@ -6,7 +6,7 @@ repos:
         args:
           - --print-width=120
         files: ^apps/opik-documentation
-        exclude: "^(apps/opik-documentation/documentation/docs/reference)|(apps/opik-documentation/documentation/docs/cookbook/)|(apps/opik-documentation/documentation/rest_api/opik.yaml)"
+        exclude: "^(apps/opik-documentation/documentation/docs/cookbook/)|(apps/opik-documentation/documentation/fern/openapi/opik.yaml)|(apps/opik-documentation/documentation/fern/docs/cookbook)"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9

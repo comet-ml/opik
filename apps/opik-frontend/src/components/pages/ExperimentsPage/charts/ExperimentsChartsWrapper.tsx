@@ -61,13 +61,13 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
       ? "w-full"
       : chartsData.length === 2
         ? "basis-1/2"
-        : "basis-2/5";
+        : "basis-[520px]";
 
   return (
     <div
       className={cn(
-        "flex items-center gap-6 overflow-y-auto",
-        chartsData.length > 0 && "mb-6",
+        "flex items-center gap-4 overflow-y-auto",
+        chartsData.length > 0 && "mb-4",
       )}
     >
       {chartsData.map((data) => (

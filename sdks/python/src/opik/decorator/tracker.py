@@ -1,6 +1,6 @@
 import logging
 
-from typing import List, Any, Dict, Optional, Callable, Tuple, Union
+from typing import List, Any, Dict, Optional, Callable, Tuple
 
 
 from . import inspect_helpers, arguments_helpers
@@ -57,19 +57,13 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _generators_handler(
+    def _streams_handler(
         self,
         output: Any,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Union[
-        base_track_decorator.Generator[Any, None, None],
-        base_track_decorator.AsyncGenerator[Any, None],
-        None,
-    ]:
-        return super()._generators_handler(
-            output, capture_output, generations_aggregator
-        )
+    ) -> Optional[Any]:
+        return super()._streams_handler(output, capture_output, generations_aggregator)
 
 
 def flush_tracker(timeout: Optional[int] = None) -> None:
