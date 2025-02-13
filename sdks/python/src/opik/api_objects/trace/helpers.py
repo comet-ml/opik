@@ -3,27 +3,26 @@ from .. import span, helpers
 from ... import id_helpers
 from datetime import datetime
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import logging
 
 LOGGER = logging.getLogger(__name__)
 
-def _convert_id(id: str,start_time: Optional[datetime]):
+
+def _convert_id(id: str, start_time: Optional[datetime]) -> str:
     if start_time:
-        id = str(
-            id_helpers.uuid4_to_uuid7(start_time, str(uuid.uuid4()))
-        )
+        id = str(id_helpers.uuid4_to_uuid7(start_time, str(uuid.uuid4())))
     else:
         id = helpers.generate_id()
-    
+
     return id
+
 
 def prepare_traces_and_spans_for_copy(
     destination_project_name: str,
     traces_data: List[trace.TraceData],
     spans_data: List[span.SpanData],
-):
-
+) -> Tuple[List[trace.TraceData], List[span.SpanData]]:
     trace_id_mapping = {}
     traces_copy = []
     for trace_ in traces_data:
@@ -33,7 +32,7 @@ def prepare_traces_and_spans_for_copy(
         trace_.id = id
         trace_.project_name = destination_project_name
         traces_copy.append(trace_)
-    
+
     span_id_mapping = {}
     for span_ in spans_data:
         id = _convert_id(span_.id, span_.start_time)
@@ -51,9 +50,10 @@ def prepare_traces_and_spans_for_copy(
 
         span_.project_name = destination_project_name
         span_.trace_id = trace_id_mapping[span_.trace_id]
-        span_.parent_span_id = trace_id_mapping.get(span_.parent_span_id, None)
+        if span_.parent_span_id:
+            span_.parent_span_id = trace_id_mapping.get(span_.parent_span_id)
+
         span_.id = span_id_mapping[span_.id]
         spans_copy.append(span_)
-    
+
     return traces_copy, spans_copy
-        

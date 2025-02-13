@@ -2,7 +2,6 @@ import functools
 import atexit
 import datetime
 import logging
-import uuid
 
 from typing import Optional, Any, Dict, List
 
@@ -37,7 +36,6 @@ from .. import (
     httpx_client,
     url_helpers,
     rest_client_configurator,
-    id_helpers,
 )
 
 LOGGER = logging.getLogger(__name__)
