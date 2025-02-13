@@ -1,12 +1,12 @@
-name: Documentation - Test codeblocks
+name: Docs - Test codeblocks
 on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'apps/opik-documentation/documentation/docs/*.md'
-      - 'apps/opik-documentation/documentation/docs/*.mdx'
-      - 'apps/opik-documentation/documentation/docs/**/*.md'
-      - 'apps/opik-documentation/documentation/docs/**/*.mdx'
+      - 'apps/opik-documentation/documentation/fern/docs/*.md'
+      - 'apps/opik-documentation/documentation/fern/docs/*.mdx'
+      - 'apps/opik-documentation/documentation/fern/docs/**/*.md'
+      - 'apps/opik-documentation/documentation/fern/docs/**/*.mdx'
 
 jobs:
   collect_test_paths:
