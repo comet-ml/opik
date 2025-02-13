@@ -18,10 +18,10 @@ jobs:
 
             - name: Generate preview URL
               id: generate-docs
+              working-directory: apps/opik-documentation/documentation
               env:
                   FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
               run: |
-                  cd apps/opik-documentation/documentation
                   OUTPUT=$(fern generate --docs --preview 2>&1) || true
                   echo "$OUTPUT"
                   URL=$(echo "$OUTPUT" | grep -oP 'Published docs to \K.*(?= \()')
