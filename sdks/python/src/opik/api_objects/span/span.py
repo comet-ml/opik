@@ -12,7 +12,7 @@ from ...types import (
 )
 
 from ...message_processing import streamer, messages
-from ... import datetime_helpers
+from ... import datetime_helpers, id_helpers
 from .. import helpers, validation_helpers, constants
 from opik import dict_utils
 
@@ -178,7 +178,7 @@ class Span:
         Returns:
             Span: The created child span object.
         """
-        span_id = id if id is not None else helpers.generate_id()
+        span_id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )

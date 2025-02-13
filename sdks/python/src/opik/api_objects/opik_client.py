@@ -15,11 +15,10 @@ from . import (
     trace,
     dataset,
     experiment,
-    helpers,
     constants,
     validation_helpers,
 )
-from .trace import helpers as trace_helpers
+from .trace import migration as trace_migration
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from .dataset import rest_operations as dataset_rest_operations
@@ -36,6 +35,7 @@ from .. import (
     httpx_client,
     url_helpers,
     rest_client_configurator,
+    id_helpers,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -185,7 +185,7 @@ class Opik:
         Returns:
             trace.Trace: The created trace object.
         """
-        id = id if id is not None else helpers.generate_id()
+        id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
@@ -256,16 +256,18 @@ class Opik:
 
         trace_data = [
             trace.trace_public_to_trace_data(
-                project_name=project_name, trace=trace_public_
+                project_name=project_name, trace_public=trace_public_
             )
             for trace_public_ in traces_public
         ]
         span_data = [
-            span.span_public_to_span_data(project_name=project_name, span=span_public_)
+            span.span_public_to_span_data(
+                project_name=project_name, span_public_=span_public_
+            )
             for span_public_ in spans_public
         ]
 
-        new_trace_data, new_span_data = trace_helpers.prepare_traces_and_spans_for_copy(
+        new_trace_data, new_span_data = trace_migration.prepare_traces_and_spans_for_copy(
             destination_project_name, trace_data, span_data
         )
 
@@ -277,11 +279,11 @@ class Opik:
 
         if delete_original_project:
             trace_ids = [trace_.id for trace_ in trace_data]
-            while trace_ids:
-                self._rest_client.traces.delete_traces(
-                    ids=trace_ids[: constants.DELETE_TRACE_BATCH_SIZE]
-                )
-                trace_ids = trace_ids[constants.DELETE_TRACE_BATCH_SIZE :]
+            for batch in sequence_splitter.split_into_batches(
+                trace_ids,
+                max_length=constants.DELETE_TRACE_BATCH_SIZE,
+            ):
+                self._rest_client.traces.delete_traces(ids=batch)
 
     def span(
         self,
@@ -331,7 +333,7 @@ class Opik:
         Returns:
             span.Span: The created span object.
         """
-        id = id if id is not None else helpers.generate_id()
+        id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
@@ -348,7 +350,7 @@ class Opik:
             project_name = self._project_name
 
         if trace_id is None:
-            trace_id = helpers.generate_id()
+            trace_id = id_helpers.generate_id()
             # TODO: decide what needs to be passed to CreateTraceMessage.
             # This version is likely not final.
             create_trace_message = messages.CreateTraceMessage(
@@ -634,7 +636,7 @@ class Opik:
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
-        id = helpers.generate_id()
+        id = id_helpers.generate_id()
 
         checked_prompts = experiment_helpers.handle_prompt_args(
             prompt=prompt,

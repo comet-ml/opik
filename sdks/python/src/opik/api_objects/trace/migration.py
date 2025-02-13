@@ -1,21 +1,10 @@
 from . import trace
-from .. import span, helpers
+from .. import span
 from ... import id_helpers
-from datetime import datetime
-import uuid
-from typing import Optional, List, Tuple
+from typing import List, Tuple
 import logging
 
 LOGGER = logging.getLogger(__name__)
-
-
-def _convert_id(id: str, start_time: Optional[datetime]) -> str:
-    if start_time:
-        id = str(id_helpers.uuid4_to_uuid7(start_time, str(uuid.uuid4())))
-    else:
-        id = helpers.generate_id()
-
-    return id
 
 
 def prepare_traces_and_spans_for_copy(
@@ -26,7 +15,7 @@ def prepare_traces_and_spans_for_copy(
     trace_id_mapping = {}
     traces_copy = []
     for trace_ in traces_data:
-        id = _convert_id(trace_.id, trace_.start_time)
+        id = id_helpers.generate_id(trace_.start_time)
         trace_id_mapping[trace_.id] = id
 
         trace_.id = id
@@ -35,7 +24,7 @@ def prepare_traces_and_spans_for_copy(
 
     span_id_mapping = {}
     for span_ in spans_data:
-        id = _convert_id(span_.id, span_.start_time)
+        id = id_helpers.generate_id(span_.start_time)
         span_id_mapping[span_.id] = id
 
     spans_copy = []
