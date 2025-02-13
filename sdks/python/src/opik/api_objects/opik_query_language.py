@@ -63,6 +63,9 @@ class OpikQueryLanguage:
     def _is_valid_field_char(self, char: str) -> bool:
         return char.isalnum() or char == "_"
 
+    def _is_valid_connector_char(self, char: str) -> bool:
+        return char in "&and"
+
     def _skip_whitespace(self) -> None:
         while (
             self._cursor < len(self.query_string)
@@ -101,6 +104,15 @@ class OpikQueryLanguage:
             return True
 
         return False
+
+    def _parse_connector(self) -> str:
+        start = self._cursor
+        while self._cursor < len(self.query_string) and self._is_valid_connector_char(
+            self.query_string[self._cursor]
+        ):
+            self._cursor += 1
+        connector = self.query_string[start : self._cursor]
+        return connector
 
     def _parse_field(self) -> Dict[str, Any]:
         # Skip whitespace
@@ -251,20 +263,33 @@ class OpikQueryLanguage:
         if len(self.query_string) == 0:
             return None
 
-        # Parse fields
-        parsed_field = self._parse_field()
+        expressions = []
 
-        # Parse operators
-        parsed_operator = self._parse_operator(parsed_field["field"])
+        while True:
+            # Parse fields
+            parsed_field = self._parse_field()
 
-        # Parse values
-        parsed_value = self._parse_value()
+            # Parse operators
+            parsed_operator = self._parse_operator(parsed_field["field"])
 
-        # Check for any trailing characters
-        self._skip_whitespace()
-        if self._cursor < len(self.query_string):
-            raise ValueError(
-                f"Invalid filter string, trailing characters {self.query_string[self._cursor:]}"
-            )
+            # Parse values
+            parsed_value = self._parse_value()
 
-        return json.dumps([{**parsed_field, **parsed_operator, **parsed_value}])
+            expressions.append({**parsed_field, **parsed_operator, **parsed_value})
+
+            self._skip_whitespace()
+
+            if self._cursor < len(self.query_string):
+                position = self._cursor
+                connector = self._parse_connector()
+
+                if connector.lower() in ["&&", "&", "and"]:
+                    continue
+                else:
+                    raise ValueError(
+                        f"Invalid filter string, trailing characters {self.query_string[position:]}"
+                    )
+            else:
+                break
+
+        return json.dumps(expressions)

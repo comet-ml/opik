@@ -6,52 +6,76 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
 @pytest.mark.parametrize(
     "filter_string, expected",
     [
-        ('name = "test"', {"field": "name", "operator": "=", "value": "test"}),
+        ('name = "test"', [{"field": "name", "operator": "=", "value": "test"}]),
         (
             "usage.total_tokens > 100",
-            {"field": "usage.total_tokens", "operator": ">", "value": "100"},
+            [{"field": "usage.total_tokens", "operator": ">", "value": "100"}],
         ),
         (
             'tags contains "important"',
-            {"field": "tags", "operator": "contains", "value": "important"},
+            [{"field": "tags", "operator": "contains", "value": "important"}],
         ),
         (
             'output not_contains "error"',
-            {"field": "output", "operator": "not_contains", "value": "error"},
+            [{"field": "output", "operator": "not_contains", "value": "error"}],
         ),
         (
             "feedback_scores >= 4.5",
-            {"field": "feedback_scores", "operator": ">=", "value": "4.5"},
+            [{"field": "feedback_scores", "operator": ">=", "value": "4.5"}],
         ),
         # New test cases for quoted identifiers
         (
             'feedback_scores."Answer Relevance" < 0.8',
-            {
-                "field": "feedback_scores",
-                "key": "Answer Relevance",
-                "operator": "<",
-                "value": "0.8",
-            },
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "Answer Relevance",
+                    "operator": "<",
+                    "value": "0.8",
+                }
+            ],
         ),
         (
             'feedback_scores."Escaped ""Quote""" < 0.8',
-            {
-                "field": "feedback_scores",
-                "key": 'Escaped "Quote"',
-                "operator": "<",
-                "value": "0.8",
-            },
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": 'Escaped "Quote"',
+                    "operator": "<",
+                    "value": "0.8",
+                }
+            ],
+        ),
+        # Test cases for AND:
+        (
+            'name = "test" && tags contains "important"  ',
+            [
+                {"field": "name", "operator": "=", "value": "test"},
+                {"field": "tags", "operator": "contains", "value": "important"},
+            ],
+        ),
+        (
+            'feedback_scores."Escaped ""Quote""" < 0.8 and feedback_scores >= 4.5',
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": 'Escaped "Quote"',
+                    "operator": "<",
+                    "value": "0.8",
+                },
+                {"field": "feedback_scores", "operator": ">=", "value": "4.5"},
+            ],
         ),
     ],
 )
 def test_valid_oql_expressions(filter_string, expected):
     oql = OpikQueryLanguage(filter_string)
     parsed = json.loads(oql.parsed_filters)
-    assert len(parsed) == 1
-    parsed_result = parsed[0]
+    assert len(parsed) == len(expected)
 
-    for key, value in expected.items():
-        assert parsed_result[key] == value
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
 
 
 @pytest.mark.parametrize(
@@ -68,6 +92,11 @@ def test_valid_oql_expressions(filter_string, expected):
         (
             'feedback_scores."Unterminated Quote < 0.8',
             r'Missing closing quote for: "Unterminated Quote < 0.8',
+        ),
+        # Tests with AND
+        (
+            'name = "test" and name = "other" extra_stuff',
+            r"Invalid filter string, trailing characters.*",
         ),
     ],
 )
