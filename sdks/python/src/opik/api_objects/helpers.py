@@ -2,15 +2,10 @@ import datetime
 import logging
 from typing import Optional
 
-import uuid6
-
 from .. import config, datetime_helpers, logging_messages
+from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
 
 LOGGER = logging.getLogger(__name__)
-
-
-def generate_id() -> str:
-    return str(uuid6.uuid7())
 
 
 def datetime_to_iso8601_if_not_None(

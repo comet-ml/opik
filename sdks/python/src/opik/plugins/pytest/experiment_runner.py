@@ -6,7 +6,7 @@ import json
 from opik.api_objects import opik_client
 from opik.api_objects.experiment import experiment_item
 from opik.api_objects.dataset import dataset_item
-from opik.api_objects import helpers
+from opik import id_helpers
 
 from opik import datetime_helpers, dict_utils
 from . import test_runs_storage, test_run_content
@@ -59,7 +59,7 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
         dataset_item_id = dataset_item_id_finder(test_run_content)
 
         if dataset_item_id is None:
-            dataset_item_id = helpers.generate_id()
+            dataset_item_id = id_helpers.generate_id()
             filtered_test_run_content_dict = dict_utils.remove_none_from_dict(
                 test_run_content.__dict__
             )
