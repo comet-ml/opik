@@ -33,15 +33,19 @@ tabs:
   documentation:
     display-name: Documentation
     icon: building
+    slug: /
   self-host:
     display-name: Self-hosting Opik
     icon: server
+    slug: /self-host
   cookbook:
     display-name: Cookbooks
     icon: book
+    slug: /cookbook
   reference:
     display-name: SDK and API reference
     icon: square-terminal
+    slug: /reference
 navigation:
   - tab: documentation
     layout:
@@ -59,6 +63,7 @@ navigation:
             title: Changelog
             slug: Changelog
       - section: Observability
+        slug: /
         contents:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
@@ -77,6 +82,7 @@ navigation:
           - page: Export data
             path: docs/tracing/export_data.mdx
           - section: Integrations
+            slug: /
             contents:
               - page: Overview
                 path: docs/tracing/integrations/overview.mdx
@@ -119,6 +125,7 @@ navigation:
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
       - section: Evaluation
+        slug: /
         contents:
           - page: Overview
             path: docs/evaluation/overview.mdx
@@ -133,6 +140,7 @@ navigation:
           - page: Manage datasets
             path: docs/evaluation/manage_datasets.mdx
           - section: Metrics
+            slug: /
             contents:
               - page: Overview
                 path: docs/evaluation/metrics/overview.mdx
@@ -155,6 +163,7 @@ navigation:
               - page: Custom metric
                 path: docs/evaluation/metrics/custom_metric.mdx
       - section: Prompt engineering
+        slug: /
         contents:
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
@@ -163,10 +172,12 @@ navigation:
           - page: Playground
             path: docs/prompt_engineering/playground.mdx
       - section: Testing
+        slug: /
         contents:
           - page: Pytest integration
             path: docs/testing/pytest_integration.mdx
       - section: Production
+        slug: /
         contents:
           - page: Production monitoring
             path: docs/production/production_monitoring.mdx
@@ -180,64 +191,92 @@ navigation:
         path: docs/self-host/overview.mdx
       - page: Local deployment
         path: docs/self-host/local_deployment.mdx
+        slug: local_deployment
       - page: Kubernetes deployment
         path: docs/self-host/kubernetes.mdx
+        slug: kubernetes
       - section: Configuration
+        slug: /
         contents:
           - page: Anonymous usage statistics
             path: docs/self-host/configure/anonymous_usage_statistics.mdx
+            slug: anonymous_usage_statistics
   - tab: cookbook
     layout:
       - page: Overview
         path: docs/cookbook/overview.mdx
       - section: Getting started tutorials
+        slug: /
         contents:
           - page: Quickstart notebook
             path: docs/cookbook/quickstart_notebook.mdx
+            slug: quickstart_notebook
       - section: Integrations
+        slug: /
         contents:
           - page: OpenAI
             path: docs/cookbook/openai.mdx
+            slug: openai
           - page: LiteLLM
             path: docs/cookbook/litellm.mdx
+            slug: litellm
           - page: Langchain
             path: docs/cookbook/langchain.mdx
-          - page: AIsuite
+            slug: langchain
+          - page: aisuite
             path: docs/cookbook/aisuite.mdx
+            slug: aisuite
           - page: Anthropic
             path: docs/cookbook/anthropic.mdx
+            slug: anthropic
           - page: Bedrock
             path: docs/cookbook/bedrock.mdx
+            slug: bedrock
           - page: Crewai
             path: docs/cookbook/crewai.mdx
+            slug: crewai
           - page: DSPY
             path: docs/cookbook/dspy.mdx
+            slug: dspy
           - page: Gemini
             path: docs/cookbook/gemini.mdx
+            slug: gemini
           - page: Groq
             path: docs/cookbook/groq.mdx
+            slug: groq
           - page: Guardrails AI
             path: docs/cookbook/guardrails-ai.mdx
+            slug: guardrails-ai
           - page: Haystack
             path: docs/cookbook/haystack.mdx
+            slug: haystack
           - page: LangGraph
             path: docs/cookbook/langgraph.mdx
+            slug: langgraph
           - page: Llama Index
             path: docs/cookbook/llama-index.mdx
+            slug: llama-index
           - page: Ollama
             path: docs/cookbook/ollama.mdx
+            slug: ollama
           - page: Predibase
             path: docs/cookbook/predibase.mdx
+            slug: predibase
           - page: Ragas
             path: docs/cookbook/ragas.mdx
+            slug: ragas
           - page: WatsonX
             path: docs/cookbook/watsonx.mdx
+            slug: watsonx
       - section: Advanced
+        slug: /
         contents:
           - page: Evaluate hallucination metric
             path: docs/cookbook/evaluate_hallucination_metric.mdx
+            slug: evaluate_hallucination_metric
           - page: Evaluate moderation metric
             path: docs/cookbook/evaluate_moderation_metric.mdx
+            slug: evaluate_moderation_metric
   - tab: reference
     layout:
       - page: Overview

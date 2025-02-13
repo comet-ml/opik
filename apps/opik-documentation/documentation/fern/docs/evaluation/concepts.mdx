@@ -5,7 +5,7 @@ slug: /evaluation/concepts
 
 <Tip>
   If you want to jump straight to running evaluations, you can head to the [Evaluate
-  prompts](/evaluation/evaluate_prompt.md) or [Evaluate your LLM application](/evaluation/evaluate_your_llm.md) guides.
+  prompts](/evaluation/evaluate_prompt) or [Evaluate your LLM application](/evaluation/evaluate_your_llm) guides.
 </Tip>
 
 When working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.
@@ -29,14 +29,14 @@ Given the importance of datasets in the evaluation process, teams often spend a 
 
 1. **Manually curating examples**: As a first step, you can manually curate a set of examples based on your knowledge of the application you are building. You can also leverage subject matter experts to help in the creation of the dataset.
 
-2. **Using synthetic data**: If you don't have enough data to create a diverse set of examples, you can turn to synthetic data generation tools to help you create a dataset. The [LangChain cookbook](/cookbook/langchain.md) has a great example of how to use synthetic data generation tools to create a dataset.
+2. **Using synthetic data**: If you don't have enough data to create a diverse set of examples, you can turn to synthetic data generation tools to help you create a dataset. The [LangChain cookbook](/cookbook/langchain) has a great example of how to use synthetic data generation tools to create a dataset.
 
 3. **Leveraging production data**: If you application is in production, you can leverage the data that is being generated to augment your dataset. While this is often not the first step in creating a dataset, it can be a great way to to enrich your dataset with real world data.
 
    If you are using Opik for production monitoring, you can easily add traces to your dataset by selecting them in the UI and selecting `Add to dataset` in the `Actions` dropdown.
 
 <Tip>
-  You can learn more about how to manage your datasets in Opik in the [Manage Datasets](/evaluation/manage_datasets.md)
+  You can learn more about how to manage your datasets in Opik in the [Manage Datasets](/evaluation/manage_datasets)
   section.
 </Tip>
 
@@ -73,6 +73,6 @@ Experiment items store the input, expected output, actual output and feedback sc
 
 We have provided some guides to help you get started with Opik's evaluation framework:
 
-1. [Overview of Opik's evaluation features](/evaluation/overview.mdx)
-2. [Evaluate prompts](/evaluation/evaluate_prompt.md)
-3. [Evaluate your LLM application](/evaluation/evaluate_your_llm.md)
+1. [Overview of Opik's evaluation features](/evaluation/overview)
+2. [Evaluate prompts](/evaluation/evaluate_prompt)
+3. [Evaluate your LLM application](/evaluation/evaluate_your_llm)
