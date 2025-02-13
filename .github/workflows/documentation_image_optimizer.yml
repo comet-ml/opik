@@ -5,10 +5,10 @@ on:
     # See https://help.github.com/en/actions/automating-your-workflow-with-github-actions/workflow-syntax-for-github-actions#onpushpull_requestpaths for reference.
     paths:
       [
-        "/apps/opik-documentation/documentation/static/img/**.jpg",
-        "/apps/opik-documentation/documentation/static/img/**.jpeg",
-        "/apps/opik-documentation/documentation/static/img/**.png",
-        "/apps/opik-documentation/documentation/static/img/**.webp",
+        "/apps/opik-documentation/documentation/fern/img/**.jpg",
+        "/apps/opik-documentation/documentation/fern/img/**.jpeg",
+        "/apps/opik-documentation/documentation/fern/img/**.png",
+        "/apps/opik-documentation/documentation/fern/img/**.webp",
       ]
 jobs:
   build:
