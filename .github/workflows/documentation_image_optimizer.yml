@@ -31,4 +31,4 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           ignorePaths: |
             !apps/opik-documentation/documentation/fern/img
-            apps/opik-documentation/documentation/fern/img/**
+            **
