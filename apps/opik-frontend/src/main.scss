@@ -160,16 +160,15 @@
 
   .comet-code {
     @apply font-normal text-sm tracking-[0.02em];
-    font-family:
-      Ubuntu Mono,
-      ui-monospace,
-      SFMono-Regular,
-      Menlo,
-      Monaco,
-      Consolas,
-      "Liberation Mono",
-      "Courier New",
-      monospace;
+    font-family: Ubuntu Mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
   }
 
   .comet-header-height {
@@ -196,16 +195,15 @@
   kbd,
   samp,
   pre {
-    font-family:
-      Ubuntu Mono,
-      ui-monospace,
-      SFMono-Regular,
-      Menlo,
-      Monaco,
-      Consolas,
-      "Liberation Mono",
-      "Courier New",
-      monospace;
+    font-family: Ubuntu Mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
   }
 
   .comet-custom-scrollbar {
@@ -273,4 +271,12 @@
     z-index: -5;
     background: hsl(var(--secondary));
   }
+}
+
+.comet-markdown ul {
+  @apply list-disc pl-6;
+}
+
+.comet-markdown ol {
+  @apply list-decimal pl-6;
 }
