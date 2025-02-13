@@ -145,3 +145,16 @@ from opik.integrations.langchain import OpikTracer
 opik_tracer = OpikTracer()
 opik_tracer.flush()
 ```
+
+## Important notes
+1. If you are using asynchronous streaming mode (calling `.astream()` method), the `input` field in the trace UI will be empty due to a Langchain limitation for this mode.
+However, you can find the input data inside the nested spans of this chain. 
+
+2. if you are planning to use streaming with LLM-calls, and you want to calculate LLM-call tokens/cost, you need explicitly set argument `stream_usage` to `True`,
+```python
+from langchain_openai import ChatOpenAI
+llm = ChatOpenAI(
+    temperature=0,
+    stream_usage=True,
+)
+```

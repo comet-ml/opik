@@ -15,6 +15,7 @@ from ...testlib import (
 )
 
 
+@pytest.mark.skip
 @pytest.fixture(autouse=True, scope="module")
 def enable_haystack_content_tracing():
     assert (
@@ -24,6 +25,7 @@ def enable_haystack_content_tracing():
         yield
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [

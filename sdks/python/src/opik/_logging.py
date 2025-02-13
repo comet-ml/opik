@@ -1,7 +1,6 @@
-from typing import Callable, Any, Optional
 import functools
 import logging
-
+from typing import Any, Callable, Optional, Set
 
 from . import config
 
@@ -10,6 +9,8 @@ DEBUG_MSG_FORMAT = "%(asctime)s [%(process)d-%(processName)s:%(thread)d] %(relat
 # 1MB, to prevent logger from frequent writing hundreds of megabytes in DEBUG mode
 # when batches are big and payloads are heavy (e.g. base64 encoded data)
 MAX_MESSAGE_LENGTH = 1024 * 1024
+
+LOG_ONCE_CACHE: Set[str] = set()
 
 
 class TruncateFormatter(logging.Formatter):
@@ -79,3 +80,25 @@ def convert_exception_to_log_message(
         return wrapper
 
     return decorator
+
+
+def log_once_at_level(
+    logging_level: int,
+    message: str,
+    logger: logging.Logger,
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    """
+    Log the given message once at the given level then at the DEBUG
+    level on further calls.
+
+    This is a global log-once-per-session
+    """
+    global LOG_ONCE_CACHE
+
+    if message not in LOG_ONCE_CACHE:
+        LOG_ONCE_CACHE.add(message)
+        logger.log(logging_level, message, *args, **kwargs)
+    else:
+        logger.debug(message, *args, **kwargs)
