@@ -1,4 +1,4 @@
-name: Preview Docs
+name: Docs - Preview link
 
 on:
   pull_request:

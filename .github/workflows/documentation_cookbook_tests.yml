@@ -1,4 +1,4 @@
-name: Documentation - Test cookbooks
+name: Docs - Test cookbooks
 on:
   workflow_dispatch:
     inputs:
