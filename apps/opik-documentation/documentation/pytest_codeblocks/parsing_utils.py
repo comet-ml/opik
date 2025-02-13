@@ -50,6 +50,7 @@ def get_page_frontmatter(path):
 def check_skip_code_block(mk_language):
     language_params = mk_language.split(" ")
     for params in language_params:
+        params = params.strip("{").strip("}")
         if "=" in params:
             title, value = params.split("=")
             if title == "pytest_codeblocks_skip" and (
