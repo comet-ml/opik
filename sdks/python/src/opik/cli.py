@@ -128,9 +128,7 @@ def proxy(
         sys.exit(1)
 
     if ollama and lm_studio:
-        click.echo(
-            "Error: Cannot specify both --ollama and --lm-studio", err=True
-        )
+        click.echo("Error: Cannot specify both --ollama and --lm-studio", err=True)
         sys.exit(1)
 
     if ollama:

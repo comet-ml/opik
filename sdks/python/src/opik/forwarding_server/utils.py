@@ -20,16 +20,18 @@ def check_llm_server_running(url: str) -> bool:
     except Exception:
         return False
 
+
 def get_model_list(local_url: str) -> List[str]:
     """Get a list of available models."""
     try:
         with httpx.Client() as client:
             response = client.get(f"{local_url}/v1/models", timeout=2.0)
             res = response.json()
-            models = [model['id'] for model in res['data']]
+            models = [model["id"] for model in res["data"]]
             return models
-    except Exception as e:
+    except Exception:
         return []
+
 
 def print_server_startup_message(
     host: str,
@@ -74,7 +76,7 @@ def print_server_startup_message(
         f"\n   This server is meant only for development purposes, for production we recommend deploying {llm_server_type}\n"
         "in a scalable and secure way.\n"
     )
-    
+
     # Create the main panel with rounded corners and title
     main_panel = Panel(
         Align.left(content),
