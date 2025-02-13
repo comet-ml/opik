@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "fern": "^0.0.19"
+  },
+  "scripts": {
+    "dev": "sh dev_script.sh"
+  }
+}
