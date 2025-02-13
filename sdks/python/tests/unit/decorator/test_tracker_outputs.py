@@ -736,9 +736,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                                 id=ANY_BUT_NONE,
                                 name="gen_f",
                                 input={"y": "generator-input"},
-                                output={
-                                    "output": "yielded-1 yielded-2 yielded-3"
-                                },
+                                output={"output": "yielded-1 yielded-2 yielded-3"},
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
@@ -813,9 +811,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                                 id=ANY_BUT_NONE,
                                 name="gen_f",
                                 input={"y": "generator-input"},
-                                output={
-                                    "output": "yielded-1 yielded-2 yielded-3"
-                                },
+                                output={"output": "yielded-1 yielded-2 yielded-3"},
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[
