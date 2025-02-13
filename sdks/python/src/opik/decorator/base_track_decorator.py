@@ -11,9 +11,7 @@ from typing import (
     Optional,
     Callable,
     Tuple,
-    Generator,
     Union,
-    AsyncGenerator,
 )
 
 from ..types import SpanType, DistributedTraceHeadersDict, ErrorInfoDict
@@ -23,8 +21,9 @@ from . import (
     inspect_helpers,
     error_info_collector,
 )
-from ..api_objects import opik_client, helpers, span, trace
-from .. import context_storage, logging_messages, datetime_helpers, config
+from ..api_objects import opik_client, span, trace
+from .. import context_storage, logging_messages, config
+from . import span_creation_handler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -134,16 +133,143 @@ class BaseTrackDecorator(abc.ABC):
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
     ) -> Callable:
-        if not inspect_helpers.is_async(func):
-            return self._tracked_sync(
+        """
+        Tracking strategies:
+
+            * Regular sync and async functions/methods: start the span when the
+        function is called, end the span when the function is finished. While the
+        function is working, span is kept in opik context, so it can be a parent for the
+        spans created by nested tracked functions.
+
+            * Generators and async generators: start the span when generator started
+        yielding values, end the trace when generator finished yielding values.
+        Span is kept in the opik context only while __next__ or __anext__ method is working.
+        It means that the span can be a parent only for spans created by tracked functions
+        called inside __next__ or __anext__.
+
+            * Sync and async functions that return a stream or stream manager object
+        recognizable by `_streams_handler`: span is started when the function is called,
+        finished when the stream chunks are exhausted. Span is NOT kept inside the opik context.
+        So these spans can't be parents for other spans. This is usually the case LLM API calls
+        with `stream=True`.
+        """
+        if inspect.isgeneratorfunction(func):
+            return self._tracked_sync_generator(func=func, track_options=track_options)
+
+        if inspect.isasyncgenfunction(func):
+            return self._tracked_async_generator(
                 func=func,
                 track_options=track_options,
             )
 
-        return self._tracked_async(
+        if inspect_helpers.is_async(func):
+            return self._tracked_async(
+                func=func,
+                track_options=track_options,
+            )
+
+        return self._tracked_sync(
             func=func,
             track_options=track_options,
         )
+
+    def _tracked_sync_generator(
+        self, func: Callable, track_options: arguments_helpers.TrackOptions
+    ) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            try:
+                opik_distributed_trace_headers: Optional[
+                    DistributedTraceHeadersDict
+                ] = kwargs.pop("opik_distributed_trace_headers", None)
+
+                start_span_arguments = self._start_span_inputs_preprocessor(
+                    func=func,
+                    track_options=track_options,
+                    args=args,
+                    kwargs=kwargs,
+                )
+            except Exception as exception:
+                LOGGER.error(
+                    logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
+                    func.__name__,
+                    (args, kwargs),
+                    str(exception),
+                    exc_info=True,
+                )
+
+            result = None
+            try:
+                result = generator_wrappers.SyncTrackedGenerator(
+                    func(*args, **kwargs),
+                    start_span_arguments=start_span_arguments,
+                    opik_distributed_trace_headers=opik_distributed_trace_headers,
+                    track_options=track_options,
+                    finally_callback=self._after_call,
+                )
+                return result
+            except Exception as exception:
+                LOGGER.debug(
+                    logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
+                    func.__name__,
+                    (args, kwargs),
+                    str(exception),
+                    exc_info=True,
+                )
+                raise exception
+
+        wrapper.opik_tracked = True  # type: ignore
+
+        return wrapper
+
+    def _tracked_async_generator(
+        self, func: Callable, track_options: arguments_helpers.TrackOptions
+    ) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            try:
+                opik_distributed_trace_headers: Optional[
+                    DistributedTraceHeadersDict
+                ] = kwargs.pop("opik_distributed_trace_headers", None)
+
+                start_span_arguments = self._start_span_inputs_preprocessor(
+                    func=func,
+                    track_options=track_options,
+                    args=args,
+                    kwargs=kwargs,
+                )
+            except Exception as exception:
+                LOGGER.error(
+                    logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
+                    func.__name__,
+                    (args, kwargs),
+                    str(exception),
+                    exc_info=True,
+                )
+
+            result = None
+            try:
+                result = generator_wrappers.AsyncTrackedGenerator(
+                    func(*args, **kwargs),
+                    start_span_arguments=start_span_arguments,
+                    opik_distributed_trace_headers=opik_distributed_trace_headers,
+                    track_options=track_options,
+                    finally_callback=self._after_call,
+                )
+                return result
+            except Exception as exception:
+                LOGGER.debug(
+                    logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
+                    func.__name__,
+                    (args, kwargs),
+                    str(exception),
+                    exc_info=True,
+                )
+                raise exception
+
+        wrapper.opik_tracked = True  # type: ignore
+
+        return wrapper
 
     def _tracked_sync(
         self, func: Callable, track_options: arguments_helpers.TrackOptions
@@ -172,13 +298,13 @@ class BaseTrackDecorator(abc.ABC):
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                generator_or_generator_container = self._generators_handler(
+                stream_or_stream_manager = self._streams_handler(
                     result,
                     track_options.capture_output,
                     track_options.generations_aggregator,
                 )
-                if generator_or_generator_container is not None:
-                    return generator_or_generator_container
+                if stream_or_stream_manager is not None:
+                    return stream_or_stream_manager
 
                 self._after_call(
                     output=result,
@@ -211,7 +337,7 @@ class BaseTrackDecorator(abc.ABC):
             try:
                 result = await func(*args, **kwargs)
             except Exception as exception:
-                LOGGER.error(
+                LOGGER.debug(
                     logging_messages.EXCEPTION_RAISED_FROM_TRACKED_FUNCTION,
                     func.__name__,
                     (args, kwargs),
@@ -221,13 +347,13 @@ class BaseTrackDecorator(abc.ABC):
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                generator = self._generators_handler(
+                stream_or_stream_manager = self._streams_handler(
                     result,
                     track_options.capture_output,
                     track_options.generations_aggregator,
                 )
-                if generator is not None:  # TODO: test this flow for async generators
-                    return generator
+                if stream_or_stream_manager is not None:
+                    return stream_or_stream_manager
 
                 self._after_call(
                     output=result,
@@ -260,10 +386,17 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
 
-            self._create_span(
-                start_span_arguments,
-                opik_distributed_trace_headers,
+            created_trace_data, created_span_data = (
+                span_creation_handler.create_span_for_current_context(
+                    start_span_arguments=start_span_arguments,
+                    distributed_trace_headers=opik_distributed_trace_headers,
+                )
             )
+            if created_trace_data is not None:
+                context_storage.set_trace_data(created_trace_data)
+                TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
+
+            context_storage.add_span_data(created_span_data)
 
         except Exception as exception:
             LOGGER.error(
@@ -273,96 +406,6 @@ class BaseTrackDecorator(abc.ABC):
                 str(exception),
                 exc_info=True,
             )
-
-    def _create_span(
-        self,
-        start_span_arguments: arguments_helpers.StartSpanParameters,
-        distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None,
-    ) -> None:
-        """
-        Handles different span creation flows.
-        """
-        span_data: span.SpanData
-        trace_data: trace.TraceData
-
-        if distributed_trace_headers:
-            span_data = arguments_helpers.create_span_data(
-                start_span_arguments=start_span_arguments,
-                parent_span_id=distributed_trace_headers["opik_parent_span_id"],
-                trace_id=distributed_trace_headers["opik_trace_id"],
-            )
-            context_storage.add_span_data(span_data)
-            return
-
-        current_span_data = context_storage.top_span_data()
-        current_trace_data = context_storage.get_trace_data()
-
-        if current_span_data is not None:
-            # There is already at least one span in current context.
-            # Simply attach a new span to it.
-            assert current_trace_data is not None
-
-            project_name = helpers.resolve_child_span_project_name(
-                parent_project_name=current_span_data.project_name,
-                child_project_name=start_span_arguments.project_name,
-                show_warning=current_trace_data.created_by != "evaluation",
-            )
-
-            start_span_arguments.project_name = project_name
-
-            span_data = arguments_helpers.create_span_data(
-                start_span_arguments=start_span_arguments,
-                parent_span_id=current_span_data.id,
-                trace_id=current_span_data.trace_id,
-            )
-            context_storage.add_span_data(span_data)
-            return
-
-        if current_trace_data is not None and current_span_data is None:
-            # By default, we expect trace to be created with a span.
-            # But there can be cases when trace was created and added
-            # to context manually (not via decorator).
-            # In that case decorator should just create a span for the existing trace.
-
-            project_name = helpers.resolve_child_span_project_name(
-                parent_project_name=current_trace_data.project_name,
-                child_project_name=start_span_arguments.project_name,
-                show_warning=current_trace_data.created_by != "evaluation",
-            )
-
-            start_span_arguments.project_name = project_name
-
-            span_data = arguments_helpers.create_span_data(
-                start_span_arguments=start_span_arguments,
-                parent_span_id=None,
-                trace_id=current_trace_data.id,
-            )
-            context_storage.add_span_data(span_data)
-            return
-
-        if current_span_data is None and current_trace_data is None:
-            # Create a trace and root span because it is
-            # the first decorated function run in current context.
-            trace_data = trace.TraceData(
-                id=helpers.generate_id(),
-                start_time=datetime_helpers.local_timestamp(),
-                name=start_span_arguments.name,
-                input=start_span_arguments.input,
-                metadata=start_span_arguments.metadata,
-                tags=start_span_arguments.tags,
-                project_name=start_span_arguments.project_name,
-            )
-            TRACES_CREATED_BY_DECORATOR.add(trace_data.id)
-
-            span_data = arguments_helpers.create_span_data(
-                start_span_arguments=start_span_arguments,
-                parent_span_id=None,
-                trace_id=trace_data.id,
-            )
-
-            context_storage.set_trace_data(trace_data)
-            context_storage.add_span_data(span_data)
-            return
 
     def _after_call(
         self,
@@ -424,50 +467,24 @@ class BaseTrackDecorator(abc.ABC):
             )
 
     @abc.abstractmethod
-    def _generators_handler(
+    def _streams_handler(
         self,
         output: Any,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Union[Generator, AsyncGenerator]]:
+    ) -> Optional[Any]:
         """
-        Subclasses must override this method to customize generator objects handling
-        This is the implementation for regular generators and async generators that
-        uses aggregator function passed to track.
+        Subclasses must override this method to customize stream-like objects handling.
+        Stream objects are usually the objects returned by LLM providers when invoking their API with
+        `stream=True` option.
 
-        However, sometimes the function might return an instance of some specific class which
-        is not a python generator itself, but implements some API for iterating through data chunks.
-        In that case `_generators_handler` must be fully overridden in the subclass.
-
-        This is usually the case when creating an integration with some LLM library.
+        Opik's approach for such stream objects is to start the span when the API call is made and
+        finish the span when the stream chunks are exhausted.
         """
-        if inspect.isgenerator(output):
-            span_to_end, trace_to_end = pop_end_candidates()
-            # For some reason mypy things wrap_sync_generator returns Any
-            return generator_wrappers.wrap_sync_generator(  # type: ignore[no-any-return]
-                generator=output,
-                capture_output=capture_output,
-                span_to_end=span_to_end,
-                trace_to_end=trace_to_end,
-                generations_aggregator=generations_aggregator,
-                finally_callback=self._after_call,
-            )
 
-        if inspect.isasyncgen(output):
-            span_to_end, trace_to_end = pop_end_candidates()
-            # For some reason mypy things wrap_async_generator returns Any
-            return generator_wrappers.wrap_async_generator(  # type: ignore[no-any-return]
-                generator=output,
-                capture_output=capture_output,
-                span_to_end=span_to_end,
-                trace_to_end=trace_to_end,
-                generations_aggregator=generations_aggregator,
-                finally_callback=self._after_call,
-            )
+        NO_STREAM_DETECTED = None
 
-        NOT_A_GENERATOR = None
-
-        return NOT_A_GENERATOR
+        return NO_STREAM_DETECTED
 
     @abc.abstractmethod
     def _start_span_inputs_preprocessor(
