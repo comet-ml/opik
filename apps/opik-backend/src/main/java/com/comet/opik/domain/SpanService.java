@@ -12,6 +12,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -279,13 +281,17 @@ public class SpanService {
 
     private List<Span> bindSpanToProjectAndId(SpanBatch batch, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
-                .collect(Collectors.toMap(project -> project.name().toLowerCase(), Function.identity()));
+                .collect(Collectors.toMap(
+                        Project::name,
+                        Function.identity(),
+                        BinaryOperatorUtils.last(),
+                        () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
 
         return batch.spans()
                 .stream()
                 .map(span -> {
                     String projectName = WorkspaceUtils.getProjectName(span.projectName());
-                    Project project = projectPerName.get(projectName.toLowerCase());
+                    Project project = projectPerName.get(projectName);
 
                     if (project == null) {
                         log.warn("Project not found for span project '{}' and default '{}'", span.projectName(),
