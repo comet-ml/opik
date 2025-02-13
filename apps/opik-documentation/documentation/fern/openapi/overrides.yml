@@ -1,0 +1,7 @@
+paths:
+  /is-alive/ping:
+    get:
+      x-fern-ignore: true
+  /is-alive/ver:
+    get:
+      x-fern-ignore: true

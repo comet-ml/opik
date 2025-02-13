@@ -113,8 +113,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .collect(groupingBy(FeedbackScoreBatchItem::projectName));
 
         return handleProjectRetrieval(scoresPerProject)
-                .map(this::groupByName)
-                .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
+                .map(this::groupByLowerCaseName)
+                .map(projectMapLowerCaseName -> mergeProjectsAndScores(projectMapLowerCaseName, scoresPerProject))
                 .flatMap(projects -> processScoreBatch(entityType, projects, scores.size())) // score all scores
                 .then();
     }
@@ -147,21 +147,24 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Error while processing scores batch")));
     }
 
-    private List<ProjectDto> mergeProjectsAndScores(Map<String, Project> projectMap,
+    private List<ProjectDto> mergeProjectsAndScores(Map<String, Project> projectMapLowerCaseName,
             Map<String, List<FeedbackScoreBatchItem>> scoresPerProject) {
         return scoresPerProject.keySet()
                 .stream()
-                .map(projectName -> new ProjectDto(
-                        projectMap.get(projectName),
-                        scoresPerProject.get(projectName)
-                                .stream()
-                                .map(item -> item.toBuilder().projectId(projectMap.get(projectName).id()).build()) // set projectId
-                                .toList()))
+                .map(projectName -> {
+                    Project project = projectMapLowerCaseName.get(projectName.toLowerCase());
+                    return new ProjectDto(
+                            project,
+                            scoresPerProject.get(projectName)
+                                    .stream()
+                                    .map(item -> item.toBuilder().projectId(project.id()).build()) // set projectId
+                                    .toList());
+                })
                 .toList();
     }
 
-    private Map<String, Project> groupByName(List<Project> projects) {
-        return projects.stream().collect(toMap(Project::name, Function.identity()));
+    private Map<String, Project> groupByLowerCaseName(List<Project> projects) {
+        return projects.stream().collect(toMap(p -> p.name().toLowerCase(), Function.identity()));
     }
 
     private List<Project> getAllProjectsByName(String workspaceId,
@@ -177,7 +180,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private void checkIfNeededToCreateProjects(Map<String, List<FeedbackScoreBatchItem>> scoresPerProject,
             String userName, String workspaceId) {
 
-        Map<String, Project> projectsPerName = groupByName(getAllProjectsByName(workspaceId, scoresPerProject));
+        Map<String, Project> projectsPerLowerCaseName = groupByLowerCaseName(
+                getAllProjectsByName(workspaceId, scoresPerProject));
 
         syncTemplate.inTransaction(WRITE, handle -> {
 
@@ -186,7 +190,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             scoresPerProject
                     .keySet()
                     .stream()
-                    .filter(projectName -> !projectsPerName.containsKey(projectName))
+                    .filter(projectName -> !projectsPerLowerCaseName.containsKey(projectName.toLowerCase()))
                     .forEach(projectName -> {
                         UUID projectId = idGenerator.generateId();
                         var newProject = Project.builder()
