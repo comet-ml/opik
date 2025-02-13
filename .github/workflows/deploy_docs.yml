@@ -1,6 +1,7 @@
 name: Publish Docs
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -21,4 +22,6 @@ jobs:
       - name: Publish Docs
         env:
           FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
-        run: fern generate --docs
+        run: |
+          cd apps/opik-documentation/documentation
+          fern generate --docs
