@@ -12,7 +12,7 @@ def f(test_prompts, chain, callback):
 llm = fake.FakeListLLM(
     responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"]
 )
-template = "Given the title of play, right a synopsys for that. Title: {title}."
+template = "Given the title of play, write a synopsys for that. Title: {title}."
 prompt_template = PromptTemplate(input_variables=["title"], template=template)
 synopsis_chain = prompt_template | llm
 callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
