@@ -11,8 +11,6 @@ import time
 from rich.logging import RichHandler
 from rich.console import Console
 import uuid
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
 
 # Configure rich console
 console = Console()
@@ -116,6 +114,7 @@ async def stream_generator(
     async for chunk in stream:
         yield f"data: {json.dumps(chunk.model_dump())}\n\n"
 
+
 def create_app(llm_server_host: str) -> FastAPI:
     app = FastAPI(title="Opik Ollama Proxy")
 
@@ -125,7 +124,14 @@ def create_app(llm_server_host: str) -> FastAPI:
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["https://dev.comet.com", "https://staging.comet.com", "https://comet.com", "http://localhost:5173"],
+        allow_origins=[
+            "https://dev.comet.com",
+            "https://staging.comet.com",
+            "https://comet.com",
+            "http://localhost:5173",
+            "https://www.comet.com",
+            "http://localhost:5174",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

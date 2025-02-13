@@ -6,6 +6,7 @@ from rich.text import Text
 from rich import box
 from rich.align import Align
 import httpx
+from typing import List
 
 console = Console()
 
@@ -19,6 +20,16 @@ def check_llm_server_running(url: str) -> bool:
     except Exception:
         return False
 
+def get_model_list(local_url: str) -> List[str]:
+    """Get a list of available models."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{local_url}/v1/models", timeout=2.0)
+            res = response.json()
+            models = [model['id'] for model in res['data']]
+            return models
+    except Exception as e:
+        return []
 
 def print_server_startup_message(
     host: str,
@@ -29,6 +40,7 @@ def print_server_startup_message(
     """Print a nicely formatted server startup message."""
     # Create main content with improved styling
     local_url = f"http://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
+    models = get_model_list(llm_server_host)
 
     # Status section with improved formatting
     content = Text()
@@ -45,21 +57,24 @@ def print_server_startup_message(
 
     content.append("\n")
     content.append(
-        "The Opik proxy server is now running, you can now navigate to Opik and setup up\n"
+        "The Opik proxy server is now running, you can now navigate to Opik and setup up\n\n"
     )
-    content.append("your new AI provider!\n\n")
-    content.append("🚀 Proxy server running at:\n")
-    content.append(f"   - {local_url}/v1/chat/completions\n")
+    content.append("🚀 Proxy server running:\n")
+    content.append(f"   - URL: {local_url}/v1/chat/completions\n")
+    if len(models) > 0:
+        content.append(f"   - Models: {', '.join(models)}\n")
+    else:
+        content.append("   - No models available\n")
     content.append("\n")
     content.append("📚 Documentation:\n")
     content.append("   - https://www.comet.com/docs/opik/playground\n")
     content.append("\n")
     content.append("Note:", style="bold yellow")
     content.append(
-        "\n   This is a simple proxy server that allows you to use local LLMs with the Opik\n"
+        f"\n   This server is meant only for development purposes, for production we recommend deploying {llm_server_type}\n"
+        "in a scalable and secure way.\n"
     )
-    content.append("   playground. It is not meant for production use.\n")
-
+    
     # Create the main panel with rounded corners and title
     main_panel = Panel(
         Align.left(content),

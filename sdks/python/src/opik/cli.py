@@ -68,7 +68,7 @@ def configure(use_local: bool) -> None:
 
 @cli.command(context_settings={"ignore_unknown_options": True})
 @click.option(
-    "--ollama-proxy",
+    "--ollama",
     is_flag=True,
     help="Run as a proxy server for Ollama",
 )
@@ -79,7 +79,7 @@ def configure(use_local: bool) -> None:
     show_default=True,
 )
 @click.option(
-    "--lm-studio-proxy",
+    "--lm-studio",
     is_flag=True,
     help="Run as a proxy server for LM Studio",
 )
@@ -91,7 +91,7 @@ def configure(use_local: bool) -> None:
 )
 @click.option(
     "--host",
-    default="127.0.0.1",
+    default="localhost",
     help="Host to bind to",
     show_default=True,
 )
@@ -101,10 +101,10 @@ def configure(use_local: bool) -> None:
     help="Port to bind to",
     show_default=True,
 )
-def serve(
-    ollama_proxy: bool,
+def proxy(
+    ollama: bool,
     ollama_host: str,
-    lm_studio_proxy: bool,
+    lm_studio: bool,
     lm_studio_host: str,
     host: str,
     port: int,
@@ -120,20 +120,20 @@ def serve(
             "Proxy server dependencies not found. Please install them with: pip install opik[proxy]"
         )
 
-    if not ollama_proxy and not lm_studio_proxy:
+    if not ollama and not lm_studio:
         click.echo(
-            "Error: Either --ollama-proxy or --lm-studio-proxy must be specified",
+            "Error: Either --ollama or --lm-studio must be specified",
             err=True,
         )
         sys.exit(1)
 
-    if ollama_proxy and lm_studio_proxy:
+    if ollama and lm_studio:
         click.echo(
-            "Error: Cannot specify both --ollama-proxy and --lm-studio-proxy", err=True
+            "Error: Cannot specify both --ollama and --lm-studio", err=True
         )
         sys.exit(1)
 
-    if ollama_proxy:
+    if ollama:
         llm_server_host = ollama_host
         llm_server_type = "Ollama"
     else:  # lm_studio_proxy
