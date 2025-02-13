@@ -55,7 +55,11 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
             )
             return None
 
-        if usage_validator.UsageValidator(usage=token_usage, provider=provider).validate().ok():
+        if (
+            usage_validator.UsageValidator(usage=token_usage, provider=provider)
+            .validate()
+            .ok()
+        ):
             return cast(UsageDict, token_usage)
 
         return None
