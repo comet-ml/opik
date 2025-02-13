@@ -11,7 +11,8 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { cn } from "@/lib/utils";
+import { buildDocsUrl, cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 
@@ -39,6 +40,25 @@ const LocalAIProviderDetails: React.FC<LocalAIProviderDetailsProps> = ({
             return (
               <FormItem>
                 <Label htmlFor="url">{urlLabel}</Label>
+                <Description>
+                  To use {providerName}you will need to configure the Opik proxy
+                  to avoid network issues, learn more in the{" "}
+                  <Button
+                    variant="link"
+                    size="sm"
+                    asChild
+                    className="inline px-0"
+                  >
+                    <a
+                      href={buildDocsUrl("/playground")}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      documentation
+                    </a>
+                  </Button>
+                  .
+                </Description>
                 <FormControl>
                   <Input
                     id="url"
@@ -67,7 +87,7 @@ const LocalAIProviderDetails: React.FC<LocalAIProviderDetailsProps> = ({
               <FormItem>
                 <Label htmlFor="models">Models list</Label>
                 <Description>
-                  Comma separated list of models available by specified URL
+                  Comma separated list of available models
                 </Description>
                 <FormControl>
                   <Input
