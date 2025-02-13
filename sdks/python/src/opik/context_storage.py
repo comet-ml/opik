@@ -84,8 +84,8 @@ def temporary_context(
     span_data: span.SpanData, trace_data: Optional[trace.TraceData]
 ) -> Generator[None, None, None]:
     """
-    Temporary adds span and trace data passed to the context.
-    If trac_ data is None, it has no effect on the context.
+    Temporary adds span and trace data to the context.
+    If trace_data is None, it has no effect on the current trace in the context.
     """
     try:
         original_trace = get_trace_data()
