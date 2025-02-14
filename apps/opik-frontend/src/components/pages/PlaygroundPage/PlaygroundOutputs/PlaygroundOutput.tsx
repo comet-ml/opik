@@ -1,8 +1,8 @@
 import React from "react";
-import ReactMarkdown from "react-markdown";
 
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
+import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import {
   useOutputLoadingByPromptDatasetItemId,
   useOutputStaleStatusByPromptDatasetItemId,
@@ -25,13 +25,13 @@ const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
     }
 
     return (
-      <ReactMarkdown
-        className={cn("comet-markdown", {
+      <MarkdownPreview
+        className={cn({
           "text-muted-gray": stale,
         })}
       >
         {value}
-      </ReactMarkdown>
+      </MarkdownPreview>
     );
   };
 
