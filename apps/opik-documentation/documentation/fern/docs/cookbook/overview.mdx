@@ -25,21 +25,13 @@ The advanced guides cover more advanced usage of the Opik platform.
 
 ## Integration examples
 
+Opik provides first-class support for many popular LLM frameworks and providers. Choose your integration below to get started:
+
+### LLM Providers
+
 <CardGroup cols={3}>
   <Card title="OpenAI" href="/cookbook/openai">
     Log all OpenAI LLM calls to Opik
-  </Card>
-  <Card title="LiteLLM" href="/cookbook/litellm">
-    LiteLLM allows you to call all LLM APIs using the OpenAI format
-  </Card>
-  <Card title="LangChain" href="/cookbook/langchain">
-    LangChain is a framework for developing applications powered by LLMs
-  </Card>
-  <Card title="Haystack" href="/cookbook/haystack">
-    Build production-ready LLM applications
-  </Card>
-  <Card title="aisuite" href="/cookbook/aisuite">
-    Simple, unified interface to multiple Generative AI providers
   </Card>
   <Card title="Anthropic" href="/cookbook/anthropic">
     Log all Anthropic LLM calls to Opik
@@ -47,17 +39,40 @@ The advanced guides cover more advanced usage of the Opik platform.
   <Card title="Bedrock" href="/cookbook/bedrock">
     AWS Bedrock is a managed service for high performing foundational models
   </Card>
-  <Card title="CrewAI" href="/cookbook/crewai">
-    CrewAi can be used to create AI agent teams that work together to tackle complex tasks
-  </Card>
-  <Card title="DSPy" href="/cookbook/dspy">
-    DSPy is an LLM optimization framework for prompt engineering
-  </Card>
   <Card title="Gemini" href="/cookbook/gemini">
     Gemini is a family of multimodal large language models developed by Google DeepMind
   </Card>
   <Card title="Groq" href="/cookbook/groq">
     Groq provides fast LLM inference for Open Source models
+  </Card>
+  <Card title="Ollama" href="/cookbook/ollama">
+    Ollama allows you to run open-source LLM models on your local machine
+  </Card>
+  <Card title="watsonx" href="/cookbook/watsonx">
+    IBM's platform for deploying ML models
+  </Card>
+</CardGroup>
+
+### Frameworks & Tools
+
+<CardGroup cols={3}>
+  <Card title="LangChain" href="/cookbook/langchain">
+    LangChain is a framework for developing applications powered by LLMs
+  </Card>
+  <Card title="LlamaIndex" href="/cookbook/llama-index">
+    LlamaIndex is a framework for building agentic applications
+  </Card>
+  <Card title="Haystack" href="/cookbook/haystack">
+    Build production-ready LLM applications
+  </Card>
+  <Card title="LiteLLM" href="/cookbook/litellm">
+    LiteLLM allows you to call all LLM APIs using the OpenAI format
+  </Card>
+  <Card title="CrewAI" href="/cookbook/crewai">
+    CrewAi can be used to create AI agent teams that work together to tackle complex tasks
+  </Card>
+  <Card title="DSPy" href="/cookbook/dspy">
+    DSPy is an LLM optimization framework for prompt engineering
   </Card>
   <Card title="Guardrails" href="/cookbook/guardrails-ai">
     Guardrails is a framework for detecting and preventing errors in LLM applications
@@ -65,11 +80,8 @@ The advanced guides cover more advanced usage of the Opik platform.
   <Card title="LangGraph" href="/cookbook/langgraph">
     LangGraph is a framework for building agentic applications built by the LangChain team
   </Card>
-  <Card title="LlamaIndex" href="/cookbook/llama-index">
-    LlamaIndex is a framework for building agentic applications
-  </Card>
-  <Card title="Ollama" href="/cookbook/ollama">
-    Ollama allows you to run open-source LLM models on your local machine
+  <Card title="aisuite" href="/cookbook/aisuite">
+    Simple, unified interface to multiple Generative AI providers
   </Card>
   <Card title="Predibase" href="/cookbook/predibase">
     Predibase provides the fastest way to fine-tune and serve open-source LLMs
@@ -77,7 +89,6 @@ The advanced guides cover more advanced usage of the Opik platform.
   <Card title="Ragas" href="/cookbook/ragas">
     Ragas is a framework for evaluating Retrieval Augmented Generation (RAG) pipelines
   </Card>
-  <Card title="watsonx" href="/cookbook/watsonx">
-    IBM's platform for deploying ML models
-  </Card>
 </CardGroup>
+
+Don't see your preferred framework or tool? [Open an issue](https://github.com/comet-ml/opik/issues) to request it! In the meantime, you can use our SDK's core logging functions to track your LLM interactions - check out our [tracing documentation](/docs/opik/tracing/log_traces) for details.
