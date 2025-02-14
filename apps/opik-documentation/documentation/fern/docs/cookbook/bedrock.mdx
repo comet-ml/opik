@@ -6,15 +6,18 @@ description: Cookbook that showcases Opik's integration with AWS Bedrock
 
 Opik integrates with AWS Bedrock to provide a simple way to log traces for all Bedrock LLM calls. This works for all supported models, including if you are using the streaming API.
 
+
 ## Creating an account on Comet.com
 
 [Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=bedrock&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=bedrock&utm_campaign=opik) and grab you API Key.
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=bedrock&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install --upgrade opik boto3
 ```
+
 
 ```python
 import opik
@@ -25,6 +28,7 @@ opik.configure(use_local=False)
 ## Preparing our environment
 
 First, we will set up our bedrock client. Uncomment the following lines to pass AWS Credentials manually or [checkout other ways of passing credentials to Boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html). You will also need to request access to the model in the UI before being able to generate text, here we are gonna use the Llama 3.2 model, you can request access to it in [this page for the us-east1](https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/providers?model=meta.llama3-2-3b-instruct-v1:0) region.
+
 
 ```python
 import boto3
@@ -46,6 +50,7 @@ bedrock = boto3.client(
 
 In order to log traces to Opik, we need to wrap our Bedrock calls with the `track_bedrock` function:
 
+
 ```python
 import os
 
@@ -53,6 +58,7 @@ from opik.integrations.bedrock import track_bedrock
 
 bedrock_client = track_bedrock(bedrock, project_name="bedrock-integration-demo")
 ```
+
 
 ```python
 PROMPT = "Why is it important to use a LLM Monitoring like CometML Opik tool that allows you to log traces and spans when working with LLM Models hosted on AWS Bedrock?"
@@ -70,6 +76,7 @@ The prompt and response messages are automatically logged to Opik and can be vie
 ![Bedrock Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/bedrock_trace_cookbook.png)
 
 # Logging traces with streaming
+
 
 ```python
 def stream_conversation(
@@ -158,6 +165,7 @@ stream_conversation(
 ## Using it with the `track` decorator
 
 If you have multiple steps in your LLM pipeline, you can use the `track` decorator to log the traces for each step. If Bedrock is called within one of these steps, the LLM call with be associated with that corresponding step:
+
 
 ```python
 from opik import track

@@ -17,9 +17,11 @@ There are two main ways to use Opik with Ragas:
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=ragas&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install --quiet --upgrade opik ragas nltk
 ```
+
 
 ```python
 import opik
@@ -30,6 +32,7 @@ opik.configure(use_local=False)
 ## Preparing our environment
 
 First, we will configure the OpenAI API key.
+
 
 ```python
 import os
@@ -53,6 +56,7 @@ In order to use the Ragas metric without using the `evaluate` function, you need
 
 We will first start by initializing the Ragas metric:
 
+
 ```python
 # Import the metric
 from ragas.metrics import AnswerRelevancy
@@ -72,12 +76,14 @@ answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
 
 Once the metric is initialized, you can use it to score a sample question. Given that the metric scoring is done asynchronously, you need to use the `asyncio` library to run the scoring function.
 
+
 ```python
 # Run this cell first if you are running this in a Jupyter notebook
 import nest_asyncio
 
 nest_asyncio.apply()
 ```
+
 
 ```python
 import asyncio
@@ -123,6 +129,7 @@ If you now navigate to Opik, you will be able to see that a new trace has been c
 You can score traces by using the `update_current_trace` function.
 
 The advantage of this approach is that the scoring span is added to the trace allowing for a more fine-grained analysis of the RAG pipeline. It will however run the Ragas metric calculation synchronously and so might not be suitable for production use-cases.
+
 
 ```python
 from opik import track, opik_context
@@ -170,6 +177,7 @@ rag_pipeline("What is the capital of France?")
 You can use Ragas metrics with the Opik `evaluate` function. This will compute the metrics on all the rows of the dataset and return a summary of the results.
 
 As Ragas metrics are only async, we will need to create a wrapper to be able to use them with the Opik `evaluate` function.
+
 
 ```python
 from datasets import load_dataset
@@ -239,6 +247,7 @@ If you looking at evaluating a dataset, you can use the Ragas `evaluate` functio
 
 You can use the `OpikTracer` callback to log the results of the evaluation to the Opik platform:
 
+
 ```python
 from datasets import load_dataset
 from ragas.metrics import context_precision, answer_relevancy, faithfulness
@@ -267,6 +276,7 @@ result = evaluate(
 
 print(result)
 ```
+
 
 ```python
 

@@ -14,15 +14,18 @@ In this guide, we will showcase how to integrate Opik with DSPy so that all the 
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=dspy&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install --upgrade opik dspy
 ```
+
 
 ```python
 import opik
 
 opik.configure(use_local=False)
 ```
+
 
 ```python
 import os
@@ -36,6 +39,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 In order to log traces to Opik, you will need to set the `opik` callback:
 
+
 ```python
 import dspy
 from opik.integrations.dspy.callback import OpikCallback
@@ -47,6 +51,7 @@ opik_callback = OpikCallback(project_name=project_name)
 
 dspy.configure(lm=lm, callbacks=[opik_callback])
 ```
+
 
 ```python
 cot = dspy.ChainOfThought("question -> answer")

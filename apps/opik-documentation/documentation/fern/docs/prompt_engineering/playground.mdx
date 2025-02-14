@@ -1,37 +1,90 @@
----
-subtitle: >-
-  Describes Opik's prompt playground that can be used to quickly try out
-  different prompts
----
-
 <Tip>
   The Opik prompt playground is current in public preview, if you have any feedback or suggestions, please [let us
   know](https://github.com/comet-ml/opik/pulls).
 </Tip>
 
-When working with LLMs, there are time when you want to quickly try out different prompts and see how they perform. Opik's prompt playground is a great way to do just that.
-
-<Frame>
-  <img src="/img/evaluation/playground.png" />
-</Frame>
-
-## Configuring the prompt playground
-
-In order to use the prompt playground, you will need to first configure the LLM provider you want to use. You can do this by clicking on the `Configuration` tab in the sidebar and navigating to the `AI providers` tab. From there, you can select the provider you want to use and enter your API key.
-
-<Tip>Currently only OpenAI is supported but we are working on adding support for other LLM providers.</Tip>
+When working with LLMs, there are time when you want to quickly try out different prompts and see how they perform. Opik's
+prompt playground is a great way to do just that.
 
 ## Using the prompt playground
 
-The prompt playground is a simple interface that allows you to enter prompts and see the output of the LLM. It allows you to enter system, user and assistant messages and see the output of the LLM in real time.
+The prompt playground is a simple interface that allows you to enter prompts and see the output of the LLM. It allows you
+to enter system, user and assistant messages and see the output of the LLM in real time.
 
-You can also easily evaluate how different models impact the prompt by duplicating a prompt and changing either the model or the model parameters.
-
-All of the conversations from the playground are logged to the `playground` project so that you can easily refer back to them later:
+You can also easily evaluate how different models impact the prompt by duplicating a prompt and changing either the
+model or the model parameters.
 
 <Frame>
-  <img src="/img/evaluation/playground_conversations.png" />
+  <img src="/img/prompt_engineering/playground.png" />
 </Frame>
+
+_All of the conversations from the playground are logged to the `playground` project so that you can easily refer back to them later._
+
+## Configuring the prompt playground
+
+The playground supports the following LLM providers:
+
+- OpenAI
+- Anthropic
+- Ollama
+- LM Studio (coming soon)
+
+<Tip>
+  If you would like us to support additional LLM providers, please let us know by opening an issue on
+  [GitHub](https://github.com/comet-ml/opik/issues).
+</Tip>
+
+### Configuring OpenAI and Anthropic
+
+To use OpenAI or Anthropic models, you will need to add your API key to Opik. You can do this by clicking on the `Configuration` tab in the sidebar
+and navigating to the `AI providers` tab. From there, you can select the provider you want to use and enter your API key.
+
+### Configuring Ollama
+
+If you are using Ollama, you will need to ensure that Ollama's security configuration is set up correctly to avoid CORS issues. If you are running Ollama
+in production, we recommend reviewing the [Ollama documentation](https://github.com/ollama/ollama/blob/main/docs/faq.md#faq) for advice on best practices.
+
+If you are simply looking at using Ollama in the Oplik playground, we have released a utility to help you access Ollama from your browser. The Python
+SDK includes a simple reverse proxy that you can run on your local machine to proxy requests to Ollama:
+
+<Steps>
+  <Step title="Install the Python SDK">
+```bash
+# Install the latest version of the SDK
+pip install opik -U
+
+````
+</Step>
+
+  <Step title="Run the reverse proxy">
+```bash
+# Run the reverse proxy
+opik proxy --ollama
+````
+
+Once the server is running, you should see the output:
+
+<Frame>
+  <img src="/img/prompt_engineering/ollama_proxy.png" />
+</Frame>
+
+</Step>
+<Step>
+You can then configure the AI providers using the `URL` and `models` parameters returned by the proxy server in the console:
+
+<Frame>
+  <img src="/img/prompt_engineering/ollama_config.png" />
+</Frame>
+
+_Don't forget to update the model list with the models supported by your proxy server!_
+
+<Note>
+  You will need to keep the proxy server running for the playground to work. If it is not running, you will see the
+  error: `Unexpected error`.
+</Note>
+
+</Step>
+</Steps>
 
 ## Running experiments in the playground
 

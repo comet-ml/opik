@@ -214,7 +214,7 @@ navigation:
                 path: docs/evaluation/metrics/custom_metric.mdx
                 slug: custom_metric
       - section: Prompt engineering
-        slug: /prompt_engineerign
+        slug: /prompt_engineering
         contents:
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
@@ -353,8 +353,12 @@ navigation:
         slug: rest-api
         contents:
           - page: Overview
-            path: docs/reference/api-reference/overview.mdx
+            path: docs/reference/rest-api/overview.mdx
             slug: overview
           - api: API Reference
             slug: /
             display-errors: true
+redirects:
+  - source: "/docs/opik/playground"
+    destination: "/docs/opik/prompt_engineering/playground"
+    permanent: true

@@ -14,15 +14,18 @@ In this guide, we will showcase how to integrate Opik with Haystack so that all 
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=haystack&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install --upgrade --quiet opik haystack-ai
 ```
+
 
 ```python
 import opik
 
 opik.configure(use_local=False)
 ```
+
 
 ```python
 import os
@@ -37,11 +40,11 @@ if "OPENAI_API_KEY" not in os.environ:
 In this example, we will create a simple pipeline that uses a prompt template to translate text to German.
 
 To enable Opik tracing, we will:
-
 1. Enable content tracing in Haystack by setting the environment variable `HAYSTACK_CONTENT_TRACING_ENABLED=true`
 2. Add the `OpikConnector` component to the pipeline
 
 Note: The `OpikConnector` component is a special component that will automatically log the traces of the pipeline as Opik traces, it should not be connected to any other component.
+
 
 ```python
 import os
@@ -100,6 +103,7 @@ By default the `OpikConnector` will flush the trace to the Opik platform after e
 
 **Caution**: Disabling this feature may result in data loss if the program crashes before the data is sent to Opik. Make sure you will call the `flush()` method explicitly before the program exits:
 
+
 ```python
 from haystack.tracing import tracer
 
@@ -109,6 +113,7 @@ tracer.actual_tracer.flush()
 ### Getting the trace ID
 
 If you would like to log additional information to the trace you will need to get the trace ID. You can do this by the `tracer` key in the response of the pipeline:
+
 
 ```python
 response = pipe.run(

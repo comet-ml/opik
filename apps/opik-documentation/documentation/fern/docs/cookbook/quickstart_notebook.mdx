@@ -12,13 +12,16 @@ We will be using a technique called Chain of Density Summarization to summarize 
 
 We will first install the required dependencies and configure both Opik and OpenAI.
 
+
 ```python
 %pip install -U opik openai requests PyPDF2 --quiet
 ```
 
+
 [Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) and grab you API Key.
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) for more information.
+
 
 ```python
 import opik
@@ -34,6 +37,7 @@ The idea behind this approach is to first generate a sparse candidate summary an
 
 1. Iteration summary prompt: This prompt is used to generate and refine a candidate summary.
 2. Final summary prompt: This prompt is used to generate the final summary from the sparse set of candidate summaries.
+
 
 ```python
 import opik
@@ -66,6 +70,7 @@ Create an extremely dense, final summary that captures all key technical informa
 ```
 
 We can now define the summarization chain by combining the two prompts. In order to track the LLM calls, we will use Opik's integration with OpenAI through the `track_openai` function and we will add the `@opik.track` decorator to each function so we can track the full chain and not just individual LLM calls:
+
 
 ```python
 from opik.integrations.openai import track_openai
@@ -144,6 +149,7 @@ def chain_of_density_summarization(
 
 Let's call the summarization chain with a sample document:
 
+
 ```python
 import textwrap
 
@@ -170,8 +176,8 @@ Thanks to the `@opik.track` decorator and Opik's integration with OpenAI, we can
 ## Automatting the evaluation process
 
 ### Defining a dataset
-
 Now that we have a working chain, we can automate the evaluation process. We will start by defining a dataset of documents and instructions:
+
 
 ```python
 import opik
@@ -230,11 +236,12 @@ dataset = client.get_or_create_dataset(name=DATASET_NAME)
 dataset.insert(dataset_items)
 ```
 
-_Note:_ Opik automatically deduplicates dataset items to make it easier to iterate on your dataset.
+*Note:* Opik automatically deduplicates dataset items to make it easier to iterate on your dataset.
 
 ### Defining the evaluation metrics
 
 Opik includes a [library of evaluation metrics](https://www.comet.com/docs/opik/evaluation/metrics/overview) that you can use to evaluate your chains. For this particular example, we will be using a custom metric that evaluates the relevance, conciseness and technical accuracy of each summary
+
 
 ```python
 from opik.evaluation.metrics import base_metric, score_result
@@ -378,6 +385,7 @@ class EvaluateSummary(base_metric.BaseMetric):
 
 We can now create the task we want to evaluate. In this case, we will have the dataset item as an input and return a dictionary containing the summary and the instruction so that we can use this in the evaluation metrics:
 
+
 ```python
 import requests
 import io
@@ -425,6 +433,7 @@ def evaluation_task(x: Dict):
 
 We can now use the `evaluate` method to evaluate the summaries in our dataset:
 
+
 ```python
 from opik.evaluation import evaluate
 
@@ -454,9 +463,11 @@ The experiment results are now available in the Opik UI:
 
 ![Trace UI](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/chain_density_experiment_cookbook.png)
 
+
 ## Comparing prompt templates
 
 We will update the iteration summary prompt and evaluate its impact on the evaluation metrics.
+
 
 ```python
 import opik
@@ -478,6 +489,7 @@ Guidelines:
 """.rstrip().lstrip(),
 )
 ```
+
 
 ```python
 from opik.evaluation import evaluate

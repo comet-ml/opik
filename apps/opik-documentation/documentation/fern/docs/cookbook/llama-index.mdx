@@ -5,7 +5,6 @@ description: Cookbook that showcases Opik's integration with the LlamaIndex Pyth
 # Using Opik with LlamaIndex
 
 This notebook showcases how to use Opik with LlamaIndex. [LlamaIndex](https://github.com/run-llama/llama_index) is a flexible data framework for building LLM applications:
-
 > LlamaIndex is a "data framework" to help you build LLM apps. It provides the following tools:
 >
 > - Offers data connectors to ingest your existing data sources and data formats (APIs, PDFs, docs, SQL, etc.).
@@ -21,9 +20,11 @@ For this guide we will be downloading the essays from Paul Graham and use them a
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=llamaindex&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install opik llama-index llama-index-agent-openai llama-index-llms-openai --upgrade --quiet
 ```
+
 
 ```python
 import opik
@@ -37,6 +38,7 @@ First, we will download the Chinook database and set up our different API keys.
 
 And configure the required environment variables:
 
+
 ```python
 import os
 import getpass
@@ -46,6 +48,7 @@ if "OPENAI_API_KEY" not in os.environ:
 ```
 
 In addition, we will download the Paul Graham essays:
+
 
 ```python
 import os
@@ -67,6 +70,7 @@ with open("./data/paul_graham/paul_graham_essay.txt", "wb") as f:
 
 You can use the Opik callback directly by calling:
 
+
 ```python
 from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
@@ -82,6 +86,7 @@ Now that the callback handler is configured, all traces will automatically be lo
 
 The first step is to load the data into LlamaIndex. We will use the `SimpleDirectoryReader` to load the data from the `data/paul_graham` directory. We will also create the vector store to index all the loaded documents.
 
+
 ```python
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
 
@@ -92,6 +97,7 @@ query_engine = index.as_query_engine()
 
 We can now query the index using the `query_engine` object:
 
+
 ```python
 response = query_engine.query("What did the author do growing up?")
 print(response)
@@ -100,3 +106,5 @@ print(response)
 You can now go to the Opik app to see the trace:
 
 ![LlamaIndex trace in Opik](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/llamaIndex_cookbook.png)
+
+
