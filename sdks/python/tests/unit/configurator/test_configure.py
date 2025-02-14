@@ -747,6 +747,34 @@ class TestGetWorkspace:
         "opik.configurator.configure.OpikConfigurator._get_default_workspace",
         return_value="default_workspace",
     )
+    @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
+    def test_get_workspace_accept_default__automatic_approvals_enabled__no_approval_questions_asked(
+        self, mock_ask_user_for_approval, mock_get_default_workspace, mock_opik_config
+    ):
+        """
+        Test that the user accepts the default workspace.
+        """
+        current_config = OpikConfig(workspace=OPIK_WORKSPACE_DEFAULT_NAME)
+        mock_opik_config.return_value = current_config
+
+        configurator = OpikConfigurator(
+            workspace=None,
+            force=False,
+            api_key="valid_api_key",
+            automatic_approvals=True,
+        )
+        needs_update = configurator._set_workspace()
+
+        assert configurator.workspace == "default_workspace"
+        assert needs_update is True
+        mock_get_default_workspace.assert_called_once_with()
+        mock_ask_user_for_approval.assert_not_called()
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._get_default_workspace",
+        return_value="default_workspace",
+    )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
     @patch("opik.configurator.configure.OpikConfigurator._ask_for_workspace")
     def test_get_workspace_choose_different(
@@ -1087,6 +1115,33 @@ class TestConfigureLocal:
         assert configurator.base_url == OPIK_BASE_URL_LOCAL
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    @patch("opik.configurator.configure.ask_user_for_approval")
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    def test_configure_local_uses_local_instance__automatic_approvals_enabled__no_approval_questions_asked(
+        self,
+        mock_update_config,
+        mock_is_instance_active,
+        mock_ask_user_for_approval,
+        mock_is_interactive,
+    ):
+        """
+        Test that the function configures the local instance when found and user approves.
+        """
+        configurator = OpikConfigurator(url=None, force=False, automatic_approvals=True)
+        configurator._configure_local()
+
+        mock_ask_user_for_approval.assert_not_called()
+        mock_update_config.assert_called_once_with()
+
+        assert configurator.api_key is None
+        assert configurator.base_url == OPIK_BASE_URL_LOCAL
+        assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
+
     @patch("opik.configurator.configure.is_interactive", return_value=False)
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
     @patch(
@@ -1110,6 +1165,33 @@ class TestConfigureLocal:
 
         mock_ask_user_for_approval.assert_not_called()
         mock_update_config.assert_not_called()
+
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    @patch("opik.configurator.configure.ask_user_for_approval")
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    def test_configure_local_uses_local_instance__non_interactive__automatic_approvals_enabled__no_error_raised(
+        self,
+        mock_update_config,
+        mock_is_instance_active,
+        mock_ask_user_for_approval,
+        mock_is_interactive,
+    ):
+        """
+        Test that the function configures the local instance when found and user approves.
+        """
+        configurator = OpikConfigurator(url=None, force=False, automatic_approvals=True)
+        configurator._configure_local()
+
+        mock_ask_user_for_approval.assert_not_called()
+        mock_update_config.assert_called_once_with()
+
+        assert configurator.api_key is None
+        assert configurator.base_url == OPIK_BASE_URL_LOCAL
+        assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
