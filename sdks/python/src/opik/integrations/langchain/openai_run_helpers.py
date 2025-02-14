@@ -30,6 +30,8 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
     token usage info might be in different places, different formats or completely missing.
     """
     try:
+        provider, _ = _get_provider_and_model(run_dict)
+
         if run_dict["outputs"]["llm_output"] is not None:
             token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
 
@@ -53,7 +55,11 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
             )
             return None
 
-        if usage_validator.UsageValidator(token_usage).validate().ok():
+        if (
+            usage_validator.UsageValidator(usage=token_usage, provider=provider)
+            .validate()
+            .ok()
+        ):
             return cast(UsageDict, token_usage)
 
         return None

@@ -18,6 +18,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
@@ -37,6 +38,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -145,13 +147,17 @@ class TraceServiceImpl implements TraceService {
 
     private List<Trace> bindTraceToProjectAndId(TraceBatch batch, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
-                .collect(Collectors.toMap(project -> project.name().toLowerCase(), Function.identity()));
+                .collect(Collectors.toMap(
+                        Project::name,
+                        Function.identity(),
+                        BinaryOperatorUtils.last(),
+                        () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
 
         return batch.traces()
                 .stream()
                 .map(trace -> {
                     String projectName = WorkspaceUtils.getProjectName(trace.projectName());
-                    Project project = projectPerName.get(projectName.toLowerCase());
+                    Project project = projectPerName.get(projectName);
 
                     UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
                     IdGenerator.validateVersion(id, TRACE_KEY);

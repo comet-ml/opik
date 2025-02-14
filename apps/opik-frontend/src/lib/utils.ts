@@ -34,11 +34,11 @@ export const isValidJsonObject = (string: string) => {
   return json && isObject(json);
 };
 
-export const safelyParseJSON = (string: string) => {
+export const safelyParseJSON = (string: string, silent = false) => {
   try {
     return JSON.parse(string);
   } catch (e) {
-    console.error(e);
+    if (!silent) console.error(e);
     return {};
   }
 };

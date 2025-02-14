@@ -1,7 +1,7 @@
 import dataclasses
 import sys
 
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
@@ -12,6 +12,7 @@ else:
 SpanType = Literal["general", "tool", "llm"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
+LLMProvider = Literal["openai", "google_vertexai"]
 
 
 class UsageDict(TypedDict):
@@ -29,6 +30,27 @@ class UsageDict(TypedDict):
     """The number of tokens used for the prompt."""
 
     total_tokens: int
+    """The total number of tokens used, including both prompt and completion."""
+
+
+class UsageDictVertexAI(UsageDict):
+    """
+    A TypedDict representing token usage information for Google Vertex AI.
+
+    This class defines the structure for token usage, including fields
+    for completion tokens, prompt tokens, and the total number of tokens used.
+    """
+
+    cached_content_token_count: NotRequired[int]
+    """The number of tokens cached."""
+
+    candidates_token_count: int
+    """The number of tokens used for the completion."""
+
+    prompt_token_count: int
+    """The number of tokens used for the prompt."""
+
+    total_token_count: int
     """The total number of tokens used, including both prompt and completion."""
 
 
@@ -84,4 +106,4 @@ class ErrorInfoDict(TypedDict):
 class LLMUsageInfo:
     provider: Optional[str] = None
     model: Optional[str] = None
-    usage: Optional[UsageDict] = None
+    usage: Optional[Union[UsageDict, UsageDictVertexAI]] = None

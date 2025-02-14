@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 
 import OpenAIModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 import AnthropicModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
+import isEmpty from "lodash/isEmpty";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
@@ -53,12 +54,12 @@ const PromptModelConfigs = ({
     return;
   };
 
-  const noProvider = provider === "";
+  const disabled = provider === "" || isEmpty(configs);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size={size} disabled={noProvider}>
+        <Button variant="outline" size={size} disabled={disabled}>
           <Settings2 className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
