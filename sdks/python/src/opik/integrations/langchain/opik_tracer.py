@@ -250,6 +250,9 @@ class OpikTracer(BaseTracer):
         run_dict: Dict[str, Any],
         root_metadata: Dict[str, Any],
     ) -> None:
+        if self._distributed_headers is None:
+            raise ValueError("Distributed headers are not set")
+
         span_data = span.SpanData(
             trace_id=self._distributed_headers["opik_trace_id"],
             parent_span_id=self._distributed_headers["opik_parent_span_id"],
