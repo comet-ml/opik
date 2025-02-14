@@ -55,6 +55,10 @@ class UsageDictVertexAI(UsageDict):
 
 
 class DistributedTraceHeadersDict(TypedDict):
+    """
+    Contains headers for distributed tracing, returned by the :py:func:`opik.opik_context.get_distributed_trace_headers` function.
+    """
+
     opik_trace_id: str
     opik_parent_span_id: str
 
