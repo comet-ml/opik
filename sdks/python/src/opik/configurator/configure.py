@@ -22,7 +22,6 @@ OPIK_BASE_URL_CLOUD: Final[str] = "https://www.comet.com/"
 OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/"
 
 
-
 class OpikConfigurator:
     def __init__(
         self,
@@ -32,7 +31,7 @@ class OpikConfigurator:
         use_local: bool = False,
         force: bool = False,
         self_hosted_comet: bool = False,
-        automatic_approvals: bool = False
+        automatic_approvals: bool = False,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -134,7 +133,7 @@ class OpikConfigurator:
 
             use_url = (
                 True
-                if self.automatic_approvals 
+                if self.automatic_approvals
                 else ask_user_for_approval(
                     f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
                 )

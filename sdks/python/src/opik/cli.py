@@ -45,7 +45,9 @@ def configure(use_local: bool, yes: bool) -> None:
     automatic_approvals = yes
 
     if use_local:
-        opik_configure.configure(use_local=True, force=True, automatic_approvals=automatic_approvals)
+        opik_configure.configure(
+            use_local=True, force=True, automatic_approvals=automatic_approvals
+        )
     else:
         deployment_type_choice = interactive_helpers.ask_user_for_deployment_type()
 
