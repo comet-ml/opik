@@ -126,7 +126,7 @@ def create_app(llm_server_host: str) -> FastAPI:
         CORSMiddleware,
         allow_origins=[
             "https://dev.comet.com",
-            "https://staging.comet.com",
+            "https://staging.dev.comet.com",
             "https://comet.com",
             "http://localhost:5173",
             "https://www.comet.com",
