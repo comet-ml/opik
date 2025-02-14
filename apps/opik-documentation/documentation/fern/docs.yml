@@ -349,6 +349,12 @@ navigation:
         contents:
           - link: Reference
             href: https://www.comet.com/docs/opik/python-sdk-reference/
+      - section: Typescript SDK
+        slug: typescript-sdk
+        contents:
+          - page: Overview
+            path: docs/reference/typescript-sdk/overview.mdx
+            slug: overview
       - section: Rest API
         slug: rest-api
         contents:
