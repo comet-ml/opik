@@ -113,7 +113,9 @@ class Span:
         Returns:
             None
         """
-        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        parsed_usage = validation_helpers.validate_and_parse_usage(
+            usage, LOGGER, provider
+        )
         if parsed_usage.full_usage is not None:
             metadata = (
                 {"usage": parsed_usage.full_usage}
@@ -182,7 +184,9 @@ class Span:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        parsed_usage = validation_helpers.validate_and_parse_usage(
+            usage, LOGGER, provider
+        )
         if parsed_usage.full_usage is not None:
             metadata = (
                 {"usage": parsed_usage.full_usage}

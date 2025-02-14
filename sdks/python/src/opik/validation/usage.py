@@ -1,20 +1,21 @@
-import pydantic
 import dataclasses
+from typing import Any, Dict, Optional, Union
 
-from typing import Any, Dict, Optional
-from ..types import UsageDict
-from . import validator, result
+import pydantic
+
+from . import result, validator
+from ..types import UsageDict, UsageDictVertexAI
 
 
 class PydanticWrapper(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")
-    usage: UsageDict
+    usage: Union[UsageDict, UsageDictVertexAI]
 
 
 @dataclasses.dataclass
 class ParsedUsage:
     full_usage: Optional[Dict[str, Any]] = None
-    supported_usage: Optional[UsageDict] = None
+    supported_usage: Optional[Union[UsageDict, UsageDictVertexAI]] = None
 
 
 EXPECTED_TYPES = "{'completion_tokens': int, 'prompt_tokens': int, 'total_tokens': int}"
@@ -25,17 +26,23 @@ class UsageValidator(validator.Validator):
     Validator for span token usage
     """
 
-    def __init__(self, usage: Any):
+    def __init__(self, usage: Any, provider: Optional[str]):
         self.usage = usage
-
+        self.provider = provider
         self.parsed_usage = ParsedUsage()
 
     def validate(self) -> result.ValidationResult:
         try:
             if isinstance(self.usage, dict):
-                filtered_usage = _keep_supported_keys(self.usage)
+                filtered_usage = self.supported_keys
+
+                # run validation
                 PydanticWrapper(usage=filtered_usage)
-                supported_usage = UsageDict(**filtered_usage)  # type: ignore
+
+                if self.provider == "google_vertexai":
+                    supported_usage = UsageDictVertexAI(**filtered_usage)  # type: ignore
+                else:
+                    supported_usage = UsageDict(**filtered_usage)  # type: ignore
                 self.parsed_usage = ParsedUsage(
                     full_usage=self.usage, supported_usage=supported_usage
                 )
@@ -67,13 +74,18 @@ class UsageValidator(validator.Validator):
         ), "validate() must be called before accessing failure reason message"
         return self.validation_result.failure_reasons[0]
 
+    @property
+    def supported_keys(self) -> Dict[str, Any]:
+        if self.provider == "google_vertexai":
+            supported_keys = UsageDictVertexAI.__annotations__.keys()
+        # `openai` and all other
+        else:
+            supported_keys = UsageDict.__annotations__.keys()
 
-def _keep_supported_keys(usage: Dict[str, Any]) -> Dict[str, Any]:
-    supported_keys = UsageDict.__annotations__.keys()
-    filtered_usage = {}
+        filtered_usage = {}
 
-    for key in supported_keys:
-        if key in usage:
-            filtered_usage[key] = usage[key]
+        for key in supported_keys:
+            if key in self.usage:
+                filtered_usage[key] = self.usage[key]
 
-    return filtered_usage
+        return filtered_usage
