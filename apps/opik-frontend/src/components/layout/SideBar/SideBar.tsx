@@ -14,6 +14,7 @@ import {
   LucideHome,
   Blocks,
   Bolt,
+  Bot,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -66,6 +67,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: LucideHome,
         label: "Home",
+      },
+      {
+        id: "chat",
+        path: "/$workspaceName/chat",
+        type: MENU_ITEM_TYPE.router,
+        icon: Bot,
+        label: "Chat (Experimental)",
       },
     ],
   },
