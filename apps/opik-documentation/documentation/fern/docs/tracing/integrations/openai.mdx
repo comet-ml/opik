@@ -63,7 +63,33 @@ print(response.choices[0].message.content)
 
 The `track_openai` will automatically track and log the API call, including the input prompt, model used, and response generated. You can view these logs in your Opik project dashboard.
 
-By following these steps, you can seamlessly integrate Opik with the OpenAI Python SDK and gain valuable insights into your model's performance and usage.
+## Using Azure OpenAI
+
+The OpenAI integration also supports Azure OpenAI Services. To use Azure OpenAI, initialize your client with Azure configuration and use it with `track_openai` just like the standard OpenAI client:
+
+```python
+from opik.integrations.openai import track_openai
+from openai import AzureOpenAI
+
+# gets the API Key from environment variable AZURE_OPENAI_API_KEY
+azure_client = AzureOpenAI(
+    # https://learn.microsoft.com/azure/ai-services/openai/reference#rest-api-versioning
+    api_version="2023-07-01-preview",
+    # https://learn.microsoft.com/azure/cognitive-services/openai/how-to/create-resource?pivots=web-portal#create-a-resource
+    azure_endpoint="https://example-endpoint.openai.azure.com",
+)
+azure_client = track_openai(azure_client)
+
+completion = azure_client.chat.completions.create(
+    model="deployment-name",  # e.g. gpt-35-instant
+    messages=[
+        {
+            "role": "user",
+            "content": "How do I output all files in a directory using Python?",
+        },
+    ],
+)
+```
 
 ## Supported OpenAI methods
 
