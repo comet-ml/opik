@@ -25,7 +25,7 @@ class ExperimentItemsPage:
 
     def get_id_of_nth_experiment_item(self, n: int):
         row = self.page.locator("tr").nth(n + 1)
-        cell = row.locator("td").first
+        cell = row.locator("td").nth(1)
         cell.hover()
         cell.get_by_role("button").nth(1).click()
         id = self.page.evaluate("navigator.clipboard.readText()")
@@ -35,7 +35,7 @@ class ExperimentItemsPage:
         ids = []
         rows = self.page.locator("tr").all()
         for row_index, row in enumerate(rows[2:]):
-            cell = row.locator("td").first
+            cell = row.locator("td").nth(1)
             cell.hover()
             cell.get_by_role("button").nth(1).click()
             id = self.page.evaluate("navigator.clipboard.readText()")
