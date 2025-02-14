@@ -34,6 +34,9 @@ def _get_span_type(run: Dict[str, Any]) -> SpanType:
     if run.get("run_type") in ["llm", "tool"]:
         return cast(SpanType, run.get("run_type"))
 
+    if run.get("run_type") in ["prompt"]:
+        return cast(SpanType, "tool")
+
     return cast(SpanType, "general")
 
 
