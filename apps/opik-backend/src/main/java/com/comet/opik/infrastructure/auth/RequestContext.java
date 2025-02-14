@@ -17,6 +17,7 @@ public class RequestContext {
     public static final String USER_LIMIT = "Opik-User-Limit";
     public static final String USER_REMAINING_LIMIT = "Opik-User-Remaining-Limit";
     public static final String USER_LIMIT_REMAINING_TTL = "Opik-User-Remaining-Limit-TTL-Millis";
+    public static final String PROJECT_NAME = "projectName";
 
     private String userName;
     private String workspaceName;
