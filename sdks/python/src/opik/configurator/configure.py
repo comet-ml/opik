@@ -126,7 +126,7 @@ class OpikConfigurator:
                 return
 
             # Step 3: Ask user if they want to use the found local instance
-            if not is_interactive():
+            if not is_interactive() and not self.automatic_approvals:
                 raise ConfigurationError(
                     f"Opik URL is not specified - A local Opik instance was detected at {OPIK_BASE_URL_LOCAL}, to use it set your URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
                 )
