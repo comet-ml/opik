@@ -23,7 +23,7 @@ class TestDatasetItemsCrud:
     )  # add insert_via_ui once flakiness is figured out
     @pytest.mark.parametrize(
         "dataset_creation_fixture",
-        ["create_delete_dataset_sdk", "create_delete_dataset_ui"],
+        ["create_dataset_sdk", "create_dataset_ui"],
     )
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
     @pytest.mark.sanity
@@ -82,7 +82,7 @@ class TestDatasetItemsCrud:
         request,
         page: Page,
         client: opik.Opik,
-        create_delete_dataset_sdk,
+        create_dataset_sdk,
         insert_dataset_items_sdk,
     ):
         """
@@ -93,7 +93,7 @@ class TestDatasetItemsCrud:
         4. Check that the new data is correct on both the UI and the SDK
         """
         dataset = wait_for_dataset_to_be_visible(
-            client=client, dataset_name=create_delete_dataset_sdk, timeout=10
+            client=client, dataset_name=create_dataset_sdk, timeout=10
         )
 
         wait_for_number_of_items_in_dataset(
@@ -127,7 +127,7 @@ class TestDatasetItemsCrud:
         request,
         page: Page,
         client: opik.Opik,
-        create_delete_dataset_sdk,
+        create_dataset_sdk,
         insert_dataset_items_sdk,
         item_deletion,
     ):
@@ -139,7 +139,7 @@ class TestDatasetItemsCrud:
         4. Check that the item with that data no longer exists in both the SDK and the UI and that the length of the item list is updated
         """
         dataset = wait_for_dataset_to_be_visible(
-            client=client, dataset_name=create_delete_dataset_sdk, timeout=10
+            client=client, dataset_name=create_dataset_sdk, timeout=10
         )
 
         item_deleted = {}
@@ -186,7 +186,7 @@ class TestDatasetItemsCrud:
         request,
         page: Page,
         client: opik.Opik,
-        create_delete_dataset_sdk,
+        create_dataset_sdk,
         insert_dataset_items_sdk,
     ):
         """
@@ -197,7 +197,7 @@ class TestDatasetItemsCrud:
         4. Check that no items exist in the dataset when trying to get them via both the SDK and the UI
         """
         dataset = wait_for_dataset_to_be_visible(
-            client=client, dataset_name=create_delete_dataset_sdk, timeout=10
+            client=client, dataset_name=create_dataset_sdk, timeout=10
         )
         dataset.clear()
 

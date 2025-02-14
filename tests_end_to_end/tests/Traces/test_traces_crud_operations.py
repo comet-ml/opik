@@ -23,7 +23,7 @@ class TestTracesCrud:
     )
     @pytest.mark.sanity
     def test_trace_creation(
-        self, page: Page, traces_number, create_delete_project_sdk, create_traces
+        self, page: Page, traces_number, create_project, create_traces
     ):
         """Testing basic creation of traces via both decorator and low-level client.
         Test case is split into 4, creating 1 and then 15 traces using both the decorator and the client respectively
@@ -32,7 +32,7 @@ class TestTracesCrud:
         2. Create the traces using one of the creation methods, following the naming convention of "test-trace-X", where X is from 1 to 25 (so all have unique names) - no errors should occur
         3. In the UI, check that the presented number of traces in the project matches the number of traces created in the test case
         """
-        project_name = create_delete_project_sdk
+        project_name = create_project
         projects_page = ProjectsPage(page)
         projects_page.go_to_page()
         projects_page.click_project(project_name)
@@ -52,7 +52,7 @@ class TestTracesCrud:
         indirect=True,
     )
     def test_traces_visibility(
-        self, page: Page, traces_number, create_delete_project_sdk, create_traces
+        self, page: Page, traces_number, create_project, create_traces
     ):
         """
         Testing visibility within the UI and SDK of traces created via both the decorator and the client
@@ -67,7 +67,7 @@ class TestTracesCrud:
             - Fetch all traces of the project via the API client (OpikApi.traces.get_traces_by_project)
             - Check that the list of names present in the result is exactly equal to the list of names of the traces created (exactly the same elements on both sides)
         """
-        project_name = create_delete_project_sdk
+        project_name = create_project
         projects_page = ProjectsPage(page)
         projects_page.go_to_page()
         projects_page.click_project(project_name)
@@ -94,7 +94,7 @@ class TestTracesCrud:
         indirect=True,
     )
     def test_delete_traces_sdk(
-        self, page: Page, traces_number, create_delete_project_sdk, create_traces
+        self, page: Page, traces_number, create_project, create_traces
     ):
         """
         Testing trace deletion via the SDK API client (v1/private/traces/delete endpoint)
@@ -106,7 +106,7 @@ class TestTracesCrud:
         4. Check in the UI that the deleted traces are no longer present in the project page
         5. Check in the SDK that the deleted traces are no longer present in the fetch request (v1/private/traces endpoint, with project_name parameter)
         """
-        project_name = create_delete_project_sdk
+        project_name = create_project
         _ = create_traces
 
         wait_for_traces_to_be_visible(project_name=project_name, size=traces_number)
@@ -148,7 +148,7 @@ class TestTracesCrud:
         indirect=True,
     )
     def test_delete_traces_ui(
-        self, page: Page, traces_number, create_delete_project_sdk, create_traces
+        self, page: Page, traces_number, create_project, create_traces
     ):
         """
         Testing trace deletion via the UI
@@ -160,7 +160,7 @@ class TestTracesCrud:
         4. Check in the UI that the deleted traces are no longer present in the project page
         5. Check in the SDK that the deleted traces are no longer present in the fetch request (v1/private/traces endpoint, with project_name parameter)
         """
-        project_name = create_delete_project_sdk
+        project_name = create_project
         projects_page = ProjectsPage(page)
         projects_page.go_to_page()
         projects_page.click_project(project_name)

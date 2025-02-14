@@ -31,7 +31,7 @@ class PromptPage:
         rows: list[Locator] = self.page.get_by_role("row").all()[1:]
         versions = {}
         for row in rows:
-            prompt = row.get_by_role("cell").nth(1).inner_text()
+            prompt = row.get_by_role("cell").nth(2).inner_text()
             commit_id = row.get_by_role("link").first.inner_text()
             versions[prompt] = commit_id
 

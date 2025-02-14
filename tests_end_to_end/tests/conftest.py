@@ -3,7 +3,7 @@ import os
 import opik
 from opik import track, opik_context
 from tests.config import EnvConfig, get_environment_config
-from playwright.sync_api import Page, Browser
+from playwright.sync_api import Page, Browser, Playwright
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
 from page_objects.DatasetsPage import DatasetsPage
@@ -11,19 +11,31 @@ from page_objects.ExperimentsPage import ExperimentsPage
 from page_objects.PromptLibraryPage import PromptLibraryPage
 from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
 from tests.sdk_helpers import (
-    create_project_sdk,
+    create_project_api,
     delete_project_by_name_sdk,
     wait_for_number_of_traces_to_be_visible,
     client_get_prompt_retries,
+    find_project_by_name_sdk,
+    wait_for_project_to_not_be_visible,
 )
 from utils import TEST_ITEMS
-import time
 import re
 import json
 
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "sanity: mark test as a sanity test")
+
+
+@pytest.fixture(scope="session")
+def browser(playwright: Playwright, request) -> Browser:
+    browser_name = request.config.getoption("--browser", default="chromium")
+    if isinstance(browser_name, list):
+        browser_name = browser_name[0]
+    browser_type = getattr(playwright, browser_name)
+    browser = browser_type.launch(slow_mo=200)
+    yield browser
+    browser.close()
 
 
 @pytest.fixture(scope="session")
@@ -147,21 +159,49 @@ def experiments_page(page):
 
 
 @pytest.fixture(scope="function")
-def create_project_sdk_no_cleanup():
-    proj_name = "projects_crud_tests_sdk"
-
-    create_project_sdk(name=proj_name)
+def create_project(page: Page):
+    """
+    Create a project via SDK and handle cleanup.
+    Checks if project exists before attempting deletion.
+    """
+    proj_name = os.environ["OPIK_PROJECT_NAME"]
+    if find_project_by_name_sdk(proj_name):
+        delete_project_by_name_sdk(proj_name)
+    create_project_api(name=proj_name)
     yield proj_name
+
+    projects_page = ProjectsPage(page)
+    projects_page.go_to_page()
+    try:
+        projects_page.search_project(proj_name)
+        projects_page.check_project_not_exists_on_current_page(project_name=proj_name)
+    except AssertionError as _:
+        projects_page.delete_project_by_name(proj_name)
+    wait_for_project_to_not_be_visible(proj_name)
 
 
 @pytest.fixture(scope="function")
-def create_project_ui_no_cleanup(page: Page):
-    proj_name = "projects_crud_tests_ui"
+def create_project_ui(page: Page):
+    """
+    Create a project via UI and handle cleanup.
+    Checks if project exists before attempting deletion.
+    """
+    proj_name = os.environ["OPIK_PROJECT_NAME"]
+    if find_project_by_name_sdk(proj_name):
+        delete_project_by_name_sdk(proj_name)
     projects_page = ProjectsPage(page)
     projects_page.go_to_page()
     projects_page.create_new_project(project_name=proj_name)
 
     yield proj_name
+
+    projects_page.go_to_page()
+    try:
+        projects_page.search_project(proj_name)
+        projects_page.check_project_not_exists_on_current_page(project_name=proj_name)
+    except AssertionError as _:
+        projects_page.delete_project_by_name(proj_name)
+    wait_for_project_to_not_be_visible(proj_name)
 
 
 @pytest.fixture(scope="function")
@@ -284,43 +324,30 @@ def log_traces_with_spans_decorator():
 
 
 @pytest.fixture(scope="function")
-def create_delete_project_sdk():
-    proj_name = "automated_tests_project"
-    os.environ["OPIK_PROJECT_NAME"] = proj_name
-    time.sleep(1)
-    create_project_sdk(name=proj_name)
-    yield proj_name
-    delete_project_by_name_sdk(name=proj_name)
-
-
-@pytest.fixture
-def create_delete_project_ui(page: Page):
-    proj_name = "automated_tests_project"
-    projects_page = ProjectsPage(page)
-    projects_page.go_to_page()
-    projects_page.create_new_project(project_name=proj_name)
-
-    yield proj_name
-    delete_project_by_name_sdk(name=proj_name)
-
-
-@pytest.fixture(scope="function")
-def create_delete_dataset_sdk(client: opik.Opik):
+def create_dataset_sdk(client: opik.Opik):
     dataset_name = "automated_tests_dataset"
     client.create_dataset(name=dataset_name)
     yield dataset_name
-    client.delete_dataset(name=dataset_name)
+    try:
+        client.get_dataset(name=dataset_name)
+        client.delete_dataset(name=dataset_name)
+    except Exception as _:
+        pass
 
 
 @pytest.fixture(scope="function")
-def create_delete_dataset_ui(page: Page, client: opik.Opik):
+def create_dataset_ui(page: Page, client: opik.Opik):
     dataset_name = "automated_tests_dataset"
     datasets_page = DatasetsPage(page)
     datasets_page.go_to_page()
     datasets_page.create_dataset_by_name(dataset_name=dataset_name)
 
     yield dataset_name
-    client.delete_dataset(name=dataset_name)
+    try:
+        client.get_dataset(name=dataset_name)
+        client.delete_dataset(name=dataset_name)
+    except Exception as _:
+        pass
 
 
 @pytest.fixture(scope="function")
@@ -340,8 +367,8 @@ def create_dataset_ui_no_cleanup(page: Page):
 
 
 @pytest.fixture
-def insert_dataset_items_sdk(client: opik.Opik, create_delete_dataset_sdk):
-    dataset = client.get_dataset(create_delete_dataset_sdk)
+def insert_dataset_items_sdk(client: opik.Opik, create_dataset_sdk):
+    dataset = client.get_dataset(create_dataset_sdk)
     dataset.insert(TEST_ITEMS)
 
 
@@ -381,8 +408,8 @@ def create_prompt_ui(client: opik.Opik, page: Page):
 
 
 @pytest.fixture
-def create_10_test_traces(page: Page, client, create_delete_project_sdk):
-    proj_name = create_delete_project_sdk
+def create_10_test_traces(page: Page, client, create_project):
+    proj_name = create_project
     for i in range(10):
         _ = client.trace(
             name=f"trace{i}",
