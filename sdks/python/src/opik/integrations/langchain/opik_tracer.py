@@ -81,9 +81,7 @@ class OpikTracer(BaseTracer):
 
         self._project_name = project_name
 
-        self._opik_client = opik_client.Opik(
-            _use_batching=True, project_name=project_name
-        )
+        self._opik_client = get_client_cached()
 
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
