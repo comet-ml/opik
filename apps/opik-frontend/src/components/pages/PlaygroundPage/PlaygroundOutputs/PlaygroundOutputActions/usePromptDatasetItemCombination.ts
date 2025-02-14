@@ -16,6 +16,7 @@ import mustache from "mustache";
 import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
+import useLocalAIProviderData from "@/hooks/useLocalAIProviderData";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
@@ -85,6 +86,8 @@ const usePromptDatasetItemCombination = ({
   // the prop is just taken as the value on the moment of creation
   const isToStopRef = useRef(isToStop);
 
+  const { getLocalIAProviderURL } = useLocalAIProviderData();
+
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
   });
@@ -138,6 +141,7 @@ const usePromptDatasetItemCombination = ({
         );
 
         const run = await runStreaming({
+          url: getLocalIAProviderURL(prompt.provider),
           model: prompt.model,
           messages: providerMessages,
           configs: prompt.configs,
@@ -149,7 +153,8 @@ const usePromptDatasetItemCombination = ({
           },
         });
 
-        const error = run.opikError || run.providerError;
+        const error =
+          run.opikError || run.providerError || run.pythonProxyError;
 
         updateOutput(prompt.id, datasetItemId, {
           isLoading: false,
@@ -160,7 +165,7 @@ const usePromptDatasetItemCombination = ({
           providerMessages,
           configs: prompt.configs,
           model: prompt.model,
-
+          provider: prompt.provider,
           promptId: prompt.id,
           datasetName,
           datasetItemId: datasetItemId,
@@ -182,10 +187,11 @@ const usePromptDatasetItemCombination = ({
     },
 
     [
-      datasetName,
-      runStreaming,
-      updateOutput,
       addAbortController,
+      updateOutput,
+      runStreaming,
+      getLocalIAProviderURL,
+      datasetName,
       deleteAbortController,
     ],
   );

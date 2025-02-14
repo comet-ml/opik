@@ -12,9 +12,10 @@ import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import AddEditAIProviderDialog from "@/components/shared/AddEditAIProviderDialog/AddEditAIProviderDialog";
-import { ProviderKey } from "@/types/providers";
+import { PROVIDER_LOCATION_TYPE, ProviderKey } from "@/types/providers";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
 import { PROVIDERS } from "@/constants/providers";
+import useLocalAIProviderData from "@/hooks/useLocalAIProviderData";
 
 const AIProvidersRowActionsCell: React.FunctionComponent<
   CellContext<ProviderKey, unknown>
@@ -23,13 +24,25 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
   const providerKey = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
+  const { deleteLocalAIProviderData } = useLocalAIProviderData();
+
   const { mutate: deleteProviderKey } = useProviderKeysDeleteMutation();
 
   const deleteProviderKeyHandler = useCallback(() => {
-    deleteProviderKey({
-      providerId: providerKey.id,
-    });
-  }, [providerKey.id, deleteProviderKey]);
+    const config = PROVIDERS[providerKey.provider];
+    if (config.locationType === PROVIDER_LOCATION_TYPE.local) {
+      deleteLocalAIProviderData(providerKey.provider);
+    } else {
+      deleteProviderKey({
+        providerId: providerKey.id,
+      });
+    }
+  }, [
+    providerKey.provider,
+    providerKey.id,
+    deleteLocalAIProviderData,
+    deleteProviderKey,
+  ]);
 
   return (
     <CellWrapper
