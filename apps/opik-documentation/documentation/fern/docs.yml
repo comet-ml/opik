@@ -353,7 +353,7 @@ navigation:
         slug: rest-api
         contents:
           - page: Overview
-            path: docs/reference/api-reference/overview.mdx
+            path: docs/reference/rest-api/overview.mdx
             slug: overview
           - api: API Reference
             slug: /

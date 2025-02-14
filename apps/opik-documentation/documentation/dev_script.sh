@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Convert the files to markdown if that has not already been done
-sh ./update_cookbooks.sh
-
 # Start the docs server and rebuild the cookbooks on change
 npx concurrently \
   "fern docs dev" \
