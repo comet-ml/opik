@@ -53,6 +53,12 @@ setup(
         "tqdm",
         "uuid6",
     ],
+    extras_require={
+        "proxy": [
+            "fastapi>=0.100.0",
+            "uvicorn>=0.23.0",
+        ],
+    },
     entry_points={
         "pytest11": [
             "opik = opik.plugins.pytest.hooks",
