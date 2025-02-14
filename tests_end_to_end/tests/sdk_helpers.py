@@ -7,31 +7,27 @@ import opik
 import os
 
 
-def create_project_api(name: str):
-    client = OpikApi(
+def get_opik_api_client():
+    return OpikApi(
         base_url=os.getenv("OPIK_URL_OVERRIDE", None),
         workspace_name=os.getenv("OPIK_WORKSPACE", None),
         api_key=os.getenv("OPIK_API_KEY", None),
     )
+
+
+def create_project_api(name: str):
+    client = get_opik_api_client()
     client.projects.create_project(name=name)
 
 
 def find_project_by_name_sdk(name: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     proj_page = client.projects.find_projects(name=name, page=1, size=1)
     return proj_page.dict()["content"]
 
 
 def delete_project_by_name_sdk(name: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     project = find_project_by_name_sdk(name=name)
     client.projects.delete_project_by_id(project[0]["id"])
 
@@ -42,7 +38,7 @@ def wait_for_project_to_be_visible(project_name, timeout=10, initial_delay=1):
 
     while time.time() - start_time < timeout:
         if find_project_by_name_sdk(project_name):
-            return True
+            return
 
         time.sleep(delay)
         delay = min(delay * 2, timeout - (time.time() - start_time))
@@ -58,7 +54,7 @@ def wait_for_project_to_not_be_visible(project_name, timeout=10, initial_delay=1
 
     while time.time() - start_time < timeout:
         if not find_project_by_name_sdk(project_name):
-            return True
+            return
 
         time.sleep(delay)
         delay = min(delay * 2, timeout - (time.time() - start_time))
@@ -69,11 +65,7 @@ def wait_for_project_to_not_be_visible(project_name, timeout=10, initial_delay=1
 
 
 def update_project_by_name_sdk(name: str, new_name: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     wait_for_project_to_be_visible(name, timeout=10)
     projects_match = find_project_by_name_sdk(name)
     project_id = projects_match[0]["id"]
@@ -84,11 +76,7 @@ def update_project_by_name_sdk(name: str, new_name: str):
 
 
 def create_traces_sdk(prefix: str, project_name: str, qty: int):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     for i in range(qty):
         client.traces.create_trace(
             name=prefix + str(i),
@@ -103,7 +91,7 @@ def wait_for_traces_to_be_visible(project_name, size, timeout=10, initial_delay=
 
     while time.time() - start_time < timeout:
         if get_traces_of_project_sdk(project_name=project_name, size=size):
-            return True
+            return
 
         time.sleep(delay)
         delay = min(delay * 2, timeout - (time.time() - start_time))
@@ -124,7 +112,7 @@ def wait_for_number_of_traces_to_be_visible(
             project_name=project_name, size=number_of_traces
         )
         if len(traces) >= number_of_traces:
-            return True
+            return
 
         time.sleep(delay)
         delay = min(delay * 2, timeout - (time.time() - start_time))
@@ -135,51 +123,31 @@ def wait_for_number_of_traces_to_be_visible(
 
 
 def get_traces_of_project_sdk(project_name: str, size: int):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     traces = client.traces.get_traces_by_project(project_name=project_name, size=size)
     return traces.dict()["content"]
 
 
 def delete_list_of_traces_sdk(ids: list[str]):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     client.traces.delete_traces(ids=ids)
 
 
 def update_trace_by_id(id: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     client.traces.update_trace(
         id=id,
     )
 
 
 def get_dataset_by_name(dataset_name: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     dataset = client.datasets.get_dataset_by_identifier(dataset_name=dataset_name)
     return dataset.dict()
 
 
 def update_dataset_name(name: str, new_name: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     dataset = get_dataset_by_name(dataset_name=name)
     dataset_id = dataset["id"]
 
@@ -189,11 +157,7 @@ def update_dataset_name(name: str, new_name: str):
 
 
 def delete_dataset_by_name_if_exists(dataset_name: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     dataset = None
     try:
         dataset = get_dataset_by_name(dataset_name)
@@ -205,39 +169,23 @@ def delete_dataset_by_name_if_exists(dataset_name: str):
 
 
 def get_experiment_by_id(exp_id: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     exp = client.experiments.get_experiment_by_id(exp_id)
     return exp
 
 
 def delete_experiment_by_id(exp_id: str):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     client.experiments.delete_experiments_by_id(ids=[exp_id])
 
 
 def delete_experiment_items_by_id(ids: list[str]):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     client.experiments.delete_experiment_items(ids=ids)
 
 
 def experiment_items_stream(exp_name: str, limit: Optional[int] = None):
-    client = OpikApi(
-        base_url=os.getenv("OPIK_URL_OVERRIDE", None),
-        workspace_name=os.getenv("OPIK_WORKSPACE", None),
-        api_key=os.getenv("OPIK_API_KEY", None),
-    )
+    client = get_opik_api_client()
     data = b"".join(
         client.experiments.stream_experiment_items(
             experiment_name=exp_name, request_options={"chunk_size": 100}
