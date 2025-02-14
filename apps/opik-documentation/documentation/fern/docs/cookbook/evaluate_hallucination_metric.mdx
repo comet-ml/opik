@@ -13,9 +13,11 @@ For this guide we will be evaluating the Hallucination metric included in the LL
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install opik pyarrow pandas fsspec huggingface_hub --upgrade --quiet
 ```
+
 
 ```python
 import opik
@@ -26,6 +28,7 @@ opik.configure(use_local=False)
 ## Preparing our environment
 
 First, we will install configure the OpenAI API key and create a new Opik dataset
+
 
 ```python
 import os
@@ -38,6 +41,7 @@ if "OPENAI_API_KEY" not in os.environ:
 We will be using the [HaluEval dataset](https://huggingface.co/datasets/pminervini/HaluEval?library=pandas) which according to this [paper](https://arxiv.org/pdf/2305.11747) ChatGPT detects 86.2% of hallucinations. The first step will be to create a dataset in the platform so we can keep track of the results of the evaluation.
 
 Since the insert methods in the SDK deduplicates items, we can insert 50 items and if the items already exist, Opik will automatically remove them.
+
 
 ```python
 # Create dataset
@@ -75,6 +79,7 @@ In order to evaluate the performance of the Opik hallucination metric, we will d
 - Scoring metric: We will use the `Equals` metric to check if the hallucination score computed matches the expected output.
 
 By defining the evaluation task in this way, we will be able to understand how well Opik's hallucination metric is able to detect hallucinations in the dataset.
+
 
 ```python
 from opik.evaluation.metrics import Hallucination, Equals
