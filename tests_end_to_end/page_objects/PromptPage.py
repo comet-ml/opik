@@ -43,13 +43,6 @@ class PromptPage:
         versions = {}
         first_page = self.get_all_prompt_versions_with_commit_ids_on_page()
         versions.update(first_page)
-        button = self.next_page_button_locator
-        tag_name = button.evaluate('el => el.tagName')
-        print(f"Element tag: {tag_name}")
-
-        # Get all attributes
-        attributes = button.evaluate('el => Object.entries(el.attributes).map(attr => `${attr[1].name}=${attr[1].value}`).join(", ")')
-        print(f"Attributes: {attributes}")
         while (
             self.next_page_button_locator.is_visible()
             and self.next_page_button_locator.is_enabled()
