@@ -1,4 +1,4 @@
-name: Preview Docs
+name: Docs - Preview link
 
 on:
   pull_request:
@@ -18,6 +18,7 @@ jobs:
 
             - name: Generate preview URL
               id: generate-docs
+              working-directory: apps/opik-documentation/documentation
               env:
                   FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
               run: |
@@ -30,4 +31,4 @@ jobs:
             - name: Comment URL in PR
               uses: thollander/actions-comment-pull-request@v2.4.3
               with:
-                  filePath: preview_url.txt
+                  filePath: apps/opik-documentation/documentation/preview_url.txt

@@ -14,7 +14,7 @@ import time
 
 class TestDatasetsCrud:
     def test_create_dataset_ui_add_traces_to_new_dataset(
-        self, page: Page, create_delete_project_sdk, create_10_test_traces
+        self, page: Page, create_project, create_10_test_traces
     ):
         """
         Basic test to check dataset creation via "add to new dataset" functionality in the traces page. Uses the UI after creation to check the project exists
@@ -24,7 +24,7 @@ class TestDatasetsCrud:
         4. If no errors raised and dataset exists, test passes
         """
         dataset_name = "automated_tests_dataset"
-        proj_name = create_delete_project_sdk
+        proj_name = create_project
         projects_page = ProjectsPage(page)
         projects_page.go_to_page()
         projects_page.click_project(project_name=proj_name)
@@ -45,7 +45,7 @@ class TestDatasetsCrud:
             delete_dataset_by_name_if_exists(dataset_name=dataset_name)
 
     @pytest.mark.parametrize(
-        "dataset_fixture", ["create_delete_dataset_ui", "create_delete_dataset_sdk"]
+        "dataset_fixture", ["create_dataset_ui", "create_dataset_sdk"]
     )
     @pytest.mark.sanity
     def test_dataset_visibility(
@@ -69,7 +69,7 @@ class TestDatasetsCrud:
 
     @pytest.mark.parametrize(
         "dataset_fixture",
-        ["create_dataset_sdk_no_cleanup", "create_dataset_ui_no_cleanup"],
+        ["create_dataset_sdk", "create_dataset_ui"],
     )
     def test_dataset_name_update(
         self, request, page: Page, client: opik.Opik, dataset_fixture
@@ -114,7 +114,7 @@ class TestDatasetsCrud:
 
     @pytest.mark.parametrize(
         "dataset_fixture",
-        ["create_dataset_sdk_no_cleanup", "create_dataset_ui_no_cleanup"],
+        ["create_dataset_sdk", "create_dataset_ui"],
     )
     def test_dataset_deletion_in_sdk(
         self, request, page: Page, client: opik.Opik, dataset_fixture
@@ -142,7 +142,7 @@ class TestDatasetsCrud:
 
     @pytest.mark.parametrize(
         "dataset_fixture",
-        ["create_dataset_sdk_no_cleanup", "create_dataset_ui_no_cleanup"],
+        ["create_dataset_sdk", "create_dataset_ui"],
     )
     def test_dataset_deletion_in_ui(
         self, request, page: Page, client: opik.Opik, dataset_fixture
