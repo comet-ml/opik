@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
@@ -22,15 +23,16 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(FeedbackScoreServiceImpl.class)
 public interface FeedbackScoreService {
@@ -113,8 +115,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .collect(groupingBy(FeedbackScoreBatchItem::projectName));
 
         return handleProjectRetrieval(scoresPerProject)
-                .map(this::groupByLowerCaseName)
-                .map(projectMapLowerCaseName -> mergeProjectsAndScores(projectMapLowerCaseName, scoresPerProject))
+                .map(this::groupByName)
+                .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
                 .flatMap(projects -> processScoreBatch(entityType, projects, scores.size())) // score all scores
                 .then();
     }
@@ -147,12 +149,12 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Error while processing scores batch")));
     }
 
-    private List<ProjectDto> mergeProjectsAndScores(Map<String, Project> projectMapLowerCaseName,
+    private List<ProjectDto> mergeProjectsAndScores(Map<String, Project> projectMap,
             Map<String, List<FeedbackScoreBatchItem>> scoresPerProject) {
         return scoresPerProject.keySet()
                 .stream()
                 .map(projectName -> {
-                    Project project = projectMapLowerCaseName.get(projectName.toLowerCase());
+                    Project project = projectMap.get(projectName);
                     return new ProjectDto(
                             project,
                             scoresPerProject.get(projectName)
@@ -163,8 +165,12 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .toList();
     }
 
-    private Map<String, Project> groupByLowerCaseName(List<Project> projects) {
-        return projects.stream().collect(toMap(p -> p.name().toLowerCase(), Function.identity()));
+    private Map<String, Project> groupByName(List<Project> projects) {
+        return projects.stream().collect(Collectors.toMap(
+                Project::name,
+                Function.identity(),
+                BinaryOperatorUtils.last(),
+                () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
     }
 
     private List<Project> getAllProjectsByName(String workspaceId,
@@ -180,7 +186,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private void checkIfNeededToCreateProjects(Map<String, List<FeedbackScoreBatchItem>> scoresPerProject,
             String userName, String workspaceId) {
 
-        Map<String, Project> projectsPerLowerCaseName = groupByLowerCaseName(
+        Map<String, Project> projectsPerLowerCaseName = groupByName(
                 getAllProjectsByName(workspaceId, scoresPerProject));
 
         syncTemplate.inTransaction(WRITE, handle -> {
@@ -190,7 +196,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             scoresPerProject
                     .keySet()
                     .stream()
-                    .filter(projectName -> !projectsPerLowerCaseName.containsKey(projectName.toLowerCase()))
+                    .filter(projectName -> !projectsPerLowerCaseName.containsKey(projectName))
                     .forEach(projectName -> {
                         UUID projectId = idGenerator.generateId();
                         var newProject = Project.builder()
