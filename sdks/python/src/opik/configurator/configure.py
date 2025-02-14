@@ -22,6 +22,7 @@ OPIK_BASE_URL_CLOUD: Final[str] = "https://www.comet.com/"
 OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/"
 
 
+
 class OpikConfigurator:
     def __init__(
         self,
@@ -31,6 +32,7 @@ class OpikConfigurator:
         use_local: bool = False,
         force: bool = False,
         self_hosted_comet: bool = False,
+        automatic_approvals: bool = False
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -38,6 +40,7 @@ class OpikConfigurator:
         self.force = force
         self.current_config = opik.config.OpikConfig()
         self.self_hosted_comet = self_hosted_comet
+        self.automatic_approvals = automatic_approvals
 
         # Handle URL
         #
@@ -129,9 +132,14 @@ class OpikConfigurator:
                     f"Opik URL is not specified - A local Opik instance was detected at {OPIK_BASE_URL_LOCAL}, to use it set your URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
                 )
 
-            use_url = ask_user_for_approval(
-                f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+            use_url = (
+                True
+                if self.automatic_approvals 
+                else ask_user_for_approval(
+                    f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+                )
             )
+
             if use_url:
                 self.base_url = OPIK_BASE_URL_LOCAL
                 self._update_config()
@@ -272,8 +280,12 @@ class OpikConfigurator:
 
         # Case 3: No workspace provided, prompt the user
         default_workspace = self._get_default_workspace()
-        use_default_workspace = ask_user_for_approval(
-            f'Do you want to use "{default_workspace}" workspace? (Y/n)'
+        use_default_workspace = (
+            True
+            if self.automatic_approvals
+            else ask_user_for_approval(
+                f'Do you want to use "{default_workspace}" workspace? (Y/n)'
+            )
         )
 
         if use_default_workspace:
@@ -447,6 +459,7 @@ def configure(
     url: Optional[str] = None,
     use_local: bool = False,
     force: bool = False,
+    automatic_approvals: bool = False,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -459,6 +472,7 @@ def configure(
         use_local: Whether to use a local deployment.
         force: If true, the configuration file will be recreated and existing settings
                will be overwritten with passed parameters.
+        automatic_approvals: if True, `yes` will automatically be answered whenever a user approval is required
 
     Raises:
         ConfigurationError
@@ -469,5 +483,6 @@ def configure(
         url=url,
         use_local=use_local,
         force=force,
+        automatic_approvals=automatic_approvals,
     )
     client.configure()
