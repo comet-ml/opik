@@ -5,15 +5,15 @@ from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 
 from opik import dict_utils, opik_context
-from opik.api_objects import opik_client, span, trace
-from opik.types import ErrorInfoDict, LLMUsageInfo
+from opik.api_objects import span, trace
+from opik.types import DistributedTraceHeadersDict, ErrorInfoDict, LLMUsageInfo
 from . import (
     base_llm_patcher,
     google_run_helpers,
     openai_run_helpers,
     opik_encoder_extension,
 )
-from ...api_objects import helpers
+from ...api_objects import helpers, opik_client
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -56,6 +56,7 @@ class OpikTracer(BaseTracer):
         metadata: Optional[Dict[str, Any]] = None,
         graph: Optional["Graph"] = None,
         project_name: Optional[str] = None,
+        distributed_headers: Optional[DistributedTraceHeadersDict] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -81,9 +82,9 @@ class OpikTracer(BaseTracer):
 
         self._project_name = project_name
 
-        self._opik_client = opik_client.Opik(
-            _use_batching=True, project_name=project_name
-        )
+        self._distributed_headers = distributed_headers
+
+        self._opik_client = opik_client.get_client_cached()
 
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
@@ -140,6 +141,14 @@ class OpikTracer(BaseTracer):
     def _track_root_run(self, run_dict: Dict[str, Any]) -> None:
         run_metadata = run_dict["extra"].get("metadata", {})
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
+
+        if self._distributed_headers:
+            self._attach_span_to_distributed_headers(
+                run_dict=run_dict,
+                root_metadata=root_metadata,
+            )
+            return
+
         current_span_data = opik_context.get_current_span_data()
         if current_span_data is not None:
             self._attach_span_to_existing_span(
@@ -235,6 +244,27 @@ class OpikTracer(BaseTracer):
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(current_trace_data.id)
+
+    def _attach_span_to_distributed_headers(
+        self,
+        run_dict: Dict[str, Any],
+        root_metadata: Dict[str, Any],
+    ) -> None:
+        if self._distributed_headers is None:
+            raise ValueError("Distributed headers are not set")
+
+        span_data = span.SpanData(
+            trace_id=self._distributed_headers["opik_trace_id"],
+            parent_span_id=self._distributed_headers["opik_parent_span_id"],
+            name=run_dict["name"],
+            input=run_dict["inputs"],
+            metadata=root_metadata,
+            tags=self._trace_default_tags,
+            project_name=self._project_name,
+            type=_get_span_type(run_dict),
+        )
+        self._span_data_map[run_dict["id"]] = span_data
+        self._externally_created_traces_ids.add(span_data.trace_id)
 
     def _process_end_span(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()

@@ -53,7 +53,7 @@ from opik.types import UsageDict
     ],
 )
 def test_usage_validator(usage_dict, is_valid):
-    tested = usage.UsageValidator(usage_dict)
+    tested = usage.UsageValidator(usage_dict, provider="some-provider")
 
     assert tested.validate().ok() is is_valid, f"Failed with {usage_dict}"
 
