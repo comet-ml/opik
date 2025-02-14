@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import isNull from "lodash/isNull";
 import pick from "lodash/pick";
 
-import { PROVIDER_MODELS } from "@/constants/llm";
 import { PROVIDERS } from "@/constants/providers";
 
 import {
@@ -29,11 +28,12 @@ import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import AddEditAIProviderDialog from "@/components/shared/AddEditAIProviderDialog/AddEditAIProviderDialog";
 import { areAllProvidersConfigured } from "@/lib/provider";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 interface PromptModelSelectProps {
   value: PROVIDER_MODEL_TYPE | "";
   workspaceName: string;
-  onChange: (value: PROVIDER_MODEL_TYPE) => void;
+  onChange: (value: PROVIDER_MODEL_TYPE, provider: PROVIDER_TYPE) => void;
   hasError?: boolean;
   provider: PROVIDER_TYPE | "";
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
@@ -57,6 +57,7 @@ const PromptModelSelect = ({
   const [openConfigDialog, setOpenConfigDialog] = React.useState(false);
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] = useState<string | null>(null);
+  const { getProviderModels } = useLLMProviderModelsData();
 
   const { data } = useProviderKeys(
     {
@@ -74,7 +75,7 @@ const PromptModelSelect = ({
 
   const groupOptions = useMemo(() => {
     const filteredByConfiguredProviders = pick(
-      PROVIDER_MODELS,
+      getProviderModels(),
       configuredProviderKeys,
     );
 
@@ -97,10 +98,11 @@ const PromptModelSelect = ({
           label: PROVIDERS[providerName].label,
           options,
           icon: PROVIDERS[providerName].icon,
+          provider: providerName,
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
-  }, [configuredProviderKeys, onlyWithStructuredOutput]);
+  }, [configuredProviderKeys, onlyWithStructuredOutput, getProviderModels]);
 
   const filteredOptions = useMemo(() => {
     if (filterValue === "") {
@@ -131,9 +133,9 @@ const PromptModelSelect = ({
 
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
-      onChange(value);
+      onChange(value, openProviderMenu as PROVIDER_TYPE);
     },
-    [onChange],
+    [onChange, openProviderMenu],
   );
 
   const handleSelectOpenChange = useCallback((open: boolean) => {
@@ -191,16 +193,17 @@ const PromptModelSelect = ({
     return (
       <div>
         {groupOptions.map((group) => (
-          <Popover key={group.label} open={group.label === openProviderMenu}>
+          <Popover key={group.label} open={group.provider === openProviderMenu}>
             <PopoverTrigger asChild>
               <div
                 key={group.label}
-                onMouseEnter={() => setOpenProviderMenu(group.label)}
+                onMouseEnter={() => setOpenProviderMenu(group.provider)}
                 onMouseLeave={() => setOpenProviderMenu(null)}
                 className={cn(
                   "comet-body-s flex h-10 w-full items-center rounded-sm p-0 pl-2 hover:bg-primary-foreground justify-center",
                   {
-                    "bg-primary-foreground": group.label === openProviderMenu,
+                    "bg-primary-foreground":
+                      group.provider === openProviderMenu,
                   },
                 )}
               >
@@ -215,7 +218,7 @@ const PromptModelSelect = ({
               align="start"
               className="max-h-[400px] overflow-y-auto p-1"
               sideOffset={-5}
-              onMouseEnter={() => setOpenProviderMenu(group.label)}
+              onMouseEnter={() => setOpenProviderMenu(group.provider)}
               hideWhenDetached
             >
               {group.options.map((option) => {
@@ -308,6 +311,7 @@ const PromptModelSelect = ({
       </Select>
       <AddEditAIProviderDialog
         key={resetDialogKeyRef.current}
+        excludedProviders={configuredProviderKeys}
         open={openConfigDialog}
         setOpen={setOpenConfigDialog}
         onAddProvider={onAddProvider}

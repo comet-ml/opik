@@ -11,6 +11,7 @@ import {
   useSetPromptMap,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/components/pages/PlaygroundPage/PlaygroundPrompts/useLastPickedModel";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 interface PlaygroundPromptsState {
   workspaceName: string;
@@ -32,11 +33,15 @@ const PlaygroundPrompts = ({
   const promptIds = usePromptIds();
 
   const [lastPickedModel] = useLastPickedModel();
+  const { calculateModelProvider, calculateDefaultModel } =
+    useLLMProviderModelsData();
 
   const handleAddPrompt = () => {
     const newPrompt = generateDefaultPrompt({
       setupProviders: providerKeys,
       lastPickedModel,
+      providerResolver: calculateModelProvider,
+      modelResolver: calculateDefaultModel,
     });
     addPrompt(newPrompt);
   };
@@ -45,10 +50,19 @@ const PlaygroundPrompts = ({
     const newPrompt = generateDefaultPrompt({
       setupProviders: providerKeys,
       lastPickedModel,
+      providerResolver: calculateModelProvider,
+      modelResolver: calculateDefaultModel,
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
     onResetHeight();
-  }, [setPromptMap, providerKeys, lastPickedModel, onResetHeight]);
+  }, [
+    providerKeys,
+    lastPickedModel,
+    calculateModelProvider,
+    calculateDefaultModel,
+    setPromptMap,
+    onResetHeight,
+  ]);
 
   useEffect(() => {
     // hasn't been initialized yet or the last prompt is removed
@@ -84,6 +98,8 @@ const PlaygroundPrompts = ({
             key={promptId}
             providerKeys={providerKeys}
             isPendingProviderKeys={isPendingProviderKeys}
+            providerResolver={calculateModelProvider}
+            modelResolver={calculateDefaultModel}
           />
         ))}
       </div>

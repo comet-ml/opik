@@ -25,10 +25,11 @@ import {
   LLMMessage,
   LLMPromptTemplate,
 } from "@/types/llm";
-import { generateDefaultLLMPromptMessage, getModelProvider } from "@/lib/llm";
+import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { EvaluationRuleFormType } from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/schema";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -61,6 +62,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   form,
 }) => {
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
+  const { calculateModelProvider } = useLLMProviderModelsData();
 
   return (
     <>
@@ -69,7 +71,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         name="llmJudgeDetails.model"
         render={({ field, formState }) => {
           const model = field.value as PROVIDER_MODEL_TYPE | "";
-          const provider = model ? getModelProvider(model) : "";
+          const provider = calculateModelProvider(model);
           const validationErrors = get(formState.errors, [
             "llmJudgeDetails",
             "model",

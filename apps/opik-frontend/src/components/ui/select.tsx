@@ -112,7 +112,7 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName;
 interface SelectItemProps
   extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
   withoutCheck?: boolean;
-  description?: string;
+  description?: React.ReactNode;
 }
 
 const SelectItem = React.forwardRef<
@@ -143,7 +143,7 @@ const SelectItem = React.forwardRef<
         <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
       </div>
       {description && (
-        <div className="comet-body-s mt-0.5 text-light-slate">
+        <div className="comet-body-s mt-0.5 whitespace-pre-wrap text-light-slate">
           {description}
         </div>
       )}
