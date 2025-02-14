@@ -8,12 +8,17 @@ from .. import logging_messages
 
 
 def validate_and_parse_usage(
-    usage: Any, logger: logging.Logger
+    usage: Any,
+    logger: logging.Logger,
+    provider: Optional[str],
 ) -> usage_validator.ParsedUsage:
     if usage is None:
         return usage_validator.ParsedUsage()
 
-    usage_validator_ = usage_validator.UsageValidator(usage)
+    usage_validator_ = usage_validator.UsageValidator(
+        usage=usage,
+        provider=provider,
+    )
     if usage_validator_.validate().failed():
         logger.warning(
             logging_messages.INVALID_USAGE_WILL_NOT_BE_LOGGED,
