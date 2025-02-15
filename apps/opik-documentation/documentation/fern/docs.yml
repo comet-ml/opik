@@ -102,6 +102,9 @@ navigation:
               - page: OpenAI
                 path: docs/tracing/integrations/openai.mdx
                 slug: openai
+              - page: OpenRouter
+                path: docs/tracing/integrations/openrouter.mdx
+                slug: openrouter
               - page: LiteLLM
                 path: docs/tracing/integrations/litellm.mdx
                 slug: litellm
