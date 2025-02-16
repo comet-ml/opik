@@ -24,7 +24,7 @@ fi
 echo "Docker daemon started successfully after $attempts attempts"
 
 echo "Loading the Opik Sandbox Executor Python image"
-docker load < "./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}"
+docker load < "./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz"
 echo "Successfully loaded the Opik Sandbox Executor Python image"
 
 echo "Starting the Opik Python Backend server"
