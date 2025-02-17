@@ -1,0 +1,193 @@
+name: AiFindr Opik Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: environment
+        description: 'Build Environment'
+        required: true
+
+env:
+  ECR_AWS_REGION: ${{ vars.ECR_AWS_REGION }} # Repository VAR
+  AWS_REGION: ${{ vars.AWS_REGION }} # Repository VAR
+  ENVIRONMENT: ${{ inputs.environment || 'production' }} # Input
+  GIT_REF: ${{ github.ref }} # GitHub Context
+  FRONTEND_BUILD_CONTEXT: ./apps/opik-frontend # Repository VAR
+  BACKEND_BUILD_CONTEXT: ./apps/opik-backend # Repository VAR
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }} # Repository VAR
+  ECR_BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY }} # Repository VAR
+  ECR_FRONTEND_REPOSITORY: ${{ vars.ECR_FRONTEND_REPOSITORY }} # Repository VAR
+
+jobs:
+  # Check if latest tag is a release candidate and stop flow if it is
+  release-candidate-prod-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if is release candidate
+        id: check-rc
+        run: |
+
+          # Check if the latest tag is a release candidate
+          export APP_VERSION=$(git describe --tags --abbrev=0)
+          echo "App version: $APP_VERSION Current env: $ENVIRONMENT"
+          if [[ "$APP_VERSION" == *"rc"* && "$ENV" == 'prod' ]]; then
+            echo "Error: prod env cannot build with 'rc' in git tag version."
+            exit 1
+          else
+            echo "Success: CI can run in prod because the tag doesn't contain 'rc' (or skipped because not in prod)."
+          fi
+
+  bumping-semantic-version:
+    needs:
+      - release-candidate-prod-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump version
+        run: |
+          echo "Current env: $ENVIRONMENT and ref: $GIT_REF"
+
+          # Check if tags exist for the commit
+          COMMIT_HASH=$(git rev-parse HEAD)
+          EXISTING_TAGS=$(git tag --points-at $COMMIT_HASH)
+
+          if [[ "$ENV" == 'prod' || $GIT_REF == "refs/tags/"* || $GIT_REF == "refs/heads/dev" || -n "$EXISTING_TAGS" ]]; then
+            echo "Skipping because version bumping conditions are not met."
+            echo "ENV: $ENV, GIT_REF: $GIT_REF, EXISTING_TAGS: $EXISTING_TAGS"
+            exit 0
+          fi
+
+          # Input: Version number
+          export APP_VERSION=$(git describe --tags --abbrev=0)
+
+          MAIN_VERSION=$(echo $APP_VERSION | cut -d'-' -f1)
+
+          IFS='.' read -r major minor patch <<< "$MAIN_VERSION"
+
+          if [[ $APP_VERSION == *"rc"* ]] ; then
+              echo "Release candidate detected: $APP_VERSION"
+              rc_patch=$(echo $APP_VERSION | cut -d'-' -f2 | cut -d'.' -f2)
+              rc_patch=$((rc_patch + 1))
+              export APP_VERSION_RC="${major}.${minor}.${patch}-rc.${rc_patch}"
+          else
+              echo "Release candidate NOT detected: $APP_VERSION"
+              patch=$((patch + 1))
+              export APP_VERSION_RC="${major}.${minor}.${patch}-rc.1"
+          fi
+
+          git tag $APP_VERSION_RC
+
+          git push origin $APP_VERSION_RC
+
+          echo "New release candidate version: $APP_VERSION_RC"
+
+  build-and-push:
+    environment: "${{ inputs.environment || 'production' }}"
+    env:
+      ENV: ${{ vars.ENV_TAG }} # Environment VAR
+      IMAGE_TAG: ${{ vars.ENV_TAG }} # Environment VAR
+    runs-on: ubuntu-latest
+    needs: bumping-semantic-version
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.ECR_AWS_ACCESS_KEY_ID }} # Repository Secret
+          aws-secret-access-key: ${{ secrets.ECR_AWS_SECRET_ACCESS_KEY }} # Repository Secret
+          aws-region: ${{ env.ECR_AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        run: |
+
+          export APP_VERSION=$(git describe --tags --abbrev=0)
+
+          if [ $DEBUG == "true" ]; then
+            echo "building frontend image into: $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$APP_VERSION"
+          fi
+
+          docker build --build-arg OPIK_VERSION=tam_${APP_VERSION} \
+            --build-arg STORE_PASSWORD=$STORE_PASSWORD \
+            -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$APP_VERSION \
+            -f $FRONTEND_BUILD_CONTEXT/Dockerfile \
+            $FRONTEND_BUILD_CONTEXT
+
+          docker tag $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$APP_VERSION $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$APP_VERSION
+          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG
+
+          if [ $DEBUG == "true" ]; then
+            echo "building backend image into: $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$APP_VERSION"
+          fi
+
+          docker build --build-arg OPIK_VERSION=tam_$APP_VERSION \
+            --build-arg STORE_PASSWORD=$STORE_PASSWORD \
+            -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$APP_VERSION \
+            -f $BACKEND_BUILD_CONTEXT/Dockerfile \
+            $BACKEND_BUILD_CONTEXT
+
+          docker tag $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$APP_VERSION $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$APP_VERSION
+          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG
+
+  ecs-deploy:
+    environment: "${{ inputs.environment || 'production' }}"
+    env:
+      ENV: ${{ vars.ENV_TAG }} # Environment VAR
+      IMAGE_TAG: ${{ vars.ENV_TAG }} # Environment VAR
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }} # Environment VAR
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }} # Environment VAR
+    needs:
+      - build-and-push
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }} # Repository Secret
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }} # Repository Secret
+          aws-region: ${{ env.AWS_REGION }} # Repository VAR
+
+      - name: Deploy image to ECS
+        run: |
+          aws ecs update-service \
+            --region ${{ env.AWS_REGION }} \
+            --cluster ${{env.ECS_CLUSTER}} \
+            --service ${{ env.SERVICE_NAME }} \
+            --force-new-deployment
+
+      - name: Check service status
+        run: |
+
+          # Limits service wait time to 10 minutes
+          timeout 600 aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.SERVICE_NAME }} || exit 1
