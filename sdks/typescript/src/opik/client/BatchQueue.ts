@@ -79,7 +79,7 @@ class ActionQueue<EntityData = object, EntityId = string> {
     this.promise = this.promise
       .finally(() => {
         logger.debug(`Flushing ${this.name}:`, queue);
-        this.action(queue);
+        return this.action(queue);
       })
       .catch((error) => {
         logger.error(`Failed to flush ${this.name}:`, error, queue);
