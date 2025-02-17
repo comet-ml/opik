@@ -16,7 +16,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <dropwizard.version>4.0.7</dropwizard.version>
+        <dropwizard.version>4.0.12</dropwizard.version>
         <swagger.version>2.2.22</swagger.version>
         <lombok.version>1.18.32</lombok.version>
         <mysql.version>9.2.0</mysql.version>
