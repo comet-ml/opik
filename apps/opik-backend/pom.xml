@@ -24,7 +24,7 @@
         <stringtemplate.version>3.48.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
-        <clickhouse-java.version>0.7.2</clickhouse-java.version>
+        <clickhouse-java.version>0.8.1</clickhouse-java.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
@@ -73,7 +73,7 @@
         <dependency>
             <groupId>com.github.spullara.mustache.java</groupId>
             <artifactId>compiler</artifactId>
-            <version>0.9.10</version>
+            <version>0.9.14</version>
         </dependency>
         <dependency>
             <groupId>io.opentelemetry.instrumentation</groupId>
@@ -246,7 +246,7 @@
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
-            <version>3.7.0</version>
+            <version>3.7.3</version>
             <scope>test</scope>
         </dependency>
 
@@ -305,7 +305,7 @@
         <dependency>
             <groupId>com.clickhouse</groupId>
             <artifactId>clickhouse-jdbc</artifactId>
-            <version>${clickhouse-java.version}</version>
+            <version>0.7.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -381,7 +381,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>2.44.1</version>
+                <version>2.44.2</version>
                 <executions>
                     <execution>
                         <phase>validate</phase>
