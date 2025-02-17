@@ -110,7 +110,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _generators_handler(  # type: ignore
+    def _streams_handler(  # type: ignore
         self,
         output: Any,
         capture_output: bool,

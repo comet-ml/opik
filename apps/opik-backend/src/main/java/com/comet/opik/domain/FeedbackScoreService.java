@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
@@ -22,15 +23,16 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(FeedbackScoreServiceImpl.class)
 public interface FeedbackScoreService {
@@ -151,17 +153,24 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             Map<String, List<FeedbackScoreBatchItem>> scoresPerProject) {
         return scoresPerProject.keySet()
                 .stream()
-                .map(projectName -> new ProjectDto(
-                        projectMap.get(projectName),
-                        scoresPerProject.get(projectName)
-                                .stream()
-                                .map(item -> item.toBuilder().projectId(projectMap.get(projectName).id()).build()) // set projectId
-                                .toList()))
+                .map(projectName -> {
+                    Project project = projectMap.get(projectName);
+                    return new ProjectDto(
+                            project,
+                            scoresPerProject.get(projectName)
+                                    .stream()
+                                    .map(item -> item.toBuilder().projectId(project.id()).build()) // set projectId
+                                    .toList());
+                })
                 .toList();
     }
 
     private Map<String, Project> groupByName(List<Project> projects) {
-        return projects.stream().collect(toMap(Project::name, Function.identity()));
+        return projects.stream().collect(Collectors.toMap(
+                Project::name,
+                Function.identity(),
+                BinaryOperatorUtils.last(),
+                () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
     }
 
     private List<Project> getAllProjectsByName(String workspaceId,
@@ -177,7 +186,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private void checkIfNeededToCreateProjects(Map<String, List<FeedbackScoreBatchItem>> scoresPerProject,
             String userName, String workspaceId) {
 
-        Map<String, Project> projectsPerName = groupByName(getAllProjectsByName(workspaceId, scoresPerProject));
+        Map<String, Project> projectsPerLowerCaseName = groupByName(
+                getAllProjectsByName(workspaceId, scoresPerProject));
 
         syncTemplate.inTransaction(WRITE, handle -> {
 
@@ -186,7 +196,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             scoresPerProject
                     .keySet()
                     .stream()
-                    .filter(projectName -> !projectsPerName.containsKey(projectName))
+                    .filter(projectName -> !projectsPerLowerCaseName.containsKey(projectName))
                     .forEach(projectName -> {
                         UUID projectId = idGenerator.generateId();
                         var newProject = Project.builder()

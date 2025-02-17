@@ -5,7 +5,7 @@ simple filters without "and" or "or" operators.
 
 import json
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 COLUMNS = {
     "name": "string",
@@ -63,12 +63,56 @@ class OpikQueryLanguage:
     def _is_valid_field_char(self, char: str) -> bool:
         return char.isalnum() or char == "_"
 
+    def _is_valid_connector_char(self, char: str) -> bool:
+        return char.isalpha()
+
     def _skip_whitespace(self) -> None:
         while (
             self._cursor < len(self.query_string)
             and self.query_string[self._cursor].isspace()
         ):
             self._cursor += 1
+
+    def _check_escaped_key(self) -> Tuple[bool, str]:
+        if self.query_string[self._cursor] in ('"', "'"):
+            is_quoted_key = True
+            quote_type = self.query_string[self._cursor]
+            self._cursor += 1
+        else:
+            is_quoted_key = False
+            quote_type = ""
+
+        return is_quoted_key, quote_type
+
+    def _is_valid_escaped_key_char(self, quote_type: str, start: int) -> bool:
+        if self.query_string[self._cursor] != quote_type:
+            # Check this isn't the end of the string (means we missed the closing quote)
+            if self._cursor + 2 >= len(self.query_string):
+                raise ValueError(
+                    "Missing closing quote for: " + self.query_string[start - 1 :]
+                )
+
+            return True
+
+        # Check if it's an escaped quote (doubled quote)
+        if (
+            self._cursor + 1 < len(self.query_string)
+            and self.query_string[self._cursor + 1] == quote_type
+        ):
+            # Skip the second quote
+            self._cursor += 1
+            return True
+
+        return False
+
+    def _parse_connector(self) -> str:
+        start = self._cursor
+        while self._cursor < len(self.query_string) and self._is_valid_connector_char(
+            self.query_string[self._cursor]
+        ):
+            self._cursor += 1
+        connector = self.query_string[start : self._cursor]
+        return connector
 
     def _parse_field(self) -> Dict[str, Any]:
         # Skip whitespace
@@ -84,13 +128,29 @@ class OpikQueryLanguage:
 
         # Parse the key if it exists
         if self.query_string[self._cursor] == ".":
+            # Skip the "."
             self._cursor += 1
+
+            # Check if the key is quoted
+            is_quoted_key, quote_type = self._check_escaped_key()
+
             start = self._cursor
-            while self._cursor < len(self.query_string) and self._is_valid_field_char(
-                self.query_string[self._cursor]
+            while self._cursor < len(self.query_string) and (
+                self._is_valid_field_char(self.query_string[self._cursor])
+                or (
+                    is_quoted_key and self._is_valid_escaped_key_char(quote_type, start)
+                )
             ):
                 self._cursor += 1
+
             key = self.query_string[start : self._cursor]
+
+            # If escaped key, skip the closing quote
+            if is_quoted_key:
+                key = key.replace(
+                    quote_type * 2, quote_type
+                )  # Replace doubled quotes with single quotes
+                self._cursor += 1
 
             # Keys are only supported for usage, feedback_scores and metadata
             if field not in ["usage", "feedback_scores", "metadata"]:
@@ -168,6 +228,8 @@ class OpikQueryLanguage:
         if self.query_string[self._cursor] == '"':
             self._cursor += 1
             start = self._cursor
+
+            # TODO: replace with new quote parser used in field parser
             while (
                 self._cursor < len(self.query_string)
                 and self.query_string[self._cursor] != '"'
@@ -201,20 +263,37 @@ class OpikQueryLanguage:
         if len(self.query_string) == 0:
             return None
 
-        # Parse fields
-        parsed_field = self._parse_field()
+        expressions = []
 
-        # Parse operators
-        parsed_operator = self._parse_operator(parsed_field["field"])
+        while True:
+            # Parse fields
+            parsed_field = self._parse_field()
 
-        # Parse values
-        parsed_value = self._parse_value()
+            # Parse operators
+            parsed_operator = self._parse_operator(parsed_field["field"])
 
-        # Check for any trailing characters
-        self._skip_whitespace()
-        if self._cursor < len(self.query_string):
-            raise ValueError(
-                f"Invalid filter string, trailing characters {self.query_string[self._cursor:]}"
-            )
+            # Parse values
+            parsed_value = self._parse_value()
 
-        return json.dumps([{**parsed_field, **parsed_operator, **parsed_value}])
+            expressions.append({**parsed_field, **parsed_operator, **parsed_value})
+
+            self._skip_whitespace()
+
+            if self._cursor < len(self.query_string):
+                position = self._cursor
+                connector = self._parse_connector()
+
+                if connector.lower() == "and":
+                    continue
+                elif connector.lower() == "or":
+                    raise ValueError(
+                        "Invalid filter string, OR is not currently supported"
+                    )
+                else:
+                    raise ValueError(
+                        f"Invalid filter string, trailing characters {self.query_string[position:]}"
+                    )
+            else:
+                break
+
+        return json.dumps(expressions)

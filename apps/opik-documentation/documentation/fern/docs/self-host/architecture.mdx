@@ -1,0 +1,101 @@
+---
+subtitle: High-level overview on Opik's Platform Architecture
+
+pytest_codeblocks_skip: true
+---
+
+Opik's architecture consists of multiple services that each handle a specific role, including:
+
+- **A backend service**: Java + Dropwizard.
+- **A frontend application**: TypeScript + React, served by Nginx.
+- **Data stores**:
+  - ClickHouse for large-scale data ingestion and fast queries (e.g., for traces or experiments).
+    - With Zookeeper to coordinate the cluster.
+    - With an Operator to provide operational and performance metrics.
+  - MySQL for transactional data.
+  - Redis for caching, rate limiting, distributed locks and streams.
+
+<Frame>
+  <img src="/img/self-host/architecture.png" alt="Architecture Diagram" />
+</Frame>
+
+## Backend Service
+
+Opik's backend uses Java 21 LTS and Dropwizard 4, structured as a RESTful web service offering public API
+endpoints for core functionality. Full API documentation is available [here](/reference/rest-api/overview).
+
+For observability Opik uses OpenTelemetry due its vendor-neutral approach and wide support across languages
+and frameworks. It provides a single, consistent way to collect telemetry data from all services and applications.
+
+_You can find the full backend codebase in Github under the [`apps/opik-backend`](https://github.com/comet-ml/opik/tree/main/apps/opik-backend) folder._
+
+## Frontend Application
+
+Opik's frontend is a TypeScript + React application served by Nginx. It provides a user-friendly interface for
+interacting with the backend services. The frontend is built using a modular approach, with each module
+encapsulating a specific feature or functionality.
+
+_You can find the full frontend codebase in Github under the [`apps/opik-frontend`](https://github.com/comet-ml/opik/tree/main/apps/opik-frontend) folder._
+
+## SDK's
+
+Opik provides SDKs for Python, and JavaScript. These SDKs allow developers to interact with Opik's backend
+services programmatically. The SDKs are designed to be easy to use and provide a high-level abstraction over
+the REST API and many additional features.
+
+_You can find the full SDK codebase in Github under the [`sdks/python`](https://github.com/comet-ml/opik/tree/main/sdks/python) for the Python SDK
+and [`sdks/typescript`](https://github.com/comet-ml/opik/tree/main/sdks/typescript) for the TypeScript SDK._
+
+## ClickHouse
+
+ClickHouse is a column-oriented database management system developed by Yandex. It is optimized for fast analytics on large datasets and is capable of processing hundreds of millions to more than a billion rows and tens of gigabytes of data per single server per second.
+
+Opik uses ClickHouse for datasets that require near real-time ingestion and analytical queries, such as:
+
+- LLM calls and traces
+- Feedback scores
+- Datasets and experiments
+- Experiments
+
+The image below details the schema used by Opik in ClickHouse:
+
+<Frame>
+  <img src="/img/self-host/clickhouse-schema.png" alt="ClickHouse Schema" />
+</Frame>
+<em>
+  <small>Liquibase automates schema management</small>
+</em>
+
+## MySQL
+
+Opik uses MySQL for transactional data, it provides ACID-compliant transactional storage for Opik's lower-volume but critical data, such as:
+
+- Feedback definitions
+- Metadata containers e.g., projects that group related traces
+- Configuration data
+
+The image below details the schema used by Opik in MySQL:
+
+<Frame>
+  <img src="/img/self-host/mysql-schema.png" alt="MySQL Schema" />
+</Frame>
+<em>
+  <small>Liquibase automates schema management</small>
+</em>
+
+## Redis
+
+Redis is an in-memory data structure store, used as a database, cache, and message broker. It supports a vast range of data structures. Opik uses Redis for:
+
+- A distributed cache: for high-speed lookups.
+- A distributed lock: for coordinating safe access to certain shared resources.
+- A rate limiter: to enforce throughput limits and protect scalability.
+- A streaming mechanism: Redis streams power Opik's Online evaluation functionality; future iterations may integrate Kafka or similar platforms for even higher scalability.
+
+## Observability
+
+Opik is built and runs on top of open-source infrastructure (MySQL, Redis, Kubernetes, and more), making it straightforward to integrate with popular observability stacks such as Grafana and Prometheus. Specifically:
+
+- The backend uses OpenTelemetry for vendor-neutral instrumentation.
+- ClickHouse deployments include an operator for real-time performance monitoring and metric exports to Grafana/Prometheus.
+- Other components (MySQL, Redis, Kubernetes) also have well-documented strategies for monitoring.
