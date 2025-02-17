@@ -84,7 +84,7 @@ const ChartTooltipContent = React.forwardRef<
                     className="flex h-6 w-full flex-wrap items-center gap-1.5 px-2"
                   >
                     <div
-                      className="size-2 shrink-0 rounded-[2px] border-[--color-border] bg-[--color-bg]"
+                      className="size-2 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
                       style={
                         {
                           "--color-bg": indicatorColor,
@@ -99,7 +99,7 @@ const ChartTooltipContent = React.forwardRef<
                         </span>
                       </div>
                       {!isUndefined(item.value) && (
-                        <span className="comet-body-xs-accented">
+                        <span className="comet-body-xs">
                           {renderValue(item.value)}
                         </span>
                       )}

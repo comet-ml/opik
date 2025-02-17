@@ -9,6 +9,7 @@ import {
 } from "@/store/PlaygroundStore";
 import ReactMarkdown from "react-markdown";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
+import { cn } from "@/lib/utils";
 
 interface PlaygroundOutputCellData {
   dataItemId: string;
@@ -46,7 +47,11 @@ const PlaygroundOutputCell: React.FunctionComponent<
     }
 
     return (
-      <ReactMarkdown className={stale ? "text-muted-gray" : ""}>
+      <ReactMarkdown
+        className={cn("comet-markdown", {
+          "text-muted-gray": stale,
+        })}
+      >
         {value}
       </ReactMarkdown>
     );

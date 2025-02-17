@@ -11,12 +11,14 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
-import { getDefaultProviderKey } from "@/lib/provider";
-import { PROVIDERS } from "@/constants/providers";
-import { generateDefaultLLMPromptMessage, getModelProvider } from "@/lib/llm";
+import { generateDefaultLLMPromptMessage } from "@/lib/llm";
+import {
+  ModelResolver,
+  ProviderResolver,
+} from "@/hooks/useLLMProviderModelsData";
 
 export const getDefaultConfigByProvider = (
-  provider: PROVIDER_TYPE,
+  provider?: PROVIDER_TYPE | "",
 ): LLMPromptConfigsType => {
   if (provider === PROVIDER_TYPE.OPEN_AI) {
     return {
@@ -39,59 +41,30 @@ export const getDefaultConfigByProvider = (
   return {};
 };
 
-const getDefaultModel = (
-  lastPickedModel: PROVIDER_MODEL_TYPE | "",
-  setupProviders: PROVIDER_TYPE[],
-) => {
-  const lastPickedModelProvider = lastPickedModel
-    ? getModelProvider(lastPickedModel)
-    : "";
-
-  const isLastPickedModelValid =
-    !!lastPickedModelProvider &&
-    setupProviders.includes(lastPickedModelProvider);
-
-  if (isLastPickedModelValid) {
-    return lastPickedModel;
-  }
-
-  const defaultProviderKey = getDefaultProviderKey(setupProviders);
-
-  if (defaultProviderKey) {
-    return PROVIDERS[defaultProviderKey]?.defaultModel || "";
-  }
-
-  return "";
-};
-
-const getDefaultModelConfigs = (model: PROVIDER_MODEL_TYPE | "") => {
-  if (!model) {
-    return {};
-  }
-
-  const modelProvider = getModelProvider(model);
-
-  return modelProvider ? getDefaultConfigByProvider(modelProvider) : {};
-};
-
 interface GenerateDefaultPromptParams {
   initPrompt?: Partial<PlaygroundPromptType>;
   setupProviders: PROVIDER_TYPE[];
   lastPickedModel?: PROVIDER_MODEL_TYPE | "";
+  providerResolver: ProviderResolver;
+  modelResolver: ModelResolver;
 }
 
 export const generateDefaultPrompt = ({
   initPrompt = {},
   setupProviders = [],
   lastPickedModel,
+  providerResolver,
+  modelResolver,
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
-  const modelByDefault = getDefaultModel(lastPickedModel || "", setupProviders);
+  const modelByDefault = modelResolver(lastPickedModel || "", setupProviders);
+  const provider = providerResolver(modelByDefault);
 
   return {
     name: "Prompt",
     messages: [generateDefaultLLMPromptMessage()],
     model: modelByDefault,
-    configs: getDefaultModelConfigs(modelByDefault),
+    provider,
+    configs: getDefaultConfigByProvider(provider),
     ...initPrompt,
     id: generateRandomString(),
   };

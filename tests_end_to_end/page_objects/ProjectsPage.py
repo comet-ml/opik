@@ -18,7 +18,7 @@ class ProjectsPage(BasePage):
     def check_project_exists_on_current_page(self, project_name):
         expect(
             self.page.get_by_role("cell", name=project_name, exact=True)
-        ).to_be_visible()
+        ).to_be_visible(timeout=3)
 
     def check_project_not_exists_on_current_page(self, project_name):
         expect(
@@ -39,7 +39,7 @@ class ProjectsPage(BasePage):
             )
 
     def create_new_project(self, project_name):
-        self.page.get_by_role("button", name="Create new project").click()
+        self.page.get_by_role("button", name="Create new project").first.click()
 
         project_name_fill_box = self.page.get_by_placeholder("Project name")
         project_name_fill_box.click()
@@ -57,3 +57,4 @@ class ProjectsPage(BasePage):
         row.get_by_role("button").click()
         self.page.get_by_role("menuitem", name="Delete").click()
         self.page.get_by_role("button", name="Delete project").click()
+        self.check_project_not_exists_on_current_page(project_name)

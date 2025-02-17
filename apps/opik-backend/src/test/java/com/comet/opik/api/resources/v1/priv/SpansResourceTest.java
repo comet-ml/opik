@@ -4026,6 +4026,12 @@ class SpansResourceTest {
         }
     }
 
+    private Stream<Arguments> getProjectNameModifierArg() {
+        return Stream.of(
+                arguments(Function.identity()),
+                arguments((Function<String, String>) String::toUpperCase));
+    }
+
     @Nested
     @DisplayName("Batch:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -4054,9 +4060,7 @@ class SpansResourceTest {
         }
 
         Stream<Arguments> batch__whenCreateSpans__thenReturnNoContent() {
-            return Stream.of(
-                    arguments(Function.identity()),
-                    arguments((Function<String, String>) String::toUpperCase));
+            return getProjectNameModifierArg();
         }
 
         @Test
@@ -4215,17 +4219,7 @@ class SpansResourceTest {
     }
 
     private void batchCreateAndAssert(List<Span> expectedSpans, String apiKey, String workspaceName) {
-
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("batch")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new SpanBatch(expectedSpans)))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+        spanResourceClient.batchCreateSpans(expectedSpans, apiKey, workspaceName);
     }
 
     private Span getAndAssert(Span expectedSpan, String apiKey, String workspaceName) {
@@ -5559,17 +5553,66 @@ class SpansResourceTest {
                             .build())
                     .toList();
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("feedback-scores")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(scores)))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            spanResourceClient.feedbackScores(scores, API_KEY, TEST_WORKSPACE);
         }
+
+        @ParameterizedTest
+        @MethodSource
+        void feedback__whenLinkingByProjectName__thenReturnNoContent(Function<String, String> projectNameModifier) {
+
+            String projectName = UUID.randomUUID().toString();
+
+            createProject(projectName.toUpperCase(), TEST_WORKSPACE, API_KEY);
+
+            var spans = IntStream.range(0, 10)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectId(null)
+                            .projectName(projectNameModifier.apply(projectName))
+                            .parentSpanId(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            batchCreateAndAssert(spans, API_KEY, TEST_WORKSPACE);
+
+            var scores = spans.stream()
+                    .map(span -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(span.id())
+                            .projectName(projectNameModifier.apply(projectName))
+                            .build())
+                    .toList();
+
+            spanResourceClient.feedbackScores(scores, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpansWithScores = spans.stream()
+                    .map(span -> {
+                        FeedbackScoreBatchItem feedbackScoreBatchItem = scores.stream()
+                                .filter(score -> score.id().equals(span.id()))
+                                .findFirst()
+                                .orElseThrow();
+                        return span.toBuilder()
+                                .feedbackScores(List.of(mapFeedbackScore(feedbackScoreBatchItem)))
+                                .build();
+                    })
+                    .toList();
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), expectedSpansWithScores.reversed(),
+                    expectedSpansWithScores.reversed(), List.of(), API_KEY);
+        }
+
+        Stream<Arguments> feedback__whenLinkingByProjectName__thenReturnNoContent() {
+            return getProjectNameModifierArg();
+        }
+    }
+
+    private FeedbackScore mapFeedbackScore(FeedbackScoreBatchItem feedbackScoreBatchItem) {
+        return FeedbackScore.builder()
+                .name(feedbackScoreBatchItem.name())
+                .value(feedbackScoreBatchItem.value())
+                .source(feedbackScoreBatchItem.source())
+                .categoryName(feedbackScoreBatchItem.categoryName())
+                .reason(feedbackScoreBatchItem.reason())
+                .build();
     }
 
     @Nested

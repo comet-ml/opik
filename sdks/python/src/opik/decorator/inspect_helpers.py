@@ -30,6 +30,10 @@ def is_generator(obj: Any) -> bool:
     return inspect.isgenerator(obj)
 
 
+def is_generator_function(obj: Any) -> bool:
+    return inspect.isgeneratorfunction(obj)
+
+
 def is_async(func: Callable) -> bool:
     if inspect.iscoroutinefunction(func):
         return True

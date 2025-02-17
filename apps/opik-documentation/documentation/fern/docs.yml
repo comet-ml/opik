@@ -1,0 +1,373 @@
+instances:
+  - url: https://opik.docs.buildwithfern.com/docs/opik
+favicon: img/logo.svg
+layout:
+  searchbar-placement: header
+  tabs-placement: header
+colors:
+  accent-primary:
+    light: "#2e8555"
+    dark: "#166534"
+  background:
+    light: "#FFFFFF"
+    dark: "#0b0d0e"
+logo:
+  light: img/opik-logo.svg
+  dark: img/logo-dark-mode.svg
+  href: null
+  height: 28
+navbar-links:
+  - type: minimal
+    text: "Github"
+    href: "https://github.com/comet-ml/opik"
+  - type: filled
+    text: "Go to App"
+    href: "https://www.comet.com/opik"
+tabs:
+  documentation:
+    display-name: Documentation
+    icon: fa-regular fa-building
+    slug: /
+  self-host:
+    display-name: Self-hosting Opik
+    icon: fa-regular fa-server
+    slug: /self-host
+  cookbook:
+    display-name: Cookbooks
+    icon: fa-regular fa-book
+    slug: /cookbook
+  reference:
+    display-name: SDK and API reference
+    icon: fa-regular fa-square-terminal
+    slug: /reference
+navigation:
+  - tab: documentation
+    layout:
+      - section: Getting Started
+        slug: /
+        contents:
+          - page: Home
+            path: docs/home.mdx
+            slug: /
+            icon: fa-regular fa-house
+          - page: Quickstart
+            path: docs/quickstart.mdx
+            slug: /quickstart
+            icon: fa-regular fa-bolt
+          - page: Roadmap
+            path: docs/roadmap.mdx
+            slug: roadmap
+            icon: fa-regular fa-map
+          - page: FAQ
+            path: docs/faq.mdx
+            slug: faq
+            icon: fa-regular fa-question
+          - changelog: docs/changelog
+            title: Changelog
+            slug: changelog
+            icon: fa-regular fa-calendar
+      - section: Observability
+        slug: /tracing
+        contents:
+          - page: Log traces
+            path: docs/tracing/log_traces.mdx
+            slug: log_traces
+          - page: Log agents
+            path: docs/tracing/log_agents.mdx
+            slug: log_agents
+          - page: Log multimodal traces
+            path: docs/tracing/log_multimodal_traces.mdx
+            slug: log_multimodal_traces
+          - page: Log distributed traces
+            path: docs/tracing/log_distributed_traces.mdx
+            slug: log_distributed_traces
+          - page: Annotate traces
+            path: docs/tracing/annotate_traces.mdx
+            slug: annotate_traces
+          - page: Cost tracking
+            path: docs/tracing/cost_tracking.mdx
+            slug: cost_tracking
+          - page: SDK configuration
+            path: docs/tracing/sdk_configuration.mdx
+            slug: sdk_configuration
+          - page: Export data
+            path: docs/tracing/export_data.mdx
+            slug: export_data
+          - section: Integrations
+            slug: /integrations
+            contents:
+              - page: Overview
+                path: docs/tracing/integrations/overview.mdx
+                slug: overview
+              - page: OpenAI
+                path: docs/tracing/integrations/openai.mdx
+                slug: openai
+              - page: OpenRouter
+                path: docs/tracing/integrations/openrouter.mdx
+                slug: openrouter
+              - page: LiteLLM
+                path: docs/tracing/integrations/litellm.mdx
+                slug: litellm
+              - page: Langchain
+                path: docs/tracing/integrations/langchain.mdx
+                slug: langchain
+              - page: AIsuite
+                path: docs/tracing/integrations/aisuite.mdx
+                slug: aisuite
+              - page: Anthropic
+                path: docs/tracing/integrations/anthropic.mdx
+                slug: anthropic
+              - page: Bedrock
+                path: docs/tracing/integrations/bedrock.mdx
+                slug: bedrock
+              - page: Crewai
+                path: docs/tracing/integrations/crewai.mdx
+                slug: crewai
+              - page: Dify
+                path: docs/tracing/integrations/dify.mdx
+                slug: dify
+              - page: DSPY
+                path: docs/tracing/integrations/dspy.mdx
+                slug: dspy
+              - page: Gemini
+                path: docs/tracing/integrations/gemini.mdx
+                slug: gemini
+              - page: Groq
+                path: docs/tracing/integrations/groq.mdx
+                slug: groq
+              - page: Guardrails AI
+                path: docs/tracing/integrations/guardrails-ai.mdx
+                slug: guardrails-ai
+              - page: Haystack
+                path: docs/tracing/integrations/haystack.mdx
+                slug: haystack
+              - page: LangGraph
+                path: docs/tracing/integrations/langgraph.mdx
+                slug: langgraph
+              - page: Llama Index
+                path: docs/tracing/integrations/llama_index.mdx
+                slug: llama_indec
+              - page: Ollama
+                path: docs/tracing/integrations/ollama.mdx
+                slug: ollama
+              - page: Predibase
+                path: docs/tracing/integrations/predibase.mdx
+                slug: predibase
+              - page: Ragas
+                path: docs/tracing/integrations/ragas.mdx
+                slug: ragas
+              - page: WatsonX
+                path: docs/tracing/integrations/watsonx.mdx
+                slug: watsonx
+      - section: Evaluation
+        slug: /evaluation
+        contents:
+          - page: Overview
+            path: docs/evaluation/overview.mdx
+            slug: overview
+          - page: Concepts
+            path: docs/evaluation/concepts.mdx
+            slug: concepts
+          - page: Evaluate prompts
+            path: docs/evaluation/evaluate_prompt.mdx
+            slug: evaluate_prompt
+          - page: Evaluate your LLM application
+            path: docs/evaluation/evaluate_your_llm.mdx
+            slug: evaluate_your_llm
+          - page: Update existing experiment
+            path: docs/evaluation/update_existing_experiment.mdx
+            slug: update_existing_experiment
+          - page: Manage datasets
+            path: docs/evaluation/manage_datasets.mdx
+            slug: manage_datasets
+          - section: Metrics
+            slug: /metrics
+            contents:
+              - page: Overview
+                path: docs/evaluation/metrics/overview.mdx
+                slug: overview
+              - page: Heuristic metrics
+                path: docs/evaluation/metrics/heuristic_metrics.mdx
+                slug: heuristic_metrics
+              - page: Hallucination
+                path: docs/evaluation/metrics/hallucination.mdx
+                slug: hallucination
+              - page: G-Eval
+                path: docs/evaluation/metrics/g_eval.mdx
+                slug: g_eval
+              - page: Moderation
+                path: docs/evaluation/metrics/moderation.mdx
+                slug: moderation
+              - page: Usefulness
+                path: docs/evaluation/metrics/usefulness.mdx
+                slug: usefulness
+              - page: Answer relevance
+                path: docs/evaluation/metrics/answer_relevance.mdx
+                slug: answer_relevance
+              - page: Context precision
+                path: docs/evaluation/metrics/context_precision.mdx
+                slug: context_precision
+              - page: Context recall
+                path: docs/evaluation/metrics/context_recall.mdx
+                slug: context_recall
+              - page: Custom model
+                path: docs/evaluation/metrics/custom_model.mdx
+                slug: custom_model
+              - page: Custom metric
+                path: docs/evaluation/metrics/custom_metric.mdx
+                slug: custom_metric
+      - section: Prompt engineering
+        slug: /prompt_engineering
+        contents:
+          - page: Prompt management
+            path: docs/prompt_engineering/prompt_management.mdx
+            slug: prompt_management
+          - page: Managing prompts in code
+            path: docs/prompt_engineering/managing_prompts_in_code.mdx
+            slug: managing_prompts_in_code
+          - page: Playground
+            path: docs/prompt_engineering/playground.mdx
+            slug: playground
+      - section: Testing
+        slug: /testing
+        contents:
+          - page: Pytest integration
+            path: docs/testing/pytest_integration.mdx
+            slug: pytest_integration
+      - section: Production
+        slug: /production
+        contents:
+          - page: Production monitoring
+            path: docs/production/production_monitoring.mdx
+            slug: /production_monitoring
+          - page: Rules
+            path: docs/production/rules.mdx
+            slug: rules
+          - page: Gateway
+            path: docs/production/gateway.mdx
+            slug: gateway
+  - tab: self-host
+    layout:
+      - page: Overview
+        path: docs/self-host/overview.mdx
+        slug: overview
+      - page: Local deployment
+        path: docs/self-host/local_deployment.mdx
+        slug: local_deployment
+      - page: Kubernetes deployment
+        path: docs/self-host/kubernetes.mdx
+        slug: kubernetes
+      - page: Platform Architecture
+        path: docs/self-host/architecture.mdx
+        slug: architecture
+      - section: Configuration
+        slug: /configure
+        contents:
+          - page: Anonymous usage statistics
+            path: docs/self-host/configure/anonymous_usage_statistics.mdx
+            slug: anonymous_usage_statistics
+  - tab: cookbook
+    layout:
+      - page: Overview
+        path: docs/cookbook/overview.mdx
+      - section: Getting started tutorials
+        slug: /
+        contents:
+          - page: Quickstart notebook
+            path: docs/cookbook/quickstart_notebook.mdx
+            slug: quickstart_notebook
+      - section: Integrations
+        slug: /
+        contents:
+          - page: OpenAI
+            path: docs/cookbook/openai.mdx
+            slug: openai
+          - page: LiteLLM
+            path: docs/cookbook/litellm.mdx
+            slug: litellm
+          - page: Langchain
+            path: docs/cookbook/langchain.mdx
+            slug: langchain
+          - page: aisuite
+            path: docs/cookbook/aisuite.mdx
+            slug: aisuite
+          - page: Anthropic
+            path: docs/cookbook/anthropic.mdx
+            slug: anthropic
+          - page: Bedrock
+            path: docs/cookbook/bedrock.mdx
+            slug: bedrock
+          - page: Crewai
+            path: docs/cookbook/crewai.mdx
+            slug: crewai
+          - page: DSPY
+            path: docs/cookbook/dspy.mdx
+            slug: dspy
+          - page: Gemini
+            path: docs/cookbook/gemini.mdx
+            slug: gemini
+          - page: Groq
+            path: docs/cookbook/groq.mdx
+            slug: groq
+          - page: Guardrails AI
+            path: docs/cookbook/guardrails-ai.mdx
+            slug: guardrails-ai
+          - page: Haystack
+            path: docs/cookbook/haystack.mdx
+            slug: haystack
+          - page: LangGraph
+            path: docs/cookbook/langgraph.mdx
+            slug: langgraph
+          - page: Llama Index
+            path: docs/cookbook/llama-index.mdx
+            slug: llama-index
+          - page: Ollama
+            path: docs/cookbook/ollama.mdx
+            slug: ollama
+          - page: Predibase
+            path: docs/cookbook/predibase.mdx
+            slug: predibase
+          - page: Ragas
+            path: docs/cookbook/ragas.mdx
+            slug: ragas
+          - page: WatsonX
+            path: docs/cookbook/watsonx.mdx
+            slug: watsonx
+      - section: Advanced
+        slug: /
+        contents:
+          - page: Evaluate hallucination metric
+            path: docs/cookbook/evaluate_hallucination_metric.mdx
+            slug: evaluate_hallucination_metric
+          - page: Evaluate moderation metric
+            path: docs/cookbook/evaluate_moderation_metric.mdx
+            slug: evaluate_moderation_metric
+  - tab: reference
+    layout:
+      - page: Overview
+        path: docs/reference/overview.mdx
+        slug: overview
+      - section: Python SDK
+        slug: python-sdk
+        contents:
+          - link: Reference
+            href: https://www.comet.com/docs/opik/python-sdk-reference/
+      - section: Typescript SDK
+        slug: typescript-sdk
+        contents:
+          - page: Overview
+            path: docs/reference/typescript-sdk/overview.mdx
+            slug: overview
+      - section: Rest API
+        slug: rest-api
+        contents:
+          - page: Overview
+            path: docs/reference/rest-api/overview.mdx
+            slug: overview
+          - api: API Reference
+            slug: /
+            display-errors: true
+redirects:
+  - source: "/docs/opik/playground"
+    destination: "/docs/opik/prompt_engineering/playground"
+    permanent: true
