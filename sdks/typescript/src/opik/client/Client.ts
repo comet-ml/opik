@@ -3,7 +3,7 @@ import { OpikApiClient } from "@/rest_api";
 import type { Trace as ITrace } from "@/rest_api/api";
 import { Trace } from "@/tracer/Trace";
 import { generateId } from "@/utils/generateId";
-import { logger } from "@/utils/logger";
+import { createLink, logger } from "@/utils/logger";
 import { getProjectUrl } from "@/utils/url";
 import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
@@ -58,7 +58,7 @@ export class OpikClient {
     });
 
     logger.info(
-      `Started logging traces to the "${projectName}" project at ${projectUrl}.`
+      `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
     );
 
     this.lastProjectNameLogged = projectName;
@@ -91,7 +91,7 @@ export class OpikClient {
       await this.spanBatchQueue.flush();
       await this.traceFeedbackScoresBatchQueue.flush();
       await this.spanFeedbackScoresBatchQueue.flush();
-      logger.debug("Flush operation completed successfully");
+      logger.info("Successfully flushed all data to Opik");
     } catch (error) {
       logger.error("Error during flush operation:", {
         error: error instanceof Error ? error.message : error,

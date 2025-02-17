@@ -84,6 +84,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "ansi-escapes": "^7.0.0",
     "node-fetch": "^3.3.2",
     "qs": "^6.13.1",
     "readable-stream": "^4.7.0",

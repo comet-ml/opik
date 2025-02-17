@@ -1,3 +1,4 @@
+import { link } from "ansi-escapes";
 import { Logger } from "tslog";
 
 const logLevels = {
@@ -10,18 +11,24 @@ const logLevels = {
   FATAL: 6,
 } as const;
 
-const logger = new Logger({ name: "opik" });
+export function createLink(url: string, text: string = url): string {
+  return link(text, url);
+}
 
-const setLoggerLevel = (level: keyof typeof logLevels) => {
+export const logger = new Logger({
+  hideLogPositionForProduction: true,
+  prettyLogTemplate:
+    "{{yyyy}}.{{mm}}.{{dd}} {{hh}}:{{MM}}:{{ss}}:{{ms}}\t{{logLevelName}}\t",
+});
+
+export const setLoggerLevel = (level: keyof typeof logLevels) => {
   logger.settings.minLevel = logLevels[level];
 };
 
-const disableLogger = () => {
+export const disableLogger = () => {
   logger.settings.minLevel = 100;
 };
 
 setLoggerLevel(
   (process.env.OPIK_LOG_LEVEL as keyof typeof logLevels) || "INFO"
 );
-
-export { logger, disableLogger, setLoggerLevel };
