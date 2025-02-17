@@ -1,6 +1,13 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
 import isNumber from "lodash/isNumber";
+import get from "lodash/get";
 
 import { formatNumericData } from "@/lib/utils";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -30,18 +37,13 @@ import {
 } from "@/types/shared";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
-import {
-  ColumnPinningState,
-  ColumnSort,
-  RowSelectionState,
-} from "@tanstack/react-table";
+import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
-import { get } from "lodash";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -175,12 +177,22 @@ const ProjectsPage: React.FunctionComponent = () => {
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
-
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [size, setSize] = useState(10);
-
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+    updateType: "replaceIn",
+  });
+  const [size = 10, setSize] = useQueryParam("size", NumberParam, {
+    updateType: "replaceIn",
+  });
+  const [rowSelection = {}, setRowSelection] = useQueryParam(
+    "selection",
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
     COLUMNS_SORT_KEY,
@@ -192,7 +204,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   const { data, isPending } = useProjectWithStatisticsList(
     {
       workspaceName,
-      search,
+      search: search!,
       sorting: sortedColumns.map((column) => {
         if (column.id === "last_updated_at") {
           return {
@@ -202,8 +214,8 @@ const ProjectsPage: React.FunctionComponent = () => {
         }
         return column;
       }),
-      page,
-      size,
+      page: page!,
+      size: size!,
     },
     {
       placeholderData: keepPreviousData,
@@ -292,7 +304,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
-          searchText={search}
+          searchText={search!}
           setSearchText={setSearch}
           placeholder="Search by name"
           className="w-[320px]"
@@ -339,9 +351,9 @@ const ProjectsPage: React.FunctionComponent = () => {
       />
       <div className="py-4">
         <DataTablePagination
-          page={page}
+          page={page!}
           pageChange={setPage}
-          size={size}
+          size={size!}
           sizeChange={setSize}
           total={total}
         ></DataTablePagination>
