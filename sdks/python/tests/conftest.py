@@ -8,6 +8,7 @@ import pytest
 from opik import context_storage
 from opik.api_objects import opik_client
 from opik.message_processing import streamer_constructors
+from . import testlib
 from .testlib import backend_emulator_message_processor
 
 
@@ -115,3 +116,13 @@ def fake_backend_without_batching(patch_streamer_without_batching):
 
 def random_chars(n: int = 6) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
+
+
+@pytest.fixture()
+def configure_opik_local_env_vars():
+    with testlib.patch_environ(
+        {
+            "OPIK_URL_OVERRIDE": "http://localhost:5173/api",
+        }
+    ):
+        yield
