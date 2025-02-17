@@ -70,7 +70,7 @@ class Opik:
             url_override=host,
             api_key=api_key,
         )
-        config.check_for_misconfiguration(config_)
+        config.is_config_misconfigured(config_, show_misconfiguration_message=True)
         self._config = config_
 
         self._workspace: str = config_.workspace
