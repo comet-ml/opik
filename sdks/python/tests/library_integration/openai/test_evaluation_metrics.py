@@ -42,6 +42,31 @@ def test__answer_relevance(context):
         ["France is a country in Europe."],
     ],
 )
+def test__no_opik_configured__answer_relevance(
+    context,
+    configure_opik_not_configured,
+):
+    import os
+
+    os.environ["OPIK_DISABLE_LITELLM_MODELS_MONITORING"] = "True"
+    answer_relevance_metric = metrics.AnswerRelevance()
+
+    result = answer_relevance_metric.score(
+        input="What's the capital of France?",
+        output="The capital of France is Paris.",
+        context=context,
+    )
+
+    assert_score_result(result)
+
+
+@pytest.mark.parametrize(
+    argnames="context",
+    argvalues=[
+        None,
+        ["France is a country in Europe."],
+    ],
+)
 def test__context_precision(context):
     context_precision_metric = metrics.ContextPrecision()
 

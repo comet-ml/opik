@@ -126,3 +126,16 @@ def configure_opik_local_env_vars():
         }
     ):
         yield
+
+
+@pytest.fixture()
+def configure_opik_not_configured():
+    with testlib.patch_environ(
+        add_keys={},
+        remove_keys=[
+            "OPIK_URL_OVERRIDE",
+            "OPIK_API_KEY",
+            "OPIK_WORKSPACE",
+        ],
+    ):
+        yield
