@@ -1,6 +1,5 @@
 package com.comet.opik.utils;
 
-import com.comet.opik.api.resources.v1.internal.UsageResource;
 import com.comet.opik.domain.SpanType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,15 +31,15 @@ public class OpenTelemetryUtils {
         var durationMs = (otelSpan.getEndTimeUnixNano() - otelSpan.getStartTimeUnixNano()) / 1_000_000d;
 
         var otelTraceId = otelSpan.getTraceId();
-        var opikTraceId = convertOtelSpanIdToUUIDv7(otelTraceId.toByteArray(), startTimeMs, true);
+        var opikTraceId = convertOtelIdToUUIDv7(otelTraceId.toByteArray(), startTimeMs, true);
 
         var otelSpanId = otelSpan.getSpanId();
-        var opikSpanId = convertOtelSpanIdToUUIDv7(otelSpanId.toByteArray(), startTimeMs, true);
+        var opikSpanId = convertOtelIdToUUIDv7(otelSpanId.toByteArray(), startTimeMs, true);
 
         var otelParentSpanId = otelSpan.getParentSpanId();
         var opikParentSpanId = otelParentSpanId.isEmpty()
                 ? null
-                : convertOtelSpanIdToUUIDv7(otelParentSpanId.toByteArray(), startTimeMs, true);
+                : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), startTimeMs, true);
 
         var attributes = convertAttributesToJson(otelSpan.getAttributesList());
 
@@ -86,7 +85,7 @@ public class OpenTelemetryUtils {
         return node;
     }
 
-    static long WEEK_MILLISECONDS = 7L * 24 * 60 * 60 * 1000; // 604,800,000 milliseconds
+    static long DAY_MILLISECONDS = 24 * 60 * 60 * 1000L;
 
     /**
      * Uses 64-bit integer OpenTelemetry SpanId and its timestamp to prepare a good UUIDv7 id. This is actually
@@ -95,21 +94,21 @@ public class OpenTelemetryUtils {
      *
      * The truncate timestamp option is relevant when you receive non-UUIDs in multiple batches and can't predict
      * what's going to be the actual Opik UUID from the Otel integer id you know. So we take the span timestamp truncated
-     * by the week as form to make it predictable. This works fine as makes UUID predictable and they are stored next
+     * by time window as form to make it predictable. This works fine as makes UUID predictable and they are stored next
      * to each other on Clickhouse, but it has two drawbacks: (1) traces might show up un-ordered in Traces page (a trace
      * from Monday can appear as 'newer' than a Friday trace as their UUID have the same timestamp: Sunday at 00:00:00;
      * (2) a routine running between Saturday 23:59:30 and Sunday 00:00:30 will be split in 2 traces; both incomplete.
      *
      * @param otelSpanId a OpenTelemetry 64-bit integer spanId
      * @param spanTimestampMs a timestamp for the span in millis
-     * @param weekTruncate truncates the timestamp on returned UUID by week level
+     * @param timeTruncate truncates the timestamp on returned UUID by a time window level
      * @return a valid UUIDv7
      */
-    protected static UUID convertOtelSpanIdToUUIDv7(byte[] otelSpanId, long spanTimestampMs, boolean weekTruncate) {
+    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long spanTimestampMs, boolean timeTruncate) {
         // Prepare the 16-byte array for the UUID
         byte[] uuidBytes = new byte[16];
 
-        long timestampMs = weekTruncate ? (spanTimestampMs / WEEK_MILLISECONDS) * WEEK_MILLISECONDS : spanTimestampMs;
+        long timestampMs = timeTruncate ? (spanTimestampMs / DAY_MILLISECONDS) * DAY_MILLISECONDS : spanTimestampMs;
 
         // Bytes 0-5: 48-bit timestamp (big-endian)
         long ts48 = timestampMs & 0xFFFFFFFFFFFFL; // 48 bits
@@ -146,7 +145,7 @@ public class OpenTelemetryUtils {
      * @param timestampMs a timestamp for the span in millis
      * @return a valid UUIDv7
      */
-    protected static UUID convertOtelSpanIdToUUIDv7(byte[] otelSpanId, long timestampMs) throws Exception {
-        return convertOtelSpanIdToUUIDv7(otelSpanId, timestampMs, false);
+    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long timestampMs) throws Exception {
+        return convertOtelIdToUUIDv7(otelSpanId, timestampMs, false);
     }
 }

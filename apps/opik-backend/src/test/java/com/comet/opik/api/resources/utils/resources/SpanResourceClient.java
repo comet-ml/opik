@@ -18,6 +18,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
@@ -143,6 +144,25 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
         assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
         return response.readEntity(Span.class);
+    }
+
+    public Span.SpanPage getByTraceIdAndProject(UUID traceId, String projectName, String workspaceName, String apiKey) {
+        var requestBuilder = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("trace_id", traceId.toString());
+
+        if (StringUtils.isNotEmpty(projectName)) {
+            requestBuilder = requestBuilder.queryParam("project", projectName);
+        }
+
+        var response = requestBuilder
+                .queryParam("project_name", projectName)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        return response.readEntity(Span.SpanPage.class);
     }
 
     public void deleteSpan(UUID id, String workspaceName, String apiKey) {
