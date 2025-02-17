@@ -1,3 +1,5 @@
+import { logger } from "@/utils/logger";
+
 const DEFAULT_DEBOUNCE_BATCH_DELAY = 300;
 const DEFAULT_BATCH_SIZE = 100;
 
@@ -72,7 +74,17 @@ class ActionQueue<EntityData = object, EntityId = string> {
 
     const queue = new Map(this.queue);
     this.queue.clear();
-    this.promise = this.promise.finally(() => this.action(queue));
+
+    logger.debug(`Adding ${queue.size} items to ${this.name} promise:`, queue);
+    this.promise = this.promise
+      .finally(() => {
+        logger.debug(`Flushing ${this.name}:`, queue);
+        this.action(queue);
+      })
+      .catch((error) => {
+        logger.error(`Failed to flush ${this.name}:`, error, queue);
+      });
+
     await this.promise;
   };
 }

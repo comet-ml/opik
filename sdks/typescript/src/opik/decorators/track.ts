@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { OpikClient } from "@/client/Client";
+import { logger } from "@/utils/logger";
 import { SpanType } from "@/rest_api/api/types/SpanType";
 import { Span } from "@/tracer/Span";
 import { Trace } from "@/tracer/Trace";
@@ -47,6 +48,12 @@ function logSpan({
   trace?: Trace;
   type?: SpanType;
 }) {
+  logger.debug("Creating new span:", {
+    name,
+    parentSpan: parentSpan?.data.id,
+    projectName,
+    type,
+  });
   let spanTrace = trace;
 
   if (!spanTrace) {
@@ -63,6 +70,7 @@ function logSpan({
     type,
   });
 
+  logger.debug("Span created with ID:", span.data.id);
   return { span, trace: spanTrace };
 }
 
@@ -75,15 +83,20 @@ function logStart({
   span: Span;
   trace?: Trace;
 }) {
+  logger.debug("Starting span execution:", {
+    spanId: span.data.id,
+    traceId: trace?.data.id,
+  });
   if (args.length === 0) {
     return;
   }
 
   const input = { arguments: args };
-
+  logger.debug("Recording span input");
   span.update({ input });
 
   if (trace) {
+    logger.debug("Recording trace input");
     trace.update({ input });
   }
 }
@@ -97,6 +110,10 @@ function logSuccess({
   span: Span;
   trace?: Trace;
 }) {
+  logger.debug("Recording successful execution:", {
+    spanId: span.data.id,
+    traceId: trace?.data.id,
+  });
   const output = typeof result === "object" ? result : { result };
   const endTime = new Date();
 
@@ -116,6 +133,19 @@ function logError({
   error: any;
   trace?: Trace;
 }) {
+  logger.error("Recording execution error:", {
+    spanId: span.data.id,
+    traceId: trace?.data.id,
+    error:
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          }
+        : error,
+  });
+
   if (error instanceof Error) {
     span.update({
       errorInfo: {
