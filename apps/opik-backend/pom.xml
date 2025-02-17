@@ -28,7 +28,7 @@
         <org.mapstruct.version>1.6.2</org.mapstruct.version>
         <testcontainers.version>1.20.2</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
-        <wiremock.version>3.10.0</wiremock.version>
+        <wiremock.version>3.12.0</wiremock.version>
         <redisson.version>3.44.0</redisson.version>
         <opentelmetry.version>2.12.0</opentelmetry.version>
         <aws.java.sdk.version>2.30.2</aws.java.sdk.version>
@@ -196,7 +196,12 @@
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <version>5.2.3</version>
+            <version>5.4.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents.core5</groupId>
+            <artifactId>httpcore5</artifactId>
+            <version>5.3.3</version>
         </dependency>
         <dependency>
             <groupId>org.mvel</groupId>
