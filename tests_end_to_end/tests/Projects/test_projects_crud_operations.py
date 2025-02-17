@@ -10,9 +10,7 @@ from page_objects.ProjectsPage import ProjectsPage
 
 
 class TestProjectsCrud:
-    @pytest.mark.parametrize(
-        "project_fixture", ["create_delete_project_ui", "create_delete_project_sdk"]
-    )
+    @pytest.mark.parametrize("project_fixture", ["create_project", "create_project_ui"])
     @pytest.mark.sanity
     def test_project_visibility(self, request, page: Page, project_fixture):
         """
@@ -37,7 +35,7 @@ class TestProjectsCrud:
 
     @pytest.mark.parametrize(
         "project_fixture",
-        ["create_project_sdk_no_cleanup", "create_project_ui_no_cleanup"],
+        ["create_project", "create_project_ui"],
     )
     def test_project_name_update(self, request, page: Page, project_fixture):
         """
@@ -74,7 +72,7 @@ class TestProjectsCrud:
             )
 
         except Exception as e:
-            print(f"Error occured during update of project name: {e}")
+            print(f"Error occurred during update of project name: {e}")
             raise
 
         finally:
@@ -85,7 +83,7 @@ class TestProjectsCrud:
 
     @pytest.mark.parametrize(
         "project_fixture",
-        ["create_project_sdk_no_cleanup", "create_project_ui_no_cleanup"],
+        ["create_project", "create_project_ui"],
     )
     def test_project_deletion_in_sdk(self, request, page: Page, project_fixture):
         """
@@ -108,7 +106,7 @@ class TestProjectsCrud:
 
     @pytest.mark.parametrize(
         "project_fixture",
-        ["create_project_sdk_no_cleanup", "create_project_ui_no_cleanup"],
+        ["create_project", "create_project_ui"],
     )
     def test_project_deletion_in_ui(self, request, page: Page, project_fixture):
         """

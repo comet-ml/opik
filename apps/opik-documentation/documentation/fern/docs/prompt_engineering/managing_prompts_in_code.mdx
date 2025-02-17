@@ -1,0 +1,60 @@
+If you already have prompts stored in code, you can use the the [`Prompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/Prompt.html) object in the SDK to sync these prompts with the library.
+This allows you to store the prompt text in your code while also having it versioned and stored in the library:
+
+<Tabs>
+    <Tab value="Prompts stored in code" title="Prompts stored in code">
+
+        ```python
+        import opik
+
+        # Prompt text stored in a variable
+        PROMPT_TEXT = "Write a summary of the following text: {{text}}"
+
+        # Create a prompt
+        prompt = opik.Prompt(
+            name="prompt-summary",
+            prompt=PROMPT_TEXT,
+        )
+
+        # Print the prompt text
+        print(prompt.prompt)
+
+        # Build the prompt
+        print(prompt.format(text="Hello, world!"))
+        ```
+
+    </Tab>
+    <Tab value="Prompts stored in a file" title="Prompts stored in a file">
+
+        ```python {pytest_codeblocks_skip=true}
+        import opik
+
+        # Read the prompt from a file
+        with open("prompt.txt", "r") as f:
+            prompt_text = f.read()
+
+        prompt = opik.Prompt(name="prompt-summary", prompt=prompt_text)
+
+        # Print the prompt text
+        print(prompt.prompt)
+
+        # Build the prompt
+        print(prompt.format(text="Hello, world!"))
+        ```
+
+    </Tab>
+
+</Tabs>
+
+The prompt will now be stored in the library and versioned:
+
+<Frame>
+  <img src="/img/prompt_engineering/prompt_library_versions.png" />
+</Frame>
+
+<Tip>
+The [`Prompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/Prompt.html) object will create a new prompt in the library if this prompt doesn't already exist, otherwise it will return the existing prompt.
+
+This means you can safely run the above code multiple times without creating duplicate prompts.
+
+</Tip>

@@ -16,10 +16,13 @@ import api, {
   TRACES_REST_ENDPOINT,
 } from "@/api/api";
 import { snakeCaseObj } from "@/lib/utils";
-import { getModelProvider } from "@/lib/llm";
 import { createBatchProcessor } from "@/lib/batches";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
-import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  LLMPromptConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 
 export interface LogQueueParams extends RunStreamingReturn {
@@ -27,6 +30,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   datasetItemId?: string;
   datasetName: string | null;
   model: PROVIDER_MODEL_TYPE | "";
+  provider: PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
   configs: LLMPromptConfigsType;
 }
@@ -98,7 +102,7 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     output: { choices: run.choices ? run.choices : [] },
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     metadata: {
-      created_from: run.model ? getModelProvider(run.model) : "",
+      created_from: run.provider,
       usage: run.usage,
       model: run.model,
       parameters: run.configs,
