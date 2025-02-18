@@ -252,6 +252,16 @@
             <artifactId>commons-compress</artifactId>
             <version>1.27.1</version>
         </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>4.29.3</version>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry.proto</groupId>
+            <artifactId>opentelemetry-proto</artifactId>
+            <version>1.5.0-alpha</version>
+        </dependency>
 
         <!-- Test -->
 
