@@ -177,7 +177,7 @@ class OpenTelemetryResourceTest {
 
         @ParameterizedTest
         @MethodSource("credentials")
-        public void testExportTraceServiceRequest(String apiKey, String projectName, boolean expected,
+        public void testOtelProtobufRequests(String apiKey, String projectName, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -190,7 +190,7 @@ class OpenTelemetryResourceTest {
             var parentSpanId = UUID.randomUUID().toString().getBytes();
 
             var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, System.currentTimeMillis(), true);
-            log.info("Expected trace id: '{}' -> '{}'", otelTraceId, opikTraceId);
+
             var opikParentSpanId = OpenTelemetryMapper.convertOtelIdToUUIDv7(parentSpanId, System.currentTimeMillis(),
                     true);
 
