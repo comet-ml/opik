@@ -16,6 +16,7 @@ localFE: false
 component:
   backend:
     enabled: true
+    run_migraion: true
     serviceAccount: 
       create: true
     image:
