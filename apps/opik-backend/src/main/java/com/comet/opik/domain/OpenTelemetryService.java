@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
 import com.comet.opik.utils.AsyncUtils;
-import com.comet.opik.utils.OpenTelemetryUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import jakarta.inject.Inject;
@@ -12,6 +11,8 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+
+import java.time.Instant;
 
 @ImplementedBy(OpenTelemetryServiceImpl.class)
 public interface OpenTelemetryService {
@@ -35,8 +36,14 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         var opikSpans = traceRequest.getResourceSpansList().stream()
                 .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
                 .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
-                .map(OpenTelemetryUtils::toOpikSpan)
-                .map(opikSpan -> opikSpan.toBuilder().projectName(projectName).createdBy(userName).build())
+                .map(OpenTelemetryMapper::toOpikSpan)
+                .map(opikSpan -> opikSpan.toBuilder()
+                        .projectName(projectName)
+                        .createdBy(userName)
+                        .createdAt(Instant.now())
+                        .lastUpdatedBy(userName)
+                        .lastUpdatedAt(Instant.now())
+                        .build())
                 .toList();
 
         // check if there spans without parentId: we will use them as a Trace too
@@ -54,6 +61,9 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .output(rootSpan.output())
                             .metadata(rootSpan.metadata())
                             .createdBy(rootSpan.createdBy())
+                            .createdAt(rootSpan.createdAt())
+                            .lastUpdatedBy(rootSpan.lastUpdatedBy())
+                            .lastUpdatedAt(rootSpan.lastUpdatedAt())
                             .build();
 
                     var traceIdCreated = traceService.create(trace)
@@ -71,5 +81,4 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId));
 
     }
-
 }

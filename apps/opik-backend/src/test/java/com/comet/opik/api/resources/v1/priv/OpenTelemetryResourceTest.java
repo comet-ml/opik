@@ -17,7 +17,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.OpenTelemetryUtils;
+import com.comet.opik.domain.OpenTelemetryMapper;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -189,9 +189,9 @@ class OpenTelemetryResourceTest {
             var otelTraceId = UUID.randomUUID().toString().getBytes();
             var parentSpanId = UUID.randomUUID().toString().getBytes();
 
-            var opikTraceId = OpenTelemetryUtils.convertOtelIdToUUIDv7(otelTraceId, System.currentTimeMillis(), true);
+            var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, System.currentTimeMillis(), true);
             log.info("Expected trace id: '{}' -> '{}'", otelTraceId, opikTraceId);
-            var opikParentSpanId = OpenTelemetryUtils.convertOtelIdToUUIDv7(parentSpanId, System.currentTimeMillis(),
+            var opikParentSpanId = OpenTelemetryMapper.convertOtelIdToUUIDv7(parentSpanId, System.currentTimeMillis(),
                     true);
 
             // creates a batch with parent + 4-9 spans

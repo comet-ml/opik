@@ -1,6 +1,6 @@
-package com.comet.opik.utils;
+package com.comet.opik.domain;
 
-import com.comet.opik.domain.SpanType;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -12,23 +12,24 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.text.StringEscapeUtils;
 
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 @UtilityClass
 @Slf4j
-public class OpenTelemetryUtils {
+public class OpenTelemetryMapper {
     /**
-     * Converts a
+     * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
+     * of concepts, especially around ids.
      *
-     * @param otelSpan
-     * @return
+     * @param otelSpan an OpenTelemetry Span
+     * @return a converted Opik Span
      */
     public static com.comet.opik.api.Span toOpikSpan(Span otelSpan) {
-        var startTimeMs = otelSpan.getStartTimeUnixNano() / 1_000_000L;
-        var endTimeMs = otelSpan.getEndTimeUnixNano() / 1_000_000L;
-        var durationMs = (otelSpan.getEndTimeUnixNano() - otelSpan.getStartTimeUnixNano()) / 1_000_000d;
+        var startTimeMs = Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis();
+        var endTimeMs = Duration.ofNanos(otelSpan.getEndTimeUnixNano()).toMillis();
 
         var otelTraceId = otelSpan.getTraceId();
         var opikTraceId = convertOtelIdToUUIDv7(otelTraceId.toByteArray(), startTimeMs, true);
@@ -51,7 +52,6 @@ public class OpenTelemetryUtils {
                 .type(SpanType.general)
                 .startTime(Instant.ofEpochMilli(startTimeMs))
                 .endTime(Instant.ofEpochMilli(endTimeMs))
-                .duration(durationMs)
                 .createdAt(Instant.now())
                 .input(attributes)
                 .build();
