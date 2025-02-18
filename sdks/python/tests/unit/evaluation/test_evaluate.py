@@ -13,7 +13,10 @@ from ...testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
 
 
-def test_evaluate_happyflow(fake_backend):
+def test_evaluate__happyflow(
+    fake_backend,
+    configure_opik_local_env_vars,
+):
     mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])
     mock_dataset.name = "the-dataset-name"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
@@ -218,7 +221,10 @@ def test_evaluate_happyflow(fake_backend):
         assert_equal(expected_trace, actual_trace)
 
 
-def test_evaluate_with_scoring_key_mapping(fake_backend):
+def test_evaluate_with_scoring_key_mapping(
+    fake_backend,
+    configure_opik_local_env_vars,
+):
     mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])
     mock_dataset.name = "the-dataset-name"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
@@ -439,7 +445,9 @@ def test_evaluate_with_scoring_key_mapping(fake_backend):
         assert_equal(expected_trace, actual_trace)
 
 
-def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_misses_output_argument__exception_raised():
+def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_misses_output_argument__exception_raised(
+    configure_opik_local_env_vars,
+):
     # Dataset is the only thing which is mocked for this test because
     # evaluate should raise an exception right after the first attempt
     # to compute Equals metric score.
@@ -487,6 +495,7 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
 
 def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace(
     fake_backend,
+    configure_opik_local_env_vars,
 ):
     mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])
     mock_dataset.name = "the-dataset-name"
@@ -578,7 +587,10 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_evaluate_prompt_happyflow(fake_backend):
+def test_evaluate_prompt_happyflow(
+    fake_backend,
+    configure_opik_local_env_vars,
+):
     MODEL_NAME = "gpt-3.5-turbo"
 
     mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__"])

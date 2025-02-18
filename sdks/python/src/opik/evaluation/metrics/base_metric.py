@@ -1,8 +1,9 @@
 import abc
-from typing import Any, Union, List
+from typing import Any, List, Union
 
+import opik
+from opik import config as opik_config
 from ..metrics import score_result
-from opik import track as track_decorator
 
 
 class BaseMetric(abc.ABC):
@@ -36,9 +37,11 @@ class BaseMetric(abc.ABC):
         self.name = name
         self.track = track
 
-        if track:
-            self.score = track_decorator(name=self.name)(self.score)  # type: ignore
-            self.ascore = track_decorator(name=self.name)(self.ascore)  # type: ignore
+        config = opik_config.OpikConfig()
+
+        if track and opik_config.is_misconfigured(config) is False:
+            self.score = opik.track(name=self.name)(self.score)  # type: ignore
+            self.ascore = opik.track(name=self.name)(self.ascore)  # type: ignore
 
     @abc.abstractmethod
     def score(
