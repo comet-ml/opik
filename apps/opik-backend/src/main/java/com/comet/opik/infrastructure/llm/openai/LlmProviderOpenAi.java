@@ -43,8 +43,8 @@ class LlmProviderOpenAi implements LlmProviderService {
     }
 
     @Override
-    public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable runtimeException) {
-        if (runtimeException instanceof OpenAiHttpException openAiHttpException) {
+    public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
+        if (throwable instanceof OpenAiHttpException openAiHttpException) {
             return Optional.of(new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage()));
         }
 
