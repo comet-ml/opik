@@ -39,23 +39,22 @@ public class OpenTelemetryResource {
                 .getOrDefault(RequestContext.PROJECT_NAME, List.of(ProjectService.DEFAULT_PROJECT))
                 .getFirst();
         var userName = requestContext.get().getUserName();
-        var workspaceName = requestContext.get().getWorkspaceName();
         var workspaceId = requestContext.get().getWorkspaceId();
 
         try {
             // Parse the incoming Protobuf message
             ExportTraceServiceRequest traceRequest = ExportTraceServiceRequest.parseFrom(in);
 
-            log.info("Received spans batch via OpenTelemetry for project '{}' in workspace '{}'", projectName,
-                    workspaceName);
+            log.info("Received spans batch via OpenTelemetry for project '{}' in workspaceId '{}'", projectName,
+                    workspaceId);
 
             Long stored = openTelemetryService
                     .parseAndStoreSpans(traceRequest, projectName)
-                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId))
+                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                     .block();
 
-            log.info("Stored {} spans via OpenTelemetry for project '{}' in workspace '{}'", stored, projectName,
-                    workspaceName);
+            log.info("Stored {} spans via OpenTelemetry for project '{}' in workspaceId '{}'", stored, projectName,
+                    workspaceId);
 
             // Return a successful HTTP response
             return Response.ok().build();
