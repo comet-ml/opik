@@ -371,3 +371,12 @@ redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
     permanent: true
+  - source: "/docs/opik/reference/rest_api/opik-rest-api/"
+    destination: "/docs/opik/reference/rest-api/overview"
+    permanent: true
+  - source: "/docs/opik/reference/rest_api/opik-rest-api/:slug"
+    destination: "/docs/opik/reference/rest-api/overview"
+    permanent: true
+  - source: "/docs/opik/reference/rest_api/opik-rest-api/:slug/:slug"
+    destination: "/docs/opik/reference/rest-api/overview"
+    permanent: true
