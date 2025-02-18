@@ -61,12 +61,10 @@ class RemoteAuthService implements AuthService {
 
         if (sessionToken != null) {
             authenticateUsingSessionToken(sessionToken, currentWorkspaceName, path);
-            requestContext.get().setWorkspaceName(currentWorkspaceName);
             return;
         }
 
         authenticateUsingApiKey(headers, currentWorkspaceName, path);
-        requestContext.get().setWorkspaceName(currentWorkspaceName);
     }
 
     private String getCurrentWorkspaceName(HttpHeaders headers) {

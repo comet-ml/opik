@@ -161,8 +161,9 @@ class AuthenticationResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("check access for default workspace: when api key is present, then return proper response")
-        void checkAccessForDefaultWorkspace__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, int expectedStatus,
-                                                                          String errorMessage) {
+        void checkAccessForDefaultWorkspace__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                int expectedStatus,
+                String errorMessage) {
 
             mockTargetWorkspace(okApikey, DEFAULT_WORKSPACE_NAME, WORKSPACE_ID);
 

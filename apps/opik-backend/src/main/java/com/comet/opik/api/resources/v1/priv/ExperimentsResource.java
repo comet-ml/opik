@@ -219,7 +219,6 @@ public class ExperimentsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemStreamRequest.class))) @NotNull @Valid ExperimentItemStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
-        var workspaceName = requestContext.get().getWorkspaceName();
         log.info("Streaming experiment items by '{}', workspaceId '{}'", request, workspaceId);
         var criteria = ExperimentItemSearchCriteria.builder()
                 .experimentName(request.experimentName())
@@ -229,7 +228,6 @@ public class ExperimentsResource {
                 .build();
         var items = experimentItemService.getExperimentItems(criteria)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
         var stream = streamer.getOutputStream(items);
         log.info("Streamed experiment items by '{}', workspaceId '{}'", request, workspaceId);

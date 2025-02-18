@@ -19,7 +19,6 @@ public class RequestContext {
     public static final String USER_LIMIT_REMAINING_TTL = "Opik-User-Remaining-Limit-TTL-Millis";
 
     private String userName;
-    private String workspaceName;
     private String workspaceId;
     private String apiKey;
     private MultivaluedMap<String, String> headers;
