@@ -141,7 +141,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.initContainers[0].image | string | `"stefanevinance/wait-for-200"` |  |
 | component.backend.initContainers[0].name | string | `"wait-for-clickhouse-service"` |  |
 | component.backend.replicaCount | int | `1` |  |
-| component.backend.run_migraion | bool | `true` |  |
+| component.backend.run_migration | bool | `true` |  |
 | component.backend.service.ports[0].name | string | `"http"` |  |
 | component.backend.service.ports[0].port | int | `8080` |  |
 | component.backend.service.ports[0].protocol | string | `"TCP"` |  |
