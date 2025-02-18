@@ -1,3 +1,4 @@
+import { logger } from "@/utils/logger";
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
@@ -51,6 +52,7 @@ describe("Opik client batching", () => {
   let updateSpansSpy: MockInstance<typeof client.api.spans.updateSpan>;
   let createTracesSpy: MockInstance<typeof client.api.traces.createTraces>;
   let updateTracesSpy: MockInstance<typeof client.api.traces.updateTrace>;
+  let loggerErrorSpy: MockInstance<typeof logger.error>;
 
   beforeEach(() => {
     client = new Opik({
@@ -73,6 +75,8 @@ describe("Opik client batching", () => {
       .spyOn(client.api.traces, "updateTrace")
       .mockImplementation(mockAPIPromise);
 
+    loggerErrorSpy = vi.spyOn(logger, "error");
+
     vi.useFakeTimers();
   });
 
@@ -83,6 +87,7 @@ describe("Opik client batching", () => {
     createTracesSpy.mockRestore();
     updateSpansSpy.mockRestore();
     updateTracesSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 
   it("basic create and update with flush flow - merge entity locally", async () => {
@@ -129,5 +134,23 @@ describe("Opik client batching", () => {
     expect(createSpansSpy).toHaveBeenCalledTimes(25);
     expect(updateSpansSpy).toHaveBeenCalledTimes(25);
     expect(updateTracesSpy).toHaveBeenCalledTimes(5);
+  });
+
+  it("should log an error if trace endpoint fails", async () => {
+    const errorMessage = "Test error";
+
+    createTracesSpy.mockImplementation(async () => {
+      throw new Error(errorMessage);
+    });
+
+    const trace = client.trace({ name: "test" });
+    trace.end();
+    await client.flush();
+
+    expect(createTracesSpy).toHaveBeenCalledTimes(1);
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+    expect(loggerErrorSpy.mock.calls[0].flat().toString()).toContain(
+      errorMessage
+    );
   });
 });

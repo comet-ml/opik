@@ -4,7 +4,7 @@ import type {
   Trace as ITrace,
   TraceUpdate,
 } from "@/rest_api/api";
-import { v7 as uuid } from "uuid";
+import { generateId } from "@/utils/generateId";
 import { SavedSpan, Span } from "./Span";
 
 export interface SavedTrace extends ITrace {
@@ -48,7 +48,7 @@ export class Trace {
       this.opik.config.projectName;
 
     const spanWithId: SavedSpan = {
-      id: uuid(),
+      id: generateId(),
       startTime: new Date(),
       ...spanData,
       projectName,
