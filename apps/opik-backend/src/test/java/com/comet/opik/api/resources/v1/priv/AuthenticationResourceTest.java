@@ -148,14 +148,25 @@ class AuthenticationResourceTest {
 
         @ParameterizedTest
         @MethodSource("credentials")
-        @DisplayName("create project: when api key is present, then return proper response")
-        void createProject__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, int expectedStatus,
+        @DisplayName("check access: when api key is present, then return proper response")
+        void checkAccess__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, int expectedStatus,
                 String errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
             checkProjectAccess(apiKey, workspaceName, expectedStatus, errorMessage);
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("check access for default workspace: when api key is present, then return proper response")
+        void checkAccessForDefaultWorkspace__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, int expectedStatus,
+                                                                          String errorMessage) {
+
+            mockTargetWorkspace(okApikey, DEFAULT_WORKSPACE_NAME, WORKSPACE_ID);
+
+            checkProjectAccess(apiKey, DEFAULT_WORKSPACE_NAME, expectedStatus, errorMessage);
         }
 
         @ParameterizedTest
@@ -171,8 +182,7 @@ class AuthenticationResourceTest {
         private Stream<Arguments> useInvalidWorkspace__thenReturnForbiddenResponse() {
             return Stream.of(
                     arguments("", MISSING_WORKSPACE),
-                    arguments(UNAUTHORISED_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE),
-                    arguments(DEFAULT_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE));
+                    arguments(UNAUTHORISED_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE));
         }
 
         private void checkProjectAccess(String apiKey,
