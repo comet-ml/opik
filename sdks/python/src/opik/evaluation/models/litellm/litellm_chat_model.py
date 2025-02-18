@@ -168,7 +168,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         if (
             opik_monitor.enabled_in_config()
-            and not opik_monitor.config_is_misconfigured()
+            and not opik_monitor.opik_is_misconfigured()
         ):
             all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 

@@ -252,7 +252,7 @@ def get_from_user_inputs(**user_inputs: Any) -> OpikConfig:
     return OpikConfig(**cleaned_user_inputs)
 
 
-def is_config_misconfigured(
+def is_misconfigured(
     config: OpikConfig,
     show_misconfiguration_message: bool = False,
 ) -> bool:
