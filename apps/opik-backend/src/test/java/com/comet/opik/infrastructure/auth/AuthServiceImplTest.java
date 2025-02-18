@@ -33,7 +33,6 @@ class AuthServiceImplTest {
         authService.authenticate(headers, sessionToken, PATH);
 
         // Then
-        verify(requestContext).setWorkspaceName(ProjectService.DEFAULT_WORKSPACE_NAME);
         verify(requestContext).setUserName(ProjectService.DEFAULT_USER);
     }
 
@@ -46,7 +45,6 @@ class AuthServiceImplTest {
         authService.authenticate(headers, sessionToken, PATH);
 
         // Then
-        verify(requestContext).setWorkspaceName(ProjectService.DEFAULT_WORKSPACE_NAME);
         verify(requestContext).setUserName(ProjectService.DEFAULT_USER);
     }
 

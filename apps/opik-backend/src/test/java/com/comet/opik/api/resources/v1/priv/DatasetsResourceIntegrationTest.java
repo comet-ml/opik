@@ -63,9 +63,6 @@ class DatasetsResourceIntegrationTest {
         when(requestContext.getUserName())
                 .thenReturn(DEFAULT_USER);
 
-        when(requestContext.getWorkspaceName())
-                .thenReturn(DEFAULT_WORKSPACE_NAME);
-
         when(requestContext.getWorkspaceId())
                 .thenReturn(workspaceId);
 

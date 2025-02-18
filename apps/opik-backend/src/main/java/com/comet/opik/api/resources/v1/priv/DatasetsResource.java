@@ -299,11 +299,9 @@ public class DatasetsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
-        var workspaceName = requestContext.get().getWorkspaceName();
         log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
         var items = itemService.getItems(workspaceId, request)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
         var outputStream = streamer.getOutputStream(items);
         log.info("Streamed dataset items by '{}' on workspaceId '{}'", request, workspaceId);

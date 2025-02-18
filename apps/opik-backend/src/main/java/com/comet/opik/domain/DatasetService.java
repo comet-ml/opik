@@ -305,14 +305,13 @@ class DatasetServiceImpl implements DatasetService {
     public DatasetPage find(int page, int size, @NonNull DatasetCriteria criteria, List<SortingField> sortingFields) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        String workspaceName = requestContext.get().getWorkspaceName();
 
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
         if (criteria.withExperimentsOnly() || criteria.promptId() != null) {
 
             Mono<Set<UUID>> datasetIds = experimentDAO.findAllDatasetIds(criteria)
-                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId))
+                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                     .map(dto -> dto.stream()
                             .map(ExperimentDatasetId::datasetId)
                             .collect(toSet()));

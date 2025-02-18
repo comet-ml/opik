@@ -57,19 +57,14 @@ class RemoteAuthService implements AuthService {
         if (currentWorkspaceName.isBlank()) {
             log.warn("Workspace name is missing");
             throw new ClientErrorException(MISSING_WORKSPACE, Response.Status.FORBIDDEN);
-        } else if (ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(currentWorkspaceName)) {
-            log.warn("Default workspace name is not allowed");
-            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
 
         if (sessionToken != null) {
             authenticateUsingSessionToken(sessionToken, currentWorkspaceName, path);
-            requestContext.get().setWorkspaceName(currentWorkspaceName);
             return;
         }
 
         authenticateUsingApiKey(headers, currentWorkspaceName, path);
-        requestContext.get().setWorkspaceName(currentWorkspaceName);
     }
 
     private String getCurrentWorkspaceName(HttpHeaders headers) {
@@ -78,6 +73,12 @@ class RemoteAuthService implements AuthService {
     }
 
     private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path) {
+
+        if (ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName)) {
+            log.warn("Default workspace name is not allowed for UI authentication");
+            throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+        }
+
         try (var response = client.target(URI.create(uiAuthUrl.url()))
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
