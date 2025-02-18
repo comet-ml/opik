@@ -358,7 +358,6 @@ public class SpansResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
-        var workspaceName = requestContext.get().getWorkspaceName();
 
         validateProjectNameAndProjectId(request.projectName(), request.projectId());
 
@@ -376,7 +375,6 @@ public class SpansResource {
 
         var items = spanService.search(request.limit(), criteria)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
 
         return streamer.getOutputStream(items,
