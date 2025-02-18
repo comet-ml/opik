@@ -1,18 +1,18 @@
-# on:
-#   pull_request:
-#     branches:
-#       - main
-#   workflow_dispatch:
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
-# jobs:
-#   security-code-scanning:
-#     runs-on: ubuntu-latest
-#     env:
-#       GO111MODULE: on
-#     steps:
-#       - name: Checkout Source
-#         uses: actions/checkout@v3
-#       - name: Run Gosec Security Scanner
-#         uses: securego/gosec@master
-#         with:
-#           args: -severity medium -nosec -exclude-dir=cmd -exclude-dir=settings ./...
+jobs:
+  security-code-scanning:
+    runs-on: ubuntu-latest
+    env:
+      GO111MODULE: on
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v3
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: -severity medium -nosec -exclude-dir=cmd -exclude-dir=settings ./...
