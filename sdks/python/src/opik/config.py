@@ -252,7 +252,21 @@ def get_from_user_inputs(**user_inputs: Any) -> OpikConfig:
     return OpikConfig(**cleaned_user_inputs)
 
 
-def check_for_misconfiguration(config: OpikConfig) -> None:
+def is_misconfigured(
+    config: OpikConfig,
+    show_misconfiguration_message: bool = False,
+) -> bool:
+    """
+    Determines if the provided Opik configuration is misconfigured and optionally displays
+    a corresponding error message.
+
+    Parameters:
+    config: The configuration object containing settings such as URL overrides, workspace, API key,
+        and tracking options to be validated for misconfiguration.
+    show_misconfiguration_message : A flag indicating whether to display detailed error messages if the configuration
+        is determined to be misconfigured. Defaults to False.
+    """
+
     cloud_installation = url_helpers.get_base_url(
         config.url_override
     ) == url_helpers.get_base_url(OPIK_URL_CLOUD)
@@ -268,24 +282,28 @@ def check_for_misconfiguration(config: OpikConfig) -> None:
         and (not api_key_configured or workspace_is_default)
         and not tracking_disabled
     ):
-        print()
-        LOGGER.error(
-            "========================\n"
-            "The workspace and API key must be specified to log data to https://www.comet.com/opik.\n"
-            "You can use `opik configure` CLI command to configure your environment for logging.\n"
-            "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration.\n"
-            "==============================\n"
-        )
-        return
+        if show_misconfiguration_message:
+            print()
+            LOGGER.error(
+                "========================\n"
+                "The workspace and API key must be specified to log data to https://www.comet.com/opik.\n"
+                "You can use `opik configure` CLI command to configure your environment for logging.\n"
+                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration.\n"
+                "==============================\n"
+            )
+        return True
 
     if localhost_installation and not workspace_is_default and not tracking_disabled:
-        print()
-        LOGGER.error(
-            "========================\n"
-            "Open source installations do not support workspace specification. Only `default` is available.\n"
-            "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration\n"
-            "If you need advanced workspace management - you may consider using our cloud offer (https://www.comet.com/site/pricing/)\n"
-            "or contact our team for purchasing and setting up a self-hosted installation.\n"
-            "==============================\n"
-        )
-        return
+        if show_misconfiguration_message:
+            print()
+            LOGGER.error(
+                "========================\n"
+                "Open source installations do not support workspace specification. Only `default` is available.\n"
+                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration\n"
+                "If you need advanced workspace management - you may consider using our cloud offer (https://www.comet.com/site/pricing/)\n"
+                "or contact our team for purchasing and setting up a self-hosted installation.\n"
+                "==============================\n"
+            )
+        return True
+
+    return False
