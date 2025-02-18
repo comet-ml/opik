@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.OpenTelemetryService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.AsyncUtils;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
@@ -49,7 +50,9 @@ public class OpenTelemetryResource {
                     workspaceName);
 
             Long stored = openTelemetryService
-                    .parseAndStoreSpans(traceRequest, projectName, userName, workspaceName, workspaceId).block();
+                    .parseAndStoreSpans(traceRequest, projectName)
+                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId))
+                    .block();
 
             log.info("Stored {} spans via OpenTelemetry for project '{}' in workspace '{}'", stored, projectName,
                     workspaceName);

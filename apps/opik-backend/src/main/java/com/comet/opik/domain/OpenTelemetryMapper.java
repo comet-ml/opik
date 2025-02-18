@@ -52,10 +52,8 @@ public class OpenTelemetryMapper {
                 .type(SpanType.general)
                 .startTime(Instant.ofEpochMilli(startTimeMs))
                 .endTime(Instant.ofEpochMilli(endTimeMs))
-                .createdAt(Instant.now())
                 .input(attributes)
                 .build();
-
     }
 
     /**

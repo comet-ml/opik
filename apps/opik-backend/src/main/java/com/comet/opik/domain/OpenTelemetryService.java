@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
-import com.comet.opik.utils.AsyncUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import jakarta.inject.Inject;
@@ -10,15 +9,13 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.time.Instant;
 
 @ImplementedBy(OpenTelemetryServiceImpl.class)
 public interface OpenTelemetryService {
 
-    Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName,
-            @NonNull String userName, @NonNull String workspaceName, @NonNull String workspaceId);
+    Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName);
 }
 
 @Singleton
@@ -30,8 +27,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     private final @NonNull SpanService spanService;
 
     @Override
-    public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName,
-            @NonNull String userName, @NonNull String workspaceName, @NonNull String workspaceId) {
+    public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName) {
 
         var opikSpans = traceRequest.getResourceSpansList().stream()
                 .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
@@ -39,17 +35,12 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .map(OpenTelemetryMapper::toOpikSpan)
                 .map(opikSpan -> opikSpan.toBuilder()
                         .projectName(projectName)
-                        .createdBy(userName)
-                        .createdAt(Instant.now())
-                        .lastUpdatedBy(userName)
-                        .lastUpdatedAt(Instant.now())
                         .build())
                 .toList();
 
         // check if there spans without parentId: we will use them as a Trace too
-        opikSpans.stream()
-                .filter(span -> span.parentSpanId() == null)
-                .forEach(rootSpan -> {
+        return Flux.fromStream(opikSpans.stream().filter(span -> span.parentSpanId() == null))
+                .flatMap(rootSpan -> {
                     var trace = Trace.builder()
                             .id(rootSpan.traceId())
                             .name(rootSpan.name())
@@ -60,25 +51,18 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .input(rootSpan.input())
                             .output(rootSpan.output())
                             .metadata(rootSpan.metadata())
-                            .createdBy(rootSpan.createdBy())
-                            .createdAt(rootSpan.createdAt())
-                            .lastUpdatedBy(rootSpan.lastUpdatedBy())
-                            .lastUpdatedAt(rootSpan.lastUpdatedAt())
                             .build();
 
-                    var traceIdCreated = traceService.create(trace)
-                            .contextWrite(
-                                    ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId))
-                            .block();
-                    log.info("Created trace with id: '{}'", traceIdCreated);
-                });
+                    return traceService.create(trace);
+                })
+                .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))
+                .then(Mono.defer(() -> {
+                    var spanBatch = SpanBatch.builder().spans(opikSpans).build();
 
-        var spanBatch = SpanBatch.builder().spans(opikSpans).build();
+                    log.info("Parsed OpenTelemetry span batch for project '{}' into {} spans", projectName,
+                            opikSpans.size());
 
-        log.info("Parsed OpenTelemetry span batch for project '{}' into {} spans", projectName, opikSpans.size());
-
-        return spanService.create(spanBatch)
-                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceName, workspaceId));
-
+                    return spanService.create(spanBatch);
+                }));
     }
 }
