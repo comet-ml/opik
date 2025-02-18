@@ -2,7 +2,9 @@ import { loadConfig, OpikConfig } from "@/config/Config";
 import { OpikApiClient } from "@/rest_api";
 import type { Trace as ITrace } from "@/rest_api/api";
 import { Trace } from "@/tracer/Trace";
-import { v7 as uuid } from "uuid";
+import { generateId } from "@/utils/generateId";
+import { createLink, logger } from "@/utils/logger";
+import { getProjectUrl } from "@/utils/url";
 import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
@@ -21,8 +23,10 @@ export class OpikClient {
   public traceBatchQueue: TraceBatchQueue;
   public spanFeedbackScoresBatchQueue: SpanFeedbackScoresBatchQueue;
   public traceFeedbackScoresBatchQueue: TraceFeedbackScoresBatchQueue;
+  private lastProjectNameLogged: string | undefined;
 
   constructor(explicitConfig?: Partial<OpikConfig>) {
+    logger.debug("Initializing OpikClient with config:", explicitConfig);
     this.config = loadConfig(explicitConfig);
     this.api = new OpikApiClient({
       apiKey: this.config.apiKey,
@@ -42,11 +46,30 @@ export class OpikClient {
     clients.push(this);
   }
 
+  private displayTraceLog = (projectName: string) => {
+    if (projectName === this.lastProjectNameLogged || !this.config.host) {
+      return;
+    }
+
+    const projectUrl = getProjectUrl({
+      host: this.config.host,
+      projectName,
+      workspaceName: this.config.workspaceName,
+    });
+
+    logger.info(
+      `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
+    );
+
+    this.lastProjectNameLogged = projectName;
+  };
+
   public trace = (traceData: TraceData) => {
+    logger.debug("Creating new trace with data:", traceData);
     const projectName = traceData.projectName ?? this.config.projectName;
     const trace = new Trace(
       {
-        id: uuid(),
+        id: generateId(),
         startTime: new Date(),
         ...traceData,
         projectName,
@@ -55,14 +78,24 @@ export class OpikClient {
     );
 
     this.traceBatchQueue.create(trace.data);
+    logger.debug("Trace added to the queue with ID:", trace.data.id);
+    this.displayTraceLog(projectName);
 
     return trace;
   };
 
   public flush = async () => {
-    await this.traceBatchQueue.flush();
-    await this.spanBatchQueue.flush();
-    await this.traceFeedbackScoresBatchQueue.flush();
-    await this.spanFeedbackScoresBatchQueue.flush();
+    logger.debug("Starting flush operation");
+    try {
+      await this.traceBatchQueue.flush();
+      await this.spanBatchQueue.flush();
+      await this.traceFeedbackScoresBatchQueue.flush();
+      await this.spanFeedbackScoresBatchQueue.flush();
+      logger.info("Successfully flushed all data to Opik");
+    } catch (error) {
+      logger.error("Error during flush operation:", {
+        error: error instanceof Error ? error.message : error,
+      });
+    }
   };
 }
