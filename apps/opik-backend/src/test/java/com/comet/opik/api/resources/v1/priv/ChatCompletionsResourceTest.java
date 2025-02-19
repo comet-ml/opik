@@ -240,7 +240,7 @@ class ChatCompletionsResourceTest {
                             System.getenv("ANTHROPIC_API_KEY"), actualContainsExpectedEval),
                     arguments(GeminiModelName.GEMINI_1_0_PRO.toString(), LlmProvider.GEMINI,
                             System.getenv("GEMINI_API_KEY"), actualContainsExpectedEval),
-                    arguments(OpenRouterModelName.GEMINI_2_0_FLASH_LITE_PREVIEW_02_05_FREE.toString(),
+                    arguments(OpenRouterModelName.GOOGLE_GEMINI_2_0_FLASH_LITE_PREVIEW_02_05_FREE.toString(),
                             LlmProvider.OPEN_ROUTER, System.getenv("OPENROUTER_API_KEY"),
                             expectedContainsActualEval));
         }
