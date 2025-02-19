@@ -90,7 +90,9 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         model = result_dict["model_version"]
-        usage = llm_usage.opik_usage_from_google_format(result_dict["usage_metadata"])
+        usage = {
+            **llm_usage.opik_usage_from_google_format(result_dict["usage_metadata"])
+        }
 
         result = arguments_helpers.EndSpanParameters(
             output=output,
