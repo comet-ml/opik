@@ -107,7 +107,7 @@ class PromptClient:
                 raise e
 
         return None
-    
+
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
     def get_all_prompts(self, name: str) -> List[opik_prompt.Prompt]:
@@ -121,24 +121,43 @@ class PromptClient:
             List[Prompt]: A list of prompts for the given name.
         """
         try:
-            prompt_list = self._rest_client.prompts.get_prompts(name=name).content
-            if prompt_list is None or len(prompt_list) == 0:
+            prompts_matching_name_string = self._rest_client.prompts.get_prompts(
+                name=name
+            ).content
+            if (
+                prompts_matching_name_string is None
+                or len(prompts_matching_name_string) == 0
+            ):
                 raise ValueError("No prompts found for name: " + name)
-            
-            prompt_id = prompt_list[0].id
-            
-            page=1
-            size=100
+
+            filtered_prompt_list = [
+                x.id for x in prompts_matching_name_string if name == x.name
+            ]
+            if len(filtered_prompt_list) == 0:
+                raise ValueError("No prompts found for name: " + name)
+
+            prompt_id = filtered_prompt_list[0]
+
+            page = 1
+            size = 100
+
             prompts: List[opik_prompt.Prompt] = []
             while True:
-                prompt_versions = self._rest_client.prompts.get_prompt_versions(id=prompt_id, page=page, size=size).content
-                prompts.extend([opik_prompt.Prompt.from_fern_prompt_version(name, version) for version in prompt_versions])
+                prompt_versions = self._rest_client.prompts.get_prompt_versions(
+                    id=prompt_id, page=page, size=size
+                ).content
+                prompts.extend(
+                    [
+                        opik_prompt.Prompt.from_fern_prompt_version(name, version)
+                        for version in prompt_versions
+                    ]
+                )
                 if len(prompt_versions) < size:
                     break
                 page += 1
 
             return prompts
-        
+
         except rest_api_core.ApiError as e:
             if e.status_code != 404:
                 raise e

@@ -922,7 +922,7 @@ class Opik:
         """
         prompt_client = PromptClient(self._rest_client)
         return prompt_client.get_prompt(name=name, commit=commit)
-    
+
     def get_all_prompts(self, name: str) -> List[Prompt]:
         """
         Retrieve all the prompt versions for a given prompt name.
