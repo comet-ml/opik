@@ -12,12 +12,14 @@ import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 public class OpenRouterModule extends AbstractModule {
+    private static final String OPEN_ROUTER_URL = "https://openrouter.ai/api/v1";
+
     @Provides
     @Singleton
     @Named("openrouterGenerator")
     public OpenAIClientGenerator clientGenerator(
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        config.setOpenAiClient(new LlmProviderClientConfig.OpenAiClientConfig("https://openrouter.ai/api/v1"));
+        config.setOpenAiClient(new LlmProviderClientConfig.OpenAiClientConfig(OPEN_ROUTER_URL));
         return new OpenAIClientGenerator(config);
     }
 

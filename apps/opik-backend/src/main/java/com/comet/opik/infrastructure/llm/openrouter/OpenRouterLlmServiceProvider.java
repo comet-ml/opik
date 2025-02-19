@@ -5,6 +5,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.openai.LlmProviderOpenAi;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Named;
@@ -20,7 +21,7 @@ class OpenRouterLlmServiceProvider implements LlmServiceProvider {
 
     @Override
     public LlmProviderService getService(String apiKey) {
-        return new LlmProviderOpenRouter(clientGenerator.newOpenAiClient(apiKey));
+        return new LlmProviderOpenAi(clientGenerator.newOpenAiClient(apiKey));
     }
 
     @Override
