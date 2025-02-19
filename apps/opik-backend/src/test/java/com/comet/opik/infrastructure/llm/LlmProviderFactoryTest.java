@@ -114,7 +114,7 @@ class LlmProviderFactoryTest {
         var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.GEMINI, "LlmProviderGemini"));
         var openRouterModels = EnumUtils.getEnumList(OpenRouterModelName.class).stream()
-                .map(model -> arguments(model.toString(), LlmProvider.OPEN_ROUTER, "LlmProviderOpenRouter"));
+                .map(model -> arguments(model.toString(), LlmProvider.OPEN_ROUTER, "LlmProviderOpenAi"));
 
         return Stream.of(openAiModels, anthropicModels, geminiModels, openRouterModels).flatMap(Function.identity());
     }
