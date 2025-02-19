@@ -54,8 +54,10 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -183,18 +185,10 @@ class OpenTelemetryResourceTest {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var dayMillis = 24 * 60 * 60 * 1000L;
-            var todayMidnight = (System.currentTimeMillis() / dayMillis) * dayMillis;
+            var otelTraceId = UUID.randomUUID().toString().getBytes(); // otel uses 128-bit, but it doesnt matter
+            var parentSpanId = UUID.randomUUID().toString().getBytes();// otel uses  64-bit, but it doesnt matter
 
-            var otelTraceId = UUID.randomUUID().toString().getBytes();
-            var parentSpanId = UUID.randomUUID().toString().getBytes();
-
-            var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, System.currentTimeMillis(), true);
-
-            var opikParentSpanId = OpenTelemetryMapper.convertOtelIdToUUIDv7(parentSpanId, System.currentTimeMillis(),
-                    true);
-
-            // creates a batch with parent + 4-9 spans
+             // creates a batch with parent + 4-9 spans
             var otelSpans = new ArrayList<Span>();
             otelSpans.add(Span.newBuilder()
                     .setName("parent span")
@@ -215,6 +209,12 @@ class OpenTelemetryResourceTest {
                             .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
                             .build())
                     .forEach(otelSpans::add);
+
+            // opik trace id should be created with the earliest timestamp in the batch
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+            var expectedOpikParentSpanId = OpenTelemetryMapper.convertOtelIdToUUIDv7(parentSpanId, minTimestampMs);
 
             byte[] requestProtobufBytes = ExportTraceServiceRequest.newBuilder()
                     .addResourceSpans(ResourceSpans.newBuilder()
@@ -238,14 +238,20 @@ class OpenTelemetryResourceTest {
                 if (expected) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-                    Trace trace = traceResourceClient.getById(opikTraceId, workspaceName, apiKey);
-                    assertThat(trace.id()).isEqualTo(opikTraceId);
+                    // the otel span batch should have created a trace with this expect traceId. Check it.
+                    Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, apiKey);
+                    assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
 
                     var projectNameOrDefault = StringUtils.isNotEmpty(projectName)
                             ? projectName
                             : ProjectService.DEFAULT_PROJECT;
-                    var spanPage = spanResourceClient.getByTraceIdAndProject(opikTraceId, projectNameOrDefault,
+
+                    // the otel span batch should have created spans with this expected traceId. Check it.
+                    var spanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId, projectNameOrDefault,
                             workspaceName, apiKey);
+                    // TODO: check all parent span value has a span id
+                    // TODO: check root span id
+                    // TODO: a test checkin two batches?
                     assertThat(spanPage.size()).isEqualTo(otelSpans.size());
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);

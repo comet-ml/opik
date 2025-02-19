@@ -20,27 +20,32 @@ import java.util.UUID;
 @UtilityClass
 @Slf4j
 public class OpenTelemetryMapper {
+
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
      * of concepts, especially around ids.
      *
+     * We will be linking this span to a given Opik traceId precalculated with the closest timestamp we could get for
+     * it. We can extract the timestamp from this traceId and use into spanId otel -> opik conversion, so all span ids
+     * for the trace can be predictable, but using the same reference timestamp.
+     *
      * @param otelSpan an OpenTelemetry Span
+     * @param opikTraceId the Opik UUID to be used for this span
      * @return a converted Opik Span
      */
-    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan) {
+    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId) {
+        var traceTimestamp = extractTimestampFromUUIDv7(opikTraceId);
+
         var startTimeMs = Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis();
         var endTimeMs = Duration.ofNanos(otelSpan.getEndTimeUnixNano()).toMillis();
 
-        var otelTraceId = otelSpan.getTraceId();
-        var opikTraceId = convertOtelIdToUUIDv7(otelTraceId.toByteArray(), startTimeMs, true);
-
         var otelSpanId = otelSpan.getSpanId();
-        var opikSpanId = convertOtelIdToUUIDv7(otelSpanId.toByteArray(), startTimeMs, true);
+        var opikSpanId = convertOtelIdToUUIDv7(otelSpanId.toByteArray(), traceTimestamp);
 
         var otelParentSpanId = otelSpan.getParentSpanId();
         var opikParentSpanId = otelParentSpanId.isEmpty()
                 ? null
-                : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), startTimeMs, true);
+                : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), traceTimestamp);
 
         var attributes = convertAttributesToJson(otelSpan.getAttributesList());
 
@@ -56,13 +61,7 @@ public class OpenTelemetryMapper {
                 .build();
     }
 
-    /**
-     * Converts a list of protobuf KeyValue into a JsonNode, preserving their types.
-     *
-     * @param attributes a list of
-     * @return
-     */
-    protected static JsonNode convertAttributesToJson(List<KeyValue> attributes) {
+    static JsonNode convertAttributesToJson(List<KeyValue> attributes) {
         ObjectMapper mapper = JsonUtils.MAPPER;
         ObjectNode node = mapper.createObjectNode();
 
@@ -143,7 +142,20 @@ public class OpenTelemetryMapper {
      * @param timestampMs a timestamp for the span in millis
      * @return a valid UUIDv7
      */
-    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long timestampMs) throws Exception {
+    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long timestampMs) {
         return convertOtelIdToUUIDv7(otelSpanId, timestampMs, false);
+    }
+
+    /**
+     * Extracts the Unix epoch timestamp in milliseconds from a UUIDv7.
+     *
+     * @param uuid the UUIDv7 instance
+     * @return the extracted timestamp as a long (milliseconds since Unix epoch)
+     */
+    long extractTimestampFromUUIDv7(UUID uuid) {
+        // Get the 64 most significant bits.
+        long msb = uuid.getMostSignificantBits();
+        // The top 48 bits represent the timestamp.
+        return msb >>> 16;
     }
 }
