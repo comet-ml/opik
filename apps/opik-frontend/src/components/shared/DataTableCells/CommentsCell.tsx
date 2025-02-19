@@ -15,7 +15,6 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
   commentsList,
 }) => {
   const commentsCount = commentsList.length;
-  const counterLabel = commentsCount === 1 ? "comment" : "comments";
 
   if (!commentsCount) {
     return "-";
@@ -34,9 +33,7 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
   return (
     <div className="flex items-center gap-1 overflow-hidden">
       <UserCommentAvatarList commentsList={commentsList} />
-      <div className="comet-body-s truncate">
-        {commentsCount} {counterLabel}
-      </div>
+      <div className="comet-body-s truncate">{commentsCount} comments</div>
     </div>
   );
 };

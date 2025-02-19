@@ -94,7 +94,9 @@ export const treeRenderers: TreeRenderProps = {
                 <div className={styles.detailsInnerContainer}>
                   <BaseTraceDataTypeIcon type={type} />
                   <TooltipWrapper content={name}>
-                    <p> {name} </p>
+                    <p className={cn(props.context.isFocused && "font-medium")}>
+                      {name}
+                    </p>
                   </TooltipWrapper>
                   <div className={styles.detailsDivider} />
                 </div>

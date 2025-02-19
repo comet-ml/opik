@@ -1,13 +1,13 @@
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@radix-ui/react-hover-card";
 import { useCallback, useState } from "react";
 import UserComment from "./UserComment";
 import { Comment } from "@/types/comment";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 type UserCommentHoverListProps = {
   commentsList: Comment[];
@@ -41,7 +41,7 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
       <HoverCardTrigger asChild>
         <div className="flex size-full min-w-0 flex-1">{children}</div>
       </HoverCardTrigger>
-      <HoverCardContent className=" p-0">
+      <HoverCardContent className="p-0">
         <div
           className="relative h-full max-h-[40vh] max-w-[270px] overflow-auto p-1 pb-0"
           ref={onRefCreated}

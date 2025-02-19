@@ -55,6 +55,8 @@ const updateTextAreaHeight = (textarea: HTMLTextAreaElement | null) => {
   textarea.style.height = scrollHeight + "px";
 };
 
+const MAX_LENGTH_LIMIT = 5000;
+
 type TextareaFieldProps = Omit<
   TextareaProps,
   "onChange" | "onFocus" | "ref" | "value"
@@ -88,7 +90,7 @@ const TextareaField: React.FC<TextareaFieldProps> = (props) => {
       {...commentTextRegsiter}
       autoFocus
       ref={callbackTextareaRef}
-      maxLength={499}
+      maxLength={MAX_LENGTH_LIMIT}
       className={cn(
         "min-h-[80px] w-full rounded-md border p-3 pr-10 pb-11 resize-none overflow-hidden",
         {
@@ -110,7 +112,7 @@ const commentSchema = z.object({
   commentText: z
     .string()
     .min(1, "Can not be empty")
-    .max(500, "Max 500 characters"),
+    .max(MAX_LENGTH_LIMIT, "Max 500 characters"),
 });
 type CommentFormValues = z.infer<typeof commentSchema>;
 
