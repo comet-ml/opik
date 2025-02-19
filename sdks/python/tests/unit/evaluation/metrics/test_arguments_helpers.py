@@ -3,8 +3,6 @@ from opik.evaluation.metrics import arguments_helpers, base_metric
 
 import pytest
 
-from opik.evaluation.metrics.arguments_helpers import create_scoring_inputs
-
 
 @pytest.mark.parametrize(
     argnames="score_kwargs, should_raise",
@@ -67,8 +65,11 @@ def test_raise_if_score_arguments_are_missing__with_mapping(
 
     # Check if the `unused_kwarg` is present in the exception message
     if unused_kwarg is not None:
-        assert f"Some keys in `scoring_key_mapping` didn't match anything: {{'{unused_kwarg}'}}" in str(exc_info.value), f"'unused_kwarg' ({unused_kwarg}) not found in exception message"
+        assert (
+            f"Some keys in `scoring_key_mapping` didn't match anything: {{'{unused_kwarg}'}}"
+            in str(exc_info.value)
+        ), f"'unused_kwarg' ({unused_kwarg}) not found in exception message"
     else:
-        assert f"Some keys in `scoring_key_mapping` didn't match anything" not in str(
-            exc_info.value), f"'unused_kwarg' ({unused_kwarg}) found in exception message"
-
+        assert "Some keys in `scoring_key_mapping` didn't match anything" not in str(
+            exc_info.value
+        ), f"'unused_kwarg' ({unused_kwarg}) found in exception message"

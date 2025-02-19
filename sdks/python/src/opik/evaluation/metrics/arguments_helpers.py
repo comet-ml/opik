@@ -39,7 +39,12 @@ def raise_if_score_arguments_are_missing(
             f"The available keys found in the dataset item and evaluation task output are: {list(kwargs.keys())}."
         )
 
-        unused_mapping_arguments: Set[str] = set(scoring_key_mapping.values()) if scoring_key_mapping else set()
+        unused_mapping_arguments: Set[str] = set()
+        if scoring_key_mapping:
+            unused_mapping_arguments = set(
+                key for key in scoring_key_mapping.values() if not callable(key)
+            )
+
         unused_mapping_arguments -= set(kwargs.keys())
 
         if len(unused_mapping_arguments) > 0:
