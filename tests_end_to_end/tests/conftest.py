@@ -23,8 +23,45 @@ import re
 import json
 
 
+import logging
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--show-requests",
+        action="store_true",
+        default=False,
+        help="Show HTTP requests in test output"
+    )
+
+
 def pytest_configure(config):
+    """This runs before any tests or fixtures are executed"""
     config.addinivalue_line("markers", "sanity: mark test as a sanity test")
+    
+    logging.getLogger("opik").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # Set up logging configuration
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    
+    # Configure all possible HTTP-related loggers
+    loggers_to_configure = [
+        "opik",
+        "urllib3",
+        "requests",
+        "httpx",
+        "http.client",
+    ]
+    
+    level = logging.INFO if config.getoption("--show-requests") else logging.WARNING
+    for logger_name in loggers_to_configure:
+        logging.getLogger(logger_name).setLevel(level)
 
 
 @pytest.fixture(scope="session")
@@ -453,3 +490,19 @@ def create_feedback_definition_numerical_ui(client: opik.Opik, page: Page):
         feedbacks_page.check_feedback_not_exists_by_name(feedback_name=data["name"])
     except AssertionError as _:
         feedbacks_page.delete_feedback_by_name(data["name"])
+
+
+@pytest.fixture(autouse=True)
+def setup_logging(caplog):
+    """Set up logging for all tests"""
+    caplog.set_level(logging.INFO)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def configure_logging(request):
+    """Additional logging setup that runs before any tests"""
+    # Ensure SDK logging is configured even if pytest_configure wasn't enough
+    opik_logger = logging.getLogger("opik")
+    if not request.config.getoption("--show-requests"):
+        opik_logger.setLevel(logging.ERROR)
+        logging.getLogger("urllib3").setLevel(logging.ERROR)
