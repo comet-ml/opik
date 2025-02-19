@@ -14,7 +14,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 }) => {
   return (
     <ReactMarkdown
-      className={cn("prose comet-body-s max-w-full", className)}
+      className={cn("prose comet-markdown", className)}
       remarkPlugins={[remarkGfm]}
     >
       {children}
