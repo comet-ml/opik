@@ -159,6 +159,12 @@ navigation:
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
                 slug: watsonx
+          - section: OpenTelemetry
+            slug: /opentelemetry
+            contents:
+              - page: Get Started
+                path: docs/tracing/opentelemetry/overview.mdx
+                slug: overview
       - section: Evaluation
         slug: /evaluation
         contents:
