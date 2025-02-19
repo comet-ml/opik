@@ -4,7 +4,7 @@ import { MockInstance } from "vitest";
 
 describe("Opik client batching", () => {
   let loggerErrorSpy: MockInstance<typeof logger.error>;
-  const originalHost = process.env.OPIK_HOST;
+  const originalApiUrl = process.env.OPIK_URL_OVERRIDE;
   const originalApiKey = process.env.OPIK_API_KEY;
   const originalWorkspace = process.env.OPIK_WORKSPACE;
 
@@ -13,8 +13,8 @@ describe("Opik client batching", () => {
   });
 
   afterEach(() => {
-    if (originalHost) {
-      process.env.OPIK_HOST = originalHost;
+    if (originalApiUrl) {
+      process.env.OPIK_URL_OVERRIDE = originalApiUrl;
     }
     if (originalApiKey) {
       process.env.OPIK_API_KEY = originalApiKey;
@@ -26,7 +26,7 @@ describe("Opik client batching", () => {
   });
 
   it("should throw an error if the host is cloud and the API key is not set", async () => {
-    process.env.OPIK_HOST = "https://www.comet.com/api";
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
 
     expect(() => {
       new Opik();
@@ -34,7 +34,7 @@ describe("Opik client batching", () => {
   });
 
   it("should throw an error if the host is cloud and workspace is not set", async () => {
-    process.env.OPIK_HOST = "https://www.comet.com/api";
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";
 
     expect(() => {
@@ -43,7 +43,7 @@ describe("Opik client batching", () => {
   });
 
   it("should throw an error if the host is cloud and workspace is not set", async () => {
-    process.env.OPIK_HOST = "https://www.comet.com/api";
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";
     process.env.OPIK_WORKSPACE = "test";
 
