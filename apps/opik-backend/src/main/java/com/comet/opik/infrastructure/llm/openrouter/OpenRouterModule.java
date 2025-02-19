@@ -14,6 +14,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 public class OpenRouterModule extends AbstractModule {
     @Provides
     @Singleton
+    @Named("openrouterGenerator")
     public OpenAIClientGenerator clientGenerator(
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
         config.setOpenAiClient(new LlmProviderClientConfig.OpenAiClientConfig("https://openrouter.ai/api/v1"));
@@ -24,7 +25,7 @@ public class OpenRouterModule extends AbstractModule {
     @Singleton
     @Named("openrouter")
     public LlmServiceProvider llmServiceProvider(@NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull OpenAIClientGenerator clientGenerator) {
+            @NonNull @Named("openrouterGenerator") OpenAIClientGenerator clientGenerator) {
         return new OpenRouterLlmServiceProvider(clientGenerator, llmProviderFactory);
     }
 }
