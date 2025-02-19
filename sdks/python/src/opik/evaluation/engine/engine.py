@@ -184,11 +184,13 @@ class EvaluationEngine:
     def evaluate_test_cases(
         self,
         test_cases: List[test_case.TestCase],
+        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> List[test_result.TestResult]:
         evaluation_tasks: List[EvaluationTask] = [
             functools.partial(
                 self._evaluate_test_case,
                 test_case_=test_case_,
+                scoring_key_mapping=scoring_key_mapping,
             )
             for test_case_ in test_cases
         ]

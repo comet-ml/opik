@@ -179,7 +179,10 @@ def evaluate_experiment(
             workers=scoring_threads,
             verbose=verbose,
         )
-        test_results = evaluation_engine.evaluate_test_cases(test_cases=test_cases)
+        test_results = evaluation_engine.evaluate_test_cases(
+            test_cases=test_cases,
+            scoring_key_mapping=scoring_key_mapping,
+        )
 
     total_time = time.time() - start_time
 
