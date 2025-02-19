@@ -3268,6 +3268,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
                             .build())
                     .map(trace -> trace.toBuilder()
