@@ -36,6 +36,9 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
@@ -53,6 +56,7 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
@@ -89,6 +93,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1049,9 +1054,9 @@ class TracesResourceTest {
             traces2.forEach(trace -> create(trace, apiKey2, workspaceName2));
 
             getAndAssertPage(1, traces2.size() + traces1.size(), projectName1, List.of(), traces1.reversed(),
-                    traces2.reversed(), workspaceName1, apiKey1);
+                    traces2.reversed(), workspaceName1, apiKey1, null);
             getAndAssertPage(1, traces2.size() + traces1.size(), projectName1, List.of(), traces2.reversed(),
-                    traces1.reversed(), workspaceName2, apiKey2);
+                    traces1.reversed(), workspaceName2, apiKey2, null);
 
         }
 
@@ -3243,6 +3248,124 @@ class TracesResourceTest {
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
         }
+
+        @ParameterizedTest
+        @MethodSource
+        void getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted(Comparator<Trace> comparator,
+                SortingField sorting) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .build())
+                    .map(trace -> trace.toBuilder()
+                            .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var expectedTraces = traces.stream()
+                    .sorted(comparator)
+                    .toList();
+
+            List<SortingField> sortingFields = List.of(sorting);
+
+            getAndAssertPage(workspaceName, projectName, List.of(), traces, expectedTraces, List.of(), apiKey,
+                    sortingFields);
+        }
+
+        static Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
+
+            Comparator<Trace> inputComparator = Comparator.comparing(trace -> trace.input().toString());
+            Comparator<Trace> outputComparator = Comparator.comparing(trace -> trace.output().toString());
+            Comparator<Trace> metadataComparator = Comparator.comparing(trace -> trace.metadata().toString());
+            Comparator<Trace> tagsComparator = Comparator.comparing(trace -> trace.tags().toString());
+            Comparator<Trace> errorInfoComparator = Comparator.comparing(trace -> trace.errorInfo().toString());
+
+            return Stream.of(
+                    Arguments.of(Comparator.comparing(Trace::name),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Trace::name).reversed(),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Trace::startTime),
+                            SortingField.builder().field(SortableFields.START_TIME).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Trace::startTime).reversed(),
+                            SortingField.builder().field(SortableFields.START_TIME).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Trace::endTime),
+                            SortingField.builder().field(SortableFields.END_TIME).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Trace::endTime).reversed(),
+                            SortingField.builder().field(SortableFields.END_TIME).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Trace::duration)
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.DURATION).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Trace::duration).reversed()
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.DURATION).direction(Direction.DESC).build()),
+                    Arguments.of(inputComparator,
+                            SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build()),
+                    Arguments.of(inputComparator.reversed(),
+                            SortingField.builder().field(SortableFields.INPUT).direction(Direction.DESC).build()),
+                    Arguments.of(outputComparator,
+                            SortingField.builder().field(SortableFields.OUTPUT).direction(Direction.ASC).build()),
+                    Arguments.of(outputComparator.reversed(),
+                            SortingField.builder().field(SortableFields.OUTPUT).direction(Direction.DESC).build()),
+                    Arguments.of(metadataComparator,
+                            SortingField.builder().field(SortableFields.METADATA).direction(Direction.ASC).build()),
+                    Arguments.of(metadataComparator.reversed(),
+                            SortingField.builder().field(SortableFields.METADATA).direction(Direction.DESC).build()),
+                    Arguments.of(tagsComparator,
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    Arguments.of(tagsComparator.reversed(),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Trace::id),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Trace::id).reversed(),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+                    Arguments.of(errorInfoComparator,
+                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.ASC).build()),
+                    Arguments.of(errorInfoComparator.reversed(),
+                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()));
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByInvalidField__thenReturn400() {
+            var field = RandomStringUtils.randomAlphanumeric(10);
+            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    400,
+                    "Invalid sorting fields '%s'".formatted(field));
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("project_name", projectName)
+                    .queryParam("sorting",
+                            URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualError).isEqualTo(expectedError);
+        }
+
     }
 
     private Integer randomNumber() {
@@ -3256,15 +3379,29 @@ class TracesResourceTest {
     private void getAndAssertPage(String workspaceName, String projectName, List<? extends Filter> filters,
             List<Trace> traces,
             List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey) {
+        getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces, unexpectedTraces, apiKey, null);
+    }
+
+    private void getAndAssertPage(String workspaceName, String projectName, List<? extends Filter> filters,
+            List<Trace> traces,
+            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey, List<SortingField> sortingFields) {
         int page = 1;
         int size = traces.size() + expectedTraces.size() + unexpectedTraces.size();
         getAndAssertPage(page, size, projectName, filters, expectedTraces, unexpectedTraces,
-                workspaceName, apiKey);
+                workspaceName, apiKey, sortingFields);
     }
 
     private void getAndAssertPage(int page, int size, String projectName, List<? extends Filter> filters,
-            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String workspaceName, String apiKey) {
-        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String workspaceName, String apiKey,
+            List<SortingField> sortingFields) {
+        WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI));
+
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            target = target.queryParam("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
+        }
+
+        var actualResponse = target
                 .queryParam("page", page)
                 .queryParam("size", size)
                 .queryParam("project_name", projectName)
@@ -4818,7 +4955,7 @@ class TracesResourceTest {
                     .toList();
 
             getAndAssertPage(1, traces.size(), projectName, List.of(), traces.reversed(), List.of(), TEST_WORKSPACE,
-                    API_KEY);
+                    API_KEY, null);
         }
 
         @Test

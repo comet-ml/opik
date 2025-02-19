@@ -16,10 +16,13 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.workspaces.WorkspaceMetadata;
+import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
@@ -77,6 +80,8 @@ public class TracesResource {
     private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
+    private final @NonNull TraceSortingFactory traceSortingFactory;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
@@ -89,15 +94,28 @@ public class TracesResource {
             @QueryParam("project_name") String projectName,
             @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
+            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
+            @QueryParam("sorting") String sorting) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
+        var sortingFields = traceSortingFactory.newSorting(sorting);
+
+        WorkspaceMetadata workspaceMetadata = workspaceMetadataService
+                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        if (!workspaceMetadata.canUseDynamicSorting()) {
+            throw new BadRequestException("Dynamic sorting is not enabled for this workspace");
+        }
+
         var searchCriteria = TraceSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(traceFilters)
                 .truncate(truncate)
+                .sortingFields(sortingFields)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
