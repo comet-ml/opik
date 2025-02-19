@@ -16,6 +16,8 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.dropwizard.configuration.ConfigurationException;
 import io.dropwizard.configuration.FileConfigurationSourceProvider;
@@ -82,6 +84,7 @@ class LlmProviderFactoryTest {
         AnthropicModule anthropicModule = new AnthropicModule();
         GeminiModule geminiModule = new GeminiModule();
         OpenAIModule openAIModule = new OpenAIModule();
+        OpenRouterModule openRouterModule = new OpenRouterModule();
 
         AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig);
         anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator);
@@ -91,6 +94,9 @@ class LlmProviderFactoryTest {
 
         OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig);
         openAIModule.llmServiceProvider(llmProviderFactory, openAIClientGenerator);
+
+        OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
+        openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
 
@@ -105,7 +111,9 @@ class LlmProviderFactoryTest {
                 .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, "LlmProviderAnthropic"));
         var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.GEMINI, "LlmProviderGemini"));
+        var openRouterModels = EnumUtils.getEnumList(OpenRouterModelName.class).stream()
+                .map(model -> arguments(model.toString(), LlmProvider.OPEN_ROUTER, "LlmProviderOpenRouter"));
 
-        return Stream.of(openAiModels, anthropicModels, geminiModels).flatMap(Function.identity());
+        return Stream.of(openAiModels, anthropicModels, geminiModels, openRouterModels).flatMap(Function.identity());
     }
 }
