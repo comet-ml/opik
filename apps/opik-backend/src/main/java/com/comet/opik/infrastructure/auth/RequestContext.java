@@ -20,7 +20,6 @@ public class RequestContext {
     public static final String PROJECT_NAME = "projectName";
 
     private String userName;
-    private String workspaceName;
     private String workspaceId;
     private String apiKey;
     private MultivaluedMap<String, String> headers;
