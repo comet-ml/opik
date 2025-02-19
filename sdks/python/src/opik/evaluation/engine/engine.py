@@ -12,7 +12,7 @@ from opik.evaluation import (
     test_result,
 )
 from opik.evaluation.metrics import arguments_helpers, base_metric, score_result
-from opik.evaluation.types import LLMTask
+from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers
 from .types import EvaluationTask
@@ -41,6 +41,7 @@ class EvaluationEngine:
     def _evaluate_test_case(
         self,
         test_case_: test_case.TestCase,
+        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> test_result.TestResult:
         score_results: List[score_result.ScoreResult] = []
 
@@ -51,6 +52,7 @@ class EvaluationEngine:
                     score_function=metric.score,
                     score_name=metric.name,
                     kwargs=score_kwargs,
+                    scoring_key_mapping=scoring_key_mapping,
                 )
                 LOGGER.debug("Metric %s score started", metric.name)
                 result = metric.score(**score_kwargs)
@@ -147,7 +149,10 @@ class EvaluationEngine:
                 scoring_inputs=scoring_inputs,
                 task_output=task_output_,
             )
-            test_result_ = self._evaluate_test_case(test_case_=test_case_)
+            test_result_ = self._evaluate_test_case(
+                test_case_=test_case_,
+                scoring_key_mapping=scoring_key_mapping,
+            )
 
         return test_result_
 

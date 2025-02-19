@@ -1,16 +1,18 @@
-from typing import List, Callable, Dict, Any, Optional, Union
 import inspect
-from opik import exceptions
-
 import logging
+from typing import Any, Callable, Dict, List, Optional, Set
 
+from opik import exceptions
 from opik.evaluation.types import ScoringKeyMappingType
 
 LOGGER = logging.getLogger(__name__)
 
 
 def raise_if_score_arguments_are_missing(
-    score_function: Callable, score_name: str, kwargs: Dict[str, Any]
+    score_function: Callable,
+    score_name: str,
+    kwargs: Dict[str, Any],
+    scoring_key_mapping: Optional[ScoringKeyMappingType],
 ) -> None:
     signature = inspect.signature(score_function)
 
@@ -30,12 +32,20 @@ def raise_if_score_arguments_are_missing(
                 missing_required_arguments.append(name)
 
     if len(missing_required_arguments) > 0:
-        raise exceptions.ScoreMethodMissingArguments(
+        message = (
             f"The scoring method {score_name} is missing arguments: {missing_required_arguments}. "
             f"These keys were not present in either the dataset item or the dictionary returned by the evaluation task. "
             f"You can either update the dataset or evaluation task to return this key or use the `scoring_key_mapping` to map existing items to the expected arguments."
             f"The available keys found in the dataset item and evaluation task output are: {list(kwargs.keys())}."
         )
+
+        unused_mapping_arguments: Set[str] = set(scoring_key_mapping.values()) if scoring_key_mapping else set()
+        unused_mapping_arguments -= set(kwargs.keys())
+
+        if len(unused_mapping_arguments) > 0:
+            message += f" Some keys in `scoring_key_mapping` didn't match anything: {unused_mapping_arguments}"
+
+        raise exceptions.ScoreMethodMissingArguments(message)
 
 
 def create_scoring_inputs(
