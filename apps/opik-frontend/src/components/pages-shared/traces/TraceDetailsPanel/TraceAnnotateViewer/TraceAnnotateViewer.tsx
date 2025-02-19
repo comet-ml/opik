@@ -1,7 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import sortBy from "lodash/sortBy";
-import { Plus } from "lucide-react";
-import { useHotkeys } from "react-hotkeys-hook";
+import { ExternalLink } from "lucide-react";
 
 import {
   FEEDBACK_SCORE_TYPE,
@@ -13,40 +12,23 @@ import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
 import AnnotateRow from "./AnnotateRow";
+import { LastSectionValue } from "../TraceDetailsPanel";
+import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
+import { Link } from "@tanstack/react-router";
+import LastSectionLayout from "../LastSectionLayout";
 
 type TraceAnnotateViewerProps = {
   data: Trace | Span;
   spanId?: string;
   traceId: string;
-  annotateOpen: boolean;
-  setAnnotateOpen: (open: boolean) => void;
+  lastSection?: LastSectionValue | null;
+  setLastSection: (v: LastSectionValue | null) => void;
 };
-
-const HOTKEYS = ["Esc"];
 
 const TraceAnnotateViewer: React.FunctionComponent<
   TraceAnnotateViewerProps
-> = ({ data, spanId, traceId, annotateOpen, setAnnotateOpen }) => {
-  const [feedbackDefinitionDialogOpen, setFeedbackDefinitionDialogOpen] =
-    useState(false);
-
-  useHotkeys(
-    "Escape",
-    (keyboardEvent: KeyboardEvent) => {
-      if (!annotateOpen) return;
-      keyboardEvent.stopPropagation();
-      switch (keyboardEvent.code) {
-        case "Escape":
-          setAnnotateOpen(false);
-          break;
-      }
-    },
-    [annotateOpen],
-  );
-
+> = ({ data, spanId, traceId, lastSection, setLastSection }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
     workspaceName,
@@ -90,54 +72,64 @@ const TraceAnnotateViewer: React.FunctionComponent<
     );
   }, [feedbackDefinitions, feedbackScores]);
 
-  return (
-    <div className="size-full max-w-full overflow-auto p-6">
-      <div className="min-w-60 max-w-full overflow-x-hidden">
-        <div className="flex w-full items-center justify-between gap-2 overflow-x-hidden">
-          <div className="flex items-center gap-2 overflow-x-hidden">
-            <div className="comet-title-m truncate">Annotate</div>
-          </div>
-          <TooltipWrapper content="Close annotate" hotkeys={HOTKEYS}>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAnnotateOpen(false)}
-            >
-              Close
-            </Button>
-          </TooltipWrapper>
-        </div>
-        <div className="mt-4 flex flex-col gap-4">
-          <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,10fr)_minmax(0,2fr)] border-t border-border">
-            {rows.map((row) => (
-              <AnnotateRow
-                key={row.name}
-                name={row.name}
-                feedbackDefinition={row.feedbackDefinition}
-                feedbackScore={row.feedbackScore}
-                spanId={spanId}
-                traceId={traceId}
-              />
-            ))}
-          </div>
-          <div className="flex">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setFeedbackDefinitionDialogOpen(true)}
-            >
-              <Plus className="mr-2 size-4 " />
-              Add feedback definition
-            </Button>
+  const hasFeedbackScores = Boolean(data.feedback_scores?.length);
 
-            <AddEditFeedbackDefinitionDialog
-              open={feedbackDefinitionDialogOpen}
-              setOpen={setFeedbackDefinitionDialogOpen}
+  return (
+    <LastSectionLayout
+      title="Feedback scores"
+      closeTooltipContent="Close annotate"
+      setLastSection={setLastSection}
+      lastSection={lastSection}
+    >
+      {hasFeedbackScores && (
+        <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
+          {data.feedback_scores?.map((score) => (
+            <FeedbackScoreTag
+              key={score.name}
+              label={score.name}
+              value={score.value}
+              reason={score.reason}
             />
-          </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-4 flex flex-col px-6">
+        <div className="comet-body-s-accented pb-2">Human review</div>
+        <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,12fr)_34px] border-t border-border empty:border-transparent">
+          {rows.map((row) => (
+            <AnnotateRow
+              key={row.name}
+              name={row.name}
+              feedbackDefinition={row.feedbackDefinition}
+              feedbackScore={row.feedbackScore}
+              spanId={spanId}
+              traceId={traceId}
+            />
+          ))}
+        </div>
+        <div className="comet-body-xs pt-4 text-light-slate">
+          Set up
+          <Button
+            size="sm"
+            variant="link"
+            className="comet-body-xs inline-flex h-auto gap-0.5 px-1"
+            asChild
+          >
+            <Link
+              to="/$workspaceName/configuration"
+              params={{ workspaceName }}
+              search={{
+                tab: "feedback-definitions",
+              }}
+            >
+              custom human review scores
+              <ExternalLink className="size-3" />
+            </Link>
+          </Button>
+          to annotate your traces.
         </div>
       </div>
-    </div>
+    </LastSectionLayout>
   );
 };
 

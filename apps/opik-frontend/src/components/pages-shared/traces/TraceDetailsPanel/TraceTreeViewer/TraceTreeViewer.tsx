@@ -241,7 +241,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     >
       <div className="min-w-[400px] max-w-full overflow-x-hidden">
         <div className="flex flex-row items-end gap-2 px-6 py-2">
-          <div className="comet-title-m">Trace spans</div>
+          <div className="comet-title-s">Trace spans</div>
           <div className="comet-body-s pb-[3px] text-muted-slate">
             <div>{traceSpans.length} spans</div>
           </div>

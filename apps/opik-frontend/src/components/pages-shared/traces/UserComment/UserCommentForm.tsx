@@ -1,0 +1,180 @@
+import { Button, ButtonProps } from "@/components/ui/button";
+import { Textarea, TextareaProps } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ArrowRight, Check, X } from "lucide-react";
+import React, { useCallback, useEffect, useRef } from "react";
+import { FormProvider, useForm, useFormContext } from "react-hook-form";
+import { z } from "zod";
+
+const CancelButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  (buttonProps, ref) => {
+    return (
+      <Button {...buttonProps} variant="outline" size="icon-xs" ref={ref}>
+        <span className="sr-only">Cancel edit comment</span>
+        <X className="size-3.5" />
+      </Button>
+    );
+  },
+);
+CancelButton.displayName = "CommentFormCancelButton";
+
+const SubmitButton = React.forwardRef<
+  HTMLButtonElement,
+  ButtonProps & {
+    editMode?: boolean;
+  }
+>(({ editMode, ...buttonProps }, ref) => {
+  const {
+    formState: { isValid, isDirty },
+  } = useFormContext();
+
+  const SubmitIcon = editMode ? Check : ArrowRight;
+
+  return (
+    <Button
+      {...buttonProps}
+      size="icon-xs"
+      ref={ref}
+      type="submit"
+      disabled={!isValid || !isDirty || buttonProps.disabled}
+    >
+      <span className="sr-only">Approve edit comment</span>
+      <SubmitIcon className="size-3.5" />
+    </Button>
+  );
+});
+SubmitButton.displayName = "CommentFormSubmitButton";
+
+const updateTextAreaHeight = (textarea: HTMLTextAreaElement | null) => {
+  if (!textarea) return;
+
+  textarea.style.height = "80px";
+  const scrollHeight = textarea.scrollHeight;
+
+  textarea.style.height = scrollHeight + "px";
+};
+
+type TextareaFieldProps = Omit<
+  TextareaProps,
+  "onChange" | "onFocus" | "ref" | "value"
+>;
+const TextareaField: React.FC<TextareaFieldProps> = (props) => {
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const { register, formState, watch } = useFormContext<CommentFormValues>();
+
+  const { ref: commentTextRef, ...commentTextRegsiter } =
+    register("commentText");
+
+  useEffect(() => {
+    const { unsubscribe } = watch(() => {
+      updateTextAreaHeight(textAreaRef.current);
+    });
+    return () => unsubscribe();
+  }, [watch]);
+
+  const callbackTextareaRef = useCallback(
+    (e: HTMLTextAreaElement | null) => {
+      commentTextRef(e);
+      textAreaRef.current = e;
+      updateTextAreaHeight(e);
+    },
+    [commentTextRef],
+  );
+
+  return (
+    <Textarea
+      {...props}
+      {...commentTextRegsiter}
+      autoFocus
+      ref={callbackTextareaRef}
+      maxLength={499}
+      className={cn(
+        "min-h-[80px] w-full rounded-md border p-3 pr-10 pb-11 resize-none overflow-hidden",
+        {
+          "border-destructive": formState.errors.commentText,
+        },
+        props.className,
+      )}
+    />
+  );
+};
+
+type UserCommentFormComponents = {
+  SubmitButton: typeof SubmitButton;
+  CancelButton: typeof CancelButton;
+  TextareaField: typeof TextareaField;
+};
+
+const commentSchema = z.object({
+  commentText: z
+    .string()
+    .min(1, "Can not be empty")
+    .max(500, "Max 500 characters"),
+});
+type CommentFormValues = z.infer<typeof commentSchema>;
+
+export type UserCommentFormProps = {
+  onSubmit: (data: CommentFormValues) => void;
+  actions?: React.ReactNode;
+  commentText?: string;
+  className?: string;
+  children: React.ReactNode;
+};
+const UserCommentForm: UserCommentFormComponents &
+  React.FC<UserCommentFormProps> = ({
+  onSubmit,
+  actions,
+  commentText,
+  className,
+  children,
+}) => {
+  const form = useForm<CommentFormValues>({
+    resolver: zodResolver(commentSchema),
+    defaultValues: {
+      commentText,
+    },
+  });
+
+  const {
+    reset,
+    formState: { isSubmitSuccessful },
+  } = form;
+
+  const onKeyDown: React.KeyboardEventHandler<HTMLFormElement> = (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      form.handleSubmit(onSubmit)();
+    }
+  };
+
+  useEffect(() => {
+    if (isSubmitSuccessful) {
+      reset();
+    }
+  }, [isSubmitSuccessful, reset]);
+
+  return (
+    <FormProvider {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className={cn("w-full", className)}
+        onKeyDown={onKeyDown}
+      >
+        <div className="relative">
+          {children}
+
+          <div className="absolute bottom-0 right-0 flex gap-2 p-2">
+            {actions}
+          </div>
+        </div>
+      </form>
+    </FormProvider>
+  );
+};
+
+UserCommentForm.CancelButton = CancelButton;
+UserCommentForm.SubmitButton = SubmitButton;
+UserCommentForm.TextareaField = TextareaField;
+
+export default UserCommentForm;
