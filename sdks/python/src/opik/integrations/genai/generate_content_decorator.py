@@ -82,7 +82,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         assert isinstance(
             output,
             genai_types.GenerateContentResponse,
-        )
+        ), f"{output}"
 
         result_dict = output.model_dump(mode="json")
         output, metadata = dict_utils.split_dict_by_keys(
@@ -90,14 +90,16 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         model = result_dict["model_version"]
-        provider_usage = result_dict["usage_metadata"]
+        provider_usage = dict_utils.remove_none_from_dict(result_dict["usage_metadata"])
 
-        usage = UsageDictGoogle(
-            completion_tokens=provider_usage["candidates_token_count"],
-            prompt_tokens=provider_usage["prompt_token_count"],
-            total_tokens=provider_usage["total_token_count"],
-            **provider_usage,  # type: ignore
-        )
+        usage = {
+            **UsageDictGoogle(
+                completion_tokens=provider_usage["candidates_token_count"],
+                prompt_tokens=provider_usage["prompt_token_count"],
+                total_tokens=provider_usage["total_token_count"],
+                **provider_usage,  # type: ignore
+            )
+        }
 
         result = arguments_helpers.EndSpanParameters(
             output=output,
