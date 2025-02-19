@@ -1,9 +1,3 @@
----
-subtitle: >-
-  This guide helps you integrate the Opik platform with your existing LLM
-  application
----
-
 This guide helps you integrate the Opik platform with your existing LLM application. The goal of this guide is to help you log your first LLM calls and chains to the Opik platform.
 
 <Frame>
@@ -74,7 +68,7 @@ const client = new Opik({
 
 ### Logging LLM calls
 
-The first step in integrating Opik with your codebase is to track your LLM calls. If you are using OpenAI or any LLM provider that is supported by LiteLLM, you
+The first step in integrating Opik with your codebase is to track your LLM calls. If you are using OpenAI, OpenRouter, or any LLM provider that is supported by LiteLLM, you
 can use one of our [integrations](/tracing/integrations/overview):
 
 <Tabs>
@@ -90,6 +84,35 @@ openai_client = track_openai(openai_client)
 ```
 
 All OpenAI calls made using the `openai_client` will now be logged to Opik.
+
+</Tab>
+<Tab value="OpenRouter (Python)" title="OpenRouter (Python)">
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Initialize OpenRouter client
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key="YOUR_OPENROUTER_API_KEY"
+)
+client = track_openai(client)
+
+# Optional headers for OpenRouter leaderboard
+headers = {
+    "HTTP-Referer": "YOUR_SITE_URL",  # Optional
+    "X-Title": "YOUR_SITE_NAME"  # Optional
+}
+
+response = client.chat.completions.create(
+    model="openai/gpt-4",  # You can use any model available on OpenRouter
+    extra_headers=headers,
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+All OpenRouter calls made using the `client` will now be logged to Opik.
 
 </Tab>
 <Tab value="LiteLLM (Python)" title="LiteLLM (Python)">

@@ -136,12 +136,10 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _generators_handler(
+    def _streams_handler(
         self,
         output: Any,
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], str]],
     ) -> Optional[Union[Generator, AsyncGenerator]]:
-        return super()._generators_handler(
-            output, capture_output, generations_aggregator
-        )
+        return super()._streams_handler(output, capture_output, generations_aggregator)

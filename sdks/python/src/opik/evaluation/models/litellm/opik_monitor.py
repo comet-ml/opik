@@ -32,6 +32,12 @@ def enabled_in_config() -> bool:
     return config_.enable_litellm_models_monitoring
 
 
+@functools.lru_cache
+def opik_is_misconfigured() -> bool:
+    config_ = config.OpikConfig()
+    return config.is_misconfigured(config_)
+
+
 def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
     current_span = opik_context.get_current_span_data()
 

@@ -10,8 +10,8 @@ def eval_task(item: dict):
 
 
 @pytest.fixture()
-def mock_experiment(client: Opik, create_delete_dataset_sdk, insert_dataset_items_sdk):
-    dataset = client.get_dataset(create_delete_dataset_sdk)
+def mock_experiment(client: Opik, create_dataset_sdk, insert_dataset_items_sdk):
+    dataset = client.get_dataset(create_dataset_sdk)
     experiment_name = "test_experiment"
     eval = evaluate(
         experiment_name=experiment_name,

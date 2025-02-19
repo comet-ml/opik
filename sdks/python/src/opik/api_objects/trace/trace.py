@@ -3,10 +3,16 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional
 
-from . import constants, helpers, span, validation_helpers
-from .. import datetime_helpers
-from ..message_processing import messages, streamer
-from ..types import CreatedByType, FeedbackScoreDict, SpanType, UsageDict, ErrorInfoDict
+from .. import constants, span, validation_helpers
+from ... import datetime_helpers, id_helpers
+from ...message_processing import messages, streamer
+from ...types import (
+    CreatedByType,
+    FeedbackScoreDict,
+    SpanType,
+    UsageDict,
+    ErrorInfoDict,
+)
 from opik import dict_utils
 
 LOGGER = logging.getLogger(__name__)
@@ -141,11 +147,13 @@ class Trace:
         Returns:
             span.Span: The created span object.
         """
-        span_id = id if id is not None else helpers.generate_id()
+        span_id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        parsed_usage = validation_helpers.validate_and_parse_usage(
+            usage, LOGGER, provider
+        )
         if parsed_usage.full_usage is not None:
             metadata = (
                 {"usage": parsed_usage.full_usage}
@@ -231,7 +239,7 @@ class TraceData:
     The TraceData object is returned when calling :func:`opik.opik_context.get_current_trace_data` from a tracked function.
     """
 
-    id: str = dataclasses.field(default_factory=helpers.generate_id)
+    id: str = dataclasses.field(default_factory=id_helpers.generate_id)
     name: Optional[str] = None
     start_time: Optional[datetime.datetime] = dataclasses.field(
         default_factory=datetime_helpers.local_timestamp

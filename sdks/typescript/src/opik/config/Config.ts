@@ -30,9 +30,34 @@ function loadFromEnv(): Partial<OpikConfig> {
 export function loadConfig(explicit?: Partial<OpikConfig>): OpikConfig {
   const envConfig = loadFromEnv();
 
-  return {
+  return validateConfig({
     ...DEFAULT_CONFIG,
     ...envConfig,
     ...explicit,
-  };
+  });
+}
+
+export function validateConfig(config: OpikConfig) {
+  if (!config.host) {
+    throw new Error("OPIK_HOST is not set");
+  }
+
+  const isCloudHost = isCloud(config.host);
+
+  if (isCloudHost && !config.apiKey) {
+    throw new Error("OPIK_API_KEY is not set");
+  }
+
+  if (
+    isCloudHost &&
+    (!config.workspaceName || config.workspaceName === "default")
+  ) {
+    throw new Error("OPIK_WORKSPACE is not set");
+  }
+
+  return config;
+}
+
+function isCloud(host: string) {
+  return new URL(host).hostname.endsWith("comet.com");
 }

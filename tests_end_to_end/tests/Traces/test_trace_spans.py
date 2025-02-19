@@ -11,16 +11,14 @@ class TestTraceSpans:
         ["log_traces_with_spans_low_level", "log_traces_with_spans_decorator"],
     )
     @pytest.mark.sanity
-    def test_spans_of_traces(
-        self, page, request, create_delete_project_sdk, traces_fixture
-    ):
+    def test_spans_of_traces(self, page, request, create_project, traces_fixture):
         """
         Checks that every trace has the correct number and names of spans defined in the sanity_config.yaml file
         1. Open the traces page of the project
         2. Go through each trace and click it
         3. Check that the spans are present in each trace
         """
-        project_name = create_delete_project_sdk
+        project_name = create_project
         _, span_config = request.getfixturevalue(traces_fixture)
         projects_page = ProjectsPage(page)
         projects_page.go_to_page()
@@ -42,7 +40,7 @@ class TestTraceSpans:
     )
     @pytest.mark.sanity
     def test_trace_and_span_details(
-        self, page, request, create_delete_project_sdk, traces_fixture
+        self, page, request, create_project, traces_fixture
     ):
         """
         Checks that for each trace and spans, the attributes defined in sanity_config.yaml are present
@@ -52,7 +50,7 @@ class TestTraceSpans:
         4. Check the defined metadata is present
         5. Go through each span of the traces and repeat 2-4
         """
-        project_name = create_delete_project_sdk
+        project_name = create_project
         trace_config, span_config = request.getfixturevalue(traces_fixture)
         projects_page = ProjectsPage(page)
         projects_page.go_to_page()

@@ -1,6 +1,7 @@
 export enum PROVIDER_TYPE {
   OPEN_AI = "openai",
   ANTHROPIC = "anthropic",
+  OLLAMA = "ollama",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -31,6 +32,25 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_3_OPUS_20240229 = "claude-3-opus-20240229",
   CLAUDE_3_SONNET_20240229 = "claude-3-sonnet-20240229",
   CLAUDE_3_HAIKU_20240307 = "claude-3-haiku-20240307",
+}
+
+export type PROVIDER_MODELS_TYPE = {
+  [key in PROVIDER_TYPE]: {
+    value: PROVIDER_MODEL_TYPE;
+    label: string;
+    structuredOutput?: boolean;
+  }[];
+};
+
+export enum PROVIDER_LOCATION_TYPE {
+  cloud = "cloud",
+  local = "local",
+}
+
+export interface LocalAIProviderData {
+  url: string;
+  models: string;
+  created_at: string;
 }
 
 export interface ProviderKey {

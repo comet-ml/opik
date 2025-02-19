@@ -3,7 +3,7 @@ import dataclasses
 import logging
 
 from typing import Optional, Any, List, Dict
-from ..types import (
+from ...types import (
     SpanType,
     UsageDict,
     DistributedTraceHeadersDict,
@@ -11,9 +11,9 @@ from ..types import (
     ErrorInfoDict,
 )
 
-from ..message_processing import streamer, messages
-from .. import datetime_helpers
-from . import helpers, validation_helpers, constants
+from ...message_processing import streamer, messages
+from ... import datetime_helpers, id_helpers
+from .. import helpers, validation_helpers, constants
 from opik import dict_utils
 
 LOGGER = logging.getLogger(__name__)
@@ -113,7 +113,9 @@ class Span:
         Returns:
             None
         """
-        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        parsed_usage = validation_helpers.validate_and_parse_usage(
+            usage, LOGGER, provider
+        )
         if parsed_usage.full_usage is not None:
             metadata = (
                 {"usage": parsed_usage.full_usage}
@@ -178,11 +180,13 @@ class Span:
         Returns:
             Span: The created child span object.
         """
-        span_id = id if id is not None else helpers.generate_id()
+        span_id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        parsed_usage = validation_helpers.validate_and_parse_usage(usage, LOGGER)
+        parsed_usage = validation_helpers.validate_and_parse_usage(
+            usage, LOGGER, provider
+        )
         if parsed_usage.full_usage is not None:
             metadata = (
                 {"usage": parsed_usage.full_usage}

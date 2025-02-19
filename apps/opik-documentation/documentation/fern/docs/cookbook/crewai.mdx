@@ -5,7 +5,6 @@ description: Cookbook that showcases Opik's integration with the CrewAI
 # Using Opik with CrewAI
 
 This notebook showcases how to use Opik with CrewAI. [CrewAI](https://github.com/crewAIInc/crewAI) is a cutting-edge framework for orchestrating autonomous AI agents.
-
 > CrewAI enables you to create AI teams where each agent has specific roles, tools, and goals, working together to accomplish complex tasks.
 
 > Think of it as assembling your dream team - each member (agent) brings unique skills and expertise, collaborating seamlessly to achieve your objectives.
@@ -18,9 +17,11 @@ For this guide we will use CrewAI's quickstart example.
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=llamaindex&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install crewai crewai-tools opik --upgrade
 ```
+
 
 ```python
 import opik
@@ -32,6 +33,7 @@ opik.configure(use_local=False)
 
 First, we set up our API keys for our LLM-provider as environment variables:
 
+
 ```python
 import os
 import getpass
@@ -41,8 +43,8 @@ if "OPENAI_API_KEY" not in os.environ:
 ```
 
 ## Using CrewAI
-
 The first step is to create our project. We will use an example from CrewAI's documentation:
+
 
 ```python
 from crewai import Agent, Crew, Task, Process
@@ -91,6 +93,7 @@ class YourCrewName:
 ```
 
 Now we can import Opik's tracker and run our `crew`:
+
 
 ```python
 from opik.integrations.crewai import track_crewai

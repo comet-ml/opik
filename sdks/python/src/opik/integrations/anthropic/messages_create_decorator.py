@@ -77,7 +77,7 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
-    def _generators_handler(
+    def _streams_handler(
         self,
         output: Any,
         capture_output: bool,

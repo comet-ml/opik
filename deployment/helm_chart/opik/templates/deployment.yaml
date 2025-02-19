@@ -44,7 +44,7 @@ spec:
       initContainers:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if eq $key "backend" }}
+      {{- if and (eq $key "backend") $value.run_migration }}
         - name: backend-migrations
           image: "{{ $.Values.registry }}/{{ $value.image.repository }}:{{ $value.image.tag }}"
           imagePullPolicy: {{ $value.image.pullPolicy }}

@@ -13,9 +13,11 @@ For this guide we will be evaluating the Moderation metric included in the LLM E
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_mod&utm_campaign=opik) for more information.
 
+
 ```python
 %pip install --upgrade --quiet opik pandas
 ```
+
 
 ```python
 import opik
@@ -26,6 +28,7 @@ opik.configure(use_local=False)
 ## Preparing our environment
 
 First, we will configure the OpenAI API key and download a reference moderation dataset.
+
 
 ```python
 import os
@@ -38,6 +41,7 @@ if "OPENAI_API_KEY" not in os.environ:
 We will be using the [OpenAI Moderation API Release dataset](https://github.com/openai/moderation-api-release/tree/main/data) which according to this [blog post](https://openai.com/index/using-gpt-4-for-content-moderation/) GPT-4o detects ~60~% of hallucinations. The first step will be to create a dataset in the platform so we can keep track of the results of the evaluation.
 
 Since the insert methods in the SDK deduplicates items, we can insert 50 items and if the items already exist, Opik will automatically remove them.
+
 
 ```python
 # Create dataset
@@ -87,6 +91,7 @@ In order to evaluate the performance of the Opik moderation metric, we will defi
 By defining the evaluation task in this way, we will be able to understand how well Opik's moderation metric is able to detect moderation violations in the dataset.
 
 We can use the Opik SDK to compute a moderation score for each item in the dataset:
+
 
 ```python
 from opik.evaluation.metrics import Moderation, Equals
@@ -138,3 +143,5 @@ res = evaluate(
 We are able to detect ~85% of moderation violations, this can be improved further by providing some additional examples to the model. We can view a breakdown of the results in the Opik UI:
 
 ![Moderation Evaluation](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/moderation_metric_cookbook.png)
+
+

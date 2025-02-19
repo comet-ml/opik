@@ -1,11 +1,5 @@
 instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
-    edit-this-page:
-      github:
-        owner: comet-ml
-        repo: opik
-        branch: main
-title: Opik Documentation
 favicon: img/logo.svg
 layout:
   searchbar-placement: header
@@ -27,24 +21,24 @@ navbar-links:
     text: "Github"
     href: "https://github.com/comet-ml/opik"
   - type: filled
-    text: "Dashboard"
-    href: "https://www.comet.com/"
+    text: "Go to App"
+    href: "https://www.comet.com/opik"
 tabs:
   documentation:
     display-name: Documentation
-    icon: building
+    icon: fa-regular fa-building
     slug: /
   self-host:
     display-name: Self-hosting Opik
-    icon: server
+    icon: fa-regular fa-server
     slug: /self-host
   cookbook:
     display-name: Cookbooks
-    icon: book
+    icon: fa-regular fa-book
     slug: /cookbook
   reference:
     display-name: SDK and API reference
-    icon: square-terminal
+    icon: fa-regular fa-square-terminal
     slug: /reference
 navigation:
   - tab: documentation
@@ -55,25 +49,30 @@ navigation:
           - page: Home
             path: docs/home.mdx
             slug: /
+            icon: fa-regular fa-house
           - page: Quickstart
             path: docs/quickstart.mdx
             slug: /quickstart
+            icon: fa-regular fa-bolt
           - page: Roadmap
             path: docs/roadmap.mdx
             slug: roadmap
+            icon: fa-regular fa-map
           - page: FAQ
             path: docs/faq.mdx
             slug: faq
+            icon: fa-regular fa-question
           - changelog: docs/changelog
             title: Changelog
             slug: changelog
+            icon: fa-regular fa-calendar
       - section: Observability
         slug: /tracing
         contents:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
-          - page: log agents
+          - page: Log agents
             path: docs/tracing/log_agents.mdx
             slug: log_agents
           - page: Log multimodal traces
@@ -103,6 +102,9 @@ navigation:
               - page: OpenAI
                 path: docs/tracing/integrations/openai.mdx
                 slug: openai
+              - page: OpenRouter
+                path: docs/tracing/integrations/openrouter.mdx
+                slug: openrouter
               - page: LiteLLM
                 path: docs/tracing/integrations/litellm.mdx
                 slug: litellm
@@ -196,6 +198,9 @@ navigation:
               - page: Moderation
                 path: docs/evaluation/metrics/moderation.mdx
                 slug: moderation
+              - page: Usefulness
+                path: docs/evaluation/metrics/usefulness.mdx
+                slug: usefulness
               - page: Answer relevance
                 path: docs/evaluation/metrics/answer_relevance.mdx
                 slug: answer_relevance
@@ -212,7 +217,7 @@ navigation:
                 path: docs/evaluation/metrics/custom_metric.mdx
                 slug: custom_metric
       - section: Prompt engineering
-        slug: /prompt_engineerign
+        slug: /prompt_engineering
         contents:
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
@@ -252,6 +257,9 @@ navigation:
       - page: Kubernetes deployment
         path: docs/self-host/kubernetes.mdx
         slug: kubernetes
+      - page: Platform Architecture
+        path: docs/self-host/architecture.mdx
+        slug: architecture
       - section: Configuration
         slug: /configure
         contents:
@@ -342,15 +350,33 @@ navigation:
       - section: Python SDK
         slug: python-sdk
         contents:
-          - page: Reference
-            path: docs/reference/python-sdk/overview.mdx
+          - link: Reference
+            href: https://www.comet.com/docs/opik/python-sdk-reference/
+      - section: Typescript SDK
+        slug: typescript-sdk
+        contents:
+          - page: Overview
+            path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
       - section: Rest API
         slug: rest-api
         contents:
           - page: Overview
-            path: docs/reference/api-reference/overview.mdx
+            path: docs/reference/rest-api/overview.mdx
             slug: overview
           - api: API Reference
             slug: /
             display-errors: true
+redirects:
+  - source: "/docs/opik/playground"
+    destination: "/docs/opik/prompt_engineering/playground"
+    permanent: true
+  - source: "/docs/opik/reference/rest_api/opik-rest-api/"
+    destination: "/docs/opik/reference/rest-api/overview"
+    permanent: true
+  - source: "/docs/opik/reference/rest_api/opik-rest-api/:slug"
+    destination: "/docs/opik/reference/rest-api/overview"
+    permanent: true
+  - source: "/docs/opik/reference/rest_api/opik-rest-api/:slug/:slug"
+    destination: "/docs/opik/reference/rest-api/overview"
+    permanent: true
