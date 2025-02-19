@@ -4,6 +4,8 @@ from opik import exceptions
 
 import logging
 
+from opik.evaluation.types import ScoringKeyMappingType
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -39,9 +41,7 @@ def raise_if_score_arguments_are_missing(
 def create_scoring_inputs(
     dataset_item: Dict[str, Any],
     task_output: Dict[str, Any],
-    scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-    ],
+    scoring_key_mapping: Optional[ScoringKeyMappingType],
 ) -> Dict[str, Any]:
     mapped_inputs = {**dataset_item, **task_output}
 
@@ -54,7 +54,8 @@ def create_scoring_inputs(
             else:
                 if value not in mapped_inputs:
                     LOGGER.debug(
-                        f"Scoring key mapping value {value} not found in dataset item. Available keys: {list(mapped_inputs.keys())}"
+                        f"Scoring key mapping value '{value}' not found in dataset item. "
+                        f"Available keys: {list(mapped_inputs.keys())}"
                     )
                 else:
                     mapped_inputs[key] = mapped_inputs[value]
