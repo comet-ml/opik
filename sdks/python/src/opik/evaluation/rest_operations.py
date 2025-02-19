@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import List, Optional
 
 from opik.types import FeedbackScoreDict
 from .types import ScoringKeyMappingType

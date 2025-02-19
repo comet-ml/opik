@@ -1,6 +1,6 @@
 import functools
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import List, Optional
 
 from opik import exceptions, logging_messages, opik_context, track
 from opik.api_objects import opik_client, trace

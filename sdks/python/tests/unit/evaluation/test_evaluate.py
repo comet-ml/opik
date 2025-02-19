@@ -9,7 +9,7 @@ from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from opik.evaluation.models import models_factory
-from ...testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, assert_equal
+from ...testlib import ANY_BUT_NONE, ANY_DICT, ANY_STRING, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
 
 
@@ -114,6 +114,7 @@ def test_evaluate__happyflow(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "scoring_key_mapping": None,
                     },
                     output={
                         "output": ANY_BUT_NONE,
@@ -182,6 +183,7 @@ def test_evaluate__happyflow(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "scoring_key_mapping": None,
                     },
                     output={"output": ANY_BUT_NONE},
                     start_time=ANY_BUT_NONE,
@@ -326,6 +328,7 @@ def test_evaluate_with_scoring_key_mapping(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "scoring_key_mapping": ANY_DICT,
                     },
                     output={
                         "output": ANY_BUT_NONE,
@@ -400,6 +403,7 @@ def test_evaluate_with_scoring_key_mapping(
                     name="metrics_calculation",
                     input={
                         "test_case_": ANY_BUT_NONE,
+                        "scoring_key_mapping": ANY_DICT,
                     },
                     output={
                         "output": ANY_BUT_NONE,
