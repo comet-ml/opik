@@ -15,7 +15,7 @@ from google.genai import types as genai_types
 
 from opik import dict_utils
 from opik.decorator import arguments_helpers, base_track_decorator
-from opik import llm_usage
+from opik.types import UsageDictGoogle
 
 from . import stream_wrappers
 
@@ -90,9 +90,14 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         model = result_dict["model_version"]
-        usage = {
-            **llm_usage.opik_usage_from_google_format(result_dict["usage_metadata"])
-        }
+        provider_usage = result_dict["usage_metadata"]
+
+        usage = UsageDictGoogle(
+            completion_tokens=provider_usage["candidates_token_count"],
+            prompt_tokens=provider_usage["prompt_token_count"],
+            total_tokens=provider_usage["total_token_count"],
+            **provider_usage,  # type: ignore
+        )
 
         result = arguments_helpers.EndSpanParameters(
             output=output,
