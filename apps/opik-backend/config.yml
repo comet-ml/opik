@@ -286,3 +286,8 @@ clickHouseLogAppender:
   # Default: PT0.500S or 500ms
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: ${CLICKHOUSE_LOG_APPENDER_FLUSH_INTERVAL_DURATION:-PT0.500S}
+
+workspaceSettings:
+  # Default: 50
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting
+    maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
