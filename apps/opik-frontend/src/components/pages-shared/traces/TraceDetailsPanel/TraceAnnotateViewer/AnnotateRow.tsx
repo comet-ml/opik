@@ -7,7 +7,6 @@ import { X } from "lucide-react";
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
-import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   FEEDBACK_DEFINITION_TYPE,
@@ -16,6 +15,7 @@ import {
 import { TraceFeedbackScore } from "@/types/traces";
 import { Button } from "@/components/ui/button";
 import { isNumericFeedbackScoreValid } from "@/lib/traces";
+import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -80,7 +80,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
       return (
         <DebounceInput
-          className="min-w-[100px]"
+          className="h-7 min-w-[100px] py-1"
           max={feedbackDefinition.details.max}
           min={feedbackDefinition.details.min}
           step="any"
@@ -112,7 +112,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.categorical) {
       return (
         <ToggleGroup
-          className="w-fit"
+          className="min-w-fit"
           onValueChange={(newCategoryName) => {
             if (newCategoryName === "") {
               deleteFeedbackScore();
@@ -131,8 +131,9 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
               handleChangeValue(categoryValue, newCategoryName);
             }
           }}
+          variant="outline"
           type="single"
-          size="sm"
+          size="md"
           value={String(categoryName)}
         >
           {sortBy(
@@ -145,7 +146,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             "name",
           ).map(({ name, value }) => {
             return (
-              <ToggleGroupItem key={name} value={name}>
+              <ToggleGroupItem className="w-full" key={name} value={name}>
                 <div className="text-nowrap">
                   {name} ({value})
                 </div>
@@ -161,22 +162,22 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
   return (
     <>
-      <div className="flex items-center overflow-hidden border-b border-border px-1 py-2">
-        <ColoredTag label={name} />
+      <div className="flex items-center overflow-hidden border-b border-border p-1">
+        <ColoredTagNew label={name} />
       </div>
       <div
-        className="flex items-center overflow-hidden border-b border-border px-1 py-2"
+        className="flex items-center overflow-hidden border-b border-border p-1"
         data-test-value={name}
       >
         {feedbackDefinition ? (
-          <div className="overflow-auto">
+          <div className="min-w-0 flex-1 overflow-auto">
             {renderOptions(feedbackDefinition)}
           </div>
         ) : (
           <div>{feedbackScore?.value}</div>
         )}
       </div>
-      <div className="flex items-center overflow-hidden border-b border-border px-1 py-2">
+      <div className="flex items-center overflow-hidden border-b border-border p-1">
         {!isUndefined(feedbackScore?.value) && (
           <Button
             variant="minimal"

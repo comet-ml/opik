@@ -33,7 +33,12 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     : "";
 
   const Reason = reason ? (
-    <TooltipWrapper content={reason} delayDuration={100}>
+    <TooltipWrapper
+      content={reason}
+      delayDuration={100}
+      className="comet-body-xs max-w-[400px] border border-slate-200 bg-[#FCFCFD] text-foreground-secondary"
+      showArrow={false}
+    >
       <MessageSquareMore className="size-3.5 text-light-slate" />
     </TooltipWrapper>
   ) : null;
