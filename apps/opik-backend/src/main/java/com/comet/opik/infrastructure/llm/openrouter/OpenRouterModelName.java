@@ -8,6 +8,9 @@ import java.util.Optional;
 
 /**
  * This information is taken from <a href="https://openrouter.ai/models">OpenRouter docs</a>
+ * To extract models' list:
+ *  document.querySelectorAll('tr.text-sm')
+ *      .forEach(elem => console.log(elem.firstChild.querySelector('code.text-xs').textContent))
  */
 @Slf4j
 @RequiredArgsConstructor
