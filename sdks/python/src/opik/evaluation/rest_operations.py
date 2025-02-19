@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from opik.types import FeedbackScoreDict
+from .types import ScoringKeyMappingType
 
 from ..api_objects import opik_client
 from ..rest_api.experiments.client import ExperimentPublic
@@ -36,9 +37,7 @@ def get_experiment_test_cases(
     client: opik_client.Opik,
     experiment_id: str,
     dataset_id: str,
-    scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-    ],
+    scoring_key_mapping: Optional[ScoringKeyMappingType],
 ) -> List[test_case.TestCase]:
     test_cases = []
     page = 1

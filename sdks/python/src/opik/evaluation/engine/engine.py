@@ -100,9 +100,7 @@ class EvaluationEngine:
         self,
         item: dataset_item.DatasetItem,
         task: LLMTask,
-        scoring_key_mapping: Optional[
-            Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-        ],
+        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
@@ -161,9 +159,7 @@ class EvaluationEngine:
         dataset_: dataset.Dataset,
         task: LLMTask,
         nb_samples: Optional[int],
-        scoring_key_mapping: Optional[
-            Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-        ],
+        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> List[test_result.TestResult]:
         dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
             nb_samples=nb_samples
