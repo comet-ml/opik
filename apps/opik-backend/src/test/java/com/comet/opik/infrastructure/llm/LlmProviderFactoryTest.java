@@ -25,6 +25,7 @@ import io.dropwizard.configuration.YamlConfigurationFactory;
 import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.validation.Validators;
 import jakarta.validation.Validator;
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
@@ -60,6 +61,7 @@ class LlmProviderFactoryTest {
         llmProviderClientConfig = config.getLlmProviderClient();
     }
 
+    @SneakyThrows
     @ParameterizedTest
     @MethodSource
     void testGetService(String model, LlmProvider llmProvider, String providerClass) {
