@@ -117,10 +117,9 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         Iterator[genai_types.GenerateContentResponse],
         AsyncIterator[genai_types.GenerateContentResponse],
     ]:
-        assert generations_aggregator is not None
-
         if isinstance(output, Iterator):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+            assert generations_aggregator is not None
             return stream_wrappers.wrap_sync_iterator(
                 stream=output,
                 span_to_end=span_to_end,
@@ -131,6 +130,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if isinstance(output, AsyncIterator):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+            assert generations_aggregator is not None
             return stream_wrappers.wrap_async_iterator(
                 stream=output,
                 span_to_end=span_to_end,
