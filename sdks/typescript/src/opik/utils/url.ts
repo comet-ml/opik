@@ -3,14 +3,14 @@ export const getUIUrl = (host: string) => {
 };
 
 export const getProjectUrl = ({
-  host,
+  apiUrl,
   projectName,
   workspaceName,
 }: {
-  host: string;
+  apiUrl: string;
   projectName: string;
   workspaceName: string;
 }) => {
   const encodedProjectName = encodeURIComponent(projectName);
-  return `${getUIUrl(host)}/${workspaceName}/redirect/projects?name=${encodedProjectName}`;
+  return `${getUIUrl(apiUrl)}/${workspaceName}/redirect/projects?name=${encodedProjectName}`;
 };
