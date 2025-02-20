@@ -4,9 +4,11 @@ import com.comet.opik.utils.AsyncUtils.ContextAwareAction;
 import com.comet.opik.utils.AsyncUtils.ContextAwareStream;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
+import lombok.experimental.UtilityClass;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+@UtilityClass
 class AsyncContextUtils {
 
     static ContextAwareStream<Result> bindWorkspaceIdToFlux(Statement statement) {

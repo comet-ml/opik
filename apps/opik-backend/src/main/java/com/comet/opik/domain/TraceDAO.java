@@ -7,6 +7,7 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
@@ -385,6 +386,7 @@ class TraceDAOImpl implements TraceDAO {
                   t.created_by as created_by,
                   t.last_updated_by as last_updated_by,
                   t.duration_millis as duration_millis,
+                  t.duration_millis as duration,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
                   groupUniqArrayArray(c.comments_array) as comments
@@ -430,7 +432,7 @@ class TraceDAOImpl implements TraceDAO {
              LEFT JOIN comments_agg AS c ON t.id = c.entity_id
              GROUP BY
                 t.*
-             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+             ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
              SETTINGS join_algorithm = 'full_sorting_merge'
             ;
             """;
@@ -762,6 +764,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @Override
     @WithSpan
@@ -1036,6 +1039,10 @@ class TraceDAOImpl implements TraceDAO {
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+
+        var finalTemplate = template;
+        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
+                .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
 
         template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())

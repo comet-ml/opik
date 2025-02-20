@@ -275,6 +275,7 @@ cacheManager:
       # Default: {}
       # Description: Dynamically created caches with their respective time to live in seconds
       automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
+      workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
