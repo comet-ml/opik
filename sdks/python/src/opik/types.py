@@ -12,7 +12,7 @@ else:
 SpanType = Literal["general", "tool", "llm"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
-LLMProvider = Literal["openai", "google_vertexai"]
+LLMProvider = Literal["openai", "google_vertexai", "google_ai"]
 
 
 class UsageDict(TypedDict):

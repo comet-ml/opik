@@ -29,11 +29,11 @@ RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["candidates"]
 class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of OpenAI's `chat.completion.create` and `chat.completions.parse` functions.
-
-    Besides special processing for input arguments and response content, it
-    overrides _generators_handler() method to work correctly with
-    openai.Stream and openai.AsyncStream objects.
+    calls to genai.Client's
+    * models.generate_content
+    * models.generate_content_stream
+    * aio.models.generate_content
+    * aio.models.generate_content_stream
     """
 
     def __init__(self, provider: str) -> None:
