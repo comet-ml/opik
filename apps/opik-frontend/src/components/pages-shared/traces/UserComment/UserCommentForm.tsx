@@ -112,7 +112,7 @@ const commentSchema = z.object({
   commentText: z
     .string()
     .min(1, "Can not be empty")
-    .max(MAX_LENGTH_LIMIT, "Max 500 characters"),
+    .max(MAX_LENGTH_LIMIT, `Max ${MAX_LENGTH_LIMIT} characters`),
 });
 type CommentFormValues = z.infer<typeof commentSchema>;
 

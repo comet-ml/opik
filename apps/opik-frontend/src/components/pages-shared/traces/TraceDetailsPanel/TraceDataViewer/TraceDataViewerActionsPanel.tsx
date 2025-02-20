@@ -2,12 +2,12 @@ import React, { useMemo, useRef, useState } from "react";
 import copy from "clipboard-copy";
 import {
   Copy,
-  Database,
   MessageSquareMore,
   MoreHorizontal,
   PenLine,
   Share,
 } from "lucide-react";
+import DatabasePlus from "@/icons/database-plus.svg?react";
 
 import { Span, Trace } from "@/types/traces";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,6 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import { LastSection, LastSectionValue } from "../TraceDetailsPanel";
 import { cn } from "@/lib/utils";
-import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
-import useAppStore from "@/store/AppStore";
 
 type TraceDataViewerActionsPanelProps = {
   data: Trace | Span;
@@ -42,14 +40,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
 
   const rows = useMemo(() => (data ? [data] : []), [data]);
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
-    workspaceName,
-    page: 1,
-    size: 1000,
-  });
-
-  const annotationCount = feedbackDefinitionsData?.content?.length;
+  const annotationCount = data.feedback_scores?.length;
   const commentsCount = data.comments?.length;
 
   return (
@@ -68,7 +59,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
           resetKeyRef.current = resetKeyRef.current + 1;
         }}
       >
-        <Database className="size-4" />
+        <DatabasePlus className="size-4" />
         <div className="hidden 3xl:block 3xl:pl-1">Add to dataset</div>
       </Button>
 
@@ -84,7 +75,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
       >
         <MessageSquareMore className="size-4" />
         <div className="hidden 3xl:block 3xl:pl-1">Comments</div>
-        {Boolean(commentsCount) && <div>{commentsCount}</div>}
+        {Boolean(commentsCount) && <div>({commentsCount})</div>}
       </Button>
 
       <Button
@@ -99,7 +90,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
       >
         <PenLine className="size-4" />
         <div className="hidden 3xl:block 3xl:pl-1">Feedback scores</div>
-        {Boolean(annotationCount) && <div>{annotationCount}</div>}
+        {Boolean(annotationCount) && <div>({annotationCount})</div>}
       </Button>
 
       <DropdownMenu>

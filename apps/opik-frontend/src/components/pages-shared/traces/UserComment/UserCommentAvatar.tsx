@@ -5,7 +5,7 @@ import { getRandomColorByLabel } from "@/constants/colorVariants";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const userCommentAvatarVariants = cva(
-  "border border-slate-200 font-medium text-white ",
+  "border border-white font-medium text-white",
   {
     variants: {
       size: {
@@ -54,7 +54,7 @@ const UserCommentAvatar: Components & React.FC<UserCommentAvatarProps> = ({
       }
       className={cn(userCommentAvatarVariants({ size }), className)}
     >
-      <AvatarFallback className="bg-[var(--bg-avatar-color)]">
+      <AvatarFallback className="grid place-items-center bg-[var(--bg-avatar-color)] leading-none will-change-transform">
         {username.charAt(0).toUpperCase()}
       </AvatarFallback>
     </Avatar>

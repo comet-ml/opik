@@ -419,7 +419,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         setSpanId((state) => (row.id === state ? "" : row.id));
       }
 
-      setLastSection(lastSection);
+      if (lastSection) {
+        setLastSection(lastSection);
+      }
     },
     [setTraceId, setSpanId, type, setLastSection],
   );
@@ -451,16 +453,24 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           selectedColumns,
         },
       ),
-      mapColumnDataFields<BaseTraceData, Span | Trace>({
-        id: "comments",
-        label: "Comments",
-        type: COLUMN_TYPE.list,
-        cell: CommentsCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        [
+          {
+            id: "comments",
+            label: "Comments",
+            type: COLUMN_TYPE.list,
+            cell: CommentsCell as never,
+            customMeta: {
+              callback: handleRowClick,
+              asId: true,
+            },
+          },
+        ],
+        {
+          columnsOrder: scoresColumnsOrder,
+          selectedColumns,
         },
-      }),
+      ),
     ];
   }, [
     handleRowClick,
@@ -516,6 +526,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+
+  const columnsMenuList = useMemo(
+    () => [...TRACES_PAGE_COLUMNS, { id: "comments", label: "Comments" }],
+    [],
+  );
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
@@ -573,7 +588,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={TRACES_PAGE_COLUMNS}
+            columns={columnsMenuList}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

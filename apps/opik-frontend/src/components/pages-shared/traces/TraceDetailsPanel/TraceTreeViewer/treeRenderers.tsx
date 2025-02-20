@@ -9,6 +9,7 @@ import {
   Clock,
   Coins,
   Hash,
+  MessageSquareMore,
   PenLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,7 @@ export const treeRenderers: TreeRenderProps = {
     const name = props.item.data.name || "NA";
     const tokens = props.item.data.tokens;
     const feedbackScores = props.item.data.feedback_scores;
+    const comments = props.item.data.comments;
     const estimatedCost = props.item.data.total_estimated_cost;
 
     const type = props.item.data.type as BASE_TRACE_DATA_TYPE;
@@ -138,6 +140,13 @@ export const treeRenderers: TreeRenderProps = {
                   <TooltipWrapper content="Number of feedback scores">
                     <div className={styles.chainSpanDetailsItem}>
                       <PenLine /> {feedbackScores.length}
+                    </div>
+                  </TooltipWrapper>
+                )}
+                {Boolean(comments?.length) && (
+                  <TooltipWrapper content="Number of comments">
+                    <div className={styles.chainSpanDetailsItem}>
+                      <MessageSquareMore /> {comments.length}
                     </div>
                   </TooltipWrapper>
                 )}

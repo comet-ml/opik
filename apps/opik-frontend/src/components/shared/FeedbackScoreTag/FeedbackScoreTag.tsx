@@ -36,7 +36,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     <TooltipWrapper
       content={reason}
       delayDuration={100}
-      className="comet-body-xs max-w-[400px] border border-slate-200 bg-[#FCFCFD] text-foreground-secondary"
+      className="comet-body-xs max-w-[400px] border border-slate-200 bg-[#FCFCFD] px-2 py-1 text-foreground-secondary"
       showArrow={false}
     >
       <MessageSquareMore className="size-3.5 text-light-slate" />
@@ -57,7 +57,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       />
       <div
         data-testid="feedback-score-tag-label"
-        className="comet-body-s-accented truncate leading-none text-muted-slate"
+        className="comet-body-s-accented truncate text-muted-slate"
       >
         {label}
       </div>

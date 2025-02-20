@@ -1,19 +1,16 @@
 import { cva } from "class-variance-authority";
 
-export const rootStyleVariants = cva(
-  "group flex max-w-full items-start gap-2",
-  {
-    variants: {
-      size: {
-        default: "py-3",
-        sm: "py-2",
-      },
-    },
-    defaultVariants: {
-      size: "default",
+export const rootStyleVariants = cva("group flex max-w-full items-start ", {
+  variants: {
+    size: {
+      default: "gap-2 py-3",
+      sm: "gap-1 py-2",
     },
   },
-);
+  defaultVariants: {
+    size: "default",
+  },
+});
 
 export const textStyleVariants = cva("break-words", {
   variants: {

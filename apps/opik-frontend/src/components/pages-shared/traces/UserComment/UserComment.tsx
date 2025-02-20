@@ -18,9 +18,11 @@ import {
   textStyleVariants,
   usernameStyleVariants,
 } from "./styles";
+import { isUndefined } from "lodash";
 
 type UserCommentContextType = {
   size?: "default" | "sm";
+  userName?: string;
   comment: Comment;
   isEditMode: boolean;
   setIsEditMode: (v: boolean) => void;
@@ -67,7 +69,14 @@ type MenuProps = {
 };
 const Menu: React.FC<MenuProps> = ({ children }) => {
   const [open, setOpen] = useState(false);
-  const { isEditMode } = useUserCommentContext();
+  const { isEditMode, userName, comment } = useUserCommentContext();
+
+  const isUserOwner =
+    isUndefined(userName) ||
+    isUndefined(comment.created_by) ||
+    userName === comment.created_by;
+
+  if (!isUserOwner) return;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -178,6 +187,7 @@ type UserCommentProps = {
   header?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
+  userName?: string;
   children: React.ReactNode;
 };
 const UserComment: UserCommentComponents & React.FC<UserCommentProps> = ({
@@ -187,6 +197,7 @@ const UserComment: UserCommentComponents & React.FC<UserCommentProps> = ({
   header,
   actions,
   className,
+  userName,
   children,
 }) => {
   const [isEditMode, setIsEditMode] = useState(false);
@@ -196,14 +207,20 @@ const UserComment: UserCommentComponents & React.FC<UserCommentProps> = ({
         size,
         comment,
         isEditMode,
-        setIsEditMode: (v) => setIsEditMode(v),
+        setIsEditMode,
+        userName,
       }}
     >
       <div className={cn(rootStyleVariants({ size }), className)}>
         {avatar}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col text-foreground">
           <div className="flex justify-between">
-            <div className="flex min-h-[20px] min-w-0 flex-1 gap-1 pr-2">
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 gap-1 pr-2",
+                size === "sm" ? "min-h-[16px]" : "min-h-[20px]",
+              )}
+            >
               {header}
             </div>
             {actions}

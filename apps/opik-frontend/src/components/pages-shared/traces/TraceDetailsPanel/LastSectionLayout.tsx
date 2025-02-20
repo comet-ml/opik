@@ -28,10 +28,9 @@ const LastSectionLayout: React.FC<LastSectionLayoutProps> = ({
     (keyboardEvent: KeyboardEvent) => {
       if (!lastSection) return;
       keyboardEvent.stopPropagation();
-      switch (keyboardEvent.code) {
-        case "Escape":
-          setLastSection(null);
-          break;
+
+      if (keyboardEvent.code === "Escape") {
+        setLastSection(null);
       }
     },
     [lastSection],
