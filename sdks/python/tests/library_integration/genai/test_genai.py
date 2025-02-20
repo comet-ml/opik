@@ -48,8 +48,6 @@ def test_genai_client__generate_content__happyflow(
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        project="opik-sdk-tests",
-        location=VERTEX_LOCATION,
     )
     client = track_genai(client, project_name=project_name)
 
@@ -110,8 +108,6 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        project="opik-sdk-tests",
-        location=VERTEX_LOCATION,
     )
     client = track_genai(client)
 
@@ -180,8 +176,6 @@ def test_genai_client__generate_content_called_inside_another_tracked_function__
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        project="opik-sdk-tests",
-        location=VERTEX_LOCATION,
     )
     client = track_genai(client)
 
@@ -254,8 +248,6 @@ def test_genai_client__async_generate_content_called_inside_another_tracked_func
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        project="opik-sdk-tests",
-        location=VERTEX_LOCATION,
     )
     client = track_genai(client)
 
@@ -323,8 +315,6 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        project="opik-sdk-tests",
-        location=VERTEX_LOCATION,
     )
     client = track_genai(client, project_name="genai-integration-test")
 
@@ -387,8 +377,6 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        project="opik-sdk-tests",
-        location=VERTEX_LOCATION,
     )
     client = track_genai(client)
 
@@ -453,8 +441,6 @@ def test_genai_client__generate_content_stream_called_inside_another_tracked_fun
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        project="opik-sdk-tests",
-        location=VERTEX_LOCATION,
     )
     client = track_genai(client)
 
@@ -530,8 +516,6 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        project="opik-sdk-tests",
-        location=VERTEX_LOCATION,
     )
     client = track_genai(client)
 
