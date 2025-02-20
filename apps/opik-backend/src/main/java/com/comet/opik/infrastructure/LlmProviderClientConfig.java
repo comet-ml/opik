@@ -45,4 +45,6 @@ public class LlmProviderClientConfig {
     @Valid private LlmProviderClientConfig.OpenAiClientConfig openAiClient;
 
     @Valid private LlmProviderClientConfig.AnthropicClientConfig anthropicClient;
+
+    private String openRouterUrl;
 }

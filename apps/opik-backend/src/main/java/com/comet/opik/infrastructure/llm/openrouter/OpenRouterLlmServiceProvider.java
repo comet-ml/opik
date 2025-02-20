@@ -1,21 +1,22 @@
-package com.comet.opik.infrastructure.llm.openai;
+package com.comet.opik.infrastructure.llm.openrouter;
 
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.openai.LlmProviderOpenAi;
+import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Named;
 
-class OpenAILlmServiceProvider implements LlmServiceProvider {
-
+class OpenRouterLlmServiceProvider implements LlmServiceProvider {
     private final OpenAIClientGenerator clientGenerator;
 
-    OpenAILlmServiceProvider(
-            @Named("openaiGenerator") OpenAIClientGenerator clientGenerator, LlmProviderFactory factory) {
+    OpenRouterLlmServiceProvider(
+            @Named("openrouterGenerator") OpenAIClientGenerator clientGenerator, LlmProviderFactory factory) {
         this.clientGenerator = clientGenerator;
-        factory.register(LlmProvider.OPEN_AI, this);
+        factory.register(LlmProvider.OPEN_ROUTER, this);
     }
 
     @Override

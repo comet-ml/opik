@@ -13,6 +13,7 @@ public enum LlmProvider {
     OPEN_AI("openai"),
     ANTHROPIC("anthropic"),
     GEMINI("gemini"),
+    OPEN_ROUTER("openrouter"),
     ;
 
     @JsonValue

@@ -15,7 +15,7 @@ import java.util.function.Consumer;
 
 @RequiredArgsConstructor
 @Slf4j
-class LlmProviderOpenAi implements LlmProviderService {
+public class LlmProviderOpenAi implements LlmProviderService {
     private final @NonNull OpenAiClient openAiClient;
 
     @Override

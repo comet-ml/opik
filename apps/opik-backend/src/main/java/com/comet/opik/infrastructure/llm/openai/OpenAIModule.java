@@ -11,9 +11,9 @@ import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 public class OpenAIModule extends AbstractModule {
-
     @Provides
     @Singleton
+    @Named("openaiGenerator")
     public OpenAIClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
         return new OpenAIClientGenerator(config);
     }
@@ -22,7 +22,7 @@ public class OpenAIModule extends AbstractModule {
     @Singleton
     @Named("openai")
     public LlmServiceProvider llmServiceProvider(@NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull OpenAIClientGenerator clientGenerator) {
+            @NonNull @Named("openaiGenerator") OpenAIClientGenerator clientGenerator) {
         return new OpenAILlmServiceProvider(clientGenerator, llmProviderFactory);
     }
 }
