@@ -22,7 +22,6 @@ from ...testlib import (
 )
 
 MODEL = "gemini-2.0-flash"
-VERTEX_LOCATION = "us-east1"  # TODO: check if genai.Client can read it from the env var
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
