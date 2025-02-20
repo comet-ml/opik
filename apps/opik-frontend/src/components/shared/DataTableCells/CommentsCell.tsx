@@ -7,6 +7,7 @@ import UserCommentAvatar from "@/components/pages-shared/traces/UserComment/User
 import { LastSectionValue } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import UserCommentHoverList from "@/components/pages-shared/traces/UserComment/UserCommentHoverList";
 import UserCommentAvatarList from "@/components/pages-shared/traces/UserComment/UserCommentAvatarList";
+import { isLocalCommentCheck } from "@/components/pages-shared/traces/UserComment/UserComment";
 
 type CommentsCellContentProps = {
   commentsList: Comment[];
@@ -15,6 +16,7 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
   commentsList,
 }) => {
   const commentsCount = commentsList.length;
+  const isLocalComments = isLocalCommentCheck(commentsList[0]?.created_by);
 
   if (!commentsCount) {
     return "-";
@@ -24,7 +26,9 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
     const [comment] = commentsList;
     return (
       <div className="flex items-center gap-1 overflow-hidden">
-        <UserCommentAvatar username={comment.created_by} size="sm" />
+        {!isLocalComments && (
+          <UserCommentAvatar username={comment.created_by} size="sm" />
+        )}
         <div className="comet-body-s truncate">{comment.text}</div>
       </div>
     );
@@ -32,7 +36,9 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
 
   return (
     <div className="flex items-center gap-1 overflow-hidden">
-      <UserCommentAvatarList commentsList={commentsList} />
+      {!isLocalComments && (
+        <UserCommentAvatarList commentsList={commentsList} />
+      )}
       <div className="comet-body-s truncate">{commentsCount} comments</div>
     </div>
   );

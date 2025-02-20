@@ -24,11 +24,15 @@ type UserCommentContextType = {
   size?: "default" | "sm";
   userName?: string;
   comment: Comment;
+  isLocalComment: boolean;
   isEditMode: boolean;
   setIsEditMode: (v: boolean) => void;
 };
 
 const UserCommentContext = createContext<UserCommentContextType | null>(null);
+
+export const isLocalCommentCheck = (createdBy: string) =>
+  isUndefined(createdBy) || createdBy === "admin";
 
 export const useUserCommentContext = () => {
   const context = useContext(UserCommentContext);
@@ -49,7 +53,10 @@ const Text = () => {
 };
 
 const Username = () => {
-  const { comment, size } = useUserCommentContext();
+  const { comment, size, isLocalComment } = useUserCommentContext();
+
+  if (isLocalComment) return;
+
   return (
     <div className={usernameStyleVariants({ size })}>{comment.created_by}</div>
   );
@@ -165,7 +172,10 @@ const Form: React.FC<FormProps> = ({ onSubmit }) => {
 };
 
 const Avatar = () => {
-  const { comment, size } = useUserCommentContext();
+  const { comment, size, isLocalComment } = useUserCommentContext();
+
+  if (isLocalComment) return;
+
   return <UserCommentAvatar username={comment.created_by} size={size} />;
 };
 
@@ -201,6 +211,8 @@ const UserComment: UserCommentComponents & React.FC<UserCommentProps> = ({
   children,
 }) => {
   const [isEditMode, setIsEditMode] = useState(false);
+  const isLocalComment = isLocalCommentCheck(comment.created_by);
+
   return (
     <UserCommentContext.Provider
       value={{
@@ -209,6 +221,7 @@ const UserComment: UserCommentComponents & React.FC<UserCommentProps> = ({
         isEditMode,
         setIsEditMode,
         userName,
+        isLocalComment,
       }}
     >
       <div className={cn(rootStyleVariants({ size }), className)}>
