@@ -25,6 +25,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -1011,6 +1012,9 @@ class TraceDAOImpl implements TraceDAO {
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .duration(row.get("duration_millis", Double.class))
+                .threadId(Optional.ofNullable(row.get("thread_id", String.class))
+                        .filter(StringUtils::isNotEmpty)
+                        .orElse(null))
                 .build());
     }
 

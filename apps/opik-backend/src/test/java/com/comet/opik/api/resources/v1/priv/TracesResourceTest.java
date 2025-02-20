@@ -151,7 +151,7 @@ class TracesResourceTest {
     private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
 
     @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    private static final TestDropwizardAppExtension APP;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
 
@@ -163,7 +163,7 @@ class TracesResourceTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -4003,6 +4003,25 @@ class TracesResourceTest {
             getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
+        @Test
+        @DisplayName("when trace has threadId, then accept and create trace")
+        void createAndGet__whenTraceHasThreadId__thenReturnTrace() {
+
+            var threadId = UUID.randomUUID().toString();
+
+            var expectedTrace = createTrace().toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            create(expectedTrace, API_KEY, TEST_WORKSPACE);
+
+            UUID projectId = getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY);
+            getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
+        }
+
     }
 
     @Nested
@@ -4139,6 +4158,28 @@ class TracesResourceTest {
             List<Trace> expectedTraces = List.of(newTrace, expectedTrace);
 
             traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void batch__whenTraceHasThreadId__thenReturnNoContent() {
+
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var expectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .threadId(threadId)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .usage(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedTraces.reversed(), List.of(),
+                    API_KEY);
         }
     }
 
@@ -4910,9 +4951,30 @@ class TracesResourceTest {
                     .endTime(traceUpdate.endTime())
                     .tags(traceUpdate.tags())
                     .errorInfo(traceUpdate.errorInfo())
+                    .threadId(traceUpdate.threadId())
                     .build();
 
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when updating trace to add thread id, then accept update")
+        void update__whenUpdatingTraceToAddThreadId__thenAcceptUpdate() {
+
+            var threadId = UUID.randomUUID().toString();
+
+            var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
+
+            var traceUpdate = TraceUpdate.builder()
+                    .threadId(threadId)
+                    .projectId(projectId)
+                    .build();
+
+            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var actualTrace = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+
+            assertThat(actualTrace.threadId()).isEqualTo(threadId);
         }
 
     }
