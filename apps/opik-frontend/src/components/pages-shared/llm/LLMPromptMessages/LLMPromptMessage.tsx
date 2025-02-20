@@ -4,7 +4,6 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import find from "lodash/find";
 
 import { Button } from "@/components/ui/button";
 import { FormErrorSkeleton } from "@/components/ui/form";
@@ -22,18 +21,19 @@ import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 import { DropdownOption } from "@/types/shared";
+import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
-    label: "System",
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.system],
     value: LLM_MESSAGE_ROLE.system,
   },
   {
-    label: "Assistant",
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.assistant],
     value: LLM_MESSAGE_ROLE.assistant,
   },
   {
-    label: "User",
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.user],
     value: LLM_MESSAGE_ROLE.user,
   },
 ];
@@ -144,7 +144,7 @@ const LLMPromptMessage = ({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="minimal" size="sm" className="min-w-4 p-0">
-                {find(possibleTypes, (c) => c.value === role)?.label || role}
+                {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
                 <ChevronDown className="ml-1 w-4" />
               </Button>
             </DropdownMenuTrigger>

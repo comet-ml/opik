@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
@@ -65,6 +66,9 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         }
         if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
             return LlmProvider.GEMINI;
+        }
+        if (isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+            return LlmProvider.OPEN_ROUTER;
         }
 
         throw new BadRequestException(ERROR_MODEL_NOT_SUPPORTED.formatted(model));

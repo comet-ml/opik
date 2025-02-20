@@ -18,7 +18,10 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import LLMPromptMessagesVariables from "@/components/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariables";
 import LLMJudgeScores from "@/components/pages-shared/llm/LLMJudgeScores/LLMJudgeScores";
-import { LLM_PROMPT_TEMPLATES } from "@/constants/llm";
+import {
+  LLM_MESSAGE_ROLE_NAME_MAP,
+  LLM_PROMPT_TEMPLATES,
+} from "@/constants/llm";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -33,19 +36,19 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
-    label: "System",
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.system],
     value: LLM_MESSAGE_ROLE.system,
   },
   {
-    label: "User",
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.user],
     value: LLM_MESSAGE_ROLE.user,
   },
   {
-    label: "AI",
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.ai],
     value: LLM_MESSAGE_ROLE.ai,
   },
   {
-    label: "Tool execution result",
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.tool_execution_result],
     value: LLM_MESSAGE_ROLE.tool_execution_result,
   },
 ];
