@@ -9,15 +9,15 @@ jobs:
   set-version:
     runs-on: ubuntu-latest
     outputs:
-        version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-        - name: Checkout
-          uses: actions/checkout@v4.1.1
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
 
-        - name: Set version
-          id: version
-          run: |
-            echo "version=$(cat version.txt)" | tee -a $GITHUB_OUTPUT
+      - name: Set version
+        id: version
+        run: |
+          echo "version=$(cat version.txt)" | tee -a $GITHUB_OUTPUT
 
   create-git-tag:
     needs:
@@ -54,6 +54,16 @@ jobs:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
 
+  release-typescript-sdk:
+    needs:
+      - set-version
+      - create-git-tag
+    uses: ./.github/workflows/typescript_sdk_publish.yml
+    secrets: inherit
+    with:
+      version: ${{needs.set-version.outputs.version}}
+      is_release: true
+
   publish-helm-chart:
     needs:
       - set-version
@@ -76,36 +86,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
         with:
-            ref: main
-            fetch-depth: 0
-            token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
       - name: Bump version on main branch
         id: update_version
         shell: bash
         run: |
-            set -x
-            BASE_VERSION=$(tr -d '\r' < version.txt | xargs)
-            IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
-            # Ensure all version parts are set
-            for i in {0..2}; do
-              version_parts[$i]=${version_parts[$i]:-0}
-            done
-            ((version_parts[2]++))
-            new_version="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
-            
-            # Update version file with the new version
-            echo "$new_version" > version.txt
-            echo "new_version=${new_version}" >> $GITHUB_OUTPUT
+          set -x
+          BASE_VERSION=$(tr -d '\r' < version.txt | xargs)
+          IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
+          # Ensure all version parts are set
+          for i in {0..2}; do
+            version_parts[$i]=${version_parts[$i]:-0}
+          done
+          ((version_parts[2]++))
+          new_version="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
+
+          # Update version file with the new version
+          echo "$new_version" > version.txt
+          echo "new_version=${new_version}" >> $GITHUB_OUTPUT
 
       - name: Commit updated version file
         shell: bash
         run: |
 
-            git config --local user.email "github-actions@comet.com"
-            git config --local user.name "github-actions"
-            git commit -a -m "Update base version to ${{steps.update_version.outputs.new_version}}"
-            echo "Version updated to ${{steps.update_version.outputs.new_version}} on main" >> $GITHUB_STEP_SUMMARY
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "github-actions"
+          git commit -a -m "Update base version to ${{steps.update_version.outputs.new_version}}"
+          echo "Version updated to ${{steps.update_version.outputs.new_version}} on main" >> $GITHUB_STEP_SUMMARY
 
       - name: Push changes
         uses: ad-m/github-push-action@master
@@ -122,14 +132,14 @@ jobs:
     steps:
       - name: Create Release Changelog
         id: release_changelog
-        uses:  jaywcjlove/changelog-generator@v1.9.6
+        uses: jaywcjlove/changelog-generator@v1.9.6
         with:
-            token: ${{ secrets.GITHUB_TOKEN }}
-            show-emoji: "false"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          show-emoji: "false"
 
       - name: Create GitHub release
         uses: mikepenz/action-gh-release@v0.4.1
         with:
-            tag_name: ${{needs.set-version.outputs.version}}
-            body: ${{steps.release_changelog.outputs.changelog}}
-            generate_release_notes: true
+          tag_name: ${{needs.set-version.outputs.version}}
+          body: ${{steps.release_changelog.outputs.changelog}}
+          generate_release_notes: true
