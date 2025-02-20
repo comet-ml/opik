@@ -8,6 +8,24 @@ from . import generate_content_decorator, generations_aggregators, stream_wrappe
 def track_genai(
     client: genai.Client, project_name: Optional[str] = None
 ) -> genai.Client:
+    """
+    Adds Opik tracking to an genai.Client.
+
+    Tracks calls to:
+    * client.models.generate_content
+    * client.models.generate_content_stream
+    * client.aio.models.generate_content
+    * client.aio.models.generate_content_stream
+
+    Can be used within other Opik-tracked functions.
+
+    Args:
+        client: An instance of genai.Client.
+        project_name: The name of the project to log data.
+
+    Returns:
+        The modified genai.Client with Opik tracking enabled.
+    """
     if hasattr(client, "opik_tracked"):
         return client
 
