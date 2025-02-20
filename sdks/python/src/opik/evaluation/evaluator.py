@@ -10,7 +10,7 @@ from ..api_objects.prompt import prompt_template
 from . import asyncio_support, engine, evaluation_result, report, rest_operations
 from .metrics import base_metric
 from .models import base_model, models_factory
-from .types import LLMTask
+from .types import LLMTask, ScoringKeyMappingType
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,9 +27,7 @@ def evaluate(
     task_threads: int = 16,
     prompt: Optional[Prompt] = None,
     prompts: Optional[List[Prompt]] = None,
-    scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-    ] = None,
+    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -100,12 +98,12 @@ def evaluate(
             scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
+            scoring_key_mapping=scoring_key_mapping,
         )
         test_results = evaluation_engine.evaluate_llm_tasks(
             dataset_=dataset,
             task=task,
             nb_samples=nb_samples,
-            scoring_key_mapping=scoring_key_mapping,
         )
 
     total_time = time.time() - start_time
@@ -131,9 +129,7 @@ def evaluate_experiment(
     scoring_metrics: List[base_metric.BaseMetric],
     scoring_threads: int = 16,
     verbose: int = 1,
-    scoring_key_mapping: Optional[
-        Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-    ] = None,
+    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
 ) -> evaluation_result.EvaluationResult:
     """Update existing experiment with new evaluation metrics.
 
@@ -182,8 +178,11 @@ def evaluate_experiment(
             scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
+            scoring_key_mapping=scoring_key_mapping,
         )
-        test_results = evaluation_engine.evaluate_test_cases(test_cases=test_cases)
+        test_results = evaluation_engine.evaluate_test_cases(
+            test_cases=test_cases,
+        )
 
     total_time = time.time() - start_time
 
@@ -306,12 +305,12 @@ def evaluate_prompt(
             scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
+            scoring_key_mapping=None,
         )
         test_results = evaluation_engine.evaluate_llm_tasks(
             dataset_=dataset,
             task=_build_prompt_evaluation_task(model=model, messages=messages),
             nb_samples=nb_samples,
-            scoring_key_mapping=None,
         )
 
     total_time = time.time() - start_time
