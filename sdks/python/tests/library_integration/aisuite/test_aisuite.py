@@ -1,7 +1,6 @@
 from typing import Any, Dict
 
 import aisuite
-import openai
 import pytest
 from aisuite.provider import LLMError
 
