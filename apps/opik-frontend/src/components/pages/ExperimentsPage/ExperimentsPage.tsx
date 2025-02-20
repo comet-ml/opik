@@ -24,7 +24,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages/ExperimentsShared/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
@@ -55,6 +55,7 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -221,6 +222,17 @@ const ExperimentsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
+      mapColumnDataFields<GroupedExperiment, GroupedExperiment>({
+        id: "comments",
+        label: "Comments",
+        type: COLUMN_TYPE.list,
+        cell: CommentsCell as never,
+        customMeta: {
+          // TODO open the sidebar
+          callback: () => {},
+          asId: true,
+        },
+      }),
       generateActionsColumDef({
         cell: ExperimentRowActionsCell,
       }),

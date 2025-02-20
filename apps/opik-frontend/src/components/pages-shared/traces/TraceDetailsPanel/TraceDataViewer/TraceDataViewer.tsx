@@ -22,6 +22,7 @@ import { formatDuration } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
+import { LastSectionValue } from "../TraceDetailsPanel";
 
 type TraceDataViewerProps = {
   data: Trace | Span;
@@ -29,8 +30,8 @@ type TraceDataViewerProps = {
   projectId: string;
   traceId: string;
   spanId?: string;
-  annotateOpen: boolean;
-  setAnnotateOpen: (open: boolean) => void;
+  lastSection?: LastSectionValue | null;
+  setLastSection: (v: LastSectionValue) => void;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -39,8 +40,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   projectId,
   traceId,
   spanId,
-  annotateOpen,
-  setAnnotateOpen,
+  lastSection,
+  setLastSection,
 }) => {
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
@@ -71,7 +72,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               <BaseTraceDataTypeIcon type={type} />
               <div
                 data-testid="data-viewer-title"
-                className="comet-title-m truncate"
+                className="comet-title-s truncate"
               >
                 {data?.name}
               </div>
@@ -80,8 +81,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               data={data}
               traceId={traceId}
               spanId={spanId}
-              annotateOpen={annotateOpen}
-              setAnnotateOpen={setAnnotateOpen}
+              lastSection={lastSection}
+              setLastSection={setLastSection}
             />
           </div>
           <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
