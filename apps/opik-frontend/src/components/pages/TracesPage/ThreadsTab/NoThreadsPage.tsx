@@ -4,16 +4,17 @@ import noDataThreadsImageUrl from "/images/no-data-threads.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
-import NoDataTab from "@/components/pages/TracesPage/NoDataTab";
+import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 
 const NoThreadsPage = () => {
   const [openQuickstart, setOpenQuickstart] = useState(false);
 
   return (
-    <NoDataTab
+    <NoDataPage
       title="Log your first thread"
       description="Threads allow you to group traces together to help you evaluate your LLM model outputs in their specific context."
       imageUrl={noDataThreadsImageUrl}
+      height={188}
       buttons={
         <>
           <Button variant="secondary" asChild>
@@ -33,7 +34,7 @@ const NoThreadsPage = () => {
           <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
         </>
       }
-    ></NoDataTab>
+    ></NoDataPage>
   );
 };
 
