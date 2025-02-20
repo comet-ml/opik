@@ -12,7 +12,7 @@ def setup_genai_credentials():
             "GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION env vars must be set!"
         )
 
-    if not "GITHUB_ACTIONS":
+    if "GITHUB_ACTIONS" not in os.environ:
         if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
             raise Exception("GOOGLE_APPLICATION_CREDENTIALS env var must be configured")
         yield
