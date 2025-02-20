@@ -29,6 +29,7 @@ class EvaluationEngine:
         scoring_metrics: List[base_metric.BaseMetric],
         workers: int,
         verbose: int,
+        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> None:
         self._client = client
         self._project_name = project_name
@@ -36,12 +37,12 @@ class EvaluationEngine:
         self._workers = workers
         self._verbose = verbose
         self._scoring_metrics = scoring_metrics
+        self._scoring_key_mapping = scoring_key_mapping
 
     @track(name="metrics_calculation")
     def _evaluate_test_case(
         self,
         test_case_: test_case.TestCase,
-        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> test_result.TestResult:
         score_results: List[score_result.ScoreResult] = []
 
@@ -52,7 +53,7 @@ class EvaluationEngine:
                     score_function=metric.score,
                     score_name=metric.name,
                     kwargs=score_kwargs,
-                    scoring_key_mapping=scoring_key_mapping,
+                    scoring_key_mapping=self._scoring_key_mapping,
                 )
                 LOGGER.debug("Metric %s score started", metric.name)
                 result = metric.score(**score_kwargs)
@@ -100,7 +101,6 @@ class EvaluationEngine:
         self,
         item: dataset_item.DatasetItem,
         task: LLMTask,
-        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
@@ -138,7 +138,7 @@ class EvaluationEngine:
             scoring_inputs = arguments_helpers.create_scoring_inputs(
                 dataset_item=item_content,
                 task_output=task_output_,
-                scoring_key_mapping=scoring_key_mapping,
+                scoring_key_mapping=self._scoring_key_mapping,
             )
 
             test_case_ = test_case.TestCase(
@@ -149,7 +149,6 @@ class EvaluationEngine:
             )
             test_result_ = self._evaluate_test_case(
                 test_case_=test_case_,
-                scoring_key_mapping=scoring_key_mapping,
             )
 
         return test_result_
@@ -159,7 +158,6 @@ class EvaluationEngine:
         dataset_: dataset.Dataset,
         task: LLMTask,
         nb_samples: Optional[int],
-        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> List[test_result.TestResult]:
         dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
             nb_samples=nb_samples
@@ -170,7 +168,6 @@ class EvaluationEngine:
                 self._evaluate_llm_task,
                 item=item,
                 task=task,
-                scoring_key_mapping=scoring_key_mapping,
             )
             for item in dataset_items
         ]
@@ -184,13 +181,11 @@ class EvaluationEngine:
     def evaluate_test_cases(
         self,
         test_cases: List[test_case.TestCase],
-        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> List[test_result.TestResult]:
         evaluation_tasks: List[EvaluationTask] = [
             functools.partial(
                 self._evaluate_test_case,
                 test_case_=test_case_,
-                scoring_key_mapping=scoring_key_mapping,
             )
             for test_case_ in test_cases
         ]

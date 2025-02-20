@@ -98,12 +98,12 @@ def evaluate(
             scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
+            scoring_key_mapping=scoring_key_mapping,
         )
         test_results = evaluation_engine.evaluate_llm_tasks(
             dataset_=dataset,
             task=task,
             nb_samples=nb_samples,
-            scoring_key_mapping=scoring_key_mapping,
         )
 
     total_time = time.time() - start_time
@@ -178,10 +178,10 @@ def evaluate_experiment(
             scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
+            scoring_key_mapping=scoring_key_mapping,
         )
         test_results = evaluation_engine.evaluate_test_cases(
             test_cases=test_cases,
-            scoring_key_mapping=scoring_key_mapping,
         )
 
     total_time = time.time() - start_time
@@ -305,12 +305,12 @@ def evaluate_prompt(
             scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
+            scoring_key_mapping=None,
         )
         test_results = evaluation_engine.evaluate_llm_tasks(
             dataset_=dataset,
             task=_build_prompt_evaluation_task(model=model, messages=messages),
             nb_samples=nb_samples,
-            scoring_key_mapping=None,
         )
 
     total_time = time.time() - start_time
