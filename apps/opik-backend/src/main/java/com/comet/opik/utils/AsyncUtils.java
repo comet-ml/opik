@@ -56,6 +56,7 @@ public class AsyncUtils {
     public static RetryBackoffSpec handleConnectionError() {
         return Retry.backoff(3, Duration.ofMillis(100))
                 .doBeforeRetry(retrySignal -> log.debug("Retrying due to: {}", retrySignal.failure().getMessage()))
+                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
                 .filter(throwable -> {
                     log.debug("Filtering for retry: {}", throwable.getMessage());
 
