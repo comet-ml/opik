@@ -7,7 +7,7 @@ import {
   useOutputStaleStatusByPromptDatasetItemId,
   useOutputValueByPromptDatasetItemId,
 } from "@/store/PlaygroundStore";
-import ReactMarkdown from "react-markdown";
+import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import { cn } from "@/lib/utils";
 
@@ -47,13 +47,13 @@ const PlaygroundOutputCell: React.FunctionComponent<
     }
 
     return (
-      <ReactMarkdown
-        className={cn("comet-markdown", {
+      <MarkdownPreview
+        className={cn({
           "text-muted-gray": stale,
         })}
       >
         {value}
-      </ReactMarkdown>
+      </MarkdownPreview>
     );
   };
 
