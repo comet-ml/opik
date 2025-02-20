@@ -5,6 +5,14 @@ import {
   LLM_SCHEMA_TYPE,
 } from "@/types/llm";
 
+export const LLM_MESSAGE_ROLE_NAME_MAP = {
+  [LLM_MESSAGE_ROLE.system]: "System",
+  [LLM_MESSAGE_ROLE.assistant]: "Assistant",
+  [LLM_MESSAGE_ROLE.user]: "User",
+  [LLM_MESSAGE_ROLE.ai]: "AI",
+  [LLM_MESSAGE_ROLE.tool_execution_result]: "Tool execution result",
+};
+
 export const DEFAULT_OPEN_AI_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 1024,

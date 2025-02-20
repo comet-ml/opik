@@ -16,6 +16,8 @@ import { BASE_API_URL } from "@/api/api";
 import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 
+const DATA_PREFIX = "data:";
+
 const getNowUtcTimeISOString = (): string => {
   return dayjs().utc().toISOString();
 };
@@ -197,9 +199,8 @@ const useCompletionProxyStreaming = ({
           const lines = chunk.split("\n").filter((line) => line.trim() !== "");
 
           for (const line of lines) {
-            const ollamaDataPrefix = "data:";
-            const JSONData = line.startsWith(ollamaDataPrefix)
-              ? line.split(ollamaDataPrefix)[1]
+            const JSONData = line.startsWith(DATA_PREFIX)
+              ? line.split(DATA_PREFIX)[1]
               : line;
 
             const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;

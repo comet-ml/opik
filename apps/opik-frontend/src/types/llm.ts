@@ -1,5 +1,10 @@
 import { LLMJudgeSchema } from "@/types/automations";
 import { DropdownOption } from "@/types/shared";
+import {
+  LLMPromptConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 
 export enum LLM_MESSAGE_ROLE {
   system = "system",
@@ -36,3 +41,15 @@ export type LLMPromptTemplate = {
   variables: Record<string, string>;
   schema: LLMJudgeSchema[];
 } & DropdownOption<LLM_JUDGE>;
+
+export type ChatLLMessage = LLMMessage & {
+  isLoading?: boolean;
+};
+
+export interface LLMChatType {
+  value: string;
+  messages: ChatLLMessage[];
+  model: PROVIDER_MODEL_TYPE | "";
+  provider: PROVIDER_TYPE | "";
+  configs: LLMPromptConfigsType;
+}

@@ -29,11 +29,13 @@ import {
   useUpdateOutput,
   useUpdatePrompt,
 } from "@/store/PlaygroundStore";
-import useLastPickedModel from "@/components/pages/PlaygroundPage/PlaygroundPrompts/useLastPickedModel";
+import useLastPickedModel from "@/hooks/useLastPickedModel";
 import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
+
+export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -59,7 +61,9 @@ const PlaygroundPrompt = ({
   const prompt = usePromptById(promptId);
   const datasetVariables = useDatasetVariables();
 
-  const [, setLastPickedModel] = useLastPickedModel();
+  const [, setLastPickedModel] = useLastPickedModel({
+    key: PLAYGROUND_LAST_PICKED_MODEL,
+  });
 
   const { model, messages, configs, name } = prompt;
 
