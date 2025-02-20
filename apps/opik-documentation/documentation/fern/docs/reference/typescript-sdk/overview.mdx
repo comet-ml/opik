@@ -14,10 +14,10 @@ You can configure the Opik client using environment variables.
 export OPIK_API_KEY="your-api-key"
 
 # If running on Opik Cloud
-export OPIK_HOST="https://www.comet.com/opik/api"
+export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
 
 # If running locally
-export OPIK_HOST="http://localhost:5173/api"
+export OPIK_URL_OVERRIDE="http://localhost:5173/api"
 
 export OPIK_PROJECT_NAME="your-project-name"
 export OPIK_WORKSPACE_NAME="your-workspace-name"
@@ -38,7 +38,10 @@ const client = new Opik({
 
 ## Usage
 
-<Tip>You can find the full Typescript reference documentation [here](https://www.jsdocs.io/package/opik).</Tip>
+<Tip>
+  You can find the full Typescript reference documentation
+  [here](https://www.jsdocs.io/package/opik).
+</Tip>
 
 ```typescript
 import { Opik } from "opik";

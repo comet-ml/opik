@@ -23,11 +23,13 @@ npm install opik
 
 You can configure the Opik client using environment variables.
 
+`.env` file:
+
 ```bash
-export OPIK_API_KEY="your-api-key"
-export OPIK_HOST="https://www.comet.com/opik/api"
-export OPIK_PROJECT_NAME="your-project-name"
-export OPIK_WORKSPACE_NAME="your-workspace-name"
+OPIK_API_KEY="your-api-key"
+OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
+OPIK_PROJECT_NAME="your-project-name"
+OPIK_WORKSPACE_NAME="your-workspace-name"
 ```
 
 Or you can pass the configuration to the Opik client constructor.
@@ -37,7 +39,7 @@ import { Opik } from "opik";
 
 const client = new Opik({
   apiKey: "<your-api-key>",
-  host: "https://www.comet.com/opik/api",
+  apiUrl: "https://www.comet.com/opik/api",
   projectName: "<your-project-name>",
   workspaceName: "<your-workspace-name>",
 });

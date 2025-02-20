@@ -30,7 +30,7 @@ export class OpikClient {
     this.config = loadConfig(explicitConfig);
     this.api = new OpikApiClient({
       apiKey: this.config.apiKey,
-      environment: this.config.host,
+      environment: this.config.apiUrl,
       workspaceName: this.config.workspaceName,
     });
 
@@ -47,12 +47,12 @@ export class OpikClient {
   }
 
   private displayTraceLog = (projectName: string) => {
-    if (projectName === this.lastProjectNameLogged || !this.config.host) {
+    if (projectName === this.lastProjectNameLogged || !this.config.apiUrl) {
       return;
     }
 
     const projectUrl = getProjectUrl({
-      host: this.config.host,
+      apiUrl: this.config.apiUrl,
       projectName,
       workspaceName: this.config.workspaceName,
     });
