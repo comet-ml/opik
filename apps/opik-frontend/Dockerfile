@@ -18,7 +18,7 @@ ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
 # Production stage
-FROM nginx:1.27.3-alpine3.20
+FROM nginx:1.27.4-alpine3.20
 
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
