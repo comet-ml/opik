@@ -5,20 +5,18 @@ import api, { AUTOMATIONS_KEY, AUTOMATIONS_REST_ENDPOINT } from "@/api/api";
 
 type UseProjectBatchDeleteMutationParams = {
   ids: string[];
-  projectId: string;
 };
 
+// TODO lala test delete
+// TODO lala test project name in table
 const useRulesBatchDeleteMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({
-      projectId,
-      ids,
-    }: UseProjectBatchDeleteMutationParams) => {
+    mutationFn: async ({ ids }: UseProjectBatchDeleteMutationParams) => {
       const { data } = await api.post(
-        `${AUTOMATIONS_REST_ENDPOINT}projects/${projectId}/evaluators/delete`,
+        `${AUTOMATIONS_REST_ENDPOINT}evaluators/delete`,
         {
           ids: ids,
         },

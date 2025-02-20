@@ -1,6 +1,6 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
-import { EvaluationRuleFormType } from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/schema";
+import { EvaluationRuleFormType } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 
 type PythonCodeRuleDetailsProps = {
   form?: UseFormReturn<EvaluationRuleFormType>;

@@ -1,20 +1,29 @@
 import React from "react";
 
-type NoDataTabProps = {
+type NoDataPageProps = {
   title: string;
   description: string;
   imageUrl: string;
   buttons: React.ReactNode;
+  height?: number;
 };
 
-const NoDataTab: React.FC<NoDataTabProps> = ({
+const NoDataPage: React.FC<NoDataPageProps> = ({
   title,
   description,
   imageUrl,
   buttons,
+  height = 60,
 }) => {
   return (
-    <div className="flex h-[calc(100vh-188px)] min-h-[500px] w-full min-w-72 items-center justify-stretch py-6">
+    <div
+      style={
+        {
+          "--page-difference": `${height}px`,
+        } as React.CSSProperties
+      }
+      className="flex h-[calc(100vh-var(--page-difference))] min-h-[500px] w-full min-w-72 items-center justify-stretch py-6"
+    >
       <div className="flex size-full flex-col items-center rounded-md border bg-white px-6 py-14">
         <h2 className="comet-title-m">{title}</h2>
         <div className="comet-body-s max-w-[570px] px-4 pb-8 pt-4 text-center text-muted-slate">
@@ -35,4 +44,4 @@ const NoDataTab: React.FC<NoDataTabProps> = ({
   );
 };
 
-export default NoDataTab;
+export default NoDataPage;
