@@ -221,6 +221,9 @@ llmProviderClient:
     # Default: 2023-06-01
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: '2023-06-01'
+  # Default: https://openrouter.ai/api/v1
+  # Description: OpenRouter API URL
+  openRouterUrl: https://openrouter.ai/api/v1
 
 # Configuration for cache manager
 cacheManager:

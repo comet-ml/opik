@@ -15,8 +15,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.io.IOException;
 
 public class OpenRouterModule extends AbstractModule {
-    private static final String OPEN_ROUTER_URL = "https://openrouter.ai/api/v1";
-
     @Provides
     @Singleton
     @Named("openrouterGenerator")
@@ -24,7 +22,7 @@ public class OpenRouterModule extends AbstractModule {
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) throws IOException {
         LlmProviderClientConfig customConfig = JsonUtils.MAPPER.readValue(
                 JsonUtils.MAPPER.writeValueAsBytes(config), LlmProviderClientConfig.class);
-        customConfig.setOpenAiClient(new LlmProviderClientConfig.OpenAiClientConfig(OPEN_ROUTER_URL));
+        customConfig.setOpenAiClient(new LlmProviderClientConfig.OpenAiClientConfig(config.getOpenRouterUrl()));
         return new OpenAIClientGenerator(customConfig);
     }
 
