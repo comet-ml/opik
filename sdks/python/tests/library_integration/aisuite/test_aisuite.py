@@ -1,8 +1,8 @@
 from typing import Any, Dict
 
 import aisuite
-import openai
 import pytest
+from aisuite.provider import LLMError
 
 import opik
 from opik.integrations.aisuite import track_aisuite
@@ -165,7 +165,7 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         project_name=PROJECT_NAME,
     )
 
-    with pytest.raises(openai.BadRequestError):
+    with pytest.raises(LLMError):
         _ = wrapped_client.chat.completions.create(
             messages=None,
             model="openai:gpt-3.5-turbo",

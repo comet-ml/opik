@@ -1,6 +1,6 @@
 import functools
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import List, Optional
 
 from opik import exceptions, logging_messages, opik_context, track
 from opik.api_objects import opik_client, trace
@@ -12,7 +12,7 @@ from opik.evaluation import (
     test_result,
 )
 from opik.evaluation.metrics import arguments_helpers, base_metric, score_result
-from opik.evaluation.types import LLMTask
+from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers
 from .types import EvaluationTask
@@ -29,6 +29,7 @@ class EvaluationEngine:
         scoring_metrics: List[base_metric.BaseMetric],
         workers: int,
         verbose: int,
+        scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> None:
         self._client = client
         self._project_name = project_name
@@ -36,6 +37,7 @@ class EvaluationEngine:
         self._workers = workers
         self._verbose = verbose
         self._scoring_metrics = scoring_metrics
+        self._scoring_key_mapping = scoring_key_mapping
 
     @track(name="metrics_calculation")
     def _evaluate_test_case(
@@ -51,6 +53,7 @@ class EvaluationEngine:
                     score_function=metric.score,
                     score_name=metric.name,
                     kwargs=score_kwargs,
+                    scoring_key_mapping=self._scoring_key_mapping,
                 )
                 LOGGER.debug("Metric %s score started", metric.name)
                 result = metric.score(**score_kwargs)
@@ -98,9 +101,6 @@ class EvaluationEngine:
         self,
         item: dataset_item.DatasetItem,
         task: LLMTask,
-        scoring_key_mapping: Optional[
-            Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-        ],
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
@@ -138,7 +138,7 @@ class EvaluationEngine:
             scoring_inputs = arguments_helpers.create_scoring_inputs(
                 dataset_item=item_content,
                 task_output=task_output_,
-                scoring_key_mapping=scoring_key_mapping,
+                scoring_key_mapping=self._scoring_key_mapping,
             )
 
             test_case_ = test_case.TestCase(
@@ -147,7 +147,9 @@ class EvaluationEngine:
                 scoring_inputs=scoring_inputs,
                 task_output=task_output_,
             )
-            test_result_ = self._evaluate_test_case(test_case_=test_case_)
+            test_result_ = self._evaluate_test_case(
+                test_case_=test_case_,
+            )
 
         return test_result_
 
@@ -156,9 +158,6 @@ class EvaluationEngine:
         dataset_: dataset.Dataset,
         task: LLMTask,
         nb_samples: Optional[int],
-        scoring_key_mapping: Optional[
-            Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
-        ],
     ) -> List[test_result.TestResult]:
         dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
             nb_samples=nb_samples
@@ -169,7 +168,6 @@ class EvaluationEngine:
                 self._evaluate_llm_task,
                 item=item,
                 task=task,
-                scoring_key_mapping=scoring_key_mapping,
             )
             for item in dataset_items
         ]
