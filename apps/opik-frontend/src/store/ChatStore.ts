@@ -93,7 +93,7 @@ const useChatStore = create<ChatStore>()(
       },
     }),
     {
-      name: "PLAYGROUND_STATE",
+      name: "CHAT_STATE",
     },
   ),
 );
