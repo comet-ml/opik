@@ -238,6 +238,10 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         return self
 
+    @property
+    def is_config_file_exists(self) -> bool:
+        return self.config_file_fullpath.exists()
+
 
 def update_session_config(key: str, value: Any) -> None:
     _SESSION_CACHE_DICT[key] = value

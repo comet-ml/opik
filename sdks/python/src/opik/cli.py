@@ -5,6 +5,8 @@ import sys
 from importlib import metadata
 
 import click
+
+from opik import Opik, config
 from opik.configurator import configure as opik_configure
 from opik.configurator import interactive_helpers
 
@@ -167,6 +169,61 @@ def proxy(
     uvicorn.run(
         app, host=host, port=port, log_level="error"
     )  # Reduce uvicorn logging to keep output clean
+
+
+@cli.command(context_settings={"ignore_unknown_options": True})
+def healthcheck() -> None:
+    """
+    Performs a health check of the application, including validation of configuration,
+    verification of library installations, and checking the availability of the backend workspace.
+    Logs all relevant information to assist in debugging and diagnostics.
+    """
+    LOGGER.info("*** HEALTHCHECK STARTED ***")
+
+    LOGGER.info(f"Python version: {sys.version}")
+    LOGGER.info(f"Opik version: {__version__}")
+
+    print()
+    LOGGER.info("\n*** LIBRARIES INSTALLED. ***")
+    installed_packages = {
+        pkg.metadata["Name"]: pkg.version for pkg in metadata.distributions()
+    }
+    for name, version in sorted(installed_packages.items()):
+        LOGGER.info(f"{name}=={version}")
+
+    print()
+    LOGGER.info("*** CONFIGURATION FILE ***")
+    config_obj = config.OpikConfig()
+    LOGGER.info(f"Config file path: {config_obj.config_file_fullpath}")
+    LOGGER.info(f"Config file exists: {config_obj.is_config_file_exists}")
+
+    print()
+    LOGGER.info("*** CURRENT SETTINGS ***")
+
+    config_dict = config_obj.model_dump()
+    for key, value in sorted(config_dict.items()):
+        if key.lower() == "api_key" and value is not None:
+            value = "***HIDDEN***"
+        LOGGER.info(f"{key}: {value}")
+
+    print()
+    LOGGER.info("*** CURRENT SETTINGS VALIDATION ***")
+    LOGGER.info(
+        f"Current configuration is valid: {not config.is_misconfigured(config_obj, True)}"
+    )
+
+    print()
+    LOGGER.info("*** CHECKING BACKEND WORKSPACE AVAILABILITY ***")
+    try:
+        opik = Opik()
+        opik.auth_check()
+        LOGGER.info("workspace available: True")
+    except Exception as e:
+        LOGGER.info("workspace available: False")
+        LOGGER.error(f"Error while checking backend workspace availability: {e}")
+
+    print()
+    LOGGER.info("*** HEALTHCHECK COMPLETED ***")
 
 
 if __name__ == "__main__":
