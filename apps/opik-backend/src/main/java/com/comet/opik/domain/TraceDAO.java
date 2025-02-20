@@ -111,7 +111,8 @@ class TraceDAOImpl implements TraceDAO {
                 tags,
                 error_info,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                thread_id
             ) VALUES
                 <items:{item |
                     (
@@ -127,7 +128,8 @@ class TraceDAOImpl implements TraceDAO {
                         :tags<item.index>,
                         :error_info<item.index>,
                         :user_name,
-                        :user_name
+                        :user_name,
+                        :thread_id<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -155,7 +157,8 @@ class TraceDAOImpl implements TraceDAO {
                 error_info,
                 created_at,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                thread_id
             )
             SELECT
                 new_trace.id as id,
@@ -209,7 +212,11 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(old_trace.created_by) > 0, old_trace.created_by,
                     new_trace.created_by
                 ) as created_by,
-                new_trace.last_updated_by as last_updated_by
+                new_trace.last_updated_by as last_updated_by,
+                multiIf(
+                    LENGTH(old_trace.thread_id) > 0, old_trace.thread_id,
+                    new_trace.thread_id
+                ) as thread_id
             FROM (
                 SELECT
                     :id as id,
@@ -225,7 +232,8 @@ class TraceDAOImpl implements TraceDAO {
                     :error_info as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
-                    :user_name as last_updated_by
+                    :user_name as last_updated_by,
+                    :thread_id as thread_id
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -244,7 +252,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id
             ) SELECT
             	id,
             	project_id,
@@ -259,7 +267,8 @@ class TraceDAOImpl implements TraceDAO {
             	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
-                :user_name as last_updated_by
+                :user_name as last_updated_by,
+                <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -387,6 +396,7 @@ class TraceDAOImpl implements TraceDAO {
                   t.last_updated_by as last_updated_by,
                   t.duration_millis as duration_millis,
                   t.duration_millis as duration,
+                  t.thread_id as thread_id,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
                   groupUniqArrayArray(c.comments_array) as comments
@@ -546,7 +556,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id
             )
             SELECT
                 new_trace.id as id,
@@ -606,7 +616,11 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(old_trace.created_by) > 0, old_trace.created_by,
                     new_trace.created_by
                 ) as created_by,
-                new_trace.last_updated_by as last_updated_by
+                new_trace.last_updated_by as last_updated_by,
+                multiIf(
+                    LENGTH(old_trace.thread_id) > 0, old_trace.thread_id,
+                    new_trace.thread_id
+                ) as thread_id
             FROM (
                 SELECT
                     :id as id,
@@ -622,7 +636,8 @@ class TraceDAOImpl implements TraceDAO {
                     <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
-                    :user_name as last_updated_by
+                    :user_name as last_updated_by,
+                    <if(thread_id)> :thread_id <else> '' <endif> as thread_id
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -823,6 +838,12 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("error_info", "");
         }
 
+        if (trace.threadId() != null) {
+            statement.bind("thread_id", trace.threadId());
+        } else {
+            statement.bind("thread_id", "");
+        }
+
         return statement;
     }
 
@@ -882,6 +903,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
+
+        Optional.ofNullable(traceUpdate.threadId())
+                .ifPresent(threadId -> statement.bind("thread_id", threadId));
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
@@ -904,6 +928,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.errorInfo())
                 .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
+
+        Optional.ofNullable(traceUpdate.threadId())
+                .ifPresent(threadId -> template.add("thread_id", threadId));
 
         return template;
     }
@@ -1152,7 +1179,8 @@ class TraceDAOImpl implements TraceDAO {
                         .bind("metadata" + i, getOrDefault(trace.metadata()))
                         .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
-                                trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "");
+                                trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
+                        .bind("thread_id" + i, trace.threadId() != null ? trace.threadId() : "");
 
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());

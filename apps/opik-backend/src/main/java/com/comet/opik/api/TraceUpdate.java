@@ -25,5 +25,6 @@ public record TraceUpdate(
         JsonNode output,
         JsonNode metadata,
         Set<String> tags,
-        ErrorInfo errorInfo) {
+        ErrorInfo errorInfo,
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String threadId) {
 }
