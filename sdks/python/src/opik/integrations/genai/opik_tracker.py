@@ -2,7 +2,7 @@ from typing import Optional
 
 from google import genai
 
-from . import generate_content_decorator, generations_aggregators
+from . import generate_content_decorator, generations_aggregators, stream_wrappers
 
 
 def track_genai(
@@ -25,6 +25,14 @@ def track_genai(
         project_name=project_name,
     )(client.models.generate_content)
 
+    # This conversion is needed so that @track decorator stopped treating generate_content_stream
+    # as generator function, as they are tracked slightly differently from what we need here.
+    # The user still gets their Iterator object in return.
+    client.models.generate_content_stream = (
+        stream_wrappers.generator_function_to_normal_function(
+            client.models.generate_content_stream
+        )
+    )
     client.models.generate_content_stream = decorator_factory.track(
         name="genai_generate_content_stream",
         type="llm",
@@ -33,13 +41,15 @@ def track_genai(
     )(client.models.generate_content_stream)
 
     client.aio.models.generate_content = decorator_factory.track(
-        name="async_genai_generate_content",
+        name="genai_async_generate_content",
         type="llm",
         project_name=project_name,
     )(client.aio.models.generate_content)
 
+    # No need to perform a similar conversion as for the synchronous method, because async version of generate_content_stream
+    # is already a wrapper around generator function that works similarly to our helper function
     client.aio.models.generate_content_stream = decorator_factory.track(
-        name="async_genai_generate_content_stream",
+        name="genai_async_generate_content_stream",
         type="llm",
         project_name=project_name,
         generations_aggregator=generations_aggregators.aggregate_response_content_items,

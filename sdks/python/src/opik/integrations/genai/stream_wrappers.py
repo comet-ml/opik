@@ -1,10 +1,19 @@
+import functools
 import logging
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+)
 
-from typing import Iterator, AsyncIterator, List, Optional, Any, Dict, Callable
 from google.genai import types as genai_types
-from opik.decorator import error_info_collector, generator_wrappers
 
 from opik.api_objects import span, trace
+from opik.decorator import error_info_collector, generator_wrappers
 from opik.types import ErrorInfoDict
 
 LOGGER = logging.getLogger(__name__)
@@ -82,3 +91,16 @@ async def wrap_async_iterator(
             generators_trace_to_end=trace_to_end,
             capture_output=True,
         )
+
+
+def generator_function_to_normal_function(
+    generator_function: Callable[..., Iterator[genai_types.GenerateContentResponse]],
+) -> Callable[..., Iterator[genai_types.GenerateContentResponse]]:
+    @functools.wraps(generator_function)
+    def generator_wrapper(
+        *args: Any,
+        **kwargs: Any,
+    ) -> Iterator[genai_types.GenerateContentResponse]:
+        return generator_function(*args, **kwargs)
+
+    return generator_wrapper
