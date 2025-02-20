@@ -19,6 +19,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class TestDatasetItemsCrud:
     @pytest.mark.parametrize(
         "dataset_insert", ["insert_via_sdk"]
@@ -38,12 +39,12 @@ class TestDatasetItemsCrud:
         dataset_insert,
     ):
         """Tests the insertion of items into a dataset and verifies they appear correctly in both UI and SDK.
-        
-        This test verifies that items can be properly added to a dataset and are consistently 
+
+        This test verifies that items can be properly added to a dataset and are consistently
         visible across both the UI and SDK interfaces. It tests all possible combinations of:
         - Creating the dataset via SDK or UI
         - Inserting items via SDK or UI (currently SDK only due to UI flakiness)
-        
+
         Steps:
         1. Create a new dataset using either the SDK or UI
         2. Insert 10 test items into the dataset, each with an input/output pair
@@ -57,8 +58,10 @@ class TestDatasetItemsCrud:
            - Check all items are visible and match test data
            - Verify item count matches expected
         """
-        logger.info(f"Starting dataset item insertion test with {dataset_creation_fixture} and {dataset_insert}")
-        
+        logger.info(
+            f"Starting dataset item insertion test with {dataset_creation_fixture} and {dataset_insert}"
+        )
+
         try:
             dataset = wait_for_dataset_to_be_visible(
                 client=client,
@@ -73,7 +76,7 @@ class TestDatasetItemsCrud:
             ) from e
 
         logger.info(f"Inserting {len(TEST_ITEMS)} items via {dataset_insert}")
-        
+
         try:
             if "ui" in dataset_insert:
                 insert_dataset_items_ui(page, dataset.name, TEST_ITEMS)
@@ -136,10 +139,10 @@ class TestDatasetItemsCrud:
         insert_dataset_items_sdk,
     ):
         """Tests updating existing dataset items and verifies changes appear in both UI and SDK.
-        
+
         This test ensures that existing items in a dataset can be modified and that these
         changes are properly synchronized across both interfaces.
-        
+
         Steps:
         1. Create a new dataset via SDK and insert 10 initial test items
            Example initial item: {"input": "input0", "output": "output0"}
@@ -154,7 +157,7 @@ class TestDatasetItemsCrud:
            - Verify no items show old content
         """
         logger.info("Starting dataset item update test")
-        
+
         try:
             dataset = wait_for_dataset_to_be_visible(
                 client=client, dataset_name=create_dataset_sdk, timeout=10
@@ -184,7 +187,7 @@ class TestDatasetItemsCrud:
         updated_items = get_updated_items(
             current=items_from_sdk, update=TEST_ITEMS_UPDATE
         )
-        
+
         try:
             dataset.update(updated_items)
         except Exception as e:
@@ -208,11 +211,11 @@ class TestDatasetItemsCrud:
         item_deletion,
     ):
         """Tests deletion of individual dataset items and verifies removal across interfaces.
-        
+
         This test checks that items can be properly deleted from a dataset using either
         the UI or SDK interface, and that deletions are properly synchronized. The test
         runs twice - once for UI deletion and once for SDK deletion.
-        
+
         Steps:
         1. Create a new dataset via SDK and insert 10 initial test items
            Example item: {"input": "input0", "output": "output0"}
@@ -228,7 +231,7 @@ class TestDatasetItemsCrud:
            - Verify deleted item's data is not visible anywhere
         """
         logger.info(f"Starting dataset item deletion test via {item_deletion}")
-        
+
         try:
             dataset = wait_for_dataset_to_be_visible(
                 client=client, dataset_name=create_dataset_sdk, timeout=10
@@ -327,10 +330,10 @@ class TestDatasetItemsCrud:
         insert_dataset_items_sdk,
     ):
         """Tests complete clearing of a dataset and verifies empty state across interfaces.
-        
+
         This test verifies that the dataset.clear() operation properly removes all items
         from a dataset and that this empty state is correctly reflected in both interfaces.
-        
+
         Steps:
         1. Create a new dataset via SDK and insert 10 initial test items
            Example item: {"input": "input0", "output": "output0"}
@@ -344,7 +347,7 @@ class TestDatasetItemsCrud:
            - Verify no items are displayed in the table
         """
         logger.info("Starting dataset clear test")
-        
+
         try:
             dataset = wait_for_dataset_to_be_visible(
                 client=client, dataset_name=create_dataset_sdk, timeout=10

@@ -31,14 +31,14 @@ def pytest_addoption(parser):
         "--show-requests",
         action="store_true",
         default=False,
-        help="Show HTTP requests in test output"
+        help="Show HTTP requests in test output",
     )
 
 
 def pytest_configure(config):
     """This runs before any tests or fixtures are executed"""
     config.addinivalue_line("markers", "sanity: mark test as a sanity test")
-    
+
     logging.getLogger("opik").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
@@ -46,10 +46,10 @@ def pytest_configure(config):
     # Set up logging configuration
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(message)s',
-        datefmt='%H:%M:%S'
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
     )
-    
+
     # Configure all possible HTTP-related loggers
     loggers_to_configure = [
         "opik",
@@ -58,7 +58,7 @@ def pytest_configure(config):
         "httpx",
         "http.client",
     ]
-    
+
     level = logging.INFO if config.getoption("--show-requests") else logging.WARNING
     for logger_name in loggers_to_configure:
         logging.getLogger(logger_name).setLevel(level)

@@ -19,7 +19,7 @@ class TestDatasetsCrud:
         self, page: Page, create_project, create_10_test_traces
     ):
         """Test dataset creation via 'add to new dataset' in traces page.
-        
+
         Steps:
         1. Create a project with 10 test traces
         2. Navigate to traces page and select all traces
@@ -30,7 +30,7 @@ class TestDatasetsCrud:
         logger.info("Starting dataset creation via traces page test")
         dataset_name = "automated_tests_dataset"
         proj_name = create_project
-        
+
         # Navigate to project and traces
         logger.info(f"Navigating to project {proj_name}")
         projects_page = ProjectsPage(page)
@@ -55,7 +55,9 @@ class TestDatasetsCrud:
         try:
             datasets_page = DatasetsPage(page)
             datasets_page.go_to_page()
-            datasets_page.check_dataset_exists_on_page_by_name(dataset_name=dataset_name)
+            datasets_page.check_dataset_exists_on_page_by_name(
+                dataset_name=dataset_name
+            )
             logger.info("Successfully verified dataset exists in UI")
         except Exception as e:
             raise AssertionError(
@@ -75,14 +77,16 @@ class TestDatasetsCrud:
         self, request, page: Page, client: opik.Opik, dataset_fixture
     ):
         """Test dataset visibility in both UI and SDK interfaces.
-        
+
         Steps:
         1. Create dataset via UI or SDK (test runs for both)
         2. Verify dataset appears in UI list
         3. Verify dataset exists and is accessible via SDK
         4. Verify dataset name matches between UI and SDK
         """
-        logger.info(f"Starting dataset visibility test for dataset created via {dataset_fixture}")
+        logger.info(
+            f"Starting dataset visibility test for dataset created via {dataset_fixture}"
+        )
         dataset_name = request.getfixturevalue(dataset_fixture)
 
         # Verify in UI
@@ -124,7 +128,7 @@ class TestDatasetsCrud:
         self, request, page: Page, client: opik.Opik, dataset_fixture
     ):
         """Test dataset name update via SDK with UI verification.
-        
+
         Steps:
         1. Create dataset via UI or SDK (test runs for both)
         2. Update dataset name via SDK
@@ -134,12 +138,14 @@ class TestDatasetsCrud:
         4. Verify via UI:
            - New name appears in dataset list
            - Old name no longer appears
-        
+
         The test runs twice:
         - Once for dataset created via SDK
         - Once for dataset created via UI
         """
-        logger.info(f"Starting dataset name update test for dataset created via {dataset_fixture}")
+        logger.info(
+            f"Starting dataset name update test for dataset created via {dataset_fixture}"
+        )
         dataset_name = request.getfixturevalue(dataset_fixture)
         new_name = "updated_test_dataset_name"
         logger.info(f"Updating dataset name from '{dataset_name}' to '{new_name}'")
@@ -182,7 +188,9 @@ class TestDatasetsCrud:
             datasets_page = DatasetsPage(page)
             datasets_page.go_to_page()
             try:
-                datasets_page.check_dataset_exists_on_page_by_name(dataset_name=new_name)
+                datasets_page.check_dataset_exists_on_page_by_name(
+                    dataset_name=new_name
+                )
                 datasets_page.check_dataset_not_exists_on_page_by_name(
                     dataset_name=dataset_name
                 )
@@ -207,21 +215,21 @@ class TestDatasetsCrud:
         [
             ("create_dataset_sdk", "sdk"),
             ("create_dataset_sdk", "ui"),
-            ("create_dataset_ui", "sdk"), 
-            ("create_dataset_ui", "ui")
+            ("create_dataset_ui", "sdk"),
+            ("create_dataset_ui", "ui"),
         ],
     )
     def test_dataset_deletion(
         self, request, page: Page, client: opik.Opik, dataset_fixture, deletion_method
     ):
         """Test dataset deletion via both SDK and UI interfaces.
-        
+
         Steps:
         1. Create dataset via UI or SDK
         2. Delete dataset through specified interface (UI or SDK)
         3. Verify deletion via SDK (should get 404)
         4. Verify deletion in UI (should not be visible)
-        
+
         The test runs four times to test all combinations:
         - Dataset created via SDK, deleted via SDK
         - Dataset created via SDK, deleted via UI
@@ -233,9 +241,11 @@ class TestDatasetsCrud:
             f" and deleted via {deletion_method}"
         )
         dataset_name = request.getfixturevalue(dataset_fixture)
-        
+
         # Delete dataset via specified method
-        logger.info(f"Attempting to delete dataset {dataset_name} via {deletion_method}")
+        logger.info(
+            f"Attempting to delete dataset {dataset_name} via {deletion_method}"
+        )
         if deletion_method == "sdk":
             try:
                 client.delete_dataset(dataset_name)
@@ -287,7 +297,9 @@ class TestDatasetsCrud:
         dataset_page = DatasetsPage(page)
         dataset_page.go_to_page()
         try:
-            dataset_page.check_dataset_not_exists_on_page_by_name(dataset_name=dataset_name)
+            dataset_page.check_dataset_not_exists_on_page_by_name(
+                dataset_name=dataset_name
+            )
             logger.info("Successfully verified dataset not visible in UI")
         except AssertionError as e:
             raise AssertionError(
