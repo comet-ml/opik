@@ -1,3 +1,4 @@
+import { logger } from "@/utils/logger";
 import fs from "fs";
 import ini from "ini";
 
@@ -9,8 +10,6 @@ export interface OpikConfig {
 }
 
 const CONFIG_FILE_PATH_DEFAULT = "~/.opik.config";
-const CONFIG_FILE_PATH =
-  process.env.OPIK_CONFIG_PATH || CONFIG_FILE_PATH_DEFAULT;
 
 const DEFAULT_CONFIG: OpikConfig = {
   apiKey: "",
@@ -35,18 +34,35 @@ function loadFromEnv(): Partial<OpikConfig> {
 }
 
 function loadFromConfigFile(): Partial<OpikConfig> {
-  const config = ini.parse(fs.readFileSync(CONFIG_FILE_PATH, "utf8"));
+  const configFilePath =
+    process.env.OPIK_CONFIG_PATH || CONFIG_FILE_PATH_DEFAULT;
 
-  if (!config.opik) {
+  if (!fs.existsSync(configFilePath)) {
+    if (process.env.OPIK_CONFIG_PATH) {
+      throw new Error(`Config file not found at ${configFilePath}`);
+    }
+
     return {};
   }
 
-  return filterUndefined({
-    apiKey: config.opik.api_key,
-    apiUrl: config.opik.url_override,
-    projectName: config.opik.project_name,
-    workspaceName: config.opik.workspace,
-  });
+  try {
+    const config = ini.parse(fs.readFileSync(configFilePath, "utf8"));
+
+    if (!config.opik) {
+      return {};
+    }
+
+    return filterUndefined({
+      apiKey: config.opik.api_key,
+      apiUrl: config.opik.url_override,
+      projectName: config.opik.project_name,
+      workspaceName: config.opik.workspace,
+    });
+  } catch (error) {
+    logger.error(`Error loading config file ${configFilePath}: ${error}`);
+
+    return {};
+  }
 }
 
 export function loadConfig(explicit?: Partial<OpikConfig>): OpikConfig {
