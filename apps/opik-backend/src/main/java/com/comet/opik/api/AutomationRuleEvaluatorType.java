@@ -12,7 +12,9 @@ import java.util.Arrays;
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public enum AutomationRuleEvaluatorType {
 
-    LLM_AS_JUDGE(Constants.LLM_AS_JUDGE);
+    LLM_AS_JUDGE(Constants.LLM_AS_JUDGE),
+    USER_DEFINED_METRIC_PYTHON(Constants.USER_DEFINED_METRIC_PYTHON),
+    ;
 
     @JsonValue
     private final String type;
@@ -26,5 +28,6 @@ public enum AutomationRuleEvaluatorType {
     @UtilityClass
     public static class Constants {
         public static final String LLM_AS_JUDGE = "llm_as_judge";
+        public static final String USER_DEFINED_METRIC_PYTHON = "user_defined_metric_python";
     }
 }

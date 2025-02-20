@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -414,7 +414,7 @@ class AutomationRuleEvaluatorsResourceDeprecatedTest {
 
             UUID id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, workspaceName, okApikey);
 
-            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdate.class);
+            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class);
 
             evaluatorsResourceClient.updateEvaluator(id, projectId, workspaceName, updatedEvaluator,
                     apiKey, isAuthorized, errorMessage);
@@ -790,7 +790,7 @@ class AutomationRuleEvaluatorsResourceDeprecatedTest {
             UUID projectId = UUID.randomUUID();
             UUID id = evaluatorsResourceClient.createEvaluator(evaluator, projectId, WORKSPACE_NAME, API_KEY);
 
-            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdate.class);
+            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                     .path(id.toString())
