@@ -27,7 +27,7 @@ export const LocalAIProviderDetailsFormSchema = z.object({
     .min(1, { message: "Models is required" })
     .refine(
       (models) => {
-        const modelsArray = models.split(",");
+        const modelsArray = models.split(",").map((m) => m.trim());
 
         return modelsArray.length === uniq(modelsArray).length;
       },

@@ -28,7 +28,6 @@ class AuthServiceImpl implements AuthService {
         var currentWorkspaceName = WorkspaceUtils.getWorkspaceName(headers.getHeaderString(WORKSPACE_HEADER));
 
         if (ProjectService.DEFAULT_WORKSPACE_NAME.equals(currentWorkspaceName)) {
-            requestContext.get().setWorkspaceName(currentWorkspaceName);
             requestContext.get().setUserName(ProjectService.DEFAULT_USER);
             requestContext.get().setWorkspaceId(ProjectService.DEFAULT_WORKSPACE_ID);
             requestContext.get().setApiKey("default");

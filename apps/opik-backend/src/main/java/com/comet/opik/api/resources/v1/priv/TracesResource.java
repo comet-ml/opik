@@ -103,7 +103,6 @@ public class TracesResource {
 
         WorkspaceMetadata workspaceMetadata = workspaceMetadataService
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         if (!workspaceMetadata.canUseDynamicSorting()) {

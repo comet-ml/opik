@@ -32,7 +32,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
-import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -129,8 +128,7 @@ class TraceServiceImplTest {
                     .startTime(Instant.now())
                     .build())
                     .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
-                            .put(RequestContext.WORKSPACE_ID, workspaceId)
-                            .put(RequestContext.WORKSPACE_NAME, DEFAULT_WORKSPACE_NAME))
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
                     .block();
 
             // then
@@ -180,8 +178,7 @@ class TraceServiceImplTest {
                             .projectName(projectName)
                             .build())
                     .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
-                            .put(RequestContext.WORKSPACE_ID, workspaceId)
-                            .put(RequestContext.WORKSPACE_NAME, DEFAULT_WORKSPACE_NAME))
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
                     .block();
 
             // then

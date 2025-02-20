@@ -89,6 +89,7 @@
     "react-textarea-autosize": "^8.5.7",
     "react18-json-view": "^0.2.8",
     "recharts": "^2.13.3",
+    "remark-gfm": "^4.0.1",
     "slugify": "^1.6.6",
     "stylelint-scss": "^6.4.1",
     "tailwind-merge": "^2.3.0",
@@ -102,6 +103,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.45.3",
+    "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query-devtools": "^5.45.0",
     "@tanstack/router-devtools": "^1.36.3",
     "@tanstack/router-vite-plugin": "^1.37.0",

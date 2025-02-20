@@ -49,6 +49,7 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                     AND table = 'spans'
                     AND active
                 )
+
             SELECT
                 round((query_result.query_size * total_spans.total_count) / 1e9, 2) AS workspace_size_gb_,
                 if(isNaN(workspace_size_gb_), 0, workspace_size_gb_) AS workspace_size_gb,
