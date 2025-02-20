@@ -99,7 +99,8 @@ public class OnlineScoringSampler {
             log.debug("Fetching evaluators for {} traces, project '{}' on workspace '{}'",
                     traces.size(), projectId, tracesBatch.workspaceId());
 
-            var evaluators = ruleEvaluatorService.findAll(projectId, tracesBatch.workspaceId(), LLM_AS_JUDGE);
+            List<AutomationRuleEvaluatorLlmAsJudge> evaluators = ruleEvaluatorService.findAll(
+                    projectId, tracesBatch.workspaceId(), LLM_AS_JUDGE);
 
             // Important to set the workspaceId for logging purposes
             try (MDC.MDCCloseable logScope = MDC.putCloseable(UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name());

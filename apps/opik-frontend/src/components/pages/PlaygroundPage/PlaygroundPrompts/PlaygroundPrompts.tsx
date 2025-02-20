@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect } from "react";
-import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
+import PlaygroundPrompt, {
+  PLAYGROUND_LAST_PICKED_MODEL,
+} from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { Button } from "@/components/ui/button";
@@ -10,7 +12,7 @@ import {
   usePromptIds,
   useSetPromptMap,
 } from "@/store/PlaygroundStore";
-import useLastPickedModel from "@/components/pages/PlaygroundPage/PlaygroundPrompts/useLastPickedModel";
+import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 interface PlaygroundPromptsState {
@@ -32,7 +34,9 @@ const PlaygroundPrompts = ({
 
   const promptIds = usePromptIds();
 
-  const [lastPickedModel] = useLastPickedModel();
+  const [lastPickedModel] = useLastPickedModel({
+    key: PLAYGROUND_LAST_PICKED_MODEL,
+  });
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
 

@@ -6,12 +6,14 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import jakarta.inject.Named;
 
 class OpenAILlmServiceProvider implements LlmServiceProvider {
 
     private final OpenAIClientGenerator clientGenerator;
 
-    OpenAILlmServiceProvider(OpenAIClientGenerator clientGenerator, LlmProviderFactory factory) {
+    OpenAILlmServiceProvider(
+            @Named("openaiGenerator") OpenAIClientGenerator clientGenerator, LlmProviderFactory factory) {
         this.clientGenerator = clientGenerator;
         factory.register(LlmProvider.OPEN_AI, this);
     }
