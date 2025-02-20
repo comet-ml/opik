@@ -7,6 +7,7 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -69,6 +70,7 @@ class TraceServiceImplTest {
     private EventBus eventBus;
 
     private final PodamFactory factory = new PodamFactoryImpl();
+    private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
 
     @BeforeEach
     void setUp() {
@@ -206,7 +208,8 @@ class TraceServiceImplTest {
             when(traceDao.find(anyInt(), anyInt(),
                     eq(TraceSearchCriteria.builder().projectId(projectId).build()),
                     any()))
-                    .thenReturn(Mono.just(new Trace.TracePage(1, 1, 1, List.of(trace))));
+                    .thenReturn(Mono.just(
+                            new Trace.TracePage(1, 1, 1, List.of(trace), traceSortingFactory.getSortableFields())));
 
             when(template.nonTransaction(any()))
                     .thenAnswer(invocation -> {
