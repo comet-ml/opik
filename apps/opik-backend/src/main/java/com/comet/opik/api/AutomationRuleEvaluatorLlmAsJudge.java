@@ -8,9 +8,8 @@ import dev.langchain4j.data.message.ChatMessageType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
+import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
@@ -21,16 +20,12 @@ import java.util.UUID;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 
-@Getter
-@ToString(callSuper = true)
 @SuperBuilder(toBuilder = true)
+@Data
 @EqualsAndHashCode(callSuper = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvaluator<LlmAsJudgeCode> {
-
-    @NotNull @JsonView({View.Public.class, View.Write.class})
-    private final LlmAsJudgeCode code;
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -76,8 +71,7 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
     public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, Float samplingRate,
             @NotNull LlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
             String lastUpdatedBy) {
-        super(id, projectId, name, samplingRate, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
-        this.code = code;
+        super(id, projectId, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 
     @Override

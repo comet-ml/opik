@@ -1,1 +1,2 @@
 aisuite[anthropic,openai]
+docstring_parser  # issue with aisuite v0.1.10 (seems they lost dependency)

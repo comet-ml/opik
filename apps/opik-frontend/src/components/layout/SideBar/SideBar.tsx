@@ -67,6 +67,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: LucideHome,
         label: "Home",
       },
+      // {
+      //   id: "chat",
+      //   path: "/$workspaceName/chat",
+      //   type: MENU_ITEM_TYPE.router,
+      //   icon: BotMessageSquare,
+      //   label: "Chat (Experimental)",
+      // },
     ],
   },
   {
