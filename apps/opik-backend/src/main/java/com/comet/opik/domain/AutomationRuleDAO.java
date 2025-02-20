@@ -20,6 +20,7 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterRowMapper(AutomationRuleRowMapper.class)
 @RegisterConstructorMapper(LlmAsJudgeAutomationRuleEvaluatorModel.class)
+@RegisterConstructorMapper(UserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 interface AutomationRuleDAO {
 

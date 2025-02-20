@@ -1,6 +1,5 @@
 package com.comet.opik.api;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -25,16 +24,18 @@ import java.util.UUID;
 @SuperBuilder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = AutomationRuleEvaluatorLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE)
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE),
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON)
 })
 @Schema(name = "AutomationRuleEvaluator", discriminatorProperty = "type", discriminatorMapping = {
-        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE, schema = AutomationRuleEvaluatorLlmAsJudge.class)
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE, schema = AutomationRuleEvaluatorLlmAsJudge.class),
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorUserDefinedMetricPython.class)
 })
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRule
-        permits AutomationRuleEvaluatorLlmAsJudge {
+        permits AutomationRuleEvaluatorLlmAsJudge, AutomationRuleEvaluatorUserDefinedMetricPython {
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
@@ -48,6 +49,9 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
 
     @JsonView({View.Public.class, View.Write.class})
     private final Float samplingRate;
+
+    @JsonView({View.Public.class, View.Write.class})
+    @NotNull private final T code;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
@@ -68,13 +72,12 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     @NotNull @JsonView({View.Public.class, View.Write.class})
     public abstract AutomationRuleEvaluatorType getType();
 
-    @JsonIgnore
-    public abstract T getCode();
-
     @Override
     public AutomationRuleAction getAction() {
         return AutomationRuleAction.EVALUATOR;
     }
+
+    public abstract <C extends AutomationRuleEvaluator<T>, B extends AutomationRuleEvaluatorBuilder<T, C, B>> AutomationRuleEvaluatorBuilder<T, C, B> toBuilder();
 
     @UtilityClass
     public static class View {

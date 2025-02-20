@@ -1,11 +1,13 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.AutomationRule;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorCriteria;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
+import com.comet.opik.api.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
+import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -41,7 +43,7 @@ public interface AutomationRuleEvaluatorService {
             @NonNull String workspaceId, @NonNull String userName);
 
     void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
-            AutomationRuleEvaluatorUpdate automationRuleEvaluator);
+            AutomationRuleEvaluatorUpdate<?> automationRuleEvaluator);
 
     <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, UUID projectId,
             @NonNull String workspaceId);
@@ -51,7 +53,7 @@ public interface AutomationRuleEvaluatorService {
     AutomationRuleEvaluatorPage find(UUID projectId, @NonNull String workspaceId,
             String name, int page, int size);
 
-    List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
+    <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
             AutomationRuleEvaluatorType automationRuleEvaluatorType);
 
     Mono<LogPage> getLogs(LogCriteria criteria);
@@ -92,7 +94,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
+                case AutomationRuleEvaluatorUserDefinedMetricPython userDefinedMetricPython -> {
+                    var definition = userDefinedMetricPython.toBuilder()
+                            .id(id)
+                            .projectId(projectId)
+                            .createdBy(userName)
+                            .lastUpdatedBy(userName)
+                            .build();
 
+                    yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
+                }
             };
 
             try {
@@ -119,7 +130,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-*'", keyUsesPatternMatching = true)
     public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
-            @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate evaluatorUpdate) {
+            @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate<?> evaluatorUpdate) {
 
         log.debug("Updating AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId,
                 workspaceId);
@@ -127,13 +138,22 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             try {
-                int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.name(),
-                        evaluatorUpdate.samplingRate());
+                int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.getName(),
+                        evaluatorUpdate.getSamplingRate());
 
-                var modelUpdate = LlmAsJudgeAutomationRuleEvaluatorModel.builder()
-                        .code(AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.code()))
-                        .lastUpdatedBy(userName)
-                        .build();
+                AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
+                    case AutomationRuleEvaluatorUpdateLlmAsJudge evaluatorUpdateLlmAsJudge ->
+                        LlmAsJudgeAutomationRuleEvaluatorModel.builder()
+                                .code(AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdateLlmAsJudge.getCode()))
+                                .lastUpdatedBy(userName)
+                                .build();
+                    case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython ->
+                        UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
+                                .code(AutomationModelEvaluatorMapper.INSTANCE
+                                        .map(evaluatorUpdateUserDefinedMetricPython.getCode()))
+                                .lastUpdatedBy(userName)
+                                .build();
+                };
 
                 int resultEval = dao.updateEvaluator(id, modelUpdate);
 
@@ -169,6 +189,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     .map(ruleEvaluator -> switch (ruleEvaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                        case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                     })
                     .map(evaluator -> (T) evaluator)
                     .orElseThrow(this::newNotFoundException);
@@ -212,16 +234,18 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var total = dao.findCount(projectId, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR);
+            var criteria = AutomationRuleEvaluatorCriteria.builder().name(name).build();
+            var total = dao.findCount(workspaceId, projectId, criteria);
             var offset = (pageNum - 1) * size;
 
-            var criteria = AutomationRuleEvaluatorCriteria.builder().name(name).build();
             List<AutomationRuleEvaluator<?>> automationRuleEvaluators = List.copyOf(
                     dao.find(workspaceId, projectId, criteria, offset, size)
                             .stream()
                             .map(evaluator -> switch (evaluator) {
                                 case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                                     AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                                case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
+                                    AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                             })
                             .toList());
 
@@ -235,21 +259,22 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     @Cacheable(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-'+  $type", returnType = AutomationRuleEvaluator.class, wrapperType = List.class)
-    public List<AutomationRuleEvaluatorLlmAsJudge> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
-            @NonNull AutomationRuleEvaluatorType type) {
+    public <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(
+            @NonNull UUID projectId, @NonNull String workspaceId, @NonNull AutomationRuleEvaluatorType type) {
         log.debug("Finding AutomationRuleEvaluators with type '{}' in projectId '{}' and workspaceId '{}'", type,
                 projectId, workspaceId);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var criteria = AutomationRuleEvaluatorCriteria.builder().type(AutomationRuleEvaluatorType.LLM_AS_JUDGE)
-                    .build();
+            var criteria = AutomationRuleEvaluatorCriteria.builder().type(type).build();
 
             return dao.find(workspaceId, projectId, criteria)
                     .stream()
                     .map(evaluator -> switch (evaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
-                            AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                            (T) AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                        case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
+                            (T) AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                     })
                     .toList();
 

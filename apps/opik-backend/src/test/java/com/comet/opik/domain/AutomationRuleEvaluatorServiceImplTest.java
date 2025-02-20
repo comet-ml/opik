@@ -1,8 +1,11 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
-import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
+import com.comet.opik.api.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
+import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -13,17 +16,20 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
-import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.apache.commons.lang3.RandomStringUtils;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -34,48 +40,46 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-//TODO: Remove this test class after finsihing the implementation of the OnlineScoringEventListener class
+//TODO: Remove this test class after finishing the implementation of the OnlineScoringEventListener class
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AutomationRuleEvaluatorServiceImplTest {
 
     private static final String API_KEY = UUID.randomUUID().toString();
-    private static final String USER = UUID.randomUUID().toString();
+    private static final String USER = "user-" + RandomStringUtils.randomAlphanumeric(20);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String WORKSPACE_NAME = "workspace-" + UUID.randomUUID();
+    private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.randomAlphanumeric(20);
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-
     private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
 
     @RegisterExtension
     private static final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-    public static final String[] IGNORED_FIELDS = {"createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy",
-            "projectId"};
+    private static final WireMockUtils.WireMockRuntime WIRE_MOCK;
+    public static final String[] IGNORED_FIELDS = {
+            "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "projectId"};
 
     static {
         Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
 
-        wireMock = WireMockUtils.startWireMock();
+        WIRE_MOCK = WireMockUtils.startWireMock();
 
-        DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
-                .newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(REDIS.getRedisURI())
                         .jdbcUrl(MYSQL.getJdbcUrl())
-                        .runtimeInfo(wireMock.runtimeInfo())
+                        .runtimeInfo(WIRE_MOCK.runtimeInfo())
                         .customConfigs(
                                 List.of(
                                         new TestDropwizardAppExtensionUtils.CustomConfig("cacheManager.enabled",
@@ -87,47 +91,45 @@ class AutomationRuleEvaluatorServiceImplTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
-    private String baseURI;
-    private ClientSupport client;
     private AutomationRuleEvaluatorResourceClient evaluatorResourceClient;
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
-
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
+            MigrationUtils.runDbMigration(
+                    connection, CLICKHOUSE_CHANGELOG_FILE, ClickHouseContainerUtils.migrationParameters());
         }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.client = client;
 
         ClientSupportUtils.config(client);
 
-        mockTargetWorkspace(API_KEY, WORKSPACE_NAME, WORKSPACE_ID);
+        AuthTestUtils.mockTargetWorkspace(WIRE_MOCK.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
 
-        this.evaluatorResourceClient = new AutomationRuleEvaluatorResourceClient(this.client, baseURI);
-        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
+        var baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.evaluatorResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+    Stream<Class<? extends AutomationRuleEvaluator<?>>> getEvaluatorClass() {
+        return Stream.of(
+                AutomationRuleEvaluatorLlmAsJudge.class,
+                AutomationRuleEvaluatorUserDefinedMetricPython.class);
     }
 
-    @Test
-    void findAll__whenCacheIsEnabled__shouldCacheReturnedValue(AutomationRuleEvaluatorService service,
+    @ParameterizedTest
+    @MethodSource("getEvaluatorClass")
+    void findAll__whenCacheIsEnabled__shouldCacheReturnedValue(
+            Class<? extends AutomationRuleEvaluator<?>> evaluatorClass,
+            AutomationRuleEvaluatorService service,
             TransactionTemplate transactionTemplate) {
 
-        var projectName = factory.manufacturePojo(String.class);
+        var projectName = "project-" + RandomStringUtils.randomAlphanumeric(20);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var evaluator = createEvaluator(evaluatorClass, projectId);
 
-        var evaluator = createEvaluator(projectId);
-
-        List<AutomationRuleEvaluatorLlmAsJudge> judges = service.findAll(projectId, WORKSPACE_ID,
-                AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
@@ -135,14 +137,14 @@ class AutomationRuleEvaluatorServiceImplTest {
         // Going around the service to delete the evaluator
         deleteEvaluator(transactionTemplate, evaluator);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
     }
 
-    private void deleteEvaluator(TransactionTemplate transactionTemplate, AutomationRuleEvaluatorLlmAsJudge evaluator) {
-        transactionTemplate.inTransaction(WRITE, handle -> {
+    private void deleteEvaluator(TransactionTemplate transactionTemplate, AutomationRuleEvaluator<?> evaluator) {
+        transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE, handle -> {
             handle.createUpdate("DELETE FROM automation_rule_evaluators WHERE id = :id")
                     .bind("id", evaluator.getId())
                     .execute();
@@ -154,9 +156,10 @@ class AutomationRuleEvaluatorServiceImplTest {
         });
     }
 
-    private AutomationRuleEvaluatorLlmAsJudge createEvaluator(UUID projectId) {
+    private AutomationRuleEvaluator<?> createEvaluator(
+            Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, UUID projectId) {
         return Optional.of(
-                factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                factory.manufacturePojo(evaluatorClass).toBuilder()
                         .projectId(projectId)
                         .build())
                 .map(e -> e.toBuilder()
@@ -165,87 +168,99 @@ class AutomationRuleEvaluatorServiceImplTest {
                 .orElseThrow();
     }
 
-    private void assertEvaluator(AutomationRuleEvaluatorLlmAsJudge expected, AutomationRuleEvaluatorLlmAsJudge actual) {
+    private void assertEvaluator(AutomationRuleEvaluator<?> expected, AutomationRuleEvaluator<?> actual) {
         assertThat(actual)
                 .usingRecursiveComparison()
                 .ignoringCollectionOrder()
-                .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "projectId")
+                .ignoringFields(IGNORED_FIELDS)
                 .isEqualTo(expected);
     }
 
-    private void assertEvaluator(Collection<AutomationRuleEvaluatorLlmAsJudge> expected,
-            Collection<AutomationRuleEvaluatorLlmAsJudge> actual) {
+    private void assertEvaluator(Collection<AutomationRuleEvaluator<?>> expected,
+            Collection<AutomationRuleEvaluator<Object>> actual) {
         assertThat(actual)
                 .usingRecursiveComparison()
                 .ignoringCollectionOrder()
-                .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "projectId")
+                .ignoringFields(IGNORED_FIELDS)
                 .isEqualTo(expected);
     }
 
-    @Test
-    void findAll__whenANewEvaluatorIsCreated__shouldInvalidateCache(AutomationRuleEvaluatorService service,
-            TransactionTemplate transactionTemplate) {
+    @ParameterizedTest
+    @MethodSource("getEvaluatorClass")
+    void findAll__whenANewEvaluatorIsCreated__shouldInvalidateCache(
+            Class<? extends AutomationRuleEvaluator<?>> evaluatorClass,
+            AutomationRuleEvaluatorService service) {
 
-        var projectName = factory.manufacturePojo(String.class);
+        var projectName = "project-" + RandomStringUtils.randomAlphanumeric(20);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var evaluator = createEvaluator(evaluatorClass, projectId);
 
-        var evaluator = createEvaluator(projectId);
-
-        List<AutomationRuleEvaluatorLlmAsJudge> judges = service.findAll(projectId, WORKSPACE_ID,
-                AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
 
-        var evaluator2 = createEvaluator(projectId);
+        var evaluator2 = createEvaluator(evaluatorClass, projectId);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        judges = service.findAll(projectId, WORKSPACE_ID, evaluator2.getType());
 
         assertThat(judges).hasSize(2);
         assertEvaluator(Set.of(evaluator, evaluator2), judges);
     }
 
-    @Test
-    void findAll__whenANewEvaluatorIsUpdated__shouldInvalidateCache(AutomationRuleEvaluatorService service) {
+    Stream<Arguments> findAll__whenANewEvaluatorIsUpdated__shouldInvalidateCache() {
+        return Stream.of(
+                arguments(
+                        AutomationRuleEvaluatorLlmAsJudge.class,
+                        AutomationRuleEvaluatorUpdateLlmAsJudge.class),
+                arguments(
+                        AutomationRuleEvaluatorUserDefinedMetricPython.class,
+                        AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class));
+    }
 
-        var projectName = factory.manufacturePojo(String.class);
+    @ParameterizedTest
+    @MethodSource
+    void findAll__whenANewEvaluatorIsUpdated__shouldInvalidateCache(
+            Class<? extends AutomationRuleEvaluator<?>> evaluatorClass,
+            Class<? extends AutomationRuleEvaluatorUpdate<?>> evaluatorUpdateClass,
+            AutomationRuleEvaluatorService service) {
+
+        var projectName = "project-" + RandomStringUtils.randomAlphanumeric(20);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var evaluator = createEvaluator(evaluatorClass, projectId);
 
-        var evaluator = createEvaluator(projectId);
-
-        List<AutomationRuleEvaluatorLlmAsJudge> judges = service.findAll(projectId, WORKSPACE_ID,
-                AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
 
-        var evaluatorUpdate = factory.manufacturePojo(AutomationRuleEvaluatorUpdate.class);
-
+        var evaluatorUpdate = factory.manufacturePojo(evaluatorUpdateClass);
         service.update(evaluator.getId(), projectId, WORKSPACE_ID, USER, evaluatorUpdate);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        judges = service.findAll(projectId, WORKSPACE_ID, evaluatorUpdate.getType());
 
         assertThat(judges).hasSize(1);
-        assertThat(judges.getFirst().getName()).isEqualTo(evaluatorUpdate.name());
+        assertThat(judges.getFirst().getName()).isEqualTo(evaluatorUpdate.getName());
     }
 
-    @Test
-    void findAll__whenANewEvaluatorIsDeleted__shouldInvalidateCache(AutomationRuleEvaluatorService service) {
+    @ParameterizedTest
+    @MethodSource("getEvaluatorClass")
+    void findAll__whenANewEvaluatorIsDeleted__shouldInvalidateCache(
+            Class<? extends AutomationRuleEvaluator<?>> evaluatorClass,
+            AutomationRuleEvaluatorService service) {
 
-        var projectName = factory.manufacturePojo(String.class);
+        var projectName = "project-" + RandomStringUtils.randomAlphanumeric(20);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var evaluator = createEvaluator(evaluatorClass, projectId);
 
-        var evaluator = createEvaluator(projectId);
-
-        List<AutomationRuleEvaluatorLlmAsJudge> judges = service.findAll(projectId, WORKSPACE_ID,
-                AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
 
         service.delete(Set.of(evaluator.getId()), projectId, WORKSPACE_ID);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
         assertThat(judges).isEmpty();
     }

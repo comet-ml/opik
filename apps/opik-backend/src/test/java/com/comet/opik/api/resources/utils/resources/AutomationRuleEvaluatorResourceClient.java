@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
@@ -26,18 +27,15 @@ public class AutomationRuleEvaluatorResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName,
-            String apiKey) {
+    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName, String apiKey) {
         try (var actualResponse = createEvaluator(evaluator, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-
+            assertThat(actualResponse.hasEntity()).isFalse();
             return TestUtils.getIdFromLocation(actualResponse.getLocation());
         }
     }
 
-    public Response createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName,
-            String apiKey,
-            int expectedStatus) {
+    public Response createEvaluator(
+            AutomationRuleEvaluator<?> evaluator, String workspaceName, String apiKey, int expectedStatus) {
         var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -50,42 +48,95 @@ public class AutomationRuleEvaluatorResourceClient {
         return actualResponse;
     }
 
-    public void updateEvaluator(UUID evaluatorId, String workspaceName,
-            AutomationRuleEvaluatorUpdate updatedEvaluator, String apiKey, boolean isAuthorized,
-            io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+    public Response getEvaluator(UUID id, UUID projectId, String workspaceName, String apiKey, int expectedStatus) {
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .queryParam("project_id", projectId)
+                .request()
+                .header(WORKSPACE_HEADER, workspaceName)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .get();
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+        return actualResponse;
+    }
+
+    public Response findEvaluator(
+            UUID projectId,
+            String name,
+            Integer page,
+            Integer size,
+            String workspaceName,
+            String apiKey,
+            int expectedStatus) {
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("project_id", projectId)
+                .queryParam("name", name)
+                .queryParam("page", page)
+                .queryParam("size", size)
+                .request()
+                .header(WORKSPACE_HEADER, workspaceName)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .get();
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+        return actualResponse;
+    }
+
+    public Response updateEvaluator(
+            UUID evaluatorId,
+            String workspaceName,
+            AutomationRuleEvaluatorUpdate<?> updatedEvaluator,
+            String apiKey,
+            int expectedStatus) {
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(evaluatorId.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .method(HttpMethod.PATCH, Entity.json(updatedEvaluator))) {
+                .method(HttpMethod.PATCH, Entity.json(updatedEvaluator));
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        return actualResponse;
+    }
 
-            if (isAuthorized) {
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            } else {
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
-                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                        .isEqualTo(errorMessage);
-            }
-        }
+    public Response delete(
+            UUID projectId, String workspaceName, String apiKey, BatchDelete request, int expectedStatus) {
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .queryParam("project_id", projectId)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        return actualResponse;
     }
 
     public LogPage getLogs(UUID evaluatorId, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = getLogs(evaluatorId, workspaceName, apiKey, HttpStatus.SC_OK)) {
+            assertThat(actualResponse.hasEntity()).isTrue();
+            return actualResponse.readEntity(LogPage.class);
+        }
+    }
+
+    public Response getLogs(UUID evaluatorId, String workspaceName, String apiKey, int expectedStatus) {
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(evaluatorId.toString())
                 .path("logs")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
+                .get();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
-            return actualResponse.readEntity(LogPage.class);
-        }
+        return actualResponse;
     }
-
 }
