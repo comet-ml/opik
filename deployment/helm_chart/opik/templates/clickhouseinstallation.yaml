@@ -41,10 +41,14 @@ spec:
     profiles:
       {{ .Values.clickhouse.monitoring.username }}/readonly: 1
     {{- end }}
+
+    {{- if .Values.clickhouse.configuration }}
     {{- with .Values.clickhouse.configuration.files }}
     files:
       {{- toYaml . | nindent 8 }}
     {{- end }}
+    {{- end }}
+    
     {{- if .Values.zookeeper.enabled }}
     zookeeper:
         nodes:
