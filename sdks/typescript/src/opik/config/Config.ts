@@ -98,6 +98,6 @@ export function validateConfig(config: OpikConfig) {
   return config;
 }
 
-function isCloud(host: string) {
-  return new URL(host).hostname.endsWith("comet.com");
+function isCloud(apiUrl: string) {
+  return new URL(apiUrl).hostname.endsWith("comet.com");
 }

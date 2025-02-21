@@ -28,6 +28,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.inputs.version || inputs.version }}
+      IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}
     defaults:
       run:
         working-directory: sdks/typescript
@@ -49,7 +52,7 @@ jobs:
         run: npm ci
 
       - name: Update version
-        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+        run: npm version ${{ env.VERSION }} --no-git-tag-version
 
       - name: Build package
         run: npm run build
@@ -62,7 +65,7 @@ jobs:
           git commit -m "Update TypeScript SDK version to $(node -p "require('./package.json').version")"
 
       - name: Publish to NPM
-        if: ${{ github.event.inputs.is_release }}
+        if: ${{ env.IS_RELEASE }}
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
