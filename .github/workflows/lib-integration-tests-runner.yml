@@ -20,6 +20,7 @@ on:
           - guardrails
           - dspy
           - crewai
+          - genai
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -102,3 +103,10 @@ jobs:
     if: contains(fromJSON('["crewai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-crewai-tests.yml
     secrets: inherit
+  
+  genai_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["genai", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-genai-tests.yml
+    secrets: inherit
+

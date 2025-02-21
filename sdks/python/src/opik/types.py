@@ -12,7 +12,7 @@ else:
 SpanType = Literal["general", "tool", "llm"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
-LLMProvider = Literal["openai", "google_vertexai"]
+LLMProvider = Literal["openai", "google_vertexai", "google_ai"]
 
 
 class UsageDict(TypedDict):
@@ -33,7 +33,7 @@ class UsageDict(TypedDict):
     """The total number of tokens used, including both prompt and completion."""
 
 
-class UsageDictVertexAI(UsageDict):
+class UsageDictGoogle(UsageDict):
     """
     A TypedDict representing token usage information for Google Vertex AI.
 
@@ -110,4 +110,4 @@ class ErrorInfoDict(TypedDict):
 class LLMUsageInfo:
     provider: Optional[str] = None
     model: Optional[str] = None
-    usage: Optional[Union[UsageDict, UsageDictVertexAI]] = None
+    usage: Optional[Union[UsageDict, UsageDictGoogle]] = None

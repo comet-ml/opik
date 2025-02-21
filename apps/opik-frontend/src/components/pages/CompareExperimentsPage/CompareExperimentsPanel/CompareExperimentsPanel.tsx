@@ -89,7 +89,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
           } as React.CSSProperties
         }
       >
-        <h2 className="comet-title-m pb-3 pt-5">
+        <h2 className="comet-title-s pb-3 pt-5">
           {isSeveralExperiments ? "Experiment items" : "Experiment item"}
         </h2>
 
