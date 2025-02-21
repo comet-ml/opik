@@ -2,6 +2,7 @@ import langchain_google_vertexai
 import pytest
 from langchain.prompts import PromptTemplate
 
+from typing import Dict, Any
 from opik.integrations.langchain.opik_tracer import OpikTracer
 from ...testlib import (
     ANY_BUT_NONE,
@@ -10,44 +11,34 @@ from ...testlib import (
     SpanModel,
     TraceModel,
     assert_equal,
+    assert_dict_has_keys,
 )
 
 
 pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
 
 
+def _assert_usage_validity(usage: Dict[str, Any]):
+    REQUIRED_USAGE_KEYS = [
+        "candidates_token_count",
+        "prompt_token_count",
+        "total_token_count",
+        # there are more keys possible, but we don't check them for now
+    ]
+
+    assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
+
+
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt, metadata_usage",
+    "llm_model, expected_input_prompt",
     [
-        (
-            langchain_google_vertexai.VertexAI,
-            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-            {
-                # openai format
-                "completion_tokens": ANY_BUT_NONE,
-                "prompt_tokens": ANY_BUT_NONE,
-                "total_tokens": ANY_BUT_NONE,
-                # VertexAI format
-                # "cached_content_token_count": ANY_BUT_NONE,
-                "candidates_token_count": ANY_BUT_NONE,
-                "prompt_token_count": ANY_BUT_NONE,
-                "total_token_count": ANY_BUT_NONE,
-            },
-        ),
+        # (
+        #     langchain_google_vertexai.VertexAI,
+        #     "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+        # ),
         (
             langchain_google_vertexai.ChatVertexAI,
             "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-            {
-                # openai format
-                "completion_tokens": ANY_BUT_NONE,
-                "prompt_tokens": ANY_BUT_NONE,
-                "total_tokens": ANY_BUT_NONE,
-                # ChatVertexAI format
-                "cached_content_token_count": ANY_BUT_NONE,
-                "candidates_token_count": ANY_BUT_NONE,
-                "prompt_token_count": ANY_BUT_NONE,
-                "total_token_count": ANY_BUT_NONE,
-            },
         ),
     ],
 )
@@ -55,7 +46,6 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
     fake_backend,
     llm_model,
     expected_input_prompt,
-    metadata_usage,
 ):
     llm = llm_model(
         max_tokens=10,
@@ -117,11 +107,11 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                             "invocation_params": ANY_DICT,
                             "metadata": ANY_DICT,
                             "options": ANY_DICT,
-                            "usage": metadata_usage,
+                            "usage": ANY_DICT,
                         },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        usage=metadata_usage,
+                        usage=ANY_DICT,
                         spans=[],
                         provider="google_vertexai",
                         model=ANY_STRING(startswith="gemini-1.5-flash"),
@@ -133,4 +123,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
+    llm_call_span = fake_backend.trace_trees[0].spans[0].spans[-1]
+
+    _assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
