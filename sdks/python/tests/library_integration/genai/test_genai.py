@@ -22,6 +22,8 @@ from ...testlib import (
 )
 import tenacity
 
+pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
+
 MODEL = "gemini-2.0-flash"
 
 

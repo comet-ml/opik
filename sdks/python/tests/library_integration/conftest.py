@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from .. import testlib
 
 
 @pytest.fixture()
@@ -12,17 +13,41 @@ def ensure_openai_configured():
 
 
 @pytest.fixture
-def gcp_e2e_test_credentials():
-    gcp_credentials_file_name = "gcp_credentials.json"
+def ensure_google_project_and_location_configured():
+    if not (
+        "GOOGLE_CLOUD_PROJECT" in os.environ and "GOOGLE_CLOUD_LOCATION" in os.environ
+    ):
+        raise Exception(
+            "GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION env vars must be set!"
+        )
 
-    gcp_credentials = os.environ["GCP_E2E_TEST_CREDENTIALS"]
 
-    with open(gcp_credentials_file_name, mode="wt") as file:
-        file.write(gcp_credentials)
+@pytest.fixture
+def ensure_vertexai_configured(ensure_google_project_and_location_configured):
+    GOOGLE_APPLICATION_CREDENTIALS_PATH = "gcp_credentials.json"
 
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcp_credentials_file_name
+    if "GITHUB_ACTIONS" not in os.environ:
+        if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
+            raise Exception("GOOGLE_APPLICATION_CREDENTIALS env var must be configured")
+        yield
+        return
 
-    yield
+    if "GCP_CREDENTIALS_JSON" not in os.environ:
+        raise Exception(
+            "GCP_CREDENTIALS_JSON env var with credentials json content must be set"
+        )
 
-    del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
-    os.remove(gcp_credentials_file_name)
+    try:
+        gcp_credentials = os.environ["GCP_CREDENTIALS_JSON"]
+        with open(GOOGLE_APPLICATION_CREDENTIALS_PATH, mode="wt") as output_file:
+            output_file.write(gcp_credentials)
+
+        with testlib.patch_environ(
+            add_keys={
+                "GOOGLE_APPLICATION_CREDENTIALS": GOOGLE_APPLICATION_CREDENTIALS_PATH
+            }
+        ):
+            yield
+    finally:
+        if os.path.exists(GOOGLE_APPLICATION_CREDENTIALS_PATH):
+            os.remove(GOOGLE_APPLICATION_CREDENTIALS_PATH)
