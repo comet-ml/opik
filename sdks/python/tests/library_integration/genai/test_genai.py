@@ -47,13 +47,13 @@ def test_genai_client__generate_content__happyflow(
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
-        config=GenerateContentConfig(max_output_tokens=10),
     )
     client = track_genai(client, project_name=project_name)
 
     client.models.generate_content(
         model=MODEL,
         contents="What is the capital of Belarus?",
+        config=GenerateContentConfig(max_output_tokens=10),
     )
 
     opik.flush_tracker()
