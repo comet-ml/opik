@@ -85,9 +85,7 @@ If a `<COLUMN>` item refers to a nested object, then you can use the
 dot notation to access contained values by using its key. For example,
 you could use:
 
-```python
-"feedback_scores.accuracy > 0.5"
-```
+`"feedback_scores.accuracy > 0.5"`
 
 Here are some full examples of using `filter_string` values in searches:
 
@@ -117,25 +115,18 @@ traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
 ```
 
 :::tip
-
 If your `feedback_scores` item contains spaces, you will need to wrap
 them in double quotes:
 
-```python
-'feedback_score."My Score" > 0'
-```
+`'feedback_score."My Score" > 0'`
 
 If the feedback score contains both spaces and double quotes, you will need to escape the double quotes as `""`:
 
-```python
-'feedback_score."Score ""with"" Quotes" > 0'
-```
+`'feedback_score."Score ""with"" Quotes" > 0'`
 
 or by using different quotes, surrounding in a triple-quote, like this:
 
-```python
-'''feedback_scores.'Accuracy "Happy Index"' < 0.8'''
-```
+`'''feedback_scores.'Accuracy "Happy Index"' < 0.8'''`
 :::
 
 ### Exporting spans
