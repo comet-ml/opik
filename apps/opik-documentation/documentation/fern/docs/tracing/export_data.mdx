@@ -114,20 +114,20 @@ traces = client.search_traces(filter_string='usage.total_tokens > 1000')
 traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
 ```
 
-:::tip
-If your `feedback_scores` item contains spaces, you will need to wrap
-them in double quotes:
+<Tip>
+If your `feedback_scores` key contains spaces, you will need to wrap
+it in double quotes:
 
 `'feedback_score."My Score" > 0'`
 
-If the feedback score contains both spaces and double quotes, you will need to escape the double quotes as `""`:
+If the `feedback_score` key contains both spaces and double quotes, you will need to escape the double quotes as `""`:
 
 `'feedback_score."Score ""with"" Quotes" > 0'`
 
-or by using different quotes, surrounding in a triple-quote, like this:
+or by using different quotes, surrounding in triple-quotes, like this:
 
 `'''feedback_scores.'Accuracy "Happy Index"' < 0.8'''`
-:::
+</Tip>
 
 ### Exporting spans
 
