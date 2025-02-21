@@ -31,7 +31,7 @@ def _is_rate_limit_error(exception: Exception) -> bool:
     return False
 
 
-retry_on_internal_server_errors = tenacity.retry(
+retry_with_waiting_on_rate_limit_errors = tenacity.retry(
     stop=tenacity.stop_after_attempt(3),
     wait=tenacity.wait_incrementing(start=5, increment=5),
     retry=tenacity.retry_if_exception(_is_rate_limit_error),
@@ -48,6 +48,7 @@ def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     assert_dict_has_keys(metadata, REQUIRED_METADATA_KEYS)
 
 
+@retry_with_waiting_on_rate_limit_errors
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
@@ -121,6 +122,7 @@ def test_genai_client__generate_content__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__async_generate_content__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
@@ -180,6 +182,7 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@retry_with_waiting_on_rate_limit_errors
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
@@ -259,6 +262,7 @@ def test_genai_client__generate_content_called_inside_another_tracked_function__
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__async_generate_content_called_inside_another_tracked_function__happyflow(
     fake_backend,
 ):
@@ -328,6 +332,7 @@ def test_genai_client__async_generate_content_called_inside_another_tracked_func
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__generate_content_stream__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
@@ -390,6 +395,7 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
@@ -452,6 +458,7 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__generate_content_stream_called_inside_another_tracked_function__generations_started_after_the_parent_span_closed__llm_span_attached_to_a_parent_function_span(
     fake_backend,
 ):
@@ -527,6 +534,7 @@ def test_genai_client__generate_content_stream_called_inside_another_tracked_fun
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
+@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__async_generate_content_stream_called_inside_another_tracked_function__generations_started_after_the_parent_span_closed__llm_span_has_a_separate_trace(
     fake_backend,
 ):
