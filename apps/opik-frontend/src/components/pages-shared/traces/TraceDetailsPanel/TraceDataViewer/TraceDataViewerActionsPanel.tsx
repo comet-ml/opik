@@ -75,7 +75,13 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
       >
         <MessageSquareMore className="size-4" />
         <div className="hidden 3xl:block 3xl:pl-1">Comments</div>
-        {Boolean(commentsCount) && <div>({commentsCount})</div>}
+        {Boolean(commentsCount) && (
+          <div>
+            <span className="hidden 3xl:inline">(</span>
+            {commentsCount}
+            <span className="hidden 3xl:inline">)</span>
+          </div>
+        )}
       </Button>
 
       <Button
@@ -90,7 +96,13 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
       >
         <PenLine className="size-4" />
         <div className="hidden 3xl:block 3xl:pl-1">Feedback scores</div>
-        {Boolean(annotationCount) && <div>({annotationCount})</div>}
+        {Boolean(annotationCount) && (
+          <div>
+            <span className="hidden 3xl:inline">(</span>
+            {annotationCount}
+            <span className="hidden 3xl:inline">)</span>
+          </div>
+        )}
       </Button>
 
       <DropdownMenu>

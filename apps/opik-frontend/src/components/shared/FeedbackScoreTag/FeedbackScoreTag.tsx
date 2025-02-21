@@ -19,7 +19,7 @@ type FeedbackScoreTagProps = {
 const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   label,
   value,
-  reason,
+  reason = "after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px",
   onDelete,
   className,
 }) => {
@@ -36,7 +36,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     <TooltipWrapper
       content={reason}
       delayDuration={100}
-      className="comet-body-xs max-w-[400px] border border-slate-200 bg-[#FCFCFD] px-2 py-1 text-foreground-secondary"
+      className="comet-body-xs max-w-[400px] border border-slate-200 bg-soft-background p-2 text-foreground-secondary"
       showArrow={false}
     >
       <MessageSquareMore className="size-3.5 text-light-slate" />
