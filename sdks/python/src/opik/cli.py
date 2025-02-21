@@ -6,9 +6,15 @@ from importlib import metadata
 
 import click
 
-from opik import Opik, config
+from opik import Opik, config, healthcheck as healthcheck_tools
 from opik.configurator import configure as opik_configure
 from opik.configurator import interactive_helpers
+from opik.rest_api import ForbiddenError, UnauthorizedError
+
+from rich.logging import RichHandler
+from rich.console import Console
+
+console = Console()
 
 LOGGER = logging.getLogger(__name__)
 
@@ -172,58 +178,45 @@ def proxy(
 
 
 @cli.command(context_settings={"ignore_unknown_options": True})
-def healthcheck() -> None:
+@click.option(
+    "--show-installed-packages",
+    is_flag=True,
+    default=False,
+    help="Print the list of installed packages to the console.",
+)
+def healthcheck(show_installed_packages: bool = True) -> None:
     """
     Performs a health check of the application, including validation of configuration,
     verification of library installations, and checking the availability of the backend workspace.
     Logs all relevant information to assist in debugging and diagnostics.
     """
-    LOGGER.info("*** HEALTHCHECK STARTED ***")
+    healthcheck_tools.print_header("healthcheck started")
 
-    LOGGER.info(f"Python version: {sys.version}")
-    LOGGER.info(f"Opik version: {__version__}")
+    healthcheck_tools.print_opik_version()
 
-    print()
-    LOGGER.info("\n*** LIBRARIES INSTALLED. ***")
-    installed_packages = {
-        pkg.metadata["Name"]: pkg.version for pkg in metadata.distributions()
-    }
-    for name, version in sorted(installed_packages.items()):
-        LOGGER.info(f"{name}=={version}")
+    if show_installed_packages:
+        console.print()
+        healthcheck_tools.print_header("libraries installed")
+        healthcheck_tools.print_installed_packages()
 
-    print()
-    LOGGER.info("*** CONFIGURATION FILE ***")
-    config_obj = config.OpikConfig()
-    LOGGER.info(f"Config file path: {config_obj.config_file_fullpath}")
-    LOGGER.info(f"Config file exists: {config_obj.is_config_file_exists}")
+    console.print()
+    healthcheck_tools.print_header("configuration file")
+    healthcheck_tools.print_config_file_details()
 
-    print()
-    LOGGER.info("*** CURRENT SETTINGS ***")
+    console.print()
+    healthcheck_tools.print_header("current settings")
+    healthcheck_tools.print_current_settings()
 
-    config_dict = config_obj.model_dump()
-    for key, value in sorted(config_dict.items()):
-        if key.lower() == "api_key" and value is not None:
-            value = "***HIDDEN***"
-        LOGGER.info(f"{key}: {value}")
+    console.print()
+    healthcheck_tools.print_header("current settings validation")
+    healthcheck_tools.print_current_settings_validation(print_error_details=True)
 
-    print()
-    LOGGER.info("*** CURRENT SETTINGS VALIDATION ***")
-    LOGGER.info(
-        f"Current configuration is valid: {not config.is_misconfigured(config_obj, True)}"
-    )
+    console.print()
+    healthcheck_tools.print_header("checking backend workspace availability")
+    healthcheck_tools.print_backend_workspace_availability()
 
-    print()
-    LOGGER.info("*** CHECKING BACKEND WORKSPACE AVAILABILITY ***")
-    try:
-        opik = Opik()
-        opik.auth_check()
-        LOGGER.info("workspace available: True")
-    except Exception as e:
-        LOGGER.info("workspace available: False")
-        LOGGER.error(f"Error while checking backend workspace availability: {e}")
-
-    print()
-    LOGGER.info("*** HEALTHCHECK COMPLETED ***")
+    console.print()
+    healthcheck_tools.print_header("healthcheck completed")
 
 
 if __name__ == "__main__":

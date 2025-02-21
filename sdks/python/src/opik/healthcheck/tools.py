@@ -1,0 +1,198 @@
+import io
+import logging
+import sys
+from contextlib import redirect_stdout, redirect_stderr
+from importlib import metadata
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
+from httpx import ConnectError
+from rich import align
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
+
+from opik import Opik, config
+
+from unittest.mock import patch
+
+from opik.rest_api.core import ApiError
+
+# from rich import console, panel, table, text, align
+
+LOGGER_NAME = "healthcheck"
+LOGGER = logging.getLogger(__name__)
+
+console = Console()
+
+DEFAULT_KEY_COLOR = "green"
+DEFAULT_VALUE_COLOR = "blue"
+
+
+def print_header(text: str) -> None:
+    header_text = f"*** {text.upper()} ***"
+    header_text = Text(header_text)
+    header_text.stylize("bold")
+    header_text = align.Align.left(header_text)
+
+    console.print(header_text)
+
+
+def get_installed_packages() -> Dict[str, str]:
+    installed_packages = {
+        pkg.metadata["Name"]: pkg.version for pkg in metadata.distributions()
+    }
+    return installed_packages
+
+
+def print_installed_packages() -> None:
+    for name, version in sorted(get_installed_packages().items()):
+        name = Text(name, style=DEFAULT_KEY_COLOR)
+        version = Text(version, style=DEFAULT_VALUE_COLOR)
+
+        console.print(name, "==", version, sep="")
+
+
+def get_opik_version() -> Tuple[str, str]:
+    """
+    Retrieve and return the Python version and the Opik version.
+    """
+    try:
+        opik_version = metadata.version("opik")
+    except metadata.PackageNotFoundError:
+        opik_version = "0.0.0+dev"
+    return sys.version, opik_version
+
+
+def print_opik_version() -> None:
+    python_version, opik_version = get_opik_version()
+    python_version_label = Text("Python version:", style=DEFAULT_KEY_COLOR)
+    python_version = Text(python_version, style=DEFAULT_VALUE_COLOR)
+    opik_version_label = Text("Opik version:", style=DEFAULT_KEY_COLOR)
+    opik_version = Text(opik_version, style=DEFAULT_VALUE_COLOR)
+
+    console.print(python_version_label, python_version)
+    console.print(opik_version_label, opik_version)
+
+
+def get_config_file_details() -> Tuple[Path, bool]:
+    config_obj = config.OpikConfig()
+    return config_obj.config_file_fullpath, config_obj.is_config_file_exists
+
+
+def print_config_file_details() -> None:
+    file_path, is_exists = get_config_file_details()
+
+    file_path_label = Text("Config file path:", style=DEFAULT_KEY_COLOR)
+    file_path = Text(str(file_path), style=DEFAULT_VALUE_COLOR)
+    is_exists_label = Text("Config file exists:", style=DEFAULT_KEY_COLOR)
+    is_exists = Text(str(is_exists), style=DEFAULT_VALUE_COLOR)
+
+    console.print(file_path_label, file_path)
+    console.print(is_exists_label, is_exists)
+
+
+def get_current_settings() -> Dict[str, Any]:
+    config_obj = config.OpikConfig()
+    settings = config_obj.model_dump()
+    if "api_key" in settings:
+        settings["api_key"] = "*** HIDDEN ***"
+    return settings
+
+
+def print_current_settings() -> None:
+    current_settings = get_current_settings()
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Setting", style=DEFAULT_KEY_COLOR)
+    table.add_column("Value", style=DEFAULT_VALUE_COLOR)
+
+    for key, value in sorted(current_settings.items()):
+        table.add_row(key, str(value))
+
+    console.print(table)
+
+
+def print_current_settings_validation(print_error_details: bool = True) -> None:
+    config_obj = config.OpikConfig()
+    is_valid = not config.is_misconfigured(config_obj, False)
+    is_valid_text = Text(str(is_valid), style=DEFAULT_VALUE_COLOR)
+    is_valid_label = Text("Current configuration is valid:", style=DEFAULT_KEY_COLOR)
+
+    console.print(is_valid_label, is_valid_text)
+
+    if print_error_details and not is_valid:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            config.is_misconfigured(config_obj, True)
+
+        err_msg = Text(buffer.getvalue().rstrip("\n"), style="red")
+        console.print(err_msg)
+
+
+def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
+    is_available = False
+    err_msg = None
+
+    try:
+        # supress showing configuration errors
+        with patch("opik.config.is_misconfigured", lambda *args, **kwargs: False):
+            opik = Opik()
+
+        opik.auth_check()
+        is_available = True
+    except ConnectError as e:
+        err_msg = (
+            f"Error while checking backend workspace availability: {e}\n\n"
+            "Can't connect to the backend service. If you are using local Opik deployment, "
+            "please check https://www.comet.com/docs/opik/self-host/local_deployment\n\n"
+            "If you are using cloud version - please check your internet connection."
+        )
+    except Exception as e:
+        err_msg = f"Error while checking backend workspace availability: {e}"
+
+    return is_available, err_msg
+
+
+def get_backend_workspace_availability___old() -> Tuple[bool, str]:
+    is_available = False
+    err_msg = ""
+
+    buffer = io.StringIO()
+
+
+    handler = logging.StreamHandler(buffer)
+    logger = logging.getLogger()  # Get the root logger
+    logger.addHandler(handler)  # Add our handler to capture log messages
+    logger.setLevel(logging.DEBUG)  # Set an appropriate logging level
+
+
+    try:
+        with redirect_stdout(buffer), redirect_stderr(buffer):
+            opik = Opik()
+        opik.auth_check()
+        is_available = True
+    # except UnauthorizedError as e:
+    #     healthcheck_logger.info("workspace available: False - UnauthorizedError")
+    #     healthcheck_logger.info("workspace available: False")
+    # except ForbiddenError as e:
+    #     healthcheck_logger.info("workspace available: False")
+    #     healthcheck_logger.info("workspace available: False - ForbiddenError")
+    except Exception as e:
+        err_msg = f"Error while checking backend workspace availability: {e}"
+    finally:
+        logger.removeHandler(handler)  # Clean up the logging handler
+
+    return is_available, err_msg
+
+
+def print_backend_workspace_availability():
+    is_available, err_msg = get_backend_workspace_availability()
+
+    is_available_text = Text(str(is_available), style=DEFAULT_VALUE_COLOR)
+    is_available_label = Text("Backend workspace available:", style=DEFAULT_KEY_COLOR)
+
+    console.print(is_available_label, is_available_text)
+
+    if err_msg:
+        err_msg = Text(err_msg, style="red")
+        console.print(err_msg)
