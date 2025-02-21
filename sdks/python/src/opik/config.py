@@ -271,12 +271,39 @@ def is_misconfigured(
         is determined to be misconfigured. Defaults to False.
     """
 
+    is_misconfigured_for_cloud_flag, error_message = is_misconfigured_for_cloud(config)
+
+    if is_misconfigured_for_cloud_flag:
+        if show_misconfiguration_message:
+            print()
+            LOGGER.error(
+                "========================\n"
+                f"{error_message}\n"
+                "==============================\n"
+            )
+        return True
+
+    is_misconfigured_for_local_flag, error_message = is_misconfigured_for_local(config)
+
+    if is_misconfigured_for_local_flag:
+        if show_misconfiguration_message:
+            print()
+            LOGGER.error(
+                "========================\n"
+                f"{error_message}\n"
+                "==============================\n"
+            )
+        return True
+
+    return False
+
+
+def is_misconfigured_for_cloud(
+    config: OpikConfig,
+) -> Tuple[bool, Optional[str]]:
     cloud_installation = url_helpers.get_base_url(
         config.url_override
     ) == url_helpers.get_base_url(OPIK_URL_CLOUD)
-    localhost_installation = (
-        "localhost" in config.url_override
-    )  # does not detect all OSS installations
     workspace_is_default = config.workspace == OPIK_WORKSPACE_DEFAULT_NAME
     api_key_configured = config.api_key is not None
     tracking_disabled = config.track_disable
@@ -286,28 +313,33 @@ def is_misconfigured(
         and (not api_key_configured or workspace_is_default)
         and not tracking_disabled
     ):
-        if show_misconfiguration_message:
-            print()
-            LOGGER.error(
-                "========================\n"
-                "The workspace and API key must be specified to log data to https://www.comet.com/opik.\n"
-                "You can use `opik configure` CLI command to configure your environment for logging.\n"
-                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration.\n"
-                "==============================\n"
-            )
-        return True
+        error_message = (
+            "The workspace and API key must be specified to log data to https://www.comet.com/opik.\n"
+            "You can use `opik configure` CLI command to configure your environment for logging.\n"
+            "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration.\n"
+        )
+        return True, error_message
+
+    return False, None
+
+
+def is_misconfigured_for_local(
+    config: OpikConfig,
+) -> Tuple[bool, Optional[str]]:
+
+    localhost_installation = (
+        "localhost" in config.url_override
+    )  # does not detect all OSS installations
+    workspace_is_default = config.workspace == OPIK_WORKSPACE_DEFAULT_NAME
+    tracking_disabled = config.track_disable
 
     if localhost_installation and not workspace_is_default and not tracking_disabled:
-        if show_misconfiguration_message:
-            print()
-            LOGGER.error(
-                "========================\n"
-                "Open source installations do not support workspace specification. Only `default` is available.\n"
-                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration\n"
-                "If you need advanced workspace management - you may consider using our cloud offer (https://www.comet.com/site/pricing/)\n"
-                "or contact our team for purchasing and setting up a self-hosted installation.\n"
-                "==============================\n"
-            )
-        return True
+        error_message = (
+            "Open source installations do not support workspace specification. Only `default` is available.\n"
+            "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration\n"
+            "If you need advanced workspace management - you may consider using our cloud offer (https://www.comet.com/site/pricing/)\n"
+            "or contact our team for purchasing and setting up a self-hosted installation.\n"
+        )
+        return True, error_message
 
-    return False
+    return False, None
