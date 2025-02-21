@@ -21,8 +21,7 @@ DEFAULT_ERROR_COLOR = "red"
 
 def print_header(text: str) -> None:
     header_text = f"*** {text.upper()} ***"
-    header_text = Text(header_text)
-    header_text.stylize("bold")
+    header_text = Text(header_text, style="bold magenta")
     header_text = align.Align.left(header_text)
 
     console.print()
@@ -107,7 +106,9 @@ def print_current_settings_validation() -> None:
     config_obj = config.OpikConfig()
 
     is_valid = not config.is_misconfigured(config_obj, False)
-    is_valid_text = Text(str(is_valid), style=DEFAULT_VALUE_COLOR if is_valid else DEFAULT_ERROR_COLOR)
+    is_valid_text = Text(
+        str(is_valid), style=DEFAULT_VALUE_COLOR if is_valid else DEFAULT_ERROR_COLOR
+    )
     is_valid_label = Text("Current configuration is valid:", style=DEFAULT_KEY_COLOR)
 
     console.print(is_valid_label, is_valid_text)
@@ -115,13 +116,17 @@ def print_current_settings_validation() -> None:
     if is_valid:
         return
 
-    is_misconfigured_for_cloud_flag, error_message = config.is_misconfigured_for_cloud(config_obj)
+    is_misconfigured_for_cloud_flag, error_message = config.is_misconfigured_for_cloud(
+        config_obj
+    )
     if is_misconfigured_for_cloud_flag:
         err_msg = Text(error_message, style="red")
         console.print(err_msg)
         return
 
-    is_misconfigured_for_local_flag, error_message = config.is_misconfigured_for_local(config_obj)
+    is_misconfigured_for_local_flag, error_message = config.is_misconfigured_for_local(
+        config_obj
+    )
     if is_misconfigured_for_local_flag:
         err_msg = Text(error_message, style="red")
         console.print(err_msg)
@@ -152,10 +157,13 @@ def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
     return is_available, err_msg
 
 
-def print_backend_workspace_availability():
+def print_backend_workspace_availability() -> None:
     is_available, err_msg = get_backend_workspace_availability()
 
-    is_available_text = Text(str(is_available), style=DEFAULT_VALUE_COLOR if is_available else DEFAULT_ERROR_COLOR)
+    is_available_text = Text(
+        str(is_available),
+        style=DEFAULT_VALUE_COLOR if is_available else DEFAULT_ERROR_COLOR,
+    )
     is_available_label = Text("Backend workspace available:", style=DEFAULT_KEY_COLOR)
 
     console.print(is_available_label, is_available_text)

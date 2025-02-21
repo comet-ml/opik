@@ -326,7 +326,6 @@ def is_misconfigured_for_cloud(
 def is_misconfigured_for_local(
     config: OpikConfig,
 ) -> Tuple[bool, Optional[str]]:
-
     localhost_installation = (
         "localhost" in config.url_override
     )  # does not detect all OSS installations
