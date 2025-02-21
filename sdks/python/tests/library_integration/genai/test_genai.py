@@ -25,7 +25,6 @@ import tenacity
 MODEL = "gemini-2.0-flash"
 
 
-
 def _is_rate_limit_error(exception: Exception) -> bool:
     if isinstance(exception, genai_errors.ClientError):
         return exception.response.status_code == 429
