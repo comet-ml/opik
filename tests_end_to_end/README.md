@@ -114,8 +114,8 @@ pytest -v
 # Run tests with live logs
 pytest -s
 
-# Run specific test file with setup information
-pytest tests/Projects/test_projects_crud_operations.py --setup-show
+# Show HTTP requests in test output
+pytest --show-requests  # Shows all API calls made during tests
 
 # Run tests with specific browser
 pytest --browser chromium  # default
@@ -123,4 +123,11 @@ pytest --browser firefox
 pytest --browser webkit
 
 # Combine multiple options
-pytest -v -s tests/Datasets/ --browser firefox --setup-show
+pytest -v -s tests/Datasets/ --browser firefox --setup-show --show-requests
+```
+
+The `--show-requests` flag is particularly useful when:
+- Debugging API integration issues
+- Understanding which API calls a test makes
+- Verifying the correct API endpoints are being called
+- Checking request/response patterns
