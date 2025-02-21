@@ -4,18 +4,18 @@ from typing import Any, Dict, Optional, Union
 import pydantic
 
 from . import result, validator
-from ..types import UsageDict, UsageDictVertexAI
+from ..types import UsageDict, UsageDictGoogle
 
 
 class PydanticWrapper(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")
-    usage: Union[UsageDict, UsageDictVertexAI]
+    usage: Union[UsageDict, UsageDictGoogle]
 
 
 @dataclasses.dataclass
 class ParsedUsage:
     full_usage: Optional[Dict[str, Any]] = None
-    supported_usage: Optional[Union[UsageDict, UsageDictVertexAI]] = None
+    supported_usage: Optional[Union[UsageDict, UsageDictGoogle]] = None
 
 
 EXPECTED_TYPES = "{'completion_tokens': int, 'prompt_tokens': int, 'total_tokens': int}"
@@ -40,7 +40,7 @@ class UsageValidator(validator.Validator):
                 PydanticWrapper(usage=filtered_usage)
 
                 if self.provider == "google_vertexai":
-                    supported_usage = UsageDictVertexAI(**filtered_usage)  # type: ignore
+                    supported_usage = UsageDictGoogle(**filtered_usage)  # type: ignore
                 else:
                     supported_usage = UsageDict(**filtered_usage)  # type: ignore
                 self.parsed_usage = ParsedUsage(
@@ -77,7 +77,7 @@ class UsageValidator(validator.Validator):
     @property
     def supported_keys(self) -> Dict[str, Any]:
         if self.provider == "google_vertexai":
-            supported_keys = UsageDictVertexAI.__annotations__.keys()
+            supported_keys = UsageDictGoogle.__annotations__.keys()
         # `openai` and all other
         else:
             supported_keys = UsageDict.__annotations__.keys()

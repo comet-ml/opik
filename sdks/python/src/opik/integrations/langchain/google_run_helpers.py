@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, Final, Optional, TYPE_CHECKING, Tuple
 
 from opik import logging_messages
-from opik.types import LLMProvider, LLMUsageInfo, UsageDictVertexAI
+from opik.types import LLMProvider, LLMUsageInfo, UsageDictGoogle
 from opik.validation import usage as usage_validator
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInf
     return LLMUsageInfo(provider=provider, model=model, usage=usage_dict)
 
 
-def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDictVertexAI]:
+def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDictGoogle]:
     try:
         provider, _ = _get_provider_and_model(run_dict)
 
@@ -31,7 +31,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDictVertexAI
             "usage_metadata"
         ]
 
-        token_usage = UsageDictVertexAI(
+        token_usage = UsageDictGoogle(
             completion_tokens=usage_metadata["candidates_token_count"],
             prompt_tokens=usage_metadata["prompt_token_count"],
             total_tokens=usage_metadata["total_token_count"],
