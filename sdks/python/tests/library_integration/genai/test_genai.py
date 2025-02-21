@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 import pytest
 from google import genai
-from google.genai.types import HttpOptions
+from google.genai.types import HttpOptions, GenerateContentConfig
 
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
@@ -47,6 +47,7 @@ def test_genai_client__generate_content__happyflow(
     client = genai.Client(
         vertexai=True,
         http_options=HttpOptions(api_version="v1"),
+        config=GenerateContentConfig(max_output_tokens=10),
     )
     client = track_genai(client, project_name=project_name)
 
@@ -60,7 +61,7 @@ def test_genai_client__generate_content__happyflow(
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="genai_generate_content",
-        input={"contents": "What is the capital of Belarus?"},
+        input={"contents": "What is the capital of Belarus?", "config": ANY_BUT_NONE},
         output={"candidates": ANY_LIST},
         tags=["genai"],
         metadata=ANY_DICT,
@@ -72,7 +73,10 @@ def test_genai_client__generate_content__happyflow(
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="genai_generate_content",
-                input={"contents": "What is the capital of Belarus?"},
+                input={
+                    "contents": "What is the capital of Belarus?",
+                    "config": ANY_BUT_NONE,
+                },
                 output={"candidates": ANY_LIST},
                 tags=["genai"],
                 metadata=ANY_DICT,
