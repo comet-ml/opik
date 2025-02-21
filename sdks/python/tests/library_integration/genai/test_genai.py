@@ -5,7 +5,7 @@ from typing import Any, Dict
 import pytest
 from google import genai
 from google.genai.types import HttpOptions, GenerateContentConfig
-
+from google.genai import errors as genai_errors
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.genai import track_genai
@@ -20,8 +20,23 @@ from ...testlib import (
     assert_dict_has_keys,
     assert_equal,
 )
+import tenacity
 
 MODEL = "gemini-2.0-flash"
+
+
+
+def _is_rate_limit_error(exception: Exception) -> bool:
+    if isinstance(exception, genai_errors.ClientError):
+        return exception.response.status_code == 429
+    return False
+
+
+retry_on_internal_server_errors = tenacity.retry(
+    stop=tenacity.stop_after_attempt(3),
+    wait=tenacity.wait_incrementing(start=5, increment=5),
+    retry=tenacity.retry_if_exception(_is_rate_limit_error),
+)
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
