@@ -1,10 +1,8 @@
-import io
-import logging
 import sys
-from contextlib import redirect_stdout, redirect_stderr
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+from unittest.mock import patch
 
 from httpx import ConnectError
 from rich import align
@@ -14,19 +12,11 @@ from rich.text import Text
 
 from opik import Opik, config
 
-from unittest.mock import patch
-
-from opik.rest_api.core import ApiError
-
-# from rich import console, panel, table, text, align
-
-LOGGER_NAME = "healthcheck"
-LOGGER = logging.getLogger(__name__)
-
 console = Console()
 
 DEFAULT_KEY_COLOR = "green"
 DEFAULT_VALUE_COLOR = "blue"
+DEFAULT_ERROR_COLOR = "red"
 
 
 def print_header(text: str) -> None:
@@ -35,6 +25,7 @@ def print_header(text: str) -> None:
     header_text.stylize("bold")
     header_text = align.Align.left(header_text)
 
+    console.print()
     console.print(header_text)
 
 
@@ -95,7 +86,7 @@ def print_config_file_details() -> None:
 def get_current_settings() -> Dict[str, Any]:
     config_obj = config.OpikConfig()
     settings = config_obj.model_dump()
-    if "api_key" in settings:
+    if settings.get("api_key") is not None:
         settings["api_key"] = "*** HIDDEN ***"
     return settings
 
@@ -112,21 +103,29 @@ def print_current_settings() -> None:
     console.print(table)
 
 
-def print_current_settings_validation(print_error_details: bool = True) -> None:
+def print_current_settings_validation() -> None:
     config_obj = config.OpikConfig()
+
     is_valid = not config.is_misconfigured(config_obj, False)
-    is_valid_text = Text(str(is_valid), style=DEFAULT_VALUE_COLOR)
+    is_valid_text = Text(str(is_valid), style=DEFAULT_VALUE_COLOR if is_valid else DEFAULT_ERROR_COLOR)
     is_valid_label = Text("Current configuration is valid:", style=DEFAULT_KEY_COLOR)
 
     console.print(is_valid_label, is_valid_text)
 
-    if print_error_details and not is_valid:
-        buffer = io.StringIO()
-        with redirect_stdout(buffer):
-            config.is_misconfigured(config_obj, True)
+    if is_valid:
+        return
 
-        err_msg = Text(buffer.getvalue().rstrip("\n"), style="red")
+    is_misconfigured_for_cloud_flag, error_message = config.is_misconfigured_for_cloud(config_obj)
+    if is_misconfigured_for_cloud_flag:
+        err_msg = Text(error_message, style="red")
         console.print(err_msg)
+        return
+
+    is_misconfigured_for_local_flag, error_message = config.is_misconfigured_for_local(config_obj)
+    if is_misconfigured_for_local_flag:
+        err_msg = Text(error_message, style="red")
+        console.print(err_msg)
+        return
 
 
 def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
@@ -153,42 +152,10 @@ def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
     return is_available, err_msg
 
 
-def get_backend_workspace_availability___old() -> Tuple[bool, str]:
-    is_available = False
-    err_msg = ""
-
-    buffer = io.StringIO()
-
-
-    handler = logging.StreamHandler(buffer)
-    logger = logging.getLogger()  # Get the root logger
-    logger.addHandler(handler)  # Add our handler to capture log messages
-    logger.setLevel(logging.DEBUG)  # Set an appropriate logging level
-
-
-    try:
-        with redirect_stdout(buffer), redirect_stderr(buffer):
-            opik = Opik()
-        opik.auth_check()
-        is_available = True
-    # except UnauthorizedError as e:
-    #     healthcheck_logger.info("workspace available: False - UnauthorizedError")
-    #     healthcheck_logger.info("workspace available: False")
-    # except ForbiddenError as e:
-    #     healthcheck_logger.info("workspace available: False")
-    #     healthcheck_logger.info("workspace available: False - ForbiddenError")
-    except Exception as e:
-        err_msg = f"Error while checking backend workspace availability: {e}"
-    finally:
-        logger.removeHandler(handler)  # Clean up the logging handler
-
-    return is_available, err_msg
-
-
 def print_backend_workspace_availability():
     is_available, err_msg = get_backend_workspace_availability()
 
-    is_available_text = Text(str(is_available), style=DEFAULT_VALUE_COLOR)
+    is_available_text = Text(str(is_available), style=DEFAULT_VALUE_COLOR if is_available else DEFAULT_ERROR_COLOR)
     is_available_label = Text("Backend workspace available:", style=DEFAULT_KEY_COLOR)
 
     console.print(is_available_label, is_available_text)

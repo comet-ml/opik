@@ -5,14 +5,10 @@ import sys
 from importlib import metadata
 
 import click
-
-from opik import Opik, config, healthcheck as healthcheck_tools
-from opik.configurator import configure as opik_configure
-from opik.configurator import interactive_helpers
-from opik.rest_api import ForbiddenError, UnauthorizedError
-
-from rich.logging import RichHandler
 from rich.console import Console
+
+from opik.healthcheck import tools as healthcheck_tools
+from opik.configurator import configure as opik_configure, interactive_helpers
 
 console = Console()
 
@@ -188,34 +184,28 @@ def healthcheck(show_installed_packages: bool = True) -> None:
     """
     Performs a health check of the application, including validation of configuration,
     verification of library installations, and checking the availability of the backend workspace.
-    Logs all relevant information to assist in debugging and diagnostics.
+    Prints all relevant information to assist in debugging and diagnostics.
     """
     healthcheck_tools.print_header("healthcheck started")
 
     healthcheck_tools.print_opik_version()
 
     if show_installed_packages:
-        console.print()
         healthcheck_tools.print_header("libraries installed")
         healthcheck_tools.print_installed_packages()
 
-    console.print()
     healthcheck_tools.print_header("configuration file")
     healthcheck_tools.print_config_file_details()
 
-    console.print()
     healthcheck_tools.print_header("current settings")
     healthcheck_tools.print_current_settings()
 
-    console.print()
     healthcheck_tools.print_header("current settings validation")
-    healthcheck_tools.print_current_settings_validation(print_error_details=True)
+    healthcheck_tools.print_current_settings_validation()
 
-    console.print()
     healthcheck_tools.print_header("checking backend workspace availability")
     healthcheck_tools.print_backend_workspace_availability()
 
-    console.print()
     healthcheck_tools.print_header("healthcheck completed")
 
 
