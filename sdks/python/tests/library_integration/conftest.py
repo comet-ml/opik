@@ -13,13 +13,18 @@ def ensure_openai_configured():
 
 
 @pytest.fixture
-def ensure_vertexai_configured():
+def ensure_google_project_and_location_configured():
     if not (
         "GOOGLE_CLOUD_PROJECT" in os.environ and "GOOGLE_CLOUD_LOCATION" in os.environ
     ):
         raise Exception(
             "GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION env vars must be set!"
         )
+
+
+@pytest.fixture
+def ensure_vertexai_configured(ensure_google_project_and_location_configured):
+    GOOGLE_APPLICATION_CREDENTIALS_PATH = "gcp_credentials.json"
 
     if "GITHUB_ACTIONS" not in os.environ:
         if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
@@ -34,17 +39,15 @@ def ensure_vertexai_configured():
 
     try:
         gcp_credentials = os.environ["GCP_CREDENTIALS_JSON"]
-        with open("gcp_credentials.json", mode="wt") as output_file:
+        with open(GOOGLE_APPLICATION_CREDENTIALS_PATH, mode="wt") as output_file:
             output_file.write(gcp_credentials)
 
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_credentials.json"
-
         with testlib.patch_environ(
-            add_keys={"GOOGLE_APPLICATION_CREDENTIALS": "gcp_credentials.json"}
+            add_keys={
+                "GOOGLE_APPLICATION_CREDENTIALS": GOOGLE_APPLICATION_CREDENTIALS_PATH
+            }
         ):
             yield
     finally:
-        try:
-            os.remove("gcp_credentials.json")
-        except OSError:
-            pass
+        if os.path.exists(GOOGLE_APPLICATION_CREDENTIALS_PATH):
+            os.remove(GOOGLE_APPLICATION_CREDENTIALS_PATH)
