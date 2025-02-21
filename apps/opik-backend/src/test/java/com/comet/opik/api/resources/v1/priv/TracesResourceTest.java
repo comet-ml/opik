@@ -135,7 +135,7 @@ class TracesResourceTest {
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
-            "comments"};
+            "comments", "threadId"};
     private static final String[] IGNORED_FIELDS_SPANS = SpanResourceClient.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
@@ -151,7 +151,7 @@ class TracesResourceTest {
     private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
 
     @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    private static final TestDropwizardAppExtension APP;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
 
@@ -163,7 +163,7 @@ class TracesResourceTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -249,12 +249,12 @@ class TracesResourceTest {
         void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
@@ -284,12 +284,12 @@ class TracesResourceTest {
         void update__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
 
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
@@ -321,11 +321,11 @@ class TracesResourceTest {
         void delete__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
@@ -351,7 +351,7 @@ class TracesResourceTest {
         void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
 
             int tracesCount = setupTracesForWorkspace(workspaceName, workspaceId, okApikey);
@@ -383,10 +383,10 @@ class TracesResourceTest {
         void feedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
@@ -421,9 +421,9 @@ class TracesResourceTest {
         @DisplayName("delete feedback, when api key is present, then return proper response")
         void deleteFeedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-            var trace = factory.manufacturePojo(Trace.class);
+            var trace = createTrace();
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
@@ -458,8 +458,8 @@ class TracesResourceTest {
         void feedbackBatch__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
-            var trace = factory.manufacturePojo(Trace.class);
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var trace = createTrace();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
@@ -532,7 +532,7 @@ class TracesResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
@@ -564,7 +564,7 @@ class TracesResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
@@ -598,7 +598,7 @@ class TracesResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
@@ -668,7 +668,7 @@ class TracesResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
@@ -703,7 +703,7 @@ class TracesResourceTest {
         @DisplayName("delete feedback, when session token is present, then return proper response")
         void deleteFeedback__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
                 boolean expected, String workspaceName) {
-            var trace = factory.manufacturePojo(Trace.class);
+            var trace = createTrace();
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
@@ -738,7 +738,7 @@ class TracesResourceTest {
         void feedbackBatch__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
                 String workspaceName) {
 
-            var trace = factory.manufacturePojo(Trace.class);
+            var trace = createTrace();
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
@@ -807,12 +807,13 @@ class TracesResourceTest {
 
         @Test
         void findWithUsageAndComments() {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .toList();
 
@@ -850,16 +851,17 @@ class TracesResourceTest {
         @Test
         void findWithoutUsage() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .toList();
 
@@ -881,8 +883,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
         void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
-            var traces = Stream.of(factory.manufacturePojo(Trace.class))
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = Stream.of(createTrace())
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
@@ -931,14 +933,14 @@ class TracesResourceTest {
         void getTracesByProject__whenProjectNameIsNotEmpty__thenReturnTracesByProjectName() {
 
             var projectName = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             for (int i = 0; i < 15; i++) {
-                create(factory.manufacturePojo(Trace.class)
+                create(createTrace()
                         .toBuilder()
                         .id(null)
                         .projectName(projectName)
@@ -972,14 +974,14 @@ class TracesResourceTest {
         @DisplayName("when project id is not empty, then return traces by project id")
         void getTracesByProject__whenProjectIdIsNotEmpty__thenReturnTracesByProjectId() {
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            create(factory.manufacturePojo(Trace.class)
+            create(createTrace()
                     .toBuilder()
                     .projectName(projectName)
                     .id(null)
@@ -1036,6 +1038,7 @@ class TracesResourceTest {
                             .projectId(null)
                             .projectName(projectName1)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(null)
                             .build())
                     .toList();
@@ -1046,6 +1049,7 @@ class TracesResourceTest {
                             .projectId(null)
                             .projectName(projectName1)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(null)
                             .build())
                     .toList();
@@ -1075,19 +1079,20 @@ class TracesResourceTest {
         void getTracesByProject__whenFilterIdAndNameEqual__thenReturnTracesFiltered(Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -1112,13 +1117,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterNameEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1126,11 +1131,12 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1145,25 +1151,26 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterNameStartsWith__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1178,13 +1185,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterNameEndsWith__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1192,11 +1199,12 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1211,13 +1219,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterNameContains__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1225,11 +1233,12 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1244,13 +1253,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterNameNotContains__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traceName = generator.generate().toString();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
@@ -1260,6 +1269,7 @@ class TracesResourceTest {
                             .name(traceName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1267,7 +1277,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1285,13 +1295,13 @@ class TracesResourceTest {
         void getTracesByProject__whenFilterStartTimeEqual__thenReturnTracesFiltered(Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1299,6 +1309,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1316,13 +1327,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterStartTimeGreaterThan__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1331,6 +1342,7 @@ class TracesResourceTest {
                             .startTime(Instant.now().minusSeconds(60 * 5))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1338,7 +1350,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1353,13 +1365,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterStartTimeGreaterThanEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1368,6 +1380,7 @@ class TracesResourceTest {
                             .startTime(Instant.now().minusSeconds(60 * 5))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1375,7 +1388,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1390,13 +1403,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterStartTimeLessThan__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1405,6 +1418,7 @@ class TracesResourceTest {
                             .startTime(Instant.now().plusSeconds(60 * 5))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1412,7 +1426,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1427,13 +1441,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterStartTimeLessThanEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1442,6 +1456,7 @@ class TracesResourceTest {
                             .startTime(Instant.now().plusSeconds(60 * 5))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1449,7 +1464,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1464,13 +1479,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterEndTimeEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1478,11 +1493,12 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1497,13 +1513,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterInputEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1511,11 +1527,12 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1530,13 +1547,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterOutputEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1544,11 +1561,12 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1563,19 +1581,20 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterTotalEstimatedCostGreaterThen__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -1612,13 +1631,13 @@ class TracesResourceTest {
         void getTracesByProject__whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnTracesFiltered(Operator operator,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces,
                 Function<List<Trace>, List<Trace>> getExpectedTraces) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1626,6 +1645,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1663,13 +1683,13 @@ class TracesResourceTest {
         void getTracesByProject__whenFilterMetadataEqualString__thenReturnTracesFiltered(Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1679,6 +1699,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1701,12 +1722,12 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataEqualNumber__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1716,6 +1737,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1724,7 +1746,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1740,13 +1762,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataEqualBoolean__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1757,6 +1779,7 @@ class TracesResourceTest {
                                             "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1765,7 +1788,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1781,13 +1804,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataEqualNull__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1796,6 +1819,7 @@ class TracesResourceTest {
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -1805,7 +1829,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1821,13 +1845,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataContainsString__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1837,6 +1861,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1845,7 +1870,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1861,18 +1886,19 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataContainsNumber__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .threadId(null)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":\"two thousand twenty " +
                                     "four\",\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
@@ -1885,7 +1911,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1901,13 +1927,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataContainsBoolean__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1918,6 +1944,7 @@ class TracesResourceTest {
                                             "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1926,7 +1953,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -1942,13 +1969,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataContainsNull__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1958,6 +1985,7 @@ class TracesResourceTest {
                                     "version\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1966,8 +1994,9 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .threadId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
@@ -1982,13 +2011,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataGreaterThanNumber__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -1998,6 +2027,7 @@ class TracesResourceTest {
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2006,7 +2036,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2022,13 +2052,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataGreaterThanString__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -2042,7 +2072,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2058,13 +2088,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataGreaterThanBoolean__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -2078,7 +2108,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2094,13 +2124,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataGreaterThanNull__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -2114,7 +2144,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2130,13 +2160,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataLessThanNumber__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -2146,6 +2176,7 @@ class TracesResourceTest {
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2154,7 +2185,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2170,13 +2201,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataLessThanString__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -2190,7 +2221,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2206,13 +2237,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataLessThanBoolean__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -2226,7 +2257,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2242,13 +2273,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterMetadataLessThanNull__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -2262,7 +2293,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2278,13 +2309,13 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterTagsContains__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -2292,11 +2323,12 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -2323,12 +2355,12 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTracesByProject__whenFilterUsage__thenReturnTracesFiltered")
         void getTracesByProject__whenFilterUsageEqual__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var otherUsageValue = randomNumber(1, 8);
             var usageValue = randomNumber();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
@@ -2336,6 +2368,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(Map.of(usageKey, (long) otherUsageValue))
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -2356,7 +2389,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -2372,17 +2405,18 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTracesByProject__whenFilterUsage__thenReturnTracesFiltered")
         void getTracesByProject__whenFilterUsageGreaterThan__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 123L))
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -2403,7 +2437,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -2420,17 +2454,18 @@ class TracesResourceTest {
         @MethodSource("getTracesByProject__whenFilterUsage__thenReturnTracesFiltered")
         void getTracesByProject__whenFilterUsageGreaterThanEqual__thenReturnTracesFiltered(String usageKey,
                 Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 123L))
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -2451,7 +2486,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -2467,17 +2502,18 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTracesByProject__whenFilterUsage__thenReturnTracesFiltered")
         void getTracesByProject__whenFilterUsageLessThan__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 456L))
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -2498,7 +2534,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -2514,17 +2550,18 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTracesByProject__whenFilterUsage__thenReturnTracesFiltered")
         void getTracesByProject__whenFilterUsageLessThanEqual__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 456L))
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -2545,7 +2582,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -2563,19 +2600,20 @@ class TracesResourceTest {
         void getTracesByProject__whenFilterFeedbackScoresEqual__thenReturnTracesFiltered(Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -2622,19 +2660,20 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterFeedbackScoresGreaterThan__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -2649,8 +2688,9 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -2674,19 +2714,20 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterFeedbackScoresGreaterThanEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -2701,8 +2742,9 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -2721,19 +2763,20 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterFeedbackScoresLessThan__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -2748,8 +2791,9 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -2769,19 +2813,20 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenFilterFeedbackScoresLessThanEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -2796,8 +2841,10 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(20))
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -2852,6 +2899,7 @@ class TracesResourceTest {
                                 .usage(null)
                                 .projectName(projectName)
                                 .feedbackScores(null)
+                                .threadId(null)
                                 .startTime(now)
                                 .endTime(Set.of(Operator.LESS_THAN, Operator.LESS_THAN_EQUAL).contains(operator)
                                         ? Instant.now().plusSeconds(2)
@@ -2893,207 +2941,207 @@ class TracesResourceTest {
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
                             .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.ID)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.OUTPUT)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.ID)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.OUTPUT)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.ID)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.OUTPUT)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.ID)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.OUTPUT)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.DURATION)
@@ -3127,7 +3175,7 @@ class TracesResourceTest {
                             filter.operator().getQueryParamOperator(),
                             filter.field().getQueryParamField(),
                             filter.field().getType()));
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var filters = List.of(filter);
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("project_name", projectName)
@@ -3168,24 +3216,24 @@ class TracesResourceTest {
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .key(null)
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.EQUAL)
                             .value("")
-                            .key(RandomStringUtils.randomAlphanumeric(10))
+                            .key(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
@@ -3212,14 +3260,14 @@ class TracesResourceTest {
                     TraceFilter.builder()
                             .field(TraceField.DURATION)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(5))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(5))
                             .build());
         }
 
         @ParameterizedTest
         @MethodSource
         void getTracesByProject__whenFilterInvalidValueOrKeyForFieldType__thenReturn400(Filter filter) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
@@ -3232,7 +3280,7 @@ class TracesResourceTest {
                             filter.key(),
                             filter.field().getQueryParamField(),
                             filter.field().getType()));
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var filters = List.of(filter);
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("workspace_name", workspaceName)
@@ -3253,13 +3301,13 @@ class TracesResourceTest {
         @MethodSource
         void getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted(Comparator<Trace> comparator,
                 SortingField sorting) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
@@ -3270,6 +3318,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
+                            .threadId(null)
                             .build())
                     .map(trace -> trace.toBuilder()
                             .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
@@ -3345,11 +3394,11 @@ class TracesResourceTest {
 
         @Test
         void getTracesByProject__whenSortingByInvalidField__thenReturn400() {
-            var field = RandomStringUtils.randomAlphanumeric(10);
+            var field = RandomStringUtils.secure().nextAlphanumeric(10);
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
                     400,
                     "Invalid sorting fields '%s'".formatted(field));
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -3522,6 +3571,8 @@ class TracesResourceTest {
         assertThat(actualTrace.lastUpdatedAt()).isAfter(expectedTrace.lastUpdatedAt());
         assertThat(actualTrace.createdBy()).isEqualTo(USER);
         assertThat(actualTrace.lastUpdatedBy()).isEqualTo(USER);
+        assertThat(actualTrace.threadId()).isEqualTo(expectedTrace.threadId());
+
         var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
                 expectedTrace.startTime(), expectedTrace.endTime());
 
@@ -3557,6 +3608,7 @@ class TracesResourceTest {
                 assertThat(comment.lastUpdatedBy()).isEqualTo(USER);
             });
         }
+
     }
 
     private void assertIgnoredFieldsSpans(List<Span> actualSpans, List<Span> expectedSpans) {
@@ -3614,7 +3666,7 @@ class TracesResourceTest {
 
         @Test
         void getTraceWithUsage() {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var span = factory.manufacturePojo(Span.class);
             var usage = Stream.concat(
                     Map.of("completion_tokens", 2 * 5L, "prompt_tokens", 3 * 5L + 3, "total_tokens", 4 * 5L)
@@ -3622,7 +3674,7 @@ class TracesResourceTest {
                     span.usage().entrySet().stream())
                     .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue().longValue()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .id(null)
                     .projectName(projectName)
@@ -3667,8 +3719,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @ValueSource(strings = {"gpt-3.5-turbo-1106", "unknown-model"})
         void getTraceWithCost(String model) {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
-            var trace = factory.manufacturePojo(Trace.class)
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace()
                     .toBuilder()
                     .id(null)
                     .projectName(projectName)
@@ -3711,12 +3763,12 @@ class TracesResourceTest {
         @Test
         void getTraceWithoutUsage() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
-            var trace = factory.manufacturePojo(Trace.class)
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace()
                     .toBuilder()
                     .projectName(projectName)
                     .usage(null)
@@ -3743,6 +3795,17 @@ class TracesResourceTest {
             var id = generator.generate();
             getAndAssertTraceNotFound(id, API_KEY, TEST_WORKSPACE);
         }
+    }
+
+    private Trace createTrace() {
+        return factory.manufacturePojo(Trace.class).toBuilder()
+                .feedbackScores(null)
+                .threadId(null)
+                .comments(null)
+                .totalEstimatedCost(null)
+                .duration(null)
+                .usage(null)
+                .build();
     }
 
     private UUID create(Trace trace, String apiKey, String workspaceName) {
@@ -3795,9 +3858,9 @@ class TracesResourceTest {
 
         @Test
         @DisplayName("Success")
-        void createTrace() {
+        void testCreateTrace() {
             var id = generator.generate();
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+            var trace = createTrace().toBuilder()
                     .id(id)
                     .projectName(DEFAULT_PROJECT)
                     .usage(null)
@@ -3812,15 +3875,15 @@ class TracesResourceTest {
         @Test
         @DisplayName("when creating traces with different project names, then return created traces")
         void create__whenCreatingTracesWithDifferentProjectNames__thenReturnCreatedTraces() {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var trace1 = factory.manufacturePojo(Trace.class)
+            var trace1 = createTrace()
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .usage(null)
                     .feedbackScores(null)
                     .build();
-            var trace2 = factory.manufacturePojo(Trace.class)
+            var trace2 = createTrace()
                     .toBuilder()
                     .projectName(projectName)
                     .usage(null)
@@ -3840,7 +3903,7 @@ class TracesResourceTest {
         @DisplayName("when creating traces with same Id for different workspaces, then return conflict")
         void create__whenCreatingTracesWithSameIdForDifferentWorkspaces__thenReturnConflict() {
 
-            var trace1 = factory.manufacturePojo(Trace.class)
+            var trace1 = createTrace()
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .usage(null)
@@ -3854,7 +3917,7 @@ class TracesResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var trace2 = factory.manufacturePojo(Trace.class)
+            var trace2 = createTrace()
                     .toBuilder()
                     .id(trace1.id())
                     .projectName(DEFAULT_PROJECT)
@@ -3867,7 +3930,7 @@ class TracesResourceTest {
 
         @Test
         void createWithMissingId() {
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+            var trace = createTrace().toBuilder()
                     .id(null)
                     .usage(null)
                     .feedbackScores(null)
@@ -3883,8 +3946,8 @@ class TracesResourceTest {
         @DisplayName("when project doesn't exist, then accept and create project")
         void create__whenProjectDoesNotExist__thenAcceptAndCreateProject() {
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace().toBuilder()
                     .projectName(projectName)
                     .build();
 
@@ -3901,7 +3964,7 @@ class TracesResourceTest {
 
             var id = generator.generate();
 
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+            var trace = createTrace().toBuilder()
                     .id(id)
                     .projectName(null)
                     .build();
@@ -3926,10 +3989,29 @@ class TracesResourceTest {
                             i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-            var expectedTrace = factory.manufacturePojo(Trace.class).toBuilder()
+            var expectedTrace = createTrace().toBuilder()
                     .projectId(null)
                     .input(JsonUtils.readTree(jsonMap))
                     .output(JsonUtils.readTree(jsonMap))
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            create(expectedTrace, API_KEY, TEST_WORKSPACE);
+
+            UUID projectId = getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY);
+            getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when trace has threadId, then accept and create trace")
+        void createAndGet__whenTraceHasThreadId__thenReturnTrace() {
+
+            var threadId = UUID.randomUUID().toString();
+
+            var expectedTrace = createTrace().toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
                     .feedbackScores(null)
                     .usage(null)
                     .build();
@@ -3956,7 +4038,7 @@ class TracesResourceTest {
             createProject(projectName, TEST_WORKSPACE, API_KEY);
 
             var expectedTraces = IntStream.range(0, 1000)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                    .mapToObj(i -> createTrace().toBuilder()
                             .projectName(projectNameModifier.apply(projectName))
                             .endTime(null)
                             .usage(null)
@@ -3989,6 +4071,7 @@ class TracesResourceTest {
                             .endTime(null)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .toList();
 
@@ -4000,7 +4083,7 @@ class TracesResourceTest {
 
         @Test
         void batch__whenSendingMultipleTracesWithSameId__thenReturn422() {
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+            var trace = createTrace().toBuilder()
                     .projectId(null)
                     .feedbackScores(null)
                     .build();
@@ -4051,7 +4134,7 @@ class TracesResourceTest {
             return Stream.of(
                     Arguments.of(List.of(), "traces size must be between 1 and 1000"),
                     Arguments.of(IntStream.range(0, 1001)
-                            .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .mapToObj(i -> createTrace().toBuilder()
                                     .projectId(null)
                                     .feedbackScores(null)
                                     .build())
@@ -4060,7 +4143,7 @@ class TracesResourceTest {
 
         @Test
         void batch__whenSendingMultipleTracesWithNoId__thenReturnNoContent() {
-            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
+            var newTrace = createTrace().toBuilder()
                     .projectId(null)
                     .id(null)
                     .feedbackScores(null)
@@ -4075,6 +4158,28 @@ class TracesResourceTest {
             List<Trace> expectedTraces = List.of(newTrace, expectedTrace);
 
             traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void batch__whenTraceHasThreadId__thenReturnNoContent() {
+
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var expectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .threadId(threadId)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .usage(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+
+            getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedTraces.reversed(), List.of(),
+                    API_KEY);
         }
     }
 
@@ -4106,15 +4211,16 @@ class TracesResourceTest {
         @DisplayName("Success")
         void delete() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var traces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var traces = List.of(createTrace().toBuilder()
                     .projectName(projectName)
                     .usage(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -4156,15 +4262,16 @@ class TracesResourceTest {
         @Test
         void deleteWithoutSpansScores() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var traces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var traces = List.of(createTrace().toBuilder()
                     .projectName(projectName)
                     .usage(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -4200,13 +4307,13 @@ class TracesResourceTest {
         @Test
         void deleteWithoutScores() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var traces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var traces = List.of(createTrace().toBuilder()
                     .projectName(projectName)
                     .usage(null)
                     .feedbackScores(null)
@@ -4237,13 +4344,13 @@ class TracesResourceTest {
         @Test
         void deleteWithoutSpans() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var traces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var traces = List.of(createTrace().toBuilder()
                     .projectName(projectName)
                     .usage(null)
                     .feedbackScores(null)
@@ -4262,7 +4369,7 @@ class TracesResourceTest {
         @DisplayName("when trace does not exist, then return no content")
         void delete__whenTraceDoesNotExist__thenNoContent() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -4281,16 +4388,17 @@ class TracesResourceTest {
         @Test
         void deleteTraces() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .build())
                     .toList();
 
@@ -4337,16 +4445,17 @@ class TracesResourceTest {
         @Test
         void deleteTracesWithoutSpansScores() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
+                            .threadId(null)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -4386,17 +4495,18 @@ class TracesResourceTest {
         @Test
         void deleteTracesWithoutScores() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .toList();
 
@@ -4429,17 +4539,18 @@ class TracesResourceTest {
         @Test
         void deleteTracesWithoutSpans() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .toList();
 
@@ -4459,7 +4570,7 @@ class TracesResourceTest {
         @Test
         void deleteTracesWithoutTraces() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -4478,7 +4589,7 @@ class TracesResourceTest {
 
         @BeforeEach
         void setUp() {
-            trace = factory.manufacturePojo(Trace.class)
+            trace = createTrace()
                     .toBuilder()
                     .endTime(null)
                     .output(null)
@@ -4555,7 +4666,7 @@ class TracesResourceTest {
 
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
+            var newTrace = createTrace().toBuilder()
                     .projectName(traceUpdate.projectName())
                     .id(id)
                     .build();
@@ -4603,7 +4714,7 @@ class TracesResourceTest {
                     .projectName(projectName)
                     .build();
 
-            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
+            var newTrace = createTrace().toBuilder()
                     .projectName(traceUpdate1.projectName())
                     .endTime(null)
                     .id(id)
@@ -4840,9 +4951,30 @@ class TracesResourceTest {
                     .endTime(traceUpdate.endTime())
                     .tags(traceUpdate.tags())
                     .errorInfo(traceUpdate.errorInfo())
+                    .threadId(traceUpdate.threadId())
                     .build();
 
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when updating trace to add thread id, then accept update")
+        void update__whenUpdatingTraceToAddThreadId__thenAcceptUpdate() {
+
+            var threadId = UUID.randomUUID().toString();
+
+            var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
+
+            var traceUpdate = TraceUpdate.builder()
+                    .threadId(threadId)
+                    .projectId(projectId)
+                    .build();
+
+            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var actualTrace = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+
+            assertThat(actualTrace.threadId()).isEqualTo(threadId);
         }
 
     }
@@ -4861,7 +4993,7 @@ class TracesResourceTest {
         void createAndGetComment() {
 
             // Create comment for existing trace
-            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY,
                     TEST_WORKSPACE);
             Comment expectedComment = traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE,
                     201);
@@ -4875,7 +5007,7 @@ class TracesResourceTest {
         @Test
         void createAndUpdateComment() {
             // Create comment for existing trace
-            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY,
                     TEST_WORKSPACE);
             Comment expectedComment = traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE,
                     201);
@@ -4898,7 +5030,7 @@ class TracesResourceTest {
         @Test
         void deleteComments() {
             // Create comment for existing trace
-            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY,
                     TEST_WORKSPACE);
 
             List<Comment> expectedComments = IntStream.range(0, 5)
@@ -4923,7 +5055,7 @@ class TracesResourceTest {
 
         @Test
         void getTraceWithComments() {
-            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY,
                     TEST_WORKSPACE);
             List<Comment> expectedComments = IntStream.range(0, 5)
                     .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
@@ -4935,12 +5067,13 @@ class TracesResourceTest {
 
         @Test
         void getTracePageWithComments() {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .threadId(null)
                             .build())
                     .toList();
             var traceId = traces.getFirst().id();
@@ -4961,7 +5094,7 @@ class TracesResourceTest {
 
         @Test
         void deleteTraceDeletesTraceAndSpanComments() {
-            UUID traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class), API_KEY,
+            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY,
                     TEST_WORKSPACE);
             List<Comment> expectedTraceComments = IntStream.range(0, 5)
                     .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
@@ -4988,13 +5121,14 @@ class TracesResourceTest {
 
         @Test
         void batchDeleteTracesDeletesTraceAndSpanComments() {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
                             .comments(null)
+                            .threadId(null)
                             .build())
                     .toList();
 
@@ -5111,7 +5245,7 @@ class TracesResourceTest {
         @Test
         @DisplayName("when feedback without category name or reason, then return no content")
         void feedback__whenFeedbackWithoutCategoryNameOrReason__thenReturnNoContent() {
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
@@ -5138,7 +5272,7 @@ class TracesResourceTest {
         @Test
         @DisplayName("when feedback with category name or reason, then return no content")
         void feedback__whenFeedbackWithCategoryNameOrReason__thenReturnNoContent() {
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
@@ -5164,7 +5298,7 @@ class TracesResourceTest {
         @Test
         @DisplayName("when overriding feedback value, then return no content")
         void feedback__whenOverridingFeedbackValue__thenReturnNoContent() {
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
@@ -5218,7 +5352,7 @@ class TracesResourceTest {
         @DisplayName("Success")
         void deleteFeedback() {
 
-            var trace = factory.manufacturePojo(Trace.class);
+            var trace = createTrace();
             var id = create(trace, API_KEY, TEST_WORKSPACE);
             var score = FeedbackScore.builder()
                     .name("name")
@@ -5302,18 +5436,15 @@ class TracesResourceTest {
         @Test
         @DisplayName("Success")
         void feedback() {
-            var trace1 = factory.manufacturePojo(Trace.class)
+            var trace1 = createTrace()
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
                     .output(null)
                     .metadata(null)
-                    .tags(null)
-                    .usage(null)
-                    .feedbackScores(null)
                     .build();
             var id1 = create(trace1, API_KEY, TEST_WORKSPACE);
-            var trace2 = factory.manufacturePojo(Trace.class)
+            var trace2 = createTrace()
                     .toBuilder()
                     .projectName(UUID.randomUUID().toString())
                     .endTime(null)
@@ -5360,23 +5491,21 @@ class TracesResourceTest {
         @DisplayName("when workspace is specified, then return no content")
         void feedback__whenWorkspaceIsSpecified__thenReturnNoContent() {
             var projectName = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var expectedTrace1 = factory.manufacturePojo(Trace.class).toBuilder()
+            var expectedTrace1 = createTrace().toBuilder()
                     .projectName(DEFAULT_PROJECT)
-                    .projectId(null)
-                    .usage(null)
+
                     .build();
+
             var id1 = create(expectedTrace1, apiKey, workspaceName);
 
-            var expectedTrace2 = factory.manufacturePojo(Trace.class).toBuilder()
+            var expectedTrace2 = createTrace().toBuilder()
                     .projectName(projectName)
-                    .projectId(null)
-                    .usage(null)
                     .build();
             var id2 = create(expectedTrace2, apiKey, workspaceName);
 
@@ -5432,7 +5561,7 @@ class TracesResourceTest {
         @Test
         @DisplayName("when feedback without category name or reason, then return no content")
         void feedback__whenFeedbackWithoutCategoryNameOrReason__thenReturnNoContent() {
-            var trace = factory.manufacturePojo(Trace.class)
+            var trace = createTrace()
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
@@ -5463,9 +5592,9 @@ class TracesResourceTest {
         @Test
         @DisplayName("when feedback with category name or reason, then return no content")
         void feedback__whenFeedbackWithCategoryNameOrReason__thenReturnNoContent() {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var expectedTrace = factory.manufacturePojo(Trace.class)
+            var expectedTrace = createTrace()
                     .toBuilder()
                     .projectName(projectName)
                     .endTime(null)
@@ -5496,8 +5625,8 @@ class TracesResourceTest {
         @Test
         @DisplayName("when overriding feedback value, then return no content")
         void feedback__whenOverridingFeedbackValue__thenReturnNoContent() {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
-            var trace = factory.manufacturePojo(Trace.class)
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace()
                     .toBuilder()
                     .projectName(projectName)
                     .endTime(null)
@@ -5539,7 +5668,7 @@ class TracesResourceTest {
         @Test
         @DisplayName("when feedback trace batch has max size, then return no content and create scores")
         void feedback__whenFeedbackSpanBatchHasMaxSize__thenReturnNoContentAndCreateScores() {
-            var expectedTrace = factory.manufacturePojo(Trace.class).toBuilder()
+            var expectedTrace = createTrace().toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .build();
             var id = create(expectedTrace, API_KEY, TEST_WORKSPACE);
@@ -5584,12 +5713,9 @@ class TracesResourceTest {
             createProject(projectName.toUpperCase(), TEST_WORKSPACE, API_KEY);
 
             var traces = IntStream.range(0, 10)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                    .mapToObj(i -> createTrace().toBuilder()
                             .projectId(null)
                             .projectName(projectNameModifier.apply(projectName))
-                            .feedbackScores(null)
-                            .comments(null)
-                            .usage(null)
                             .build())
                     .toList();
 
@@ -5671,7 +5797,7 @@ class TracesResourceTest {
 
         @Test
         void findWithUsage() {
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
@@ -5710,11 +5836,11 @@ class TracesResourceTest {
         @Test
         void findWithoutUsage() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
@@ -5748,7 +5874,7 @@ class TracesResourceTest {
         void getTraceStats__whenProjectNameIsNotEmpty__thenReturnTracesByProjectName() {
 
             var projectName = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
@@ -5757,7 +5883,7 @@ class TracesResourceTest {
             List<Trace> traces = new ArrayList<>();
             for (int i = 0; i < 15; i++) {
 
-                Trace trace = factory.manufacturePojo(Trace.class)
+                Trace trace = createTrace()
                         .toBuilder()
                         .id(null)
                         .projectName(projectName)
@@ -5786,14 +5912,14 @@ class TracesResourceTest {
         @DisplayName("when project id is not empty, then return traces by project id")
         void getTraceStats__whenProjectIdIsNotEmpty__thenReturnTracesByProjectId() {
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            Trace trace = factory.manufacturePojo(Trace.class)
+            Trace trace = createTrace()
                     .toBuilder()
                     .projectName(projectName)
                     .id(null)
@@ -5823,7 +5949,7 @@ class TracesResourceTest {
         @DisplayName("when traces have cost estimation, then return total cost estimation")
         void getTraceStats__whenTracesHaveCostEstimation__thenReturnTotalCostEstimation() {
 
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -5834,7 +5960,7 @@ class TracesResourceTest {
 
             for (int i = 0; i < 5; i++) {
 
-                Trace trace = factory.manufacturePojo(Trace.class)
+                Trace trace = createTrace()
                         .toBuilder()
                         .projectName(projectName)
                         .endTime(null)
@@ -5934,13 +6060,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterIdAndNameEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -5954,7 +6080,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -5980,13 +6106,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterNameEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6000,7 +6126,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6020,13 +6146,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterNameStartsWith__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6040,7 +6166,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6060,13 +6186,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterNameEndsWith__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6080,7 +6206,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6100,13 +6226,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterNameContains__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6120,7 +6246,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6140,13 +6266,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterNameNotContains__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traceName = generator.generate().toString();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
@@ -6165,7 +6291,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6185,13 +6311,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterStartTimeEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6205,7 +6331,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6225,13 +6351,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterStartTimeGreaterThan__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6248,7 +6374,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6268,13 +6394,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterStartTimeGreaterThanEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6291,7 +6417,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6311,13 +6437,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterStartTimeLessThan__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6334,7 +6460,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6354,13 +6480,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterStartTimeLessThanEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6377,7 +6503,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6397,13 +6523,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterEndTimeEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6417,7 +6543,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6437,13 +6563,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterInputEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6457,7 +6583,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6477,13 +6603,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterOutputEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6497,7 +6623,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6517,13 +6643,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataEqualString__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6543,7 +6669,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6564,12 +6690,12 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataEqualNumber__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6589,7 +6715,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6610,13 +6736,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataEqualBoolean__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6637,7 +6763,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6658,13 +6784,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataEqualNull__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6684,7 +6810,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6705,13 +6831,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataContainsString__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6731,7 +6857,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6752,13 +6878,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataContainsNumber__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6778,7 +6904,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6799,13 +6925,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataContainsBoolean__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6826,7 +6952,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6847,13 +6973,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataContainsNull__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6873,7 +6999,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6894,13 +7020,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataGreaterThanNumber__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6920,7 +7046,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6941,13 +7067,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataGreaterThanString__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -6963,7 +7089,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -6984,13 +7110,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataGreaterThanBoolean__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7006,7 +7132,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -7025,13 +7151,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataGreaterThanNull__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7047,7 +7173,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -7066,13 +7192,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataLessThanNumber__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7092,7 +7218,7 @@ class TracesResourceTest {
                     .build());
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -7111,13 +7237,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataLessThanString__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7133,7 +7259,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -7152,13 +7278,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataLessThanBoolean__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7174,7 +7300,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.<Trace>of();
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -7193,13 +7319,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterMetadataLessThanNull__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7217,7 +7343,7 @@ class TracesResourceTest {
 
             var expectedStats = List.<ProjectStatItem<?>>of();
 
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -7344,13 +7470,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterTagsContains__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7364,7 +7490,7 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.forEach(trace -> create(trace, apiKey, workspaceName));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .build());
             unexpectedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
@@ -7394,12 +7520,12 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
         void getTraceStats__whenFilterUsageEqual__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var otherUsageValue = randomNumber();
             var usageValue = randomNumber(1, 8);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
@@ -7430,7 +7556,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -7452,12 +7578,12 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
         void getTraceStats__whenFilterUsageGreaterThan__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
@@ -7486,7 +7612,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -7503,12 +7629,12 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
         void getTraceStats__whenFilterUsageGreaterThanEqual__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
@@ -7537,7 +7663,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -7554,12 +7680,12 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
         void getTraceStats__whenFilterUsageLessThan__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
@@ -7588,7 +7714,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -7605,12 +7731,12 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getTraceStats__whenFilterUsage__thenReturnTracesFiltered")
         void getTraceStats__whenFilterUsageLessThanEqual__thenReturnTracesFiltered(String usageKey, Field field) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
                             .projectName(projectName)
@@ -7639,7 +7765,7 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
             var expectedTraces = List.of(traces.getFirst());
-            var unrelatedTraces = List.of(factory.manufacturePojo(Trace.class));
+            var unrelatedTraces = List.of(createTrace());
             unrelatedTraces.forEach(trace -> create(trace, apiKey, workspaceName));
 
             var filters = List.of(TraceFilter.builder()
@@ -7655,13 +7781,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterFeedbackScoresEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7680,8 +7806,9 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -7709,13 +7836,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterFeedbackScoresGreaterThan__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7734,8 +7861,9 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -7762,13 +7890,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterFeedbackScoresGreaterThanEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7787,8 +7915,9 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -7810,13 +7939,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterFeedbackScoresLessThan__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7835,8 +7964,9 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -7857,13 +7987,13 @@ class TracesResourceTest {
 
         @Test
         void getTraceStats__whenFilterFeedbackScoresLessThanEqual__thenReturnTracesFiltered() {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
@@ -7882,8 +8012,9 @@ class TracesResourceTest {
             traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(factory.manufacturePojo(Trace.class).toBuilder()
+            var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
+                    .feedbackScores(PodamFactoryUtils.manufacturePojoList(factory, FeedbackScore.class))
                     .build());
             unexpectedTraces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             unexpectedTraces.forEach(
@@ -7908,207 +8039,207 @@ class TracesResourceTest {
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
                             .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
                             .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
                             .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES)
                             .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.ID)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.OUTPUT)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.ID)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.OUTPUT)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.ID)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.OUTPUT)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.ID)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.NAME)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.OUTPUT)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
                             .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.DURATION)
@@ -8142,7 +8273,7 @@ class TracesResourceTest {
                             filter.operator().getQueryParamOperator(),
                             filter.field().getQueryParamField(),
                             filter.field().getType()));
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var filters = List.of(filter);
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -8185,24 +8316,24 @@ class TracesResourceTest {
                     TraceFilter.builder()
                             .field(TraceField.START_TIME)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.END_TIME)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(10))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
                             .key(null)
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.METADATA)
                             .operator(Operator.EQUAL)
                             .value("")
-                            .key(RandomStringUtils.randomAlphanumeric(10))
+                            .key(RandomStringUtils.secure().nextAlphanumeric(10))
                             .build(),
                     TraceFilter.builder()
                             .field(TraceField.TAGS)
@@ -8229,14 +8360,14 @@ class TracesResourceTest {
                     TraceFilter.builder()
                             .field(TraceField.DURATION)
                             .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.randomAlphanumeric(5))
+                            .value(RandomStringUtils.secure().nextAlphanumeric(5))
                             .build());
         }
 
         @ParameterizedTest
         @MethodSource
         void getTraceStats__whenFilterInvalidValueOrKeyForFieldType__thenReturn400(Filter filter) {
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
@@ -8249,7 +8380,7 @@ class TracesResourceTest {
                             filter.key(),
                             filter.field().getQueryParamField(),
                             filter.field().getType()));
-            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var filters = List.of(filter);
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("stats")

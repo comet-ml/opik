@@ -25,5 +25,6 @@ public record TraceUpdate(
         JsonNode output,
         JsonNode metadata,
         Set<String> tags,
-        ErrorInfo errorInfo) {
+        ErrorInfo errorInfo,
+        String threadId) {
 }
