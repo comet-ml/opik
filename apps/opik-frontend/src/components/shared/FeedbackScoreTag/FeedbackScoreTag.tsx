@@ -19,7 +19,7 @@ type FeedbackScoreTagProps = {
 const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   label,
   value,
-  reason = "after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px after:absolute after:-left-1 after:h-2 after:w-px after:bg-[#E2E8F0] pl-px",
+  reason,
   onDelete,
   className,
 }) => {
