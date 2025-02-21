@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
-import api, { TRACE_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
+import api, { TRACE_KEY, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 
 type UseTraceBatchDeleteMutationParams = {
   ids: string[];
@@ -39,6 +39,7 @@ const useTraceCommentsBatchDeleteMutation = () => {
       queryClient.invalidateQueries({
         queryKey: [TRACE_KEY, { traceId: variables.traceId }],
       });
+      queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
     },
   });
 };

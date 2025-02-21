@@ -53,7 +53,7 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
                 comment={comment}
                 size="sm"
                 avatar={<UserComment.Avatar />}
-                className="border-b border-slate-200 px-3 last:border-transparent"
+                className="border-b border-slate-200 px-1.5 last:border-transparent"
                 header={
                   <>
                     <UserComment.Username />

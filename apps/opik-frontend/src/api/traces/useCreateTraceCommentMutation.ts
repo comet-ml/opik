@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 
-import api, { TRACE_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
+import api, { TRACE_KEY, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 
 type UseCreateTraceCommentMutationParams = {
@@ -43,6 +43,7 @@ const useCreateTraceCommentMutation = () => {
       queryClient.invalidateQueries({
         queryKey: [TRACE_KEY, { traceId: variables.traceId }],
       });
+      queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
     },
   });
 };

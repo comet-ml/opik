@@ -30,6 +30,12 @@ type AnnotateRowProps = {
   traceId: string;
 };
 
+const categoryOptionLabelRenderer = (name: string, value?: number | string) => {
+  if (!value) return name;
+
+  return `${name} (${value})`;
+};
+
 const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   name,
   feedbackDefinition,
@@ -141,9 +147,10 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         "value",
       );
 
-      const hasLongNames = categoricalOptionList.some(
-        (item) => item.name.length > 10,
-      );
+      const hasLongNames = categoricalOptionList.some((item) => {
+        const label = categoryOptionLabelRenderer(item.name, item.value);
+        return label.length > 10;
+      });
       const hasMultipleOptions = categoricalOptionList.length > 2;
 
       if (hasLongNames || hasMultipleOptions) {
@@ -171,13 +178,13 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
               return (
                 <span className="text-nowrap">
-                  {value} ({selectedOption.value})
+                  {categoryOptionLabelRenderer(value, selectedOption.value)}
                 </span>
               );
             }}
             renderOption={(option: DropdownOption<string>) => (
               <SelectItem key={option.value} value={option.value}>
-                {option.value} ({option.description})
+                {categoryOptionLabelRenderer(option.value, option.description)}
               </SelectItem>
             )}
           ></SelectBox>
