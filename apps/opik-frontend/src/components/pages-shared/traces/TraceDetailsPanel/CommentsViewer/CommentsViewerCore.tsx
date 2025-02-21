@@ -109,7 +109,7 @@ const CommentsViewerCore: React.FC<CommentsViewerCoreProps> = ({
       >
         <UserCommentForm.TextareaField placeholder="Add a comment..." />
       </UserCommentForm>
-      <div className="mt-3 h-full overflow-auto px-6 pb-3">
+      <div className="mt-3 h-full overflow-auto pb-3">
         {data.comments?.length ? (
           orderBy(data.comments, "created_at", "desc").map((comment) => (
             <UserComment
@@ -129,6 +129,7 @@ const CommentsViewerCore: React.FC<CommentsViewerCoreProps> = ({
                   <UserComment.CreatedAt />
                 </>
               }
+              className="px-6 hover:bg-soft-background"
             >
               <UserComment.Text />
               <UserComment.Form onSubmit={onEditSubmit} />
