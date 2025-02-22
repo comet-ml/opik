@@ -15,15 +15,15 @@ In order to install Opik on a Kubernetes cluster, you will need to have the foll
 ## Installation
 
 You can install Opik using the helm chart maintained by the Opik team by running the following commands:
-You set VERSION to the specific Opik version or leave it as 'latest'
 
 ```bash
 # Add Opik Helm repo
 helm repo add opik https://comet-ml.github.io/opik/
 helm repo update
 
-# Install Opik
+# You can set VERSION to the specific Opik version or leave it as 'latest'
 VERSION=latest
+# Install Opik
 helm upgrade --install opik -n opik --create-namespace opik/opik \
     --set component.backend.image.tag=$VERSION \
     --set component.python-backend.image.tag=$VERSION \
@@ -45,7 +45,8 @@ You can find a full list the configuration options in the [helm chart documentat
 
 ## Advanced deployment options
 ### Using external Clickhouse installation
-Supported from Opik chart '1.4.2'
+Supported from Opik chart version 1.4.2
+
 Configuration snippet for using external Clickhouse:
 ```bash
 opik:
