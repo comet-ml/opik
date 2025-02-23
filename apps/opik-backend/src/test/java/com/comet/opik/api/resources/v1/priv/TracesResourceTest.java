@@ -4035,8 +4035,10 @@ class TracesResourceTest {
         assertThat(actualTraces).hasSize(expectedThreads.size());
 
         assertThat(actualTraces)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_SCORES)
-                .containsExactlyElementsOf(expectedThreads);
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS_TRACES)
+                .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                .isEqualTo(expectedThreads);
 
         for (int i = 0; i < expectedThreads.size(); i++) {
             var expectedThread = expectedThreads.get(i);
@@ -4044,7 +4046,6 @@ class TracesResourceTest {
 
             assertThat(actualThread.createdAt()).isBetween(expectedThread.createdAt(), Instant.now());
             assertThat(actualThread.lastUpdatedAt()).isBetween(expectedThread.lastUpdatedAt(), Instant.now());
-
         }
     }
 
@@ -4091,7 +4092,7 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindTraceThreads {
 
-        FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
+        private final FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
 
         private String getValidValue(Field field) {
             return switch (field.getType()) {
@@ -4364,11 +4365,16 @@ class TracesResourceTest {
             var unexpectedThreadId = UUID.randomUUID().toString();
 
             var traces = IntStream.range(0, 5)
-                    .mapToObj(it -> createTrace().toBuilder()
-                            .projectName(projectName)
-                            .usage(null)
-                            .threadId(threadId)
-                            .build())
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(projectName)
+                                .usage(null)
+                                .threadId(threadId)
+                                .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
                     .collect(Collectors.toList());
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
@@ -4406,10 +4412,9 @@ class TracesResourceTest {
                             .lastMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
                                     .findFirst().get().output())
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                                    expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime)).findFirst()
-                                            .get().startTime(),
-                                    expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                            .findFirst().get().endTime()))
+                                    expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).get()
+                                            .startTime(),
+                                    expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime()))
                             .projectId(projectId)
                             .createdBy(USER)
                             .startTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
