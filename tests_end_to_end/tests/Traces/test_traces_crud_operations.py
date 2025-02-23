@@ -9,6 +9,9 @@ from sdk_helpers import (
     delete_list_of_traces_sdk,
     wait_for_traces_to_be_visible,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TestTracesCrud:
@@ -26,21 +29,56 @@ class TestTracesCrud:
         self, page: Page, traces_number, create_project, create_traces
     ):
         """Testing basic creation of traces via both decorator and low-level client.
-        Test case is split into 4, creating 1 and then 15 traces using both the decorator and the client respectively
 
-        1. Create a new project
-        2. Create the traces using one of the creation methods, following the naming convention of "test-trace-X", where X is from 1 to 25 (so all have unique names) - no errors should occur
-        3. In the UI, check that the presented number of traces in the project matches the number of traces created in the test case
+        Steps:
+        1. Create project via fixture
+        2. Create traces via specified method (runs 4 times):
+           - 1 trace via decorator
+           - 15 traces via decorator
+           - 1 trace via client
+           - 15 traces via client
+        3. Verify in UI:
+           - Correct number of traces shown
+           - Trace names follow convention
         """
+        logger.info(f"Starting trace creation test for {traces_number} traces")
         project_name = create_project
+
+        # Navigate to project traces
+        logger.info(f"Navigating to project '{project_name}'")
         projects_page = ProjectsPage(page)
-        projects_page.go_to_page()
-        projects_page.click_project(project_name)
-        traces_page = TracesPage(page)
+        try:
+            projects_page.go_to_page()
+            projects_page.click_project(project_name)
+            logger.info("Successfully navigated to project traces")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to navigate to project traces.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
+
+        # Create traces
         _ = create_traces
 
-        traces_created = traces_page.get_total_number_of_traces_in_project()
-        assert traces_created == traces_number
+        # Verify trace count
+        logger.info("Verifying traces count")
+        traces_page = TracesPage(page)
+        try:
+            traces_created = traces_page.get_total_number_of_traces_in_project()
+            assert traces_created == traces_number, (
+                f"Traces count mismatch.\n"
+                f"Expected: {traces_number}\n"
+                f"Got: {traces_created}"
+            )
+            logger.info(f"Successfully verified {traces_created} traces")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify traces count.\n"
+                f"Project: {project_name}\n"
+                f"Expected count: {traces_number}\n"
+                f"Error: {str(e)}"
+            ) from e
 
     @pytest.mark.parametrize("traces_number", [25])
     @pytest.mark.parametrize(
@@ -54,35 +92,82 @@ class TestTracesCrud:
     def test_traces_visibility(
         self, page: Page, traces_number, create_project, create_traces
     ):
-        """
-        Testing visibility within the UI and SDK of traces created via both the decorator and the client
-        Test case is split into 2, creating traces via decorator first, and then via the low level client
+        """Test visibility of traces in both UI and SDK interfaces.
 
-        1. Create a new project
-        2. Create 25 traces via either the decorator or the client, following the naming convention of "test-trace-X", where X is from 1 to 25 (so all have unique names)
-        3. Check all the traces are visible in the UI:
-            - Scroll through all pages in the project and grab every trace name
-            - Check that the list of names present in the UI is exactly equal to the list of names of the traces created (exactly the same elements on both sides)
-        4. Check all the traces are visible in the SDK:
-            - Fetch all traces of the project via the API client (OpikApi.traces.get_traces_by_project)
-            - Check that the list of names present in the result is exactly equal to the list of names of the traces created (exactly the same elements on both sides)
+        Steps:
+        1. Create project via fixture
+        2. Create 25 traces via specified method (runs twice):
+           - Via decorator
+           - Via client
+        3. Verify in UI:
+           - All traces appear in project page
+           - Names match creation convention
+           - Count matches expected
+        4. Verify via SDK:
+           - All traces retrievable
+           - Names match creation convention
+           - Count matches expected
         """
+        logger.info("Starting traces visibility test")
         project_name = create_project
+        created_trace_names = Counter([PREFIX + str(i) for i in range(traces_number)])
+
+        # Navigate to project traces
+        logger.info(f"Navigating to project '{project_name}'")
         projects_page = ProjectsPage(page)
-        projects_page.go_to_page()
-        projects_page.click_project(project_name)
-        traces_page = TracesPage(page)
+        try:
+            projects_page.go_to_page()
+            projects_page.click_project(project_name)
+            logger.info("Successfully navigated to project traces")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to navigate to project traces.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
+
+        # Create traces
         _ = create_traces
 
-        created_trace_names = Counter([PREFIX + str(i) for i in range(traces_number)])
-        traces_ui = traces_page.get_all_trace_names_in_project()
-        assert Counter(traces_ui) == created_trace_names
+        # Verify traces in UI
+        logger.info("Verifying traces in UI")
+        traces_page = TracesPage(page)
+        try:
+            traces_ui = traces_page.get_all_trace_names_in_project()
+            assert Counter(traces_ui) == created_trace_names, (
+                f"UI traces mismatch.\n"
+                f"Expected: {dict(created_trace_names)}\n"
+                f"Got: {dict(Counter(traces_ui))}"
+            )
+            logger.info("Successfully verified traces in UI")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify traces in UI.\n"
+                f"Project: {project_name}\n"
+                f"Expected count: {traces_number}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        traces_sdk = get_traces_of_project_sdk(
-            project_name=project_name, size=traces_number
-        )
-        traces_sdk_names = [trace["name"] for trace in traces_sdk]
-        assert Counter(traces_sdk_names) == created_trace_names
+        # Verify traces via SDK
+        logger.info("Verifying traces via SDK")
+        try:
+            traces_sdk = get_traces_of_project_sdk(
+                project_name=project_name, size=traces_number
+            )
+            traces_sdk_names = [trace["name"] for trace in traces_sdk]
+            assert Counter(traces_sdk_names) == created_trace_names, (
+                f"SDK traces mismatch.\n"
+                f"Expected: {dict(created_trace_names)}\n"
+                f"Got: {dict(Counter(traces_sdk_names))}"
+            )
+            logger.info("Successfully verified traces via SDK")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify traces via SDK.\n"
+                f"Project: {project_name}\n"
+                f"Expected count: {traces_number}\n"
+                f"Error: {str(e)}"
+            ) from e
 
     @pytest.mark.parametrize("traces_number", [10])
     @pytest.mark.parametrize(
@@ -96,47 +181,98 @@ class TestTracesCrud:
     def test_delete_traces_sdk(
         self, page: Page, traces_number, create_project, create_traces
     ):
-        """
-        Testing trace deletion via the SDK API client (v1/private/traces/delete endpoint)
-        Test case is split into 2, creating traces via the decorator first, then via the client
+        """Test trace deletion via SDK interface.
 
-        1. Create 10 traces via either the decorator or the client, following the naming convention of "test-trace-X", where X is from 1 to 25 (so all have unique names)
-        2. Fetch all the newly created trace data via the SDK API client (v1/private/traces endpoint, with project_name parameter)
-        3. Delete the first 2 traces in the list via the SDK API client (v1/private/traces/delete endpoint)
-        4. Check in the UI that the deleted traces are no longer present in the project page
-        5. Check in the SDK that the deleted traces are no longer present in the fetch request (v1/private/traces endpoint, with project_name parameter)
+        Steps:
+        1. Create project via fixture
+        2. Create 10 traces via specified method (runs twice):
+           - Via decorator
+           - Via client
+        3. Get initial traces list via SDK
+        4. Delete first 2 traces via SDK
+        5. Verify:
+           - Traces removed from UI list
+           - Traces no longer accessible via SDK
         """
+        logger.info("Starting SDK trace deletion test")
         project_name = create_project
+
+        # Create traces
         _ = create_traces
 
-        wait_for_traces_to_be_visible(project_name=project_name, size=traces_number)
-        traces_sdk = get_traces_of_project_sdk(
-            project_name=project_name, size=traces_number
-        )
-        traces_sdk_names_ids = [
-            {"id": trace["id"], "name": trace["name"]} for trace in traces_sdk
-        ]
+        # Get initial traces list
+        logger.info("Getting initial traces list")
+        try:
+            wait_for_traces_to_be_visible(project_name=project_name, size=traces_number)
+            traces_sdk = get_traces_of_project_sdk(
+                project_name=project_name, size=traces_number
+            )
+            traces_to_delete = [
+                {"id": trace["id"], "name": trace["name"]} for trace in traces_sdk[0:2]
+            ]
+            logger.info(
+                f"Selected traces for deletion: {[t['name'] for t in traces_to_delete]}"
+            )
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to get initial traces list.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        traces_to_delete = traces_sdk_names_ids[0:2]
-        delete_list_of_traces_sdk(trace["id"] for trace in traces_to_delete)
+        # Delete traces via SDK
+        logger.info("Deleting traces via SDK")
+        try:
+            delete_list_of_traces_sdk(trace["id"] for trace in traces_to_delete)
+            logger.info("Successfully deleted traces via SDK")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to delete traces via SDK.\n"
+                f"Traces to delete: {[t['name'] for t in traces_to_delete]}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        projects_page = ProjectsPage(page)
-        projects_page.go_to_page()
-        projects_page.click_project(project_name)
-        traces_page = TracesPage(page)
-        expect(
-            traces_page.page.get_by_role("row", name=traces_to_delete[0]["name"])
-        ).not_to_be_visible()
-        expect(
-            traces_page.page.get_by_role("row", name=traces_to_delete[1]["name"])
-        ).not_to_be_visible()
+        # Verify deletion in UI
+        logger.info("Verifying traces removed from UI")
+        try:
+            projects_page = ProjectsPage(page)
+            projects_page.go_to_page()
+            projects_page.click_project(project_name)
 
-        traces_sdk = get_traces_of_project_sdk(
-            project_name=project_name, size=traces_number
-        )
-        traces_sdk_names = [trace["name"] for trace in traces_sdk]
+            traces_page = TracesPage(page)
+            for trace in traces_to_delete:
+                expect(
+                    traces_page.page.get_by_role("row", name=trace["name"])
+                ).not_to_be_visible()
+            logger.info("Successfully verified traces not visible in UI")
+        except Exception as e:
+            raise AssertionError(
+                f"Traces still visible in UI after deletion.\n"
+                f"Traces: {[t['name'] for t in traces_to_delete]}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        assert all(name not in traces_sdk_names for name in traces_to_delete)
+        # Verify deletion via SDK
+        logger.info("Verifying traces removed via SDK")
+        try:
+            traces_sdk = get_traces_of_project_sdk(
+                project_name=project_name, size=traces_number
+            )
+            traces_sdk_names = [trace["name"] for trace in traces_sdk]
+            deleted_names = [trace["name"] for trace in traces_to_delete]
+
+            assert all(name not in traces_sdk_names for name in deleted_names), (
+                f"Traces still exist after deletion.\n"
+                f"Deleted traces: {deleted_names}\n"
+                f"Current traces: {traces_sdk_names}"
+            )
+            logger.info("Successfully verified traces removed via SDK")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify traces deletion via SDK.\n"
+                f"Traces to delete: {[t['name'] for t in traces_to_delete]}\n"
+                f"Error: {str(e)}"
+            ) from e
 
     @pytest.mark.parametrize("traces_number", [10])
     @pytest.mark.parametrize(
@@ -150,44 +286,102 @@ class TestTracesCrud:
     def test_delete_traces_ui(
         self, page: Page, traces_number, create_project, create_traces
     ):
-        """
-        Testing trace deletion via the UI
-        Test case is split into 2, creating traces via the decorator first, then via the client
+        """Testing trace deletion via UI interface.
 
-        1. Create 10 traces via either the decorator or the client, following the naming convention of "test-trace-X", where X is from 1 to 25 (so all have unique names)
-        2. Fetch all the newly created trace data via the SDK API client (v1/private/traces endpoint, with project_name parameter)
-        3. Delete the first 2 traces in the list via the UI (selecting them based on name and clicking the Delete button)
-        4. Check in the UI that the deleted traces are no longer present in the project page
-        5. Check in the SDK that the deleted traces are no longer present in the fetch request (v1/private/traces endpoint, with project_name parameter)
+        Steps:
+        1. Create project via fixture
+        2. Create 10 traces via specified method (runs twice):
+           - Via decorator
+           - Via client
+        3. Get initial traces list via SDK
+        4. Delete first 2 traces via UI
+        5. Verify:
+           - Traces removed from UI list
+           - Traces no longer accessible via SDK
         """
+        logger.info("Starting trace deletion test")
         project_name = create_project
+
+        # Navigate to project traces
+        logger.info(f"Navigating to project '{project_name}'")
         projects_page = ProjectsPage(page)
-        projects_page.go_to_page()
-        projects_page.click_project(project_name)
-        traces_page = TracesPage(page)
+        try:
+            projects_page.go_to_page()
+            projects_page.click_project(project_name)
+            logger.info("Successfully navigated to project traces")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to navigate to project traces.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
+
+        # Create traces
         _ = create_traces
 
-        traces_sdk = get_traces_of_project_sdk(
-            project_name=project_name, size=traces_number
-        )
-        traces_sdk_names = [trace["name"] for trace in traces_sdk]
+        # Get initial traces list
+        logger.info("Getting initial traces list")
+        try:
+            traces_sdk = get_traces_of_project_sdk(
+                project_name=project_name, size=traces_number
+            )
+            traces_sdk_names = [trace["name"] for trace in traces_sdk]
+            traces_to_delete = traces_sdk_names[0:2]
+            logger.info(f"Selected traces for deletion: {traces_to_delete}")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to get initial traces list.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        traces_to_delete = traces_sdk_names[0:2]
-        traces_page.delete_single_trace_by_name(traces_to_delete[0])
-        traces_page.delete_single_trace_by_name(traces_to_delete[1])
-        traces_page.page.wait_for_timeout(200)
+        # Delete traces via UI
+        logger.info("Deleting traces via UI")
+        traces_page = TracesPage(page)
+        try:
+            for trace_name in traces_to_delete:
+                traces_page.delete_single_trace_by_name(trace_name)
+                logger.info(f"Deleted trace '{trace_name}'")
+            traces_page.page.wait_for_timeout(200)
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to delete traces via UI.\n"
+                f"Traces to delete: {traces_to_delete}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        expect(
-            traces_page.page.get_by_role("row", name=traces_to_delete[0])
-        ).not_to_be_visible()
-        expect(
-            traces_page.page.get_by_role("row", name=traces_to_delete[1])
-        ).not_to_be_visible()
+        # Verify deletion in UI
+        logger.info("Verifying traces removed from UI")
+        try:
+            for trace_name in traces_to_delete:
+                expect(
+                    traces_page.page.get_by_role("row", name=trace_name)
+                ).not_to_be_visible()
+            logger.info("Successfully verified traces not visible in UI")
+        except Exception as e:
+            raise AssertionError(
+                f"Traces still visible in UI after deletion.\n"
+                f"Traces: {traces_to_delete}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        wait_for_traces_to_be_visible(project_name=project_name, size=traces_number)
-        traces_sdk = get_traces_of_project_sdk(
-            project_name=project_name, size=traces_number
-        )
-        traces_sdk_names = [trace["name"] for trace in traces_sdk]
-
-        assert all(name not in traces_sdk_names for name in traces_to_delete)
+        # Verify deletion via SDK
+        logger.info("Verifying traces removed via SDK")
+        try:
+            wait_for_traces_to_be_visible(project_name=project_name, size=traces_number)
+            traces_sdk = get_traces_of_project_sdk(
+                project_name=project_name, size=traces_number
+            )
+            traces_sdk_names = [trace["name"] for trace in traces_sdk]
+            assert all(name not in traces_sdk_names for name in traces_to_delete), (
+                f"Traces still exist after deletion.\n"
+                f"Deleted traces: {traces_to_delete}\n"
+                f"Current traces: {traces_sdk_names}"
+            )
+            logger.info("Successfully verified traces removed via SDK")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify traces deletion via SDK.\n"
+                f"Traces to delete: {traces_to_delete}\n"
+                f"Error: {str(e)}"
+            ) from e

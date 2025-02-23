@@ -7,75 +7,151 @@ from sdk_helpers import (
     update_project_by_name_sdk,
 )
 from page_objects.ProjectsPage import ProjectsPage
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TestProjectsCrud:
     @pytest.mark.parametrize("project_fixture", ["create_project", "create_project_ui"])
     @pytest.mark.sanity
     def test_project_visibility(self, request, page: Page, project_fixture):
+        """Test project visibility in both UI and SDK interfaces.
+
+        Steps:
+        1. Create project via fixture (runs twice: SDK and UI created projects)
+        2. Verify via SDK:
+           - Project appears in project list
+           - Project name matches expected
+        3. Verify via UI:
+           - Project appears in projects page
+           - Project details are correct
         """
-        Checks a created project is visible via both the UI and SDK. Checks on projects created on both UI and SDK
-        1. Create a project via the UI/the SDK (2 "instances" of the test created for each one)
-        2. Fetch the project by name using the SDK OpenAI client and check the project exists in the projects table in the UI
-        3. Check that the correct project is returned in the SDK and that the name is correct in the UI
-        """
+        logger.info("Starting project visibility test")
         project_name = request.getfixturevalue(project_fixture)
 
-        wait_for_project_to_be_visible(project_name, timeout=10)
-        projects_match = find_project_by_name_sdk(project_name)
+        # Verify via SDK
+        logger.info(f"Verifying project '{project_name}' via SDK")
+        try:
+            wait_for_project_to_be_visible(project_name, timeout=10)
+            projects_match = find_project_by_name_sdk(project_name)
 
-        assert len(projects_match) > 0
-        assert projects_match[0]["name"] == project_name
+            assert len(projects_match) > 0, (
+                f"Project not found via SDK.\n" f"Project name: {project_name}"
+            )
+            assert projects_match[0]["name"] == project_name, (
+                f"Project name mismatch in SDK.\n"
+                f"Expected: {project_name}\n"
+                f"Got: {projects_match[0]['name']}"
+            )
+            logger.info("Successfully verified project via SDK")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify project via SDK.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}\n"
+                f"Note: This could be due to project not created or SDK connectivity issues"
+            ) from e
 
+        # Verify via UI
+        logger.info("Verifying project in UI")
         projects_page = ProjectsPage(page)
-        projects_page.go_to_page()
-        projects_page.check_project_exists_on_current_page_with_retry(
-            project_name=project_name, timeout=5
-        )
+        try:
+            projects_page.go_to_page()
+            projects_page.check_project_exists_on_current_page_with_retry(
+                project_name=project_name, timeout=5
+            )
+            logger.info("Successfully verified project in UI")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify project in UI.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}\n"
+                f"Note: This could be due to project not visible or page load issues"
+            ) from e
 
     @pytest.mark.parametrize(
         "project_fixture",
         ["create_project", "create_project_ui"],
     )
     def test_project_name_update(self, request, page: Page, project_fixture):
-        """
-        Checks using the SDK update method on a project. Checks on projects created on both UI and SDK
-        1. Create a project via the UI/the SDK (2 "instances" of the test created for each one)
-        2. Send a request via the SDK to update the project's name
-        3. Check on both the SDK and the UI that the project has been renamed (on SDK: check project ID matches. on UI: check
-        project with new name appears and no project with old name appears)
-        """
+        """Test project name update via SDK with UI verification.
 
+        Steps:
+        1. Create project via fixture (runs twice: SDK and UI created projects)
+        2. Update project name via SDK
+        3. Verify via SDK:
+           - Project found with new name
+           - Project ID matches original
+        4. Verify via UI:
+           - New name appears in project list
+           - Old name no longer appears
+        5. Clean up by deleting project
+        """
+        logger.info("Starting project name update test")
         project_name = request.getfixturevalue(project_fixture)
         new_name = "updated_test_project_name"
 
         name_updated = False
         try:
-            project_id = update_project_by_name_sdk(
-                name=project_name, new_name=new_name
-            )
-            name_updated = True
+            # Update name via SDK
+            logger.info(f"Updating project name from '{project_name}' to '{new_name}'")
+            try:
+                project_id = update_project_by_name_sdk(
+                    name=project_name, new_name=new_name
+                )
+                name_updated = True
+                logger.info("Successfully updated project name via SDK")
+            except Exception as e:
+                raise AssertionError(
+                    f"Failed to update project name via SDK.\n"
+                    f"Original name: {project_name}\n"
+                    f"New name: {new_name}\n"
+                    f"Error: {str(e)}"
+                ) from e
 
-            wait_for_project_to_be_visible(new_name, timeout=10)
-            projects_match = find_project_by_name_sdk(new_name)
+            # Verify via SDK
+            logger.info("Verifying project update via SDK")
+            try:
+                wait_for_project_to_be_visible(new_name, timeout=10)
+                projects_match = find_project_by_name_sdk(new_name)
+                project_id_updated_name = projects_match[0]["id"]
+                assert project_id_updated_name == project_id, (
+                    f"Project ID mismatch after update.\n"
+                    f"Original ID: {project_id}\n"
+                    f"ID after update: {project_id_updated_name}"
+                )
+                logger.info("Successfully verified project update via SDK")
+            except Exception as e:
+                raise AssertionError(
+                    f"Failed to verify project update via SDK.\n"
+                    f"New name: {new_name}\n"
+                    f"Error: {str(e)}"
+                ) from e
 
-            project_id_updated_name = projects_match[0]["id"]
-            assert project_id_updated_name == project_id
-
+            # Verify via UI
+            logger.info("Verifying project update in UI")
             projects_page = ProjectsPage(page)
-            projects_page.go_to_page()
-            projects_page.check_project_exists_on_current_page_with_retry(
-                project_name=new_name, timeout=5
-            )
-            projects_page.check_project_not_exists_on_current_page(
-                project_name=project_name
-            )
-
-        except Exception as e:
-            print(f"Error occurred during update of project name: {e}")
-            raise
+            try:
+                projects_page.go_to_page()
+                projects_page.check_project_exists_on_current_page_with_retry(
+                    project_name=new_name, timeout=5
+                )
+                projects_page.check_project_not_exists_on_current_page(
+                    project_name=project_name
+                )
+                logger.info("Successfully verified project update in UI")
+            except Exception as e:
+                raise AssertionError(
+                    f"Failed to verify project update in UI.\n"
+                    f"Expected to find: {new_name}\n"
+                    f"Expected not to find: {project_name}\n"
+                    f"Error: {str(e)}"
+                ) from e
 
         finally:
+            # Clean up
+            logger.info("Cleaning up test project")
             if name_updated:
                 delete_project_by_name_sdk(new_name)
             else:
@@ -86,45 +162,123 @@ class TestProjectsCrud:
         ["create_project", "create_project_ui"],
     )
     def test_project_deletion_in_sdk(self, request, page: Page, project_fixture):
+        """Test project deletion via SDK with UI verification.
+
+        Steps:
+        1. Create project via fixture (runs twice: SDK and UI created projects)
+        2. Delete project via SDK
+        3. Verify via UI project no longer appears
+        4. Verify via SDK project not found
         """
-        Checks proper deletion of a project via the SDK. Checks on projects created on both UI and SDK
-        1. Create a project via the UI/the SDK (2 "instances" of the test created for each one)
-        2. Send a request via the SDK to delete the project
-        3. Check on both the SDK and the UI that the project no longer exists (find_projects returns no results in SDK, project does not appear in projects table in UI)
-        """
+        logger.info("Starting project deletion via SDK test")
         project_name = request.getfixturevalue(project_fixture)
-        delete_project_by_name_sdk(project_name)
 
+        # Delete via SDK
+        logger.info(f"Deleting project '{project_name}' via SDK")
+        try:
+            delete_project_by_name_sdk(project_name)
+            logger.info("Successfully deleted project via SDK")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to delete project via SDK.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
+
+        # Verify deletion in UI
+        logger.info("Verifying project deletion in UI")
         projects_page = ProjectsPage(page)
-        projects_page.go_to_page()
-        projects_page.check_project_not_exists_on_current_page(
-            project_name=project_name
-        )
+        try:
+            projects_page.go_to_page()
+            projects_page.check_project_not_exists_on_current_page(
+                project_name=project_name
+            )
+            logger.info("Successfully verified project not visible in UI")
+        except Exception as e:
+            raise AssertionError(
+                f"Project still visible in UI after deletion.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        projects_found = find_project_by_name_sdk(project_name)
-        assert len(projects_found) == 0
+        # Verify deletion via SDK
+        logger.info("Verifying project deletion via SDK")
+        try:
+            projects_found = find_project_by_name_sdk(project_name)
+            assert len(projects_found) == 0, (
+                f"Project still exists after deletion.\n"
+                f"Project name: {project_name}\n"
+                f"Found projects: {projects_found}"
+            )
+            logger.info("Successfully verified project deletion via SDK")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify project deletion via SDK.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
 
     @pytest.mark.parametrize(
         "project_fixture",
         ["create_project", "create_project_ui"],
     )
     def test_project_deletion_in_ui(self, request, page: Page, project_fixture):
+        """Test project deletion via UI with SDK verification.
+
+        Steps:
+        1. Create project via fixture (runs twice: SDK and UI created projects)
+        2. Navigate to projects page
+        3. Delete project through UI interface
+        4. Verify via UI project no longer appears
+        5. Verify via SDK project not found
         """
-        Checks proper deletion of a project via the UI. Checks on projects created on both UI and SDK
-        1. Create a project via the UI/the SDK (2 "instances" of the test created for each one)
-        2. Delete the newly created project via the UI delete button
-        3. Check on both the SDK and the UI that the project no longer exists (find_projects returns no results in SDK, project does not appear in projects table in UI)
-        """
+        logger.info("Starting project deletion via UI test")
         project_name = request.getfixturevalue(project_fixture)
+
+        # Delete via UI
+        logger.info(f"Deleting project '{project_name}' via UI")
         project_page = ProjectsPage(page)
-        project_page.go_to_page()
-        project_page.delete_project_by_name(project_name)
+        try:
+            project_page.go_to_page()
+            project_page.delete_project_by_name(project_name)
+            logger.info("Successfully deleted project via UI")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to delete project via UI.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}\n"
+                f"Note: This could be due to delete button not found or dialog issues"
+            ) from e
 
-        projects_page = ProjectsPage(page)
-        projects_page.go_to_page()
-        projects_page.check_project_not_exists_on_current_page(
-            project_name=project_name
-        )
+        # Verify deletion in UI
+        logger.info("Verifying project deletion in UI")
+        try:
+            projects_page = ProjectsPage(page)
+            projects_page.go_to_page()
+            projects_page.check_project_not_exists_on_current_page(
+                project_name=project_name
+            )
+            logger.info("Successfully verified project not visible in UI")
+        except Exception as e:
+            raise AssertionError(
+                f"Project still visible in UI after deletion.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
 
-        projects_found = find_project_by_name_sdk(project_name)
-        assert len(projects_found) == 0
+        # Verify deletion via SDK
+        logger.info("Verifying project deletion via SDK")
+        try:
+            projects_found = find_project_by_name_sdk(project_name)
+            assert len(projects_found) == 0, (
+                f"Project still exists after deletion.\n"
+                f"Project name: {project_name}\n"
+                f"Found projects: {projects_found}"
+            )
+            logger.info("Successfully verified project deletion via SDK")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to verify project deletion via SDK.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e

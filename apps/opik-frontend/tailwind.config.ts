@@ -35,6 +35,9 @@ module.exports = {
         warning: "hsl(var(--warning))",
         success: "hsl(var(--success))",
         "light-slate": "hsl(var(--lite-slate))",
+        soft: {
+          background: "#FCFCFD",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -92,6 +95,9 @@ module.exports = {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+      },
+      screens: {
+        "3xl": "1920px",
       },
     },
   },

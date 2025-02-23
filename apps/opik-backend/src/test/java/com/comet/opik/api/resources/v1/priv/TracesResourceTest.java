@@ -1460,6 +1460,7 @@ class TracesResourceTest {
                 TestAssertionArgs<Trace> testAssertionArgs) {
 
             var projectName = UUID.randomUUID().toString();
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1551,6 +1552,8 @@ class TracesResourceTest {
                             .threadId(null)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
+                            .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                            .comments(null)
                             .build())
                     .toList();
 
@@ -1562,6 +1565,7 @@ class TracesResourceTest {
                             .usage(null)
                             .threadId(null)
                             .feedbackScores(null)
+                            .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .totalEstimatedCost(null)
                             .build())
                     .toList();
@@ -1874,6 +1878,7 @@ class TracesResourceTest {
         void whenFilterNameNotContains__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
                 TestAssertionArgs<Trace> testAssertionArgs) {
+          
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2520,6 +2525,7 @@ class TracesResourceTest {
         void whenFilterMetadataEqualBoolean__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
                 TestAssertionArgs<Trace> testAssertionArgs) {
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2670,6 +2676,7 @@ class TracesResourceTest {
         void whenFilterMetadataContainsNumber__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
                 TestAssertionArgs<Trace> testAssertionArgs) {
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2719,6 +2726,7 @@ class TracesResourceTest {
         void whenFilterMetadataContainsBoolean__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
                 TestAssertionArgs<Trace> testAssertionArgs) {
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2769,6 +2777,7 @@ class TracesResourceTest {
         void whenFilterMetadataContainsNull__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
                 TestAssertionArgs<Trace> testAssertionArgs) {
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2819,6 +2828,7 @@ class TracesResourceTest {
         void whenFilterMetadataGreaterThanNumber__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
                 TestAssertionArgs<Trace> testAssertionArgs) {
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2868,6 +2878,7 @@ class TracesResourceTest {
         void whenFilterMetadataGreaterThanString__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
                 TestAssertionArgs<Trace> testAssertionArgs) {
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2885,6 +2896,7 @@ class TracesResourceTest {
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2930,6 +2942,7 @@ class TracesResourceTest {
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
+                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -3747,6 +3760,7 @@ class TracesResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .threadId(null)
+                            .comments(null)
                             .totalEstimatedCost(null)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
@@ -5352,7 +5366,6 @@ class TracesResourceTest {
 
         @Test
         void batch__whenTraceHasThreadId__thenReturnNoContent() {
-
             var threadId = UUID.randomUUID().toString();
             var projectName = UUID.randomUUID().toString();
 
@@ -5814,7 +5827,6 @@ class TracesResourceTest {
         @DisplayName("when trace does not exist, then return create it")
         void when__traceDoesNotExist__thenReturnCreateIt() {
             var id = factory.manufacturePojo(UUID.class);
-
             var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
                     .projectId(null)
                     .build();
@@ -6082,7 +6094,7 @@ class TracesResourceTest {
                     .projectName(trace.projectName())
                     .input(input)
                     .build();
-
+          
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
             UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
@@ -6684,7 +6696,6 @@ class TracesResourceTest {
 
             var expectedTrace1 = createTrace().toBuilder()
                     .projectName(DEFAULT_PROJECT)
-
                     .build();
 
             var id1 = create(expectedTrace1, apiKey, workspaceName);

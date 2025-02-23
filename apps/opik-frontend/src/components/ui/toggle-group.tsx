@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as ToggleGroupPrimitive from "@radix-ui/react-toggle-group";
-import { VariantProps } from "class-variance-authority";
+import { cva, VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 import { toggleVariants } from "@/components/ui/toggle";
@@ -12,6 +12,21 @@ const ToggleGroupContext = React.createContext<
   variant: "default",
 });
 
+const toggleGroupVariants = cva(
+  "flex items-center justify-center gap-1 rounded-md bg-background",
+  {
+    variants: {
+      variant: {
+        default: "border border-border p-[3px]",
+        outline: "",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  },
+);
+
 const ToggleGroup = React.forwardRef<
   React.ElementRef<typeof ToggleGroupPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Root> &
@@ -20,7 +35,9 @@ const ToggleGroup = React.forwardRef<
   <ToggleGroupPrimitive.Root
     ref={ref}
     className={cn(
-      "flex items-center justify-center gap-1 border border-border bg-background rounded-md p-[3px]",
+      toggleGroupVariants({
+        variant,
+      }),
       className,
     )}
     {...props}
