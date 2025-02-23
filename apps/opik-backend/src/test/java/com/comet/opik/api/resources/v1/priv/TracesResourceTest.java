@@ -1878,7 +1878,7 @@ class TracesResourceTest {
         void whenFilterNameNotContains__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
                 TestAssertionArgs<Trace> testAssertionArgs) {
-          
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -6094,7 +6094,7 @@ class TracesResourceTest {
                     .projectName(trace.projectName())
                     .input(input)
                     .build();
-          
+
             runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
             UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
