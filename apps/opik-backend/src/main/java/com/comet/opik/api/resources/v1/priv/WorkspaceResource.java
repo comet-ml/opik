@@ -33,7 +33,7 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 public class WorkspaceResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
-    private final WorkspaceMetadataService service;
+    private final @NonNull WorkspaceMetadataService service;
 
     @GET
     @Path("metadata")

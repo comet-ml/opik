@@ -289,5 +289,5 @@ clickHouseLogAppender:
 
 workspaceSettings:
   # Default: 50
-  # Description: Maximum size of a workspace in GB to allow dynamic sorting
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
     maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
