@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import find from "lodash/find";
-import { BooleanParam, useQueryParam } from "use-query-params";
+import { createEnumParam, useQueryParam } from "use-query-params";
 
 import { Trash } from "lucide-react";
 import {
@@ -21,6 +21,7 @@ import ResizableSidePanel from "@/components/shared/ResizableSidePanel/Resizable
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import CommentsViewer from "./CommentsViewer/CommentsViewer";
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -33,6 +34,17 @@ type TraceDetailsPanelProps = {
   onRowChange?: (shift: number) => void;
 };
 
+export const LastSection = {
+  Annotations: "annotations",
+  Comments: "comments",
+} as const;
+export type LastSectionValue = (typeof LastSection)[keyof typeof LastSection];
+
+export const LastSectionParam = createEnumParam<LastSectionValue>([
+  "annotations",
+  "comments",
+]);
+
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   projectId: externalProjectId,
   traceId,
@@ -44,9 +56,9 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onRowChange,
 }) => {
   const [open, setOpen] = useState<boolean>(false);
-  const [annotateOpen = false, setAnnotateOpen] = useQueryParam(
-    "annotation",
-    BooleanParam,
+  const [lastSection, setLastSection] = useQueryParam(
+    "lastSection",
+    LastSectionParam,
     {
       updateType: "replaceIn",
     },
@@ -127,25 +139,37 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               projectId={projectId}
               spanId={spanId}
               traceId={traceId}
-              annotateOpen={annotateOpen as boolean}
-              setAnnotateOpen={setAnnotateOpen}
+              lastSection={lastSection}
+              setLastSection={setLastSection}
             />
           </ResizablePanel>
-          {annotateOpen && (
+          {Boolean(lastSection) && (
             <>
               <ResizableHandle />
               <ResizablePanel
-                id="annotate-viewer"
+                id="last-section-viewer"
                 defaultSize={40}
                 minSize={30}
               >
-                <TraceAnnotateViewer
-                  data={dataToView}
-                  spanId={spanId}
-                  traceId={traceId}
-                  annotateOpen={annotateOpen as boolean}
-                  setAnnotateOpen={setAnnotateOpen}
-                />
+                {lastSection === LastSection.Annotations && (
+                  <TraceAnnotateViewer
+                    data={dataToView}
+                    spanId={spanId}
+                    traceId={traceId}
+                    lastSection={lastSection}
+                    setLastSection={setLastSection}
+                  />
+                )}
+                {lastSection === LastSection.Comments && (
+                  <CommentsViewer
+                    data={dataToView}
+                    spanId={spanId}
+                    traceId={traceId}
+                    projectId={projectId}
+                    lastSection={lastSection}
+                    setLastSection={setLastSection}
+                  />
+                )}
               </ResizablePanel>
             </>
           )}

@@ -15,6 +15,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -40,6 +41,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
@@ -56,6 +58,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /// - **Openai**: runs against a demo server and doesn't require an API key
 /// - **Anthropic**: set `ANTHROPIC_API_KEY` to your anthropic api key
 /// - **Gemini**: set `GEMINI_API_KEY` to your gemini api key
+/// - **OpenRouter**: set `OPENROUTER_API_KEY` to your OpenRouter api key
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 // Disabled because the tests require an API key to run and this seems to be failing in the CI pipeline
 class ChatCompletionsResourceTest {
@@ -121,7 +124,9 @@ class ChatCompletionsResourceTest {
         @ParameterizedTest
         @MethodSource("testModelsProvider")
         @Disabled
-        void create(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
+        void create(
+                String expectedModel, LlmProvider llmProvider, String llmProviderApiKey,
+                BiConsumer<String, String> modelNameEvaluator) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
@@ -138,7 +143,7 @@ class ChatCompletionsResourceTest {
 
             var response = chatCompletionsClient.create(API_KEY, workspaceName, request);
 
-            assertThat(response.model()).containsIgnoringCase(expectedModel);
+            modelNameEvaluator.accept(response.model(), expectedModel);
             assertThat(response.choices()).anySatisfy(choice -> {
                 assertThat(choice.message().content()).containsIgnoringCase("Hello World");
                 assertThat(choice.message().role()).isEqualTo(Role.ASSISTANT);
@@ -190,7 +195,9 @@ class ChatCompletionsResourceTest {
         @ParameterizedTest
         @MethodSource("testModelsProvider")
         @Disabled
-        void createAndStreamResponse(String expectedModel, LlmProvider llmProvider, String llmProviderApiKey) {
+        void createAndStreamResponse(
+                String expectedModel, LlmProvider llmProvider, String llmProviderApiKey,
+                BiConsumer<String, String> modelNameEvaluator) {
             assumeThat(llmProviderApiKey).isNotEmpty();
 
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
@@ -207,9 +214,7 @@ class ChatCompletionsResourceTest {
 
             var response = chatCompletionsClient.createAndStream(API_KEY, workspaceName, request);
 
-            assertThat(response)
-                    .allSatisfy(entity -> assertThat(entity.model())
-                            .containsIgnoringCase(expectedModel));
+            response.forEach(entity -> modelNameEvaluator.accept(entity.model(), expectedModel));
 
             var choices = response.stream().flatMap(entity -> entity.choices().stream()).toList();
             assertThat(choices)
@@ -223,13 +228,21 @@ class ChatCompletionsResourceTest {
         }
 
         private static Stream<Arguments> testModelsProvider() {
+            BiConsumer<String, String> actualContainsExpectedEval = (actual, expected) -> assertThat(actual)
+                    .containsIgnoringCase(expected);
+            BiConsumer<String, String> expectedContainsActualEval = (actual, expected) -> assertThat(expected)
+                    .containsIgnoringCase(actual);
+
             return Stream.of(
                     arguments(OpenaiModelName.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
-                            UUID.randomUUID().toString()),
+                            UUID.randomUUID().toString(), actualContainsExpectedEval),
                     arguments(AnthropicModelName.CLAUDE_3_5_SONNET_20240620.toString(), LlmProvider.ANTHROPIC,
-                            System.getenv("ANTHROPIC_API_KEY")),
+                            System.getenv("ANTHROPIC_API_KEY"), actualContainsExpectedEval),
                     arguments(GeminiModelName.GEMINI_1_0_PRO.toString(), LlmProvider.GEMINI,
-                            System.getenv("GEMINI_API_KEY")));
+                            System.getenv("GEMINI_API_KEY"), actualContainsExpectedEval),
+                    arguments(OpenRouterModelName.GOOGLE_GEMINI_2_0_FLASH_LITE_PREVIEW_02_05_FREE.toString(),
+                            LlmProvider.OPEN_ROUTER, System.getenv("OPENROUTER_API_KEY"),
+                            expectedContainsActualEval));
         }
 
         @ParameterizedTest

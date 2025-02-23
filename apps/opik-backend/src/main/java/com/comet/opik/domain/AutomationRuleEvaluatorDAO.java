@@ -24,6 +24,7 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(JsonNodeArgumentFactory.class)
 @RegisterConstructorMapper(LlmAsJudgeAutomationRuleEvaluatorModel.class)
+@RegisterConstructorMapper(UserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
@@ -50,6 +51,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(name)> AND rule.name like concat('%', :name, '%') <endif>
+            ORDER by rule.id DESC
             <if(limit)> LIMIT :limit <endif>
             <if(offset)> OFFSET :offset <endif>
             """)
@@ -73,6 +75,33 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
             AutomationRuleEvaluatorCriteria criteria) {
         return find(workspaceId, projectId, criteria, null, null);
+    }
+
+    @SqlQuery("""
+            SELECT COUNT(*)
+            FROM automation_rules rule
+            JOIN automation_rule_evaluators evaluator
+              ON rule.id = evaluator.id
+            WHERE workspace_id = :workspaceId AND rule.action = :action
+            <if(projectId)> AND project_id = :projectId <endif>
+            <if(type)> AND evaluator.type = :type <endif>
+            <if(ids)> AND rule.id IN (<ids>) <endif>
+            <if(name)> AND rule.name like concat('%', :name, '%') <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    long findCount(
+            @Bind("workspaceId") String workspaceId,
+            @Define("projectId") @Bind("projectId") UUID projectId,
+            @Bind("action") AutomationRule.AutomationRuleAction action,
+            @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
+            @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
+            @Define("name") @Bind("name") String name);
+
+    default long findCount(String workspaceId,
+            UUID projectId,
+            AutomationRuleEvaluatorCriteria criteria) {
+        return findCount(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.name());
     }
 
     @SqlUpdate("""
