@@ -56,9 +56,15 @@ traces = client.search_traces(
 traces = [trace.dict() for trace in traces]
 ```
 
-The `filter_string` parameter should follow the format `<column> <operator> <value>` with:
+The `filter_string` parameter should be a string in the following format:
 
-1. `<column>`: The column to filter on, these can be:
+```
+"<COLUMN> <OPERATOR> <VALUE> [and <COLUMN> <OPERATOR> <VALUE>]*"
+```
+
+where:
+
+1. `<COLUMN>`: The column name to filter on, these can be:
    - `name`
    - `input`
    - `output`
@@ -70,10 +76,18 @@ The `filter_string` parameter should follow the format `<column> <operator> <val
    - `usage.total_tokens`
    - `usage.prompt_tokens`
    - `usage.completion_tokens`.
-2. `<operator>`: The operator to use for the filter, this can be `=`, `!=`, `>`, `>=`, `<`, `<=`, `contains`, `not_contains`. Not that not all operators are supported for all columns.
-3. `<value>`: The value to filter on. If you are filtering on a string, you will need to wrap it in double quotes.
+2. `<OPERATOR>`: The operator to use for the filter, this can be `=`, `!=`, `>`, `>=`, `<`, `<=`, `contains`, `not_contains`. Not that not all operators are supported for all columns.
+3. `<VALUE>`: The value to use in the comparison to `<COLUMN>`. If the value is a string, you will need to wrap it in double quotes.
 
-Here are some additional examples of valid `filter_string` values:
+You can add as many `and` clauses as required.
+
+If a `<COLUMN>` item refers to a nested object, then you can use the
+dot notation to access contained values by using its key. For example,
+you could use:
+
+`"feedback_scores.accuracy > 0.5"`
+
+Here are some full examples of using `filter_string` values in searches:
 
 ```python
 import opik
@@ -100,27 +114,20 @@ traces = client.search_traces(filter_string='usage.total_tokens > 1000')
 traces = client.search_traces(filter_string='metadata.model = "gpt-4o"')
 ```
 
-:::tip
+<Tip>
+If your `feedback_scores` key contains spaces, you will need to wrap
+it in double quotes:
 
-If your feedback scores names contain spaces, you will need to wrap them in double quotes:
+`'feedback_score."My Score" > 0'`
 
-```python
+If the `feedback_score` key contains both spaces and double quotes, you will need to escape the double quotes as `""`:
 
-import opik
+`'feedback_score."Score ""with"" Quotes" > 0'`
 
-client = opik.Opik(
-    project_name="Default project"
-)
+or by using different quotes, surrounding in triple-quotes, like this:
 
-# Search for traces where the input contains text
-traces = client.search_traces(
-  filter_string='feedback_score."My Score" > 0'
-)
-```
-
-If the feedback score contains both spaces and double quotes, you will need to escape the double quotes as `""`:
-`traces = client.search_traces(filter_string='feedback_score."Score ""with"" Quotes" > 0')`
-:::
+`'''feedback_scores.'Accuracy "Happy Index"' < 0.8'''`
+</Tip>
 
 ### Exporting spans
 
