@@ -7,12 +7,14 @@ import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceThreadField;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.r2dbc.spi.Statement;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -20,6 +22,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
 
 public class FilterQueryBuilder {
 
@@ -43,6 +49,12 @@ public class FilterQueryBuilder {
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
     private static final String DURATION_ANALYTICS_DB = "duration_millis";
+    private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
+    private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
+    private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
+    private static final String CREATED_AT_ANALYTICS_DB = "created_at";
+    private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
+    private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(Map.of(
             Operator.CONTAINS, new EnumMap<>(Map.of(
@@ -114,6 +126,18 @@ public class FilterQueryBuilder {
                     .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
+                    .build());
+
+    private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<TraceThreadField, String>builder()
+                    .put(TraceThreadField.ID, ID_ANALYTICS_DB)
+                    .put(TraceThreadField.NUMBER_OF_MESSAGES, NUMBER_OF_MESSAGES_ANALYTICS_DB)
+                    .put(TraceThreadField.FIRST_MESSAGE, FIRST_MESSAGE_ANALYTICS_DB)
+                    .put(TraceThreadField.LAST_MESSAGE, LAST_MESSAGE_ANALYTICS_DB)
+                    .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(TraceThreadField.CREATED_AT, CREATED_AT_ANALYTICS_DB)
+                    .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_ANALYTICS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -153,6 +177,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.METADATA)
                     .add(TraceField.TAGS)
                     .add(TraceField.DURATION)
+                    .add(TraceField.THREAD_ID)
                     .build()),
             FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.USAGE_COMPLETION_TOKENS)
@@ -184,11 +209,28 @@ public class FilterQueryBuilder {
                     .build(),
             FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
                     .add(ExperimentsComparisonValidKnownField.OUTPUT)
+                    .build()),
+            FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
+                    .add(TraceThreadField.ID)
+                    .add(TraceThreadField.NUMBER_OF_MESSAGES)
+                    .add(TraceThreadField.FIRST_MESSAGE)
+                    .add(TraceThreadField.LAST_MESSAGE)
+                    .add(TraceThreadField.DURATION)
+                    .add(TraceThreadField.CREATED_AT)
+                    .add(TraceThreadField.LAST_UPDATED_AT)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
             FieldType.FEEDBACK_SCORES_NUMBER);
+
+    public Map<Field, List<Operator>> getUnSupportedOperators(@NonNull Field... fields) {
+        return Arrays.stream(fields)
+                .flatMap(field -> ANALYTICS_DB_OPERATOR_MAP.entrySet().stream()
+                        .filter(entry -> !entry.getValue().containsKey(field.getType()))
+                        .map(entry -> Map.entry(field, entry.getKey())))
+                .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toList())));
+    }
 
     public String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
@@ -224,6 +266,7 @@ public class FilterQueryBuilder {
             case SpanField spanField -> SPAN_FIELDS_MAP.get(spanField);
             case ExperimentsComparisonValidKnownField experimentsComparisonValidKnownField ->
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
+            case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

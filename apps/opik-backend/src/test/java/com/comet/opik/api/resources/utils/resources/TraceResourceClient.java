@@ -170,4 +170,17 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                     return scores;
                 }).toList();
     }
+
+    public List<Trace> getByProjectName(String projectName, String apiKey, String workspace) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("project_name", projectName)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspace)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Trace.TracePage.class).content();
+        }
+    }
 }
