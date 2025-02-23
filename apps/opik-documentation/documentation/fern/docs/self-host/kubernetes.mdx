@@ -8,10 +8,9 @@ For production deployments, we recommend using our Kubernetes Helm chart. This c
 
 In order to install Opik on a Kubernetes cluster, you will need to have the following tools installed:
 
-- [Docker](https://www.docker.com/)
 - [Helm](https://helm.sh/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [kubectx](https://github.com/ahmetb/kubectx) and [kubens](https://github.com/ahmetb/kubectx) to switch between Kubernetes clusters and namespaces.
+- Optional: [kubectx](https://github.com/ahmetb/kubectx) and [kubens](https://github.com/ahmetb/kubectx) to switch between Kubernetes clusters and namespaces.
 
 ## Installation
 
@@ -22,10 +21,14 @@ You can install Opik using the helm chart maintained by the Opik team by running
 helm repo add opik https://comet-ml.github.io/opik/
 helm repo update
 
-# Install Opik
+# You can set VERSION to the specific Opik version or leave it as 'latest'
 VERSION=latest
+# Install Opik
 helm upgrade --install opik -n opik --create-namespace opik/opik \
-    --set component.backend.image.tag=$VERSION --set component.frontend.image.tag=$VERSION
+    --set component.backend.image.tag=$VERSION \
+    --set component.python-backend.image.tag=$VERSION \
+    --set component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG="$VERSION" \
+    --set component.frontend.image.tag=$VERSION
 ```
 
 You can port-forward any service you need to your local machine:
@@ -39,3 +42,27 @@ Opik will be available at `http://localhost:5173`.
 ## Configuration
 
 You can find a full list the configuration options in the [helm chart documentation](https://github.com/comet-ml/opik/tree/main/deployment/helm_chart/opik).
+
+## Advanced deployment options
+### Using external Clickhouse installation
+Supported from Opik chart version 1.4.2
+
+Configuration snippet for using external Clickhouse:
+```bash
+opik:
+  component:
+    backend:
+      ...
+      env:
+        ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://<YOUR CLICKHOUSE HOST>:8123"
+        ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
+      initContainers:
+      - name: wait-for-clickhouse-service
+        image: stefanevinance/wait-for-200
+        env:
+          - name: URL
+            value: http://<YOUR CLICKHOUSE HOST>:8123
+...
+  clickhouse:
+    enabled: false
+```
