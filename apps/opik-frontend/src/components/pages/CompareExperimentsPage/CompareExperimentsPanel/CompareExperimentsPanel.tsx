@@ -10,7 +10,7 @@ import ResizableSidePanel from "@/components/shared/ResizableSidePanel/Resizable
 import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { ExperimentsCompare } from "@/types/datasets";
+import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,6 +21,7 @@ type CompareExperimentsPanelProps = {
   experimentsCompareId?: string | null;
   experimentsCompare?: ExperimentsCompare;
   experimentsIds: string[];
+  experiments?: Experiment[];
   openTrace: OnChangeFn<string>;
   hasPreviousRow?: boolean;
   hasNextRow?: boolean;
@@ -35,6 +36,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
   experimentsCompareId,
   experimentsCompare,
   experimentsIds,
+  experiments,
   openTrace,
   hasPreviousRow,
   hasNextRow,
@@ -110,6 +112,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
               data={data}
               experimentItems={experimentItems}
               openTrace={openTrace}
+              experiments={experiments}
             />
           </TabsContent>
           <TabsContent

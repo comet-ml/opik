@@ -9,19 +9,21 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import NoData from "@/components/shared/NoData/NoData";
 import useExperimentById from "@/api/datasets/useExperimentById";
 import { TraceFeedbackScore } from "@/types/traces";
-import { ExperimentItem } from "@/types/datasets";
+import { Experiment, ExperimentItem } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { traceExist } from "@/lib/traces";
+import ExperimentCommentsViewerCore from "./DataTab/ExperimentCommentsViewer";
 
 type CompareExperimentsViewerProps = {
   experimentItem: ExperimentItem;
   openTrace: OnChangeFn<string>;
+  experiments: Experiment[];
 };
 
 const CompareExperimentsViewer: React.FunctionComponent<
   CompareExperimentsViewerProps
-> = ({ experimentItem, openTrace }) => {
+> = ({ experimentItem, openTrace, experiments }) => {
   const isTraceExist = traceExist(experimentItem);
   const experimentId = experimentItem.experiment_id;
   const { data } = useExperimentById(
@@ -34,6 +36,8 @@ const CompareExperimentsViewer: React.FunctionComponent<
   );
 
   const name = data?.name || experimentId;
+  const comments =
+    experiments.find((exp) => exp.id === experimentId)?.comments || [];
 
   const feedbackScores: TraceFeedbackScore[] = useMemo(
     () => sortBy(experimentItem.feedback_scores || [], "name"),
@@ -94,9 +98,13 @@ const CompareExperimentsViewer: React.FunctionComponent<
       {renderOutput()}
 
       {isTraceExist && (
-        <div className="sticky bottom-0 right-0 mt-auto box-border max-h-[310px] overflow-auto border-t bg-white py-4 contain-content">
+        <div className="sticky bottom-0 right-0 mt-auto box-border max-h-[40vh] overflow-auto border-t bg-white py-4 contain-content">
           <FeedbackScoresEditor
             feedbackScores={feedbackScores}
+            traceId={experimentItem.trace_id as string}
+          />
+          <ExperimentCommentsViewerCore
+            comments={comments}
             traceId={experimentItem.trace_id as string}
           />
         </div>

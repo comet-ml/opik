@@ -21,9 +21,9 @@ export type CustomMeta = {
   outputKey?: string;
 };
 
-type VerticallySplitCellWrapperProps = {
-  metadata?: ColumnMeta<unknown, unknown>;
-  tableMetadata?: TableMeta<unknown>;
+type VerticallySplitCellWrapperProps<TData> = {
+  metadata?: ColumnMeta<TData, unknown>;
+  tableMetadata?: TableMeta<TData>;
   renderContent: (
     item: ExperimentItem | undefined,
     experimentId: string,
@@ -32,13 +32,13 @@ type VerticallySplitCellWrapperProps = {
   rowId: string;
 };
 
-const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
+const VerticallySplitCellWrapper = <TData,>({
   metadata,
   tableMetadata,
   renderContent,
   experimentCompare,
   rowId,
-}) => {
+}: VerticallySplitCellWrapperProps<TData>) => {
   const { custom, type } = metadata ?? {};
   const { experimentsIds } = (custom ?? {}) as CustomMeta;
   const rowHeight = tableMetadata?.rowHeight ?? ROW_HEIGHT.small;

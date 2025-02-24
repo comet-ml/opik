@@ -5,7 +5,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 
-import { DatasetItem, ExperimentItem } from "@/types/datasets";
+import { DatasetItem, Experiment, ExperimentItem } from "@/types/datasets";
 import CompareExperimentsViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsViewer";
 import { OnChangeFn } from "@/types/shared";
 import ExperimentDataset from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/ExperimentDataset";
@@ -13,10 +13,16 @@ import ExperimentDataset from "@/components/pages/CompareExperimentsPage/Compare
 interface DataTabProps {
   data: DatasetItem["data"] | undefined;
   experimentItems: ExperimentItem[];
+  experiments?: Experiment[];
   openTrace: OnChangeFn<string>;
 }
 
-const DataTab = ({ data, experimentItems, openTrace }: DataTabProps) => {
+const DataTab = ({
+  data,
+  experimentItems,
+  experiments = [],
+  openTrace,
+}: DataTabProps) => {
   const renderExperimentsSection = () => {
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={experimentItem.id}>
@@ -24,6 +30,7 @@ const DataTab = ({ data, experimentItems, openTrace }: DataTabProps) => {
           <CompareExperimentsViewer
             experimentItem={experimentItem}
             openTrace={openTrace}
+            experiments={experiments}
           />
         </ResizablePanel>
 

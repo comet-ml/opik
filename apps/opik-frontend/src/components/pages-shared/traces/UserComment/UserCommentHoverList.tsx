@@ -12,11 +12,13 @@ import {
 type UserCommentHoverListProps = {
   commentsList: Comment[];
   onReply: () => void;
+  className?: string;
   children: React.ReactNode;
 };
 const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
   commentsList,
   onReply,
+  className,
   children,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -39,7 +41,7 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
   return (
     <HoverCard open={isOpen} onOpenChange={setIsOpen}>
       <HoverCardTrigger asChild>
-        <div className="flex size-full min-w-0 flex-1">{children}</div>
+        <div className={className}>{children}</div>
       </HoverCardTrigger>
       <HoverCardContent className="w-[320px] p-0" collisionPadding={24}>
         <div

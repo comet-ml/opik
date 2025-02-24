@@ -23,8 +23,13 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import {
+  COLUMN_COMMENTS_ID,
+  COLUMN_NAME_ID,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
+import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages/ExperimentsShared/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
@@ -109,6 +114,12 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
         value: formatNumericData(score.value),
       })),
     cell: FeedbackScoreListCell as never,
+  },
+  {
+    id: COLUMN_COMMENTS_ID,
+    label: "Comments",
+    type: COLUMN_TYPE.list,
+    cell: CommentsCell as never,
   },
 ];
 
@@ -222,17 +233,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
-      mapColumnDataFields<GroupedExperiment, GroupedExperiment>({
-        id: "comments",
-        label: "Comments",
-        type: COLUMN_TYPE.list,
-        cell: CommentsCell as never,
-        customMeta: {
-          // TODO open the sidebar
-          callback: () => {},
-          asId: true,
-        },
-      }),
       generateActionsColumDef({
         cell: ExperimentRowActionsCell,
       }),
@@ -251,6 +251,15 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const expandingConfig = useExpandingConfig({
     groupIds,
   });
+
+  const meta = useMemo(
+    () => ({
+      onCommentsReply: () => {
+        // TODO open sidebar
+      },
+    }),
+    [],
+  );
 
   const handleNewExperimentClick = useCallback(() => {
     setOpenDialog(true);
@@ -341,6 +350,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
+        meta={meta}
       />
       <div className="py-4">
         <DataTablePagination
