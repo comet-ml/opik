@@ -175,6 +175,7 @@ class TracesResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
+    private final FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
 
     private String baseURI;
     private ClientSupport client;
@@ -1033,308 +1034,53 @@ class TracesResourceTest {
         }
 
         private Stream<Arguments> getFilterInvalidOperatorForFieldTypeArgs() {
-            Stream<Filter> filters = Stream.of(
-                    TraceFilter.builder()
-                            .field(TraceField.START_TIME)
-                            .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.END_TIME)
-                            .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES)
-                            .operator(Operator.CONTAINS)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.START_TIME)
-                            .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.END_TIME)
-                            .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.METADATA)
-                            .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES)
-                            .operator(Operator.NOT_CONTAINS)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.START_TIME)
-                            .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.END_TIME)
-                            .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.METADATA)
-                            .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES)
-                            .operator(Operator.STARTS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.START_TIME)
-                            .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.END_TIME)
-                            .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.METADATA)
-                            .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES)
-                            .operator(Operator.ENDS_WITH)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.ID)
-                            .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.NAME)
-                            .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.INPUT)
-                            .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.OUTPUT)
-                            .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.GREATER_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.ID)
-                            .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.NAME)
-                            .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.INPUT)
-                            .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.OUTPUT)
-                            .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.METADATA)
-                            .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.GREATER_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.ID)
-                            .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.NAME)
-                            .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.INPUT)
-                            .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.OUTPUT)
-                            .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.LESS_THAN)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.ID)
-                            .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.NAME)
-                            .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.INPUT)
-                            .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.OUTPUT)
-                            .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.METADATA)
-                            .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.LESS_THAN_EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.DURATION)
-                            .operator(Operator.ENDS_WITH)
-                            .value("1")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.DURATION)
-                            .operator(Operator.STARTS_WITH)
-                            .value("1")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.DURATION)
-                            .operator(Operator.CONTAINS)
-                            .value("1")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.DURATION)
-                            .operator(Operator.NOT_CONTAINS)
-                            .value("1")
-                            .build());
-            return filters.flatMap(filter -> Stream.of(
-                    arguments("/stats", filter),
-                    arguments("", filter)));
+            return filterQueryBuilder.getUnSupportedOperators(TraceField.values())
+                    .entrySet()
+                    .stream()
+                    .flatMap(filter -> filter.getValue()
+                            .stream()
+                            .flatMap(operator -> Stream.of(
+                                    Arguments.of("/stats", TraceFilter.builder()
+                                            .field(filter.getKey())
+                                            .operator(operator)
+                                            .key(getKey(filter.getKey()))
+                                            .value(getValidValue(filter.getKey()))
+                                            .build()),
+                                    Arguments.of("", TraceFilter.builder()
+                                            .field(filter.getKey())
+                                            .operator(operator)
+                                            .key(getKey(filter.getKey()))
+                                            .value(getValidValue(filter.getKey()))
+                                            .build()))));
         }
 
-        static Stream<Arguments> getFilterInvalidValueOrKeyForFieldTypeArgs() {
-            Stream<TraceFilter> filters = Stream.of(
-                    TraceFilter.builder()
-                            .field(TraceField.ID)
-                            .operator(Operator.EQUAL)
-                            .value(" ")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.NAME)
-                            .operator(Operator.EQUAL)
-                            .value("")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.INPUT)
-                            .operator(Operator.EQUAL)
-                            .value("")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.OUTPUT)
-                            .operator(Operator.EQUAL)
-                            .value("")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.START_TIME)
-                            .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.END_TIME)
-                            .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.METADATA)
-                            .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .key(null)
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.METADATA)
-                            .operator(Operator.EQUAL)
-                            .value("")
-                            .key(RandomStringUtils.secure().nextAlphanumeric(10))
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.TAGS)
-                            .operator(Operator.CONTAINS)
-                            .value("")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES)
-                            .operator(Operator.EQUAL)
-                            .value("123.456")
-                            .key(null)
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES)
-                            .operator(Operator.EQUAL)
-                            .value("")
-                            .key("hallucination")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.DURATION)
-                            .operator(Operator.EQUAL)
-                            .value("")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.DURATION)
-                            .operator(Operator.EQUAL)
-                            .value(RandomStringUtils.secure().nextAlphanumeric(5))
-                            .build());
+        private Stream<Arguments> getFilterInvalidValueOrKeyForFieldTypeArgs() {
+
+            Stream<TraceFilter> filters = filterQueryBuilder.getSupportedOperators(TraceField.values())
+                    .entrySet()
+                    .stream()
+                    .flatMap(filter -> filter.getValue()
+                            .stream()
+                            .flatMap(operator -> switch (filter.getKey().getType()) {
+                                case DICTIONARY, FEEDBACK_SCORES_NUMBER -> Stream.of(
+                                        TraceFilter.builder()
+                                                .field(filter.getKey())
+                                                .operator(operator)
+                                                .key(null)
+                                                .value(getValidValue(filter.getKey()))
+                                                .build(),
+                                        TraceFilter.builder()
+                                                .field(filter.getKey())
+                                                .operator(operator)
+                                                .key(getKey(filter.getKey()))
+                                                .value(getInvalidValue(filter.getKey()))
+                                                .build());
+                                default -> Stream.of(TraceFilter.builder()
+                                        .field(filter.getKey())
+                                        .operator(operator)
+                                        .value(getInvalidValue(filter.getKey()))
+                                        .build());
+                            }));
 
             return filters.flatMap(filter -> Stream.of(
                     arguments("/stats", filter),
@@ -1687,9 +1433,56 @@ class TracesResourceTest {
                             .value(traces.getFirst().name())
                             .build());
 
-            getAndAssertPage(workspaceName, projectName, null, filters, traces, expectedTraces.reversed(),
-                    unexpectedTraces,
-                    apiKey);
+            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
+                    values.getT1(),
+                    filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("equalAndNotEqualFilters")
+        void whenFilterByThreadEqual__thenReturnTracesFiltered(String endpoint,
+                Operator operator,
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                TestAssertion testAssertion,
+                TestAssertionArgs<Trace> testAssertionArgs) {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .threadId(UUID.randomUUID().toString())
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traces.set(traces.size() - 1, traces.getLast().toBuilder()
+                    .threadId(null)
+                    .build());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.THREAD_ID)
+                            .operator(operator)
+                            .value(traces.getFirst().threadId())
+                            .build());
 
             var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
 
@@ -4033,6 +3826,7 @@ class TracesResourceTest {
         var actualTraces = actualPage.content();
 
         assertThat(actualTraces).hasSize(expectedThreads.size());
+        assertThat(actualPage.total()).isEqualTo(expectedThreads.size());
 
         assertThat(actualTraces)
                 .usingRecursiveComparison()
@@ -4087,34 +3881,32 @@ class TracesResourceTest {
                 .isEqualTo(expectedStats);
     }
 
+    private String getValidValue(Field field) {
+        return switch (field.getType()) {
+            case STRING, LIST, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
+            case DATE_TIME -> Instant.now().toString();
+        };
+    }
+
+    private String getKey(Field field) {
+        return switch (field.getType()) {
+            case STRING, NUMBER, DATE_TIME, LIST -> null;
+            case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
+        };
+    }
+
+    private String getInvalidValue(Field field) {
+        return switch (field.getType()) {
+            case STRING, DICTIONARY, LIST -> " ";
+            case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
+        };
+    }
+
     @Nested
     @DisplayName("Find trace Threads:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindTraceThreads {
-
-        private final FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
-
-        private String getValidValue(Field field) {
-            return switch (field.getType()) {
-                case STRING, LIST, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
-                case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
-                case DATE_TIME -> Instant.now().toString();
-            };
-        }
-
-        private String getKey(Field field) {
-            return switch (field.getType()) {
-                case STRING, NUMBER, DATE_TIME, LIST -> null;
-                case FEEDBACK_SCORES_NUMBER, DICTIONARY -> "score";
-            };
-        }
-
-        private String getInvalidValue(Field field) {
-            return switch (field.getType()) {
-                case STRING, DICTIONARY, LIST -> " ";
-                case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
-            };
-        }
 
         private Stream<Arguments> getUnsupportedOperations() {
             return filterQueryBuilder.getUnSupportedOperators(TraceThreadField.values())
@@ -4126,42 +3918,31 @@ class TracesResourceTest {
         }
 
         private Stream<TraceThreadFilter> getFilterInvalidValueOrKeyForFieldTypeArgs() {
-            return Stream.of(
-                    TraceThreadFilter.builder()
-                            .field(TraceThreadField.ID)
-                            .operator(Operator.EQUAL)
-                            .value(getInvalidValue(TraceThreadField.ID))
-                            .build(),
-                    TraceThreadFilter.builder()
-                            .field(TraceThreadField.FIRST_MESSAGE)
-                            .operator(Operator.EQUAL)
-                            .value(getInvalidValue(TraceThreadField.FIRST_MESSAGE))
-                            .build(),
-                    TraceThreadFilter.builder()
-                            .field(TraceThreadField.LAST_MESSAGE)
-                            .operator(Operator.EQUAL)
-                            .value(getInvalidValue(TraceThreadField.LAST_MESSAGE))
-                            .build(),
-                    TraceThreadFilter.builder()
-                            .field(TraceThreadField.CREATED_AT)
-                            .operator(Operator.EQUAL)
-                            .value(getInvalidValue(TraceThreadField.CREATED_AT))
-                            .build(),
-                    TraceThreadFilter.builder()
-                            .field(TraceThreadField.DURATION)
-                            .operator(Operator.EQUAL)
-                            .value(getInvalidValue(TraceThreadField.DURATION))
-                            .build(),
-                    TraceThreadFilter.builder()
-                            .field(TraceThreadField.LAST_UPDATED_AT)
-                            .operator(Operator.EQUAL)
-                            .value(getInvalidValue(TraceThreadField.LAST_UPDATED_AT))
-                            .build(),
-                    TraceThreadFilter.builder()
-                            .field(TraceThreadField.NUMBER_OF_MESSAGES)
-                            .operator(Operator.EQUAL)
-                            .value(getInvalidValue(TraceThreadField.NUMBER_OF_MESSAGES))
-                            .build());
+            return filterQueryBuilder.getSupportedOperators(TraceThreadField.values())
+                    .entrySet()
+                    .stream()
+                    .flatMap(filter -> filter.getValue()
+                            .stream()
+                            .flatMap(operator -> switch (filter.getKey().getType()) {
+                                case DICTIONARY, FEEDBACK_SCORES_NUMBER -> Stream.of(
+                                        TraceThreadFilter.builder()
+                                                .field(filter.getKey())
+                                                .operator(operator)
+                                                .key(null)
+                                                .value(getValidValue(filter.getKey()))
+                                                .build(),
+                                        TraceThreadFilter.builder()
+                                                .field(filter.getKey())
+                                                .operator(operator)
+                                                .key(getKey(filter.getKey()))
+                                                .value(getInvalidValue(filter.getKey()))
+                                                .build());
+                                default -> Stream.of(TraceThreadFilter.builder()
+                                        .field(filter.getKey())
+                                        .operator(operator)
+                                        .value(getInvalidValue(filter.getKey()))
+                                        .build());
+                            }));
         }
 
         private Stream<Arguments> getValidFilters() {
@@ -4771,7 +4552,7 @@ class TracesResourceTest {
         }
     }
 
-    private static void assertIgnoredFields(Trace actualTrace, Trace expectedTrace) {
+    private void assertIgnoredFields(Trace actualTrace, Trace expectedTrace) {
         assertThat(actualTrace.projectId()).isNotNull();
         assertThat(actualTrace.projectName()).isNull();
         assertThat(actualTrace.createdAt()).isAfter(expectedTrace.createdAt());
@@ -7063,5 +6844,4 @@ class TracesResourceTest {
                 .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
-
 }

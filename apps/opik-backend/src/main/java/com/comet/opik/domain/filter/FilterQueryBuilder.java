@@ -232,6 +232,14 @@ public class FilterQueryBuilder {
                 .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toList())));
     }
 
+    public Map<Field, List<Operator>> getSupportedOperators(@NonNull Field... fields) {
+        return Arrays.stream(fields)
+                .flatMap(field -> ANALYTICS_DB_OPERATOR_MAP.entrySet().stream()
+                        .filter(entry -> entry.getValue().containsKey(field.getType()))
+                        .map(entry -> Map.entry(field, entry.getKey())))
+                .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toList())));
+    }
+
     public String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
     }
