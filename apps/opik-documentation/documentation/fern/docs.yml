@@ -156,6 +156,9 @@ navigation:
               - page: Ragas
                 path: docs/tracing/integrations/ragas.mdx
                 slug: ragas
+              - page: Vercel AI SDK
+                path: docs/tracing/integrations/vercel-ai-sdk.mdx
+                slug: vercel-ai-sdk
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
                 slug: watsonx

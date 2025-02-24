@@ -1,0 +1,127 @@
+---
+title: Vercel AI SDK
+description: Monitor, evaluate and debug your Vercel AI SDK application with Opik
+---
+
+## Setup
+
+The AI SDK supports tracing via OpenTelemetry. With the `OpikExporter` you can collect these traces in Opik.
+While telemetry is experimental ([docs](https://sdk.vercel.ai/docs/ai-sdk-core/telemetry#enabling-telemetry)), you can enable it by setting `experimental_telemetry` on each request that you want to trace.
+
+```ts
+const result = await generateText({
+  model: openai("gpt-4o"),
+  prompt: "Write a short story about a cat.",
+  experimental_telemetry: { isEnabled: true },
+});
+```
+
+To collect the traces in Opik, you need to add the `OpikExporter` to your application, first you have to set your Opik API key.
+
+```bash filename=".env"
+OPIK_API_KEY="<opik-api-key>"
+```
+
+```ts
+import { OpikExporter } from "opik/vercel";
+
+new OpikExporter();
+```
+
+Now you need to register this exporter via the OpenTelemetry SDK.
+
+### Next.js
+
+Next.js has support for OpenTelemetry instrumentation on the framework level. Learn more about it in the [Next.js OpenTelemetry guide](https://nextjs.org/docs/app/building-your-application/optimizing/open-telemetry).
+
+Install dependencies:
+
+```bash
+npm install opik @vercel/otel @opentelemetry/api-logs @opentelemetry/instrumentation @opentelemetry/sdk-logs
+```
+
+Add `OpikExporter` to your instrumentation:
+
+```ts filename="instrumentation.ts"
+import { registerOTel } from "@vercel/otel";
+import { OpikExporter } from "opik/vercel";
+
+export function register() {
+  registerOTel({
+    serviceName: "opik-vercel-ai-nextjs-example",
+    traceExporter: new OpikExporter(),
+  });
+}
+```
+
+### Node.js
+
+Install dependencies:
+
+```bash
+npm install opik ai @ai-sdk/openai @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
+```
+
+```ts
+import { openai } from "@ai-sdk/openai";
+import { generateText } from "ai";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OpikExporter } from "opik/vercel";
+
+const sdk = new NodeSDK({
+  traceExporter: new OpikExporter(),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+
+async function main() {
+  const result = await generateText({
+    model: openai("gpt-4o"),
+    maxTokens: 50,
+    prompt: "Invent a new holiday and describe its traditions.",
+    experimental_telemetry: OpikExporter.getSettings({
+      name: "custom-trace-name",
+    }),
+  });
+
+  console.log(result.text);
+
+  await sdk.shutdown(); // Flushes the trace to Opik
+}
+
+main().catch(console.error);
+```
+
+Done! All traces that contain AI SDK spans are automatically captured in Opik.
+
+## Configuration
+
+### Pass Custom Trace name
+
+```ts
+const result = await generateText({
+  model: openai("gpt-4o"),
+  prompt: "Write a short story about a cat.",
+  experimental_telemetry: OpikExporter.getSettings({
+    name: "custom-trace-name",
+  }),
+});
+```
+
+## Debugging
+
+Use the logger level to see the more verbose logs of the exporter.
+
+```bash filename=".env"
+OPIK_LOG_LEVEL=DEBUG
+```
+
+## Troubleshooting
+
+- You need to be on `"ai": "^3.3.0"` to use the telemetry feature. In case of any issues, please update to the latest version.
+- On NextJS, make sure that you only have a single instrumentation file.
+- If you use Sentry, make sure to either:
+  - set `skipOpenTelemetrySetup: true` in Sentry.init
+  - follow Sentry's docs on how to manually set up Sentry with OTEL
