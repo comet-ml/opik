@@ -49,7 +49,7 @@ public class OpenTelemetryResource {
                     workspaceId);
 
             Long stored = openTelemetryService
-                    .parseAndStoreSpans(traceRequest, projectName, workspaceId)
+                    .parseAndStoreSpans(traceRequest, projectName)
                     .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                     .block();
 

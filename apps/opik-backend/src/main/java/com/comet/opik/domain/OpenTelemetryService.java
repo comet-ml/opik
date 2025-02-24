@@ -28,8 +28,7 @@ import java.util.UUID;
 @ImplementedBy(OpenTelemetryServiceImpl.class)
 public interface OpenTelemetryService {
 
-    Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName,
-            @NonNull String workspaceId);
+    Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName);
 }
 
 @Singleton
@@ -45,15 +44,16 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     private static final Duration REDIS_TTL = Duration.ofDays(1L);
 
     @Override
-    public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest,
-            @NonNull String projectName,
-            @NonNull String workspaceId) {
+    public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName) {
 
         // make sure project exists before starting processing
         return Mono.deferContextual(ctx -> {
             String userName = ctx.get(RequestContext.USER_NAME);
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             return Mono.just(projectService.getOrCreate(workspaceId, projectName, userName).id());
-        }).flatMap(projectId -> {
+        }).flatMap(projectId -> Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
             // extracts all otel spans in the batch, sorted by start time
             var otelSpans = traceRequest.getResourceSpansList().stream()
                     .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
@@ -62,10 +62,10 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                     .toList();
 
             // get or create a mapping of otel trace id -> opik trace id
-            final Map<String, UUID> traceIdMapper = prepareOtelToOpikTraceIdMapping(otelSpans, projectId, workspaceId);
+            final Map<String, UUID> traceIdMapper = otelToOpikTraceIdMapper(otelSpans, projectId, workspaceId);
 
             return doStoreSpans(otelSpans, traceIdMapper, projectName);
-        });
+        }));
     }
 
     private String base64OtelId(ByteString idBytes) {
@@ -121,8 +121,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 }));
     }
 
-    private Map<String, UUID> prepareOtelToOpikTraceIdMapping(List<Span> otelSpans, UUID projectId,
-            String workspaceId) {
+    private Map<String, UUID> otelToOpikTraceIdMapper(List<Span> otelSpans, UUID projectId, String workspaceId) {
         // checks Redis for the otel traceIds in the batch; have we seen them before?
         // maps (base64 otel id -> UUIDv7 opik id)
         final Map<String, UUID> traceIdMapper = new HashMap<>();
