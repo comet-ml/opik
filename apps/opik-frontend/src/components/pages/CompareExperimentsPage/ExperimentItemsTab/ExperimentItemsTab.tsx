@@ -20,6 +20,7 @@ import useLocalStorageState from "use-local-storage-state";
 
 import {
   CELL_VERTICAL_ALIGNMENT,
+  COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -68,6 +69,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -85,6 +87,7 @@ const COLUMNS_ORDER_KEY = "compare-experiments-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 const COLUMNS_SCORES_ORDER_KEY = "compare-experiments-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
+const COLUMNS_CUSTOM_ORDER_KEY = "compare-experiments-custom-columns-order";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -197,6 +200,12 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     defaultValue: [],
   });
 
+  const [customColumnsOrder, setCustomColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_CUSTOM_ORDER_KEY, {
+    defaultValue: [],
+  });
+
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const { data, isPending } = useCompareExperimentsList(
@@ -278,6 +287,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...dynamicDatasetColumns.map((c) => c.id),
       ...dynamicOutputColumns.map((c) => c.id),
       ...dynamicScoresColumns.map((c) => c.id),
+      COLUMN_COMMENTS_ID,
     ],
     [dynamicDatasetColumns, dynamicOutputColumns, dynamicScoresColumns],
   );
@@ -349,6 +359,22 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         }) as ColumnData<ExperimentsCompare>,
     );
   }, [dynamicScoresColumns, experimentsIds]);
+
+  const customColumnsData = useMemo(
+    () => [
+      {
+        id: COLUMN_COMMENTS_ID,
+        label: "Comments",
+        type: COLUMN_TYPE.list,
+        cell: CommentsCell.Compare as never,
+        customMeta: {
+          experimentsIds,
+          experiments,
+        },
+      } as ColumnData<ExperimentsCompare>,
+    ],
+    [experiments, experimentsIds],
+  );
 
   const selectedRows: Array<ExperimentsCompare> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -468,6 +494,18 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       );
     }
 
+    if (hasAnyVisibleColumns(customColumnsData, selectedColumns)) {
+      retVal.push(
+        ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
+          customColumnsData,
+          {
+            selectedColumns,
+            columnsOrder: customColumnsOrder,
+          },
+        ),
+      );
+    }
+
     return retVal;
   }, [
     experimentsCount,
@@ -481,6 +519,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     experimentsIds,
     outputColumnsOrder,
     scoresColumnsOrder,
+    customColumnsData,
+    customColumnsOrder,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -568,15 +608,31 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
       },
+      {
+        title: "Others",
+        columns: customColumnsData,
+        order: customColumnsOrder,
+        onOrderChange: setCustomColumnsOrder,
+      },
     ];
   }, [
-    scoresColumnsData,
-    scoresColumnsOrder,
-    setScoresColumnsOrder,
     outputColumnsData,
     outputColumnsOrder,
     setOutputColumnsOrder,
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    customColumnsData,
+    customColumnsOrder,
+    setCustomColumnsOrder,
   ]);
+
+  const meta = useMemo(
+    () => ({
+      onCommentsReply: handleRowClick,
+    }),
+    [],
+  );
 
   if (isPending || isFeedbackScoresPending || isExperimentsOutputPending) {
     return <Loader />;
@@ -628,6 +684,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         getRowHeightStyle={getRowHeightStyle}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        meta={meta}
       />
       <div className="py-4">
         <DataTablePagination
@@ -642,6 +699,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         experimentsCompareId={activeRowId}
         experimentsCompare={activeRow}
         experimentsIds={experimentsIds}
+        experiments={experiments}
         hasPreviousRow={hasPrevious}
         hasNextRow={hasNext}
         openTrace={setTraceId as OnChangeFn<string>}
