@@ -35,7 +35,7 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
 
   const handleOnReply = () => {
     setIsOpen(false);
-    onReply?.();
+    onReply();
   };
 
   if (!commentsList.length) return <>{children}</>;

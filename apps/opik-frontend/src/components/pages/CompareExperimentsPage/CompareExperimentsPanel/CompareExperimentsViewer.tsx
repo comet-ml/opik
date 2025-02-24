@@ -76,7 +76,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   return (
-    <div className="relative flex h-full flex-col px-6 pt-6 group-last/panel:pr-3">
+    <div className="relative flex h-full flex-col px-6 pt-4">
       <div className="flex items-center justify-between gap-1 pb-4">
         <TooltipWrapper content={name}>
           <div className="flex items-center gap-2 overflow-hidden">
@@ -102,8 +102,8 @@ const CompareExperimentsViewer: React.FunctionComponent<
       {renderOutput()}
 
       {isTraceExist && (
-        <div className="sticky bottom-0 right-0 mt-auto flex max-h-[40vh] flex-col contain-content">
-          <div className="box-border min-h-0 shrink grow overflow-auto border-y bg-white px-1 py-4">
+        <div className="sticky bottom-0 right-0 mt-auto flex max-h-[40vh] shrink-0 flex-col bg-white contain-content">
+          <div className="box-border min-h-0 shrink grow overflow-auto border-y  px-1 py-4">
             <FeedbackScoresEditor
               feedbackScores={feedbackScores}
               traceId={experimentItem.trace_id as string}
