@@ -57,7 +57,8 @@ public class RedirectResourceClient {
         }
     }
 
-    public String experimentsRedirect(UUID datasetId, UUID experimentId, String sessionToken, String workspaceName, int expectedStatus) {
+    public String experimentsRedirect(UUID datasetId, UUID experimentId, String sessionToken, String workspaceName,
+            int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .property(ClientProperties.FOLLOW_REDIRECTS, false)
                 .path("experiments")

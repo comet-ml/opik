@@ -48,12 +48,10 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -135,8 +133,10 @@ class RedirectResourceTest {
         wireMock.server().stubFor(
                 get(urlPathEqualTo("/api/workspaces/workspace-name"))
                         .withQueryParam("id", equalTo(NON_EXISTING_WORKSPACE_ID))
-                        .willReturn(WireMock.badRequest().withHeader("Content-Type", "application/json").withJsonBody(JsonUtils.readTree(
-                                new EMErrorResponse(NO_SUCH_WORKSPACE.formatted(NON_EXISTING_WORKSPACE_ID), 400)))));
+                        .willReturn(WireMock.badRequest().withHeader("Content-Type", "application/json")
+                                .withJsonBody(JsonUtils.readTree(
+                                        new EMErrorResponse(NO_SUCH_WORKSPACE.formatted(NON_EXISTING_WORKSPACE_ID),
+                                                400)))));
     }
 
     @AfterAll
@@ -176,9 +176,11 @@ class RedirectResourceTest {
         var trace = factory.manufacturePojo(Trace.class);
         traceResourceClient.createTrace(trace, API_KEY, workspaceName);
         trace = traceResourceClient.getById(trace.id(), workspaceName, API_KEY);
-        var redirectURL = redirectResourceClient.projectsRedirect(trace.id(), UUID.randomUUID().toString(), workspaceNameForRedirectRequest, expectedStatus);
+        var redirectURL = redirectResourceClient.projectsRedirect(trace.id(), UUID.randomUUID().toString(),
+                workspaceNameForRedirectRequest, expectedStatus);
         if (expectedStatus == 303) {
-            assertThat(redirectURL).isEqualTo(PROJECT_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik", workspaceName, trace.projectId()));
+            assertThat(redirectURL).isEqualTo(
+                    PROJECT_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik", workspaceName, trace.projectId()));
         }
     }
 
@@ -194,9 +196,11 @@ class RedirectResourceTest {
         var dataset = factory.manufacturePojo(Dataset.class);
         var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
-        var redirectURL = redirectResourceClient.datasetsRedirect(datasetId, UUID.randomUUID().toString(), workspaceNameForRedirectRequest, expectedStatus);
+        var redirectURL = redirectResourceClient.datasetsRedirect(datasetId, UUID.randomUUID().toString(),
+                workspaceNameForRedirectRequest, expectedStatus);
         if (expectedStatus == 303) {
-            assertThat(redirectURL).isEqualTo(DATASET_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik", workspaceName, datasetId));
+            assertThat(redirectURL)
+                    .isEqualTo(DATASET_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik", workspaceName, datasetId));
         }
     }
 
@@ -214,10 +218,12 @@ class RedirectResourceTest {
 
         var experimentId = UUID.randomUUID();
 
-        var redirectURL = redirectResourceClient.experimentsRedirect(datasetId, experimentId, UUID.randomUUID().toString(), workspaceNameForRedirectRequest, expectedStatus);
+        var redirectURL = redirectResourceClient.experimentsRedirect(datasetId, experimentId,
+                UUID.randomUUID().toString(), workspaceNameForRedirectRequest, expectedStatus);
         if (expectedStatus == 303) {
             var experimentIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(experimentId), StandardCharsets.UTF_8);
-            assertThat(redirectURL).isEqualTo(EXPERIMENT_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik", workspaceName, datasetId, experimentIdEncoded));
+            assertThat(redirectURL).isEqualTo(EXPERIMENT_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik",
+                    workspaceName, datasetId, experimentIdEncoded));
         }
     }
 
