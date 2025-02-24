@@ -107,7 +107,7 @@ public class TracesResource {
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
                 .block();
 
-        if (!workspaceMetadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
             throw new BadRequestException("Dynamic sorting is not enabled for this workspace");
         }
 

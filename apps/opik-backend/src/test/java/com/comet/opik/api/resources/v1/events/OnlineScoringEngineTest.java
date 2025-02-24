@@ -315,7 +315,7 @@ class OnlineScoringEngineTest {
 
         onlineScoringSampler.onTracesCreated(event);
 
-        Mono.delay(Duration.ofMillis(500)).block();
+        Mono.delay(Duration.ofMillis(600)).block();
 
         Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(captor.capture());
 
