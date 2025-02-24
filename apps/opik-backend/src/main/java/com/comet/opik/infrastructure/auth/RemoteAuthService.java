@@ -72,11 +72,6 @@ class RemoteAuthService implements AuthService {
         }
     }
 
-    private String getCurrentWorkspaceName(HttpHeaders headers) {
-        return Optional.ofNullable(headers.getHeaderString(RequestContext.WORKSPACE_HEADER))
-                .orElse("");
-    }
-
     private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path) {
         if (ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName)) {
             log.warn("Default workspace name is not allowed for UI authentication");
