@@ -1,0 +1,79 @@
+package com.comet.opik.api.resources.utils.resources;
+
+import org.glassfish.jersey.client.ClientProperties;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+
+import java.util.UUID;
+
+import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
+import static org.assertj.core.api.Assertions.assertThat;
+
+public class RedirectResourceClient {
+    private static final String RESOURCE_PATH = "%s/v1/session/redirect";
+
+    private final ClientSupport client;
+    private final String baseURI;
+
+    public RedirectResourceClient(ClientSupport client) {
+        this.client = client;
+        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+    }
+
+    public String projectsRedirect(UUID traceId, String sessionToken, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                .path("projects")
+                .queryParam("trace_id", traceId)
+                .queryParam("workspace_name", workspaceName)
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            if (expectedStatus == 303) {
+                return actualResponse.getHeaderString("Location");
+            }
+
+            return null;
+        }
+    }
+
+    public String datasetsRedirect(UUID datasetId, String sessionToken, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                .path("datasets")
+                .queryParam("dataset_id", datasetId)
+                .queryParam("workspace_name", workspaceName)
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            if (expectedStatus == 303) {
+                return actualResponse.getHeaderString("Location");
+            }
+
+            return null;
+        }
+    }
+
+    public String experimentsRedirect(UUID datasetId, UUID experimentId, String sessionToken, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                .path("experiments")
+                .queryParam("dataset_id", datasetId)
+                .queryParam("experiment_id", experimentId)
+                .queryParam("workspace_name", workspaceName)
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            if (expectedStatus == 303) {
+                return actualResponse.getHeaderString("Location");
+            }
+
+            return null;
+        }
+    }
+}

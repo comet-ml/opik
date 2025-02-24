@@ -66,7 +66,7 @@ class RemoteAuthService implements AuthService {
 
     @Override
     public void authenticateSession(Cookie sessionToken) {
-        if (sessionToken == null) {
+        if (sessionToken == null || StringUtils.isBlank(sessionToken.getValue())) {
             log.info("No cookies found");
             throw new ClientErrorException(NOT_LOGGED_USER, Response.Status.FORBIDDEN);
         }

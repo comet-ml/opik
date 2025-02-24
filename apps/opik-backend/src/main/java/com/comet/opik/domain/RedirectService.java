@@ -3,12 +3,14 @@ package com.comet.opik.domain;
 import com.comet.opik.api.EMErrorResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.infrastructure.DeploymentConfig;
+import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -16,9 +18,12 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.UUID;
 
+@ImplementedBy(RedirectServiceImpl.class)
 public interface RedirectService {
 
     String projectRedirectUrl(UUID traceId, String workspaceName);
@@ -37,7 +42,7 @@ class RedirectServiceImpl implements RedirectService {
     private static final String DEFAULT_WORKSPACE_NAME = "default";
     private static final String PROJECT_REDIRECT_URL = "%s/%s/projects/%s/traces";
     private static final String DATASET_REDIRECT_URL = "%s/%s/datasets/%s/items";
-    private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=[\"%s\"]";
+    private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
 
     private final @NonNull Client client;
     private final @NonNull TraceService traceService;
@@ -75,7 +80,8 @@ class RedirectServiceImpl implements RedirectService {
                     return getWorkspaceName(workspaceId);
                 });
 
-        return EXPERIMENT_REDIRECT_URL.formatted(feBaseUrl(), resolvedWorkspaceName, datasetId, experimentId);
+        var experimentIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(experimentId), StandardCharsets.UTF_8);
+        return EXPERIMENT_REDIRECT_URL.formatted(feBaseUrl(), resolvedWorkspaceName, datasetId, experimentIdEncoded);
     }
 
     private String getWorkspaceName(String workspaceId) {
@@ -108,6 +114,6 @@ class RedirectServiceImpl implements RedirectService {
     }
 
     private String feBaseUrl() {
-        return config.getBaseUrl().equals(DEFAULT_BASE_URL) ? DEFAULT_BASE_URL : config.getBaseUrl() + "opik";
+        return config.getBaseUrl().equals(DEFAULT_BASE_URL) ? DEFAULT_BASE_URL : config.getBaseUrl() + "/opik";
     }
 }

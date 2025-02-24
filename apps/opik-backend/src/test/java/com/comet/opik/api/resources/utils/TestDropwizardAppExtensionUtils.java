@@ -122,6 +122,9 @@ public class TestDropwizardAppExtensionUtils {
             configs.add("authentication.ui.url: "
                     + "%s/opik/auth-session".formatted(appContextConfig.runtimeInfo().getHttpsBaseUrl()));
 
+            configs.add("deployment.baseUrl: "
+                    + "%s".formatted(appContextConfig.runtimeInfo().getHttpBaseUrl()));
+
             if (appContextConfig.authCacheTtlInSeconds() != null) {
                 configs.add(
                         "authentication.apiKeyResolutionCacheTTLInSec: " + appContextConfig.authCacheTtlInSeconds());

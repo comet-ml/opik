@@ -63,6 +63,8 @@ public class RedirectResource {
     public Response experimentsRedirect(@QueryParam("dataset_id") @NotNull UUID datasetId,
             @QueryParam("experiment_id") @NotNull UUID experimentId,
             @QueryParam("workspace_name") String workspaceName) {
-        return Response.seeOther(URI.create(redirectService.datasetRedirectUrl(datasetId, workspaceName))).build();
+        return Response
+                .seeOther(URI.create(redirectService.experimentsRedirectUrl(datasetId, experimentId, workspaceName)))
+                .build();
     }
 }
