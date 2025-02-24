@@ -17,6 +17,6 @@ public abstract class FilterImpl implements Filter {
     private final @NonNull Field field;
     private final @NonNull Operator operator;
     private final String key;
-    private final @NonNull String value;
+    private final String value;
 
 }

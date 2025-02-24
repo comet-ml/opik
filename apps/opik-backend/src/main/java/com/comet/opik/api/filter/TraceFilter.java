@@ -17,7 +17,7 @@ public class TraceFilter extends FilterImpl {
     public TraceFilter(@JsonProperty(value = "field", required = true) TraceField field,
             @JsonProperty(value = "operator", required = true) Operator operator,
             @JsonProperty("key") String key,
-            @JsonProperty(value = "value", required = true) String value) {
+            @JsonProperty(value = "value") String value) {
         super(field, operator, key, value);
     }
 
