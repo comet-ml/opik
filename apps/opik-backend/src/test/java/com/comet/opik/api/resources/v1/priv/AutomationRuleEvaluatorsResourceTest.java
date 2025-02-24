@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
@@ -8,6 +7,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.EMErrorResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -244,7 +244,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new EMErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     HttpStatus.SC_UNAUTHORIZED)))));
         }
 
@@ -329,7 +329,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new EMErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     HttpStatus.SC_UNAUTHORIZED)))));
         }
 

@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.EMErrorResponse;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TimeInterval;
@@ -192,7 +192,7 @@ class ProjectMetricsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new EMErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 
@@ -259,7 +259,7 @@ class ProjectMetricsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new EMErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 

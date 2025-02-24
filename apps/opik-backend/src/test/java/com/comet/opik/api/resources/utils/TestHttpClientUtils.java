@@ -8,7 +8,7 @@ import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
 import org.apache.http.ssl.SSLContextBuilder;
 
-import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.EMErrorResponse.MISSING_API_KEY;
 
 @UtilityClass
 public class TestHttpClientUtils {
