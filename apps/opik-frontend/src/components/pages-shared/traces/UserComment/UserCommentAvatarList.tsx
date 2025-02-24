@@ -1,10 +1,10 @@
 import { uniqBy } from "lodash";
 import UserCommentAvatar from "./UserCommentAvatar";
-import { Comment } from "@/types/comment";
+import { CommentItems } from "@/types/comment";
 import { cn } from "@/lib/utils";
 
 type UserCommentAvatarListProps = {
-  commentsList: Comment[];
+  commentsList: CommentItems;
   className?: string;
 };
 const UserCommentAvatarList: React.FC<UserCommentAvatarListProps> = ({

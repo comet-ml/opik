@@ -26,11 +26,15 @@ const DataTab = ({
   const renderExperimentsSection = () => {
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={experimentItem.id}>
-        <ResizablePanel className="min-w-72" style={{ overflow: "unset" }}>
+        <ResizablePanel
+          className="group/panel min-w-72"
+          style={{ overflow: "unset" }}
+        >
           <CompareExperimentsViewer
             experimentItem={experimentItem}
             openTrace={openTrace}
             experiments={experiments}
+            sectionIdx={idx}
           />
         </ResizablePanel>
 

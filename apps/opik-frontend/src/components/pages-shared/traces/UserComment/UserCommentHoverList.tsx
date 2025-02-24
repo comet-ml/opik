@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import UserComment from "./UserComment";
-import { Comment } from "@/types/comment";
+import { CommentItems } from "@/types/comment";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import {
@@ -10,16 +10,18 @@ import {
 } from "@/components/ui/hover-card";
 
 type UserCommentHoverListProps = {
-  commentsList: Comment[];
+  commentsList: CommentItems;
   onReply: () => void;
   className?: string;
   children: React.ReactNode;
+  showReply: boolean;
 };
 const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
   commentsList,
   onReply,
   className,
   children,
+  showReply,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -33,7 +35,7 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
 
   const handleOnReply = () => {
     setIsOpen(false);
-    onReply();
+    onReply?.();
   };
 
   if (!commentsList.length) return <>{children}</>;
@@ -68,16 +70,18 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
             ))}
           </div>
 
-          <div className="sticky bottom-0 flex justify-end border-t border-slate-200 bg-popover py-1">
-            <Button
-              variant="ghost"
-              className="comet-body-xs h-6 w-full justify-end gap-1 text-foreground"
-              size="sm"
-              onClick={handleOnReply}
-            >
-              Reply <ArrowRight className="size-3.5" />
-            </Button>
-          </div>
+          {showReply && (
+            <div className="sticky bottom-0 flex justify-end border-t border-slate-200 bg-popover py-1">
+              <Button
+                variant="ghost"
+                className="comet-body-xs h-6 w-full justify-end gap-1 text-foreground"
+                size="sm"
+                onClick={handleOnReply}
+              >
+                Reply <ArrowRight className="size-3.5" />
+              </Button>
+            </div>
+          )}
         </div>
       </HoverCardContent>
     </HoverCard>

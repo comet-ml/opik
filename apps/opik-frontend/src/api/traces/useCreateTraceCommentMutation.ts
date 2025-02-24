@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 type UseCreateTraceCommentMutationParams = {
   traceId: string;
   text: string;
+  experimentId?: string;
 };
 
 const useCreateTraceCommentMutation = () => {
@@ -40,10 +41,22 @@ const useCreateTraceCommentMutation = () => {
       });
     },
     onSettled: (data, error, variables) => {
+      const { traceId, experimentId } = variables;
       queryClient.invalidateQueries({
-        queryKey: [TRACE_KEY, { traceId: variables.traceId }],
+        queryKey: [TRACE_KEY, { traceId }],
       });
       queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
+
+      if (experimentId) {
+        queryClient.invalidateQueries({
+          queryKey: [
+            "experiment",
+            {
+              experimentId,
+            },
+          ],
+        });
+      }
     },
   });
 };

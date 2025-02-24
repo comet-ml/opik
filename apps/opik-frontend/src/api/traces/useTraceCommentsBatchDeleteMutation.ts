@@ -6,6 +6,7 @@ import api, { TRACE_KEY, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 type UseTraceBatchDeleteMutationParams = {
   ids: string[];
   traceId: string;
+  experimentId?: string;
 };
 
 const useTraceCommentsBatchDeleteMutation = () => {
@@ -36,10 +37,22 @@ const useTraceCommentsBatchDeleteMutation = () => {
       });
     },
     onSettled: (data, error, variables) => {
+      const { traceId, experimentId } = variables;
       queryClient.invalidateQueries({
-        queryKey: [TRACE_KEY, { traceId: variables.traceId }],
+        queryKey: [TRACE_KEY, { traceId }],
       });
       queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
+
+      if (experimentId) {
+        queryClient.invalidateQueries({
+          queryKey: [
+            "experiment",
+            {
+              experimentId,
+            },
+          ],
+        });
+      }
     },
   });
 };
