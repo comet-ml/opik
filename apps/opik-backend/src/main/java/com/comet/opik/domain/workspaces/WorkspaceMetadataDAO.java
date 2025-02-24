@@ -1,5 +1,6 @@
 package com.comet.opik.domain.workspaces;
 
+import com.comet.opik.infrastructure.WorkspaceSettings;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.inject.Inject;
@@ -60,6 +61,7 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull @Named("Database Analytics Database Name") String databaseName;
+    private final @NonNull WorkspaceSettings workspaceSettings;
 
     public Mono<WorkspaceMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
         return Mono.from(connectionFactory.create())
@@ -70,8 +72,9 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                 .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceMetadata(
                         row.get("workspace_size_gb", Double.class),
                         row.get("total_table_size_gb", Double.class),
-                        row.get("percentage_of_table", Double.class))))
-                .single();
+                        row.get("percentage_of_table", Double.class),
+                        workspaceSettings)))
+                .single(new WorkspaceMetadata(0, 0, 0, workspaceSettings));
     }
 
 }
