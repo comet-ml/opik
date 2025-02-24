@@ -173,7 +173,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
               );
 
               if (!selectedOption) {
-                return "Select a category";
+                return <span className="text-nowrap">Select a category</span>;
               }
 
               return (
