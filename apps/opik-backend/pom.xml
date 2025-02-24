@@ -29,7 +29,7 @@
         <testcontainers.version>1.20.4</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.12.0</wiremock.version>
-        <redisson.version>3.44.0</redisson.version>
+        <redisson.version>3.45.0</redisson.version>
         <opentelmetry.version>2.13.0</opentelmetry.version>
         <aws.java.sdk.version>2.30.21</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
