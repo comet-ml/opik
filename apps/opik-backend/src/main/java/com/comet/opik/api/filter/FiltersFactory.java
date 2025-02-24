@@ -87,6 +87,11 @@ public class FiltersFactory {
     }
 
     private Filter toValidAndDecoded(Filter filter) {
+        // value-less operators, no need to validate or decode
+        if (List.of(Operator.IS_EMPTY, Operator.IS_NOT_EMPTY).contains(filter.operator())) {
+            return filter;
+        }
+
         // Decode the value as first thing prior to any validation
         filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
         if (filterQueryBuilder.toAnalyticsDbOperator(filter) == null) {
