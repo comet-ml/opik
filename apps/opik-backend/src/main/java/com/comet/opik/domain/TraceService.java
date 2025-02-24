@@ -9,6 +9,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceSearchCriteria;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -85,6 +86,8 @@ public interface TraceService {
     Mono<TraceThreadPage> getTraceThreads(int page, int size, TraceSearchCriteria criteria);
 
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
+
+    Mono<TraceThread> getThreadById(UUID projectId, String threadId);
 }
 
 @Slf4j
@@ -309,7 +312,7 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<Trace> get(@NonNull UUID id) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
-                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))));
+                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id.toString()))));
     }
 
     @Override
@@ -440,5 +443,11 @@ class TraceServiceImpl implements TraceService {
         return getProjectByName(traceThreads.projectName())
                 .flatMap(project -> dao.deleteThreads(project.id(), traceThreads.threadIds()))
                 .then();
+    }
+
+    @Override
+    public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId) {
+        return dao.findThreadById(projectId, threadId)
+                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace Thread", threadId))));
     }
 }

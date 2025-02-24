@@ -97,6 +97,8 @@ interface TraceDAO {
     Mono<TraceThreadPage> findThreads(int size, int page, TraceSearchCriteria threadSearchCriteria);
 
     Mono<Long> deleteThreads(UUID uuid, List<String> threadIds);
+
+    Mono<TraceThread> findThreadById(UUID projectId, String threadId);
 }
 
 @Slf4j
@@ -866,6 +868,38 @@ class TraceDAOImpl implements TraceDAO {
             AND thread_id IN :thread_ids
             """;
 
+    private static final String SELECT_TRACES_THREAD_BY_ID = """
+            SELECT
+                t.thread_id as id,
+                t.workspace_id as workspace_id,
+                t.project_id as project_id,
+                min(t.start_time) as start_time,
+                max(t.end_time) as end_time,
+                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                       NULL) AS duration_millis,
+                argMin(t.input, t.start_time) as first_message,
+                argMax(t.output, t.end_time) as last_message,
+                count(DISTINCT t.id) as number_of_messages,
+                max(t.last_updated_at) as last_updated_at,
+                argMin(t.created_by, t.created_at) as created_by,
+                min(t.created_at) as created_at
+             FROM (
+                 SELECT
+                     *
+                 FROM traces t
+                 WHERE workspace_id = :workspace_id
+                 AND project_id = :project_id
+                 AND thread_id = :thread_id
+                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                 LIMIT 1 BY id
+             ) AS t
+             GROUP BY
+                t.workspace_id, t.project_id, t.thread_id
+            ;
+            """;
+
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -1498,6 +1532,22 @@ class TraceDAOImpl implements TraceDAO {
                     .doFinally(signalType -> endSegment(segment))
                     .flatMapMany(Result::getRowsUpdated)
                     .reduce(0L, Long::sum);
+        });
+    }
+
+    @Override
+    public Mono<TraceThread> findThreadById(@NonNull UUID projectId, @NonNull String threadId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_TRACES_THREAD_BY_ID)
+                    .bind("project_id", projectId)
+                    .bind("thread_id", threadId);
+
+            Segment segment = startSegment("traces", "Clickhouse", "findThreadById");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(this::mapThreadToDto)
+                    .singleOrEmpty()
+                    .doFinally(signalType -> endSegment(segment));
         });
     }
 }

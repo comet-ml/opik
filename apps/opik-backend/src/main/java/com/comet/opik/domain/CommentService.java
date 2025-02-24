@@ -48,7 +48,7 @@ class CommentServiceImpl implements CommentService {
         };
 
         return monoProjectId
-                .switchIfEmpty(Mono.error(failWithNotFound(entityType.getType(), entityId)))
+                .switchIfEmpty(Mono.error(failWithNotFound(entityType.getType(), entityId.toString())))
                 .flatMap(projectId -> commentDAO.addComment(id, entityId, entityType, projectId,
                         comment))
                 .map(__ -> id);
@@ -57,13 +57,13 @@ class CommentServiceImpl implements CommentService {
     @Override
     public Mono<Comment> get(@NonNull UUID entityId, @NonNull UUID commentId) {
         return commentDAO.findById(entityId, commentId)
-                .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId)));
+                .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId.toString())));
     }
 
     @Override
     public Mono<Void> update(@NonNull UUID commentId, @NonNull Comment comment) {
         return commentDAO.findById(null, commentId)
-                .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId)))
+                .switchIfEmpty(Mono.error(failWithNotFound("Comment", commentId.toString())))
                 .then(Mono.defer(() -> commentDAO.updateComment(commentId, comment)));
     }
 
