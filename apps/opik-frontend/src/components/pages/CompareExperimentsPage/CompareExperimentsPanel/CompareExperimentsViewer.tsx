@@ -13,19 +13,21 @@ import { Experiment, ExperimentItem } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { traceExist } from "@/lib/traces";
-import ExperimentCommentsViewerCore from "./DataTab/ExperimentCommentsViewer";
+import ExperimentCommentsViewer from "./DataTab/ExperimentCommentsViewer";
 
 type CompareExperimentsViewerProps = {
   experimentItem: ExperimentItem;
   openTrace: OnChangeFn<string>;
   experiments: Experiment[];
+  sectionIdx: number;
 };
 
 const CompareExperimentsViewer: React.FunctionComponent<
   CompareExperimentsViewerProps
-> = ({ experimentItem, openTrace, experiments }) => {
+> = ({ experimentItem, openTrace, experiments, sectionIdx }) => {
   const isTraceExist = traceExist(experimentItem);
   const experimentId = experimentItem.experiment_id;
+
   const { data } = useExperimentById(
     {
       experimentId,
@@ -36,8 +38,10 @@ const CompareExperimentsViewer: React.FunctionComponent<
   );
 
   const name = data?.name || experimentId;
-  const comments =
-    experiments.find((exp) => exp.id === experimentId)?.comments || [];
+  const currentExperimentIdx = experiments.findIndex(
+    (exp) => exp.id === experimentId,
+  );
+  const comments = experiments[currentExperimentIdx]?.comments || [];
 
   const feedbackScores: TraceFeedbackScore[] = useMemo(
     () => sortBy(experimentItem.feedback_scores || [], "name"),
@@ -72,7 +76,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
   };
 
   return (
-    <div className="relative flex h-full flex-col px-3 pt-6">
+    <div className="relative flex h-full flex-col px-6 pt-6 group-last/panel:pr-3">
       <div className="flex items-center justify-between gap-1 pb-4">
         <TooltipWrapper content={name}>
           <div className="flex items-center gap-2 overflow-hidden">
@@ -98,15 +102,22 @@ const CompareExperimentsViewer: React.FunctionComponent<
       {renderOutput()}
 
       {isTraceExist && (
-        <div className="sticky bottom-0 right-0 mt-auto box-border max-h-[40vh] overflow-auto border-t bg-white py-4 contain-content">
-          <FeedbackScoresEditor
-            feedbackScores={feedbackScores}
-            traceId={experimentItem.trace_id as string}
-          />
-          <ExperimentCommentsViewerCore
-            comments={comments}
-            traceId={experimentItem.trace_id as string}
-          />
+        <div className="sticky bottom-0 right-0 mt-auto flex max-h-[40vh] flex-col contain-content">
+          <div className="box-border min-h-0 shrink grow overflow-auto border-y bg-white px-1 py-4">
+            <FeedbackScoresEditor
+              feedbackScores={feedbackScores}
+              traceId={experimentItem.trace_id as string}
+            />
+          </div>
+
+          <div className="flex min-h-0 shrink grow flex-col">
+            <ExperimentCommentsViewer
+              comments={comments}
+              traceId={experimentItem.trace_id as string}
+              sectionIdx={sectionIdx}
+              experimentId={experimentId}
+            />
+          </div>
         </div>
       )}
     </div>

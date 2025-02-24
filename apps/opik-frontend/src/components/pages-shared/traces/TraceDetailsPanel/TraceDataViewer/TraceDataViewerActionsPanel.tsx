@@ -51,59 +51,65 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
       />
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          setOpen(true);
-          resetKeyRef.current = resetKeyRef.current + 1;
-        }}
-      >
-        <DatabasePlus className="size-4" />
-        <div className="hidden 3xl:block 3xl:pl-1">Add to dataset</div>
-      </Button>
+      <TooltipWrapper content="Add to dataset">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(true);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+        >
+          <DatabasePlus className="size-4" />
+          <div className="hidden 3xl:block 3xl:pl-1">Add to dataset</div>
+        </Button>
+      </TooltipWrapper>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setLastSection(LastSection.Comments)}
-        className={cn(
-          "gap-1",
-          lastSection === LastSection.Comments &&
-            "bg-primary-100 hover:bg-primary-100",
-        )}
-      >
-        <MessageSquareMore className="size-4" />
-        <div className="hidden 3xl:block 3xl:pl-1">Comments</div>
-        {Boolean(commentsCount) && (
-          <div>
-            <span className="hidden 3xl:inline">(</span>
-            {commentsCount}
-            <span className="hidden 3xl:inline">)</span>
-          </div>
-        )}
-      </Button>
+      <TooltipWrapper content="Comments">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setLastSection(LastSection.Comments)}
+          className={cn(
+            "gap-1",
+            lastSection === LastSection.Comments &&
+              "bg-primary-100 hover:bg-primary-100",
+          )}
+        >
+          <MessageSquareMore className="size-4" />
+          <div className="hidden 3xl:block 3xl:pl-1">Comments</div>
+          {Boolean(commentsCount) && (
+            <div>
+              <span className="hidden 3xl:inline">(</span>
+              {commentsCount}
+              <span className="hidden 3xl:inline">)</span>
+            </div>
+          )}
+        </Button>
+      </TooltipWrapper>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setLastSection(LastSection.Annotations)}
-        className={cn(
-          "gap-1",
-          lastSection === LastSection.Annotations &&
-            "bg-primary-100 hover:bg-primary-100",
-        )}
-      >
-        <PenLine className="size-4" />
-        <div className="hidden 3xl:block 3xl:pl-1">Feedback scores</div>
-        {Boolean(annotationCount) && (
-          <div>
-            <span className="hidden 3xl:inline">(</span>
-            {annotationCount}
-            <span className="hidden 3xl:inline">)</span>
-          </div>
-        )}
-      </Button>
+      <TooltipWrapper content="Feedback scores">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setLastSection(LastSection.Annotations)}
+          className={cn(
+            "gap-1",
+            lastSection === LastSection.Annotations &&
+              "bg-primary-100 hover:bg-primary-100",
+          )}
+        >
+          <PenLine className="size-4" />
+          <div className="hidden 3xl:block 3xl:pl-1">Feedback scores</div>
+          {Boolean(annotationCount) && (
+            <div>
+              <span className="hidden 3xl:inline">(</span>
+              {annotationCount}
+              <span className="hidden 3xl:inline">)</span>
+            </div>
+          )}
+        </Button>
+      </TooltipWrapper>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

@@ -50,7 +50,7 @@ declare module "@tanstack/react-table" {
     columnsStatistic?: ColumnsStatistic;
     rowHeight: ROW_HEIGHT;
     rowHeightStyle: React.CSSProperties;
-    onCommentsReply?: (row: TData) => void;
+    onCommentsReply?: (row: TData, idx?: number) => void;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

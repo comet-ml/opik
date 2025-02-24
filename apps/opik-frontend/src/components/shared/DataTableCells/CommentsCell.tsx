@@ -2,7 +2,7 @@ import React from "react";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { Comment } from "@/types/comment";
+import { CommentItems } from "@/types/comment";
 import UserCommentAvatar from "@/components/pages-shared/traces/UserComment/UserCommentAvatar";
 import UserCommentHoverList from "@/components/pages-shared/traces/UserComment/UserCommentHoverList";
 import UserCommentAvatarList from "@/components/pages-shared/traces/UserComment/UserCommentAvatarList";
@@ -10,12 +10,13 @@ import { isLocalCommentCheck } from "@/components/pages-shared/traces/UserCommen
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   CustomMeta,
+  SplitCellRenderContent,
 } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/VerticallySplitCellWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
 import { cn } from "@/lib/utils";
 
 type CommentsCellContentProps = {
-  commentsList: Comment[];
+  commentsList: CommentItems;
   isSmall?: boolean;
 };
 const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
@@ -72,13 +73,15 @@ const CompareExperimentsCell: React.FC<
   const rowHeight = tableMeta?.rowHeight ?? ROW_HEIGHT.small;
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
-  const onReply = () => {
-    if (tableMeta?.onCommentsReply) {
-      tableMeta.onCommentsReply(context.row.original);
-    }
+  const onReply = (idx: number) => {
+    tableMeta?.onCommentsReply?.(context.row.original, idx);
   };
 
-  const renderContent = (item: ExperimentItem | undefined) => {
+  const renderContent: SplitCellRenderContent = (
+    item: ExperimentItem | undefined,
+    _,
+    idx,
+  ) => {
     const experimentData = experiments?.find(
       (exp) => exp.id === item?.experiment_id,
     );
@@ -91,7 +94,8 @@ const CompareExperimentsCell: React.FC<
           !isSmall && "overflow-y-auto max-h-full",
         )}
         commentsList={commentsList}
-        onReply={onReply}
+        onReply={() => onReply(idx)}
+        showReply={!!tableMeta?.onCommentsReply}
       >
         <CommentsCellContent isSmall={isSmall} commentsList={commentsList} />
       </UserCommentHoverList>
@@ -109,21 +113,16 @@ const CompareExperimentsCell: React.FC<
   );
 };
 
-// TODO add compare CELL
 const CommentsCell = <TData,>(context: CellContext<TData, unknown>) => {
   const { meta: tableMeta } = context.table.options;
   const rowHeight = context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
-  console.log("isSmall", isSmall);
-
   const onReply = () => {
-    if (tableMeta?.onCommentsReply) {
-      tableMeta.onCommentsReply(context.row.original);
-    }
+    tableMeta?.onCommentsReply?.(context.row.original);
   };
 
-  const commentsList = (context.getValue() || []) as Comment[];
+  const commentsList = (context.getValue() || []) as CommentItems;
 
   return (
     <CellWrapper
@@ -138,6 +137,7 @@ const CommentsCell = <TData,>(context: CellContext<TData, unknown>) => {
         )}
         commentsList={commentsList}
         onReply={onReply}
+        showReply={!!tableMeta?.onCommentsReply}
       >
         <CommentsCellContent commentsList={commentsList} isSmall={isSmall} />
       </UserCommentHoverList>

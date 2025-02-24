@@ -1,4 +1,4 @@
-import { Comment } from "@/types/comment";
+import { CommentItem } from "@/types/comment";
 import React, { createContext, useContext, useState } from "react";
 import UserCommentAvatar from "./UserCommentAvatar";
 import {
@@ -23,7 +23,7 @@ import { isUndefined } from "lodash";
 type UserCommentContextType = {
   size?: "default" | "sm";
   userName?: string;
-  comment: Comment;
+  comment: CommentItem;
   isLocalComment: boolean;
   isEditMode: boolean;
   setIsEditMode: (v: boolean) => void;
@@ -191,7 +191,7 @@ type UserCommentComponents = {
 };
 
 type UserCommentProps = {
-  comment: Comment;
+  comment: CommentItem;
   size?: "default" | "sm";
   avatar?: React.ReactNode;
   header?: React.ReactNode;

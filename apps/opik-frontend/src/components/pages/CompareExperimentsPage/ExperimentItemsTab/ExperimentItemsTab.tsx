@@ -4,6 +4,7 @@ import find from "lodash/find";
 import get from "lodash/get";
 import sortBy from "lodash/sortBy";
 import {
+  ArrayParam,
   JsonParam,
   NumberParam,
   StringParam,
@@ -70,6 +71,7 @@ import {
 import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import { isUndefined } from "lodash";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -124,6 +126,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
   });
+
+  const [, setExpandedCommentSections] = useQueryParam(
+    "expandedCommentSections",
+    ArrayParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
@@ -629,9 +639,15 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const meta = useMemo(
     () => ({
-      onCommentsReply: handleRowClick,
+      onCommentsReply: (row: ExperimentsCompare, idx?: number) => {
+        handleRowClick(row);
+
+        if (isUndefined(idx)) return;
+
+        setExpandedCommentSections([String(idx)]);
+      },
     }),
-    [],
+    [handleRowClick, setExpandedCommentSections],
   );
 
   if (isPending || isFeedbackScoresPending || isExperimentsOutputPending) {

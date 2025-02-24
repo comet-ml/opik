@@ -252,15 +252,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
     groupIds,
   });
 
-  const meta = useMemo(
-    () => ({
-      onCommentsReply: () => {
-        // TODO open sidebar
-      },
-    }),
-    [],
-  );
-
   const handleNewExperimentClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
@@ -345,7 +336,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
-        meta={meta}
       />
       <div className="py-4">
         <DataTablePagination
