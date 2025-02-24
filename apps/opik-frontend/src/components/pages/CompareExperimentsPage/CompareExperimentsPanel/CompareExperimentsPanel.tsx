@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
@@ -13,8 +13,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import FeedbackScoresTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/FeedbackScoresTab/FeedbackScoresTab";
 import DataTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/DataTab";
 
 type CompareExperimentsPanelProps = {
@@ -45,15 +43,12 @@ const CompareExperimentsPanel: React.FunctionComponent<
   isTraceDetailsOpened,
 }) => {
   const { toast } = useToast();
-  const [tab, setTab] = useState<string>("data");
 
   const experimentItems = useMemo(() => {
     return sortBy(experimentsCompare?.experiment_items || [], (e) =>
       findIndex(experimentsIds, (id) => e.id === id),
     );
   }, [experimentsCompare?.experiment_items, experimentsIds]);
-
-  const isSeveralExperiments = experimentItems?.length > 1;
 
   const datasetItemId = experimentItems?.[0]?.dataset_item_id || undefined;
   const { data: datasetItem } = useDatasetItemById(
@@ -84,44 +79,21 @@ const CompareExperimentsPanel: React.FunctionComponent<
 
     return (
       <div
-        className="relative size-full px-6"
+        className="relative size-full pl-6"
         style={
           {
-            "--experiment-sidebar-tab-content-height": "calc(100vh - 160px)",
+            "--experiment-sidebar-tab-content-height": "calc(100vh - 60px)",
           } as React.CSSProperties
         }
       >
-        <h2 className="comet-title-s pb-3 pt-5">
-          {isSeveralExperiments ? "Experiment items" : "Experiment item"}
-        </h2>
-
-        <Tabs defaultValue="data" value={tab} onValueChange={setTab}>
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="data">
-              Data
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value="feedbackScores">
-              Feedback scores
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent
-            value="data"
-            className="mt-0 h-[var(--experiment-sidebar-tab-content-height)] overflow-auto"
-          >
-            <DataTab
-              data={data}
-              experimentItems={experimentItems}
-              openTrace={openTrace}
-              experiments={experiments}
-            />
-          </TabsContent>
-          <TabsContent
-            value="feedbackScores"
-            className="h-[var(--experiment-sidebar-tab-content-height)]"
-          >
-            <FeedbackScoresTab experimentItems={experimentItems} />
-          </TabsContent>
-        </Tabs>
+        <div className="mt-0 h-[var(--experiment-sidebar-tab-content-height)] overflow-auto">
+          <DataTab
+            data={data}
+            experimentItems={experimentItems}
+            openTrace={openTrace}
+            experiments={experiments}
+          />
+        </div>
       </div>
     );
   };
