@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
 import jakarta.inject.Provider;
@@ -24,8 +23,7 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
     public AuthService authService(
             @Config("authentication") AuthenticationConfig config,
             @NonNull Provider<RequestContext> requestContext,
-            @NonNull RedissonReactiveClient redissonClient,
-            @NonNull LockService lockService) {
+            @NonNull RedissonReactiveClient redissonClient) {
 
         if (!config.isEnabled()) {
             return new AuthServiceImpl(requestContext);
@@ -45,12 +43,10 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
                 ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
                 : new NoopCacheService();
 
-        return new RemoteAuthService(client(), config.getSdk(), config.getUi(), requestContext, cacheService,
-                lockService);
+        return new RemoteAuthService(client(), config.getSdk(), config.getUi(), requestContext, cacheService);
     }
 
     public Client client() {
         return ClientBuilder.newClient();
     }
-
 }
