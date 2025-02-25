@@ -379,11 +379,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         cell: CommentsCell.Compare as never,
         customMeta: {
           experimentsIds,
-          experiments,
         },
       } as ColumnData<ExperimentsCompare>,
     ],
-    [experiments, experimentsIds],
+    [experimentsIds],
   );
 
   const selectedRows: Array<ExperimentsCompare> = useMemo(() => {
@@ -715,7 +714,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         experimentsCompareId={activeRowId}
         experimentsCompare={activeRow}
         experimentsIds={experimentsIds}
-        experiments={experiments}
         hasPreviousRow={hasPrevious}
         hasNextRow={hasNext}
         openTrace={setTraceId as OnChangeFn<string>}

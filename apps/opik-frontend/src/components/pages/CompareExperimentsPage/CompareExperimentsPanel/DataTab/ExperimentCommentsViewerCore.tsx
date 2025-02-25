@@ -16,12 +16,11 @@ export type ExperimentCommentsViewerCoreProps = {
   traceId: string;
   userName?: string;
   sectionIdx: number;
-  experimentId: string;
 };
 
 const ExperimentCommentsViewerCore: React.FC<
   ExperimentCommentsViewerCoreProps
-> = ({ comments = [], traceId, userName, sectionIdx, experimentId }) => {
+> = ({ comments = [], traceId, userName, sectionIdx }) => {
   const [expandedCommentSections = [], setExpandedCommentSections] =
     useQueryParam("expandedCommentSections", ArrayParam, {
       updateType: "replaceIn",
@@ -47,7 +46,6 @@ const ExperimentCommentsViewerCore: React.FC<
     createTraceMutation.mutate({
       text,
       traceId,
-      experimentId,
     });
   };
 
@@ -56,7 +54,6 @@ const ExperimentCommentsViewerCore: React.FC<
       text,
       commentId,
       traceId,
-      experimentId,
     });
   };
 
@@ -64,7 +61,6 @@ const ExperimentCommentsViewerCore: React.FC<
     traceDeleteMutation.mutate({
       ids: [commentId],
       traceId,
-      experimentId,
     });
   };
 

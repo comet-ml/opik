@@ -9,7 +9,6 @@ import UserCommentAvatarList from "@/components/pages-shared/traces/UserComment/
 import { isLocalCommentCheck } from "@/components/pages-shared/traces/UserComment/UserComment";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
-  CustomMeta,
   SplitCellRenderContent,
 } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/VerticallySplitCellWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
@@ -67,8 +66,6 @@ const CompareExperimentsCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
 > = (context) => {
   const experimentCompare = context.row.original;
-  const { custom } = context.column.columnDef.meta ?? {};
-  const { experiments } = (custom ?? {}) as CustomMeta;
   const { meta: tableMeta } = context.table.options;
   const rowHeight = tableMeta?.rowHeight ?? ROW_HEIGHT.small;
   const isSmall = rowHeight === ROW_HEIGHT.small;
@@ -82,10 +79,7 @@ const CompareExperimentsCell: React.FC<
     _,
     idx,
   ) => {
-    const experimentData = experiments?.find(
-      (exp) => exp.id === item?.experiment_id,
-    );
-    const commentsList = experimentData?.comments || [];
+    const commentsList = item?.comments || [];
 
     return (
       <UserCommentHoverList
