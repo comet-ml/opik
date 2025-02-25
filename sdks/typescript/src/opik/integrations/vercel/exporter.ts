@@ -1,8 +1,8 @@
-import { Opik } from "opik";
+import type { AttributeValue, Tracer } from "@opentelemetry/api";
+import type { ExportResultCode } from "@opentelemetry/core";
+import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import type { Span, Trace } from "opik";
-import { AttributeValue, Tracer } from "@opentelemetry/api";
-import { ExportResultCode } from "@opentelemetry/core";
-import { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
+import { logger, Opik } from "opik";
 
 type SpanExporter = NodeSDKConfiguration["traceExporter"];
 type ExportFunction = SpanExporter["export"];
@@ -173,11 +173,32 @@ export class OpikExporter implements SpanExporter {
     await this.client.flush();
   };
 
-  export: ExportFunction = (otelSpans, resultCallback) => {
-    const spanGroups = groupAndSortOtelSpans(otelSpans);
+  export: ExportFunction = async (allOtelSpans, resultCallback) => {
+    const aiSDKOtelSpans = allOtelSpans.filter(
+      (span) => span.instrumentationLibrary.name === "ai"
+    );
+    const diffCount = allOtelSpans.length - aiSDKOtelSpans.length;
+
+    if (diffCount > 0) {
+      logger.debug(`Ignored ${diffCount} non-AI SDK spans`);
+    }
+
+    if (aiSDKOtelSpans.length === 0) {
+      logger.debug("No AI SDK spans found");
+
+      const code: ExportResultCode.SUCCESS = 0;
+      resultCallback({ code });
+
+      return;
+    }
+
+    const spanGroups = groupAndSortOtelSpans(aiSDKOtelSpans);
+
+    logger.debug("Exporting spans", aiSDKOtelSpans);
 
     Object.entries(spanGroups).forEach(([otelTraceId, otelSpans]) => {
       const [rootOtelSpan, ...otherOtelSpans] = otelSpans;
+
       const trace = this.client.trace({
         startTime: new Date(hrTimeToMilliseconds(rootOtelSpan.startTime)),
         endTime: new Date(hrTimeToMilliseconds(rootOtelSpan.endTime)),
@@ -201,7 +222,22 @@ export class OpikExporter implements SpanExporter {
       });
     });
 
-    resultCallback({ code: ExportResultCode.SUCCESS });
+    try {
+      await this.client.flush();
+
+      const code: ExportResultCode.SUCCESS = 0;
+
+      resultCallback({ code });
+    } catch (error) {
+      logger.error("Error exporting spans", error);
+
+      const code: ExportResultCode.FAILED = 1;
+
+      resultCallback({
+        code,
+        error: error instanceof Error ? error : new Error("Unknown error"),
+      });
+    }
   };
 
   static getSettings(settings: OpikExporterSettings): TelemetrySettings {
@@ -236,21 +272,8 @@ function groupAndSortOtelSpans(
     spanGroupsByTraceId[context.traceId].push(otelSpan);
   });
 
-  Object.values(spanGroupsByTraceId).forEach((otelSpans) => {
-    otelSpans.sort((a, b) => {
-      // Put spans without parent first
-      if (!a.parentSpanId && b.parentSpanId) return -1;
-      if (a.parentSpanId && !b.parentSpanId) return 1;
-
-      // If both have parents, check if one is parent of the other
-      if (a.parentSpanId && b.parentSpanId) {
-        if (a.parentSpanId === b.spanContext().spanId) return 1;
-        if (b.parentSpanId === a.spanContext().spanId) return -1;
-      }
-
-      // If no parent relationship, maintain relative order
-      return 0;
-    });
+  Object.entries(spanGroupsByTraceId).forEach(([traceId, otelSpans]) => {
+    spanGroupsByTraceId[traceId] = sortSpansLevelOrder(otelSpans);
   });
 
   return spanGroupsByTraceId;
@@ -289,4 +312,40 @@ function tryParseJSON(input: unknown): Record<string, unknown> | undefined {
   }
 
   return undefined;
+}
+
+function sortSpansLevelOrder(otelSpans: ReadableSpan[]): ReadableSpan[] {
+  // (spanId, otelSpan)
+  const idMap = new Map<string, ReadableSpan>();
+  // (parentSpanId, [childrenOtelSpans])
+  const childrenMap = new Map<string, ReadableSpan[]>();
+
+  for (const otelSpan of otelSpans) {
+    const { spanId } = otelSpan.spanContext();
+    idMap.set(spanId, otelSpan);
+
+    if (otelSpan.parentSpanId) {
+      if (!childrenMap.has(otelSpan.parentSpanId)) {
+        childrenMap.set(otelSpan.parentSpanId, []);
+      }
+      childrenMap.get(otelSpan.parentSpanId)!.push(otelSpan);
+    }
+  }
+
+  const roots = otelSpans.filter(
+    (span) => !span.parentSpanId || !idMap.has(span.parentSpanId)
+  );
+
+  const result: ReadableSpan[] = [];
+  const queue: ReadableSpan[] = [...roots];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    result.push(current);
+    const currentId = current.spanContext().spanId;
+    const children = childrenMap.get(currentId) || [];
+    queue.push(...children);
+  }
+
+  return result;
 }
