@@ -1,12 +1,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
-import api, { TRACE_KEY, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
+import api, {
+  COMPARE_EXPERIMENTS_KEY,
+  TRACE_KEY,
+  TRACES_KEY,
+  TRACES_REST_ENDPOINT,
+} from "@/api/api";
 
 type UseTraceBatchDeleteMutationParams = {
   ids: string[];
   traceId: string;
-  experimentId?: string;
 };
 
 const useTraceCommentsBatchDeleteMutation = () => {
@@ -37,22 +41,15 @@ const useTraceCommentsBatchDeleteMutation = () => {
       });
     },
     onSettled: (data, error, variables) => {
-      const { traceId, experimentId } = variables;
+      const { traceId } = variables;
       queryClient.invalidateQueries({
         queryKey: [TRACE_KEY, { traceId }],
       });
       queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
 
-      if (experimentId) {
-        queryClient.invalidateQueries({
-          queryKey: [
-            "experiment",
-            {
-              experimentId,
-            },
-          ],
-        });
-      }
+      queryClient.invalidateQueries({
+        queryKey: [COMPARE_EXPERIMENTS_KEY],
+      });
     },
   });
 };

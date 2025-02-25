@@ -71,6 +71,7 @@ export interface ExperimentItem {
   input: object;
   output: object;
   feedback_scores?: TraceFeedbackScore[];
+  comments?: CommentItems;
   created_at: string;
   last_updated_at: string;
 }
