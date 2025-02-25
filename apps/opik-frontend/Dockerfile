@@ -11,11 +11,28 @@ RUN npm install
 COPY . .
 
 ARG OPIK_VERSION
+ARG SENTRY_AUTH_TOKEN
+
+ENV SENTRY_ORG=comet-or
+ENV SENTRY_PROJECT=opik-frontend
+
 ENV VITE_APP_VERSION=${OPIK_VERSION}
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
+
+RUN if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ]; then \
+      echo "Uploading source maps to Sentry..."; \
+      npx sentry-cli --auth-token "$SENTRY_AUTH_TOKEN" \
+        sourcemaps upload \
+        --org "$SENTRY_ORG" \
+        --project "$SENTRY_PROJECT" \
+        --release "$OPIK_VERSION" \
+        /opt/frontend/dist; \
+    else \
+      echo "Source maps for Sentry will not be uploaded. Missing required environment variables."; \
+    fi
 
 # Production stage
 FROM nginx:1.27.4-alpine3.21

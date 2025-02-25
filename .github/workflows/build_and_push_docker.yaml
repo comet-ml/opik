@@ -3,98 +3,108 @@ name: "Build Docker Images"
 on:
   workflow_call:
     inputs:
-        image:
-            type: string
-            required: true
-            description: Docker Image
-        version:
-            type: string
-            required: true
-            description: Version
-        build_from:
-            type: string
-            required: true
-            description: Original version to build from 
-            default: ""
-        build_comet_image:
-            type: boolean
-            required: true
-            description: If to build a Comet integration image
-            default: false
-        comet_build_args:
-            type: string
-            required: false
-            default: ""
-            description: Arguments for cloud docker build
-        push_latest:
-            type: string
-            required: true
-            description: If to push docker image with latest tag
-            default: "false"
+      image:
+        type: string
+        required: true
+        description: Docker Image
+      version:
+        type: string
+        required: true
+        description: Version
+      build_from:
+        type: string
+        required: true
+        description: Original version to build from
+        default: ""
+      build_comet_image:
+        type: boolean
+        required: true
+        description: If to build a Comet integration image
+        default: false
+      comet_build_args:
+        type: string
+        required: false
+        default: ""
+        description: Arguments for cloud docker build
+      push_latest:
+        type: string
+        required: true
+        description: If to push docker image with latest tag
+        default: "false"
 
 
 
 env:
-  DOCKER_REGISTRY: "ghcr.io/comet-ml/opik" 
+  DOCKER_REGISTRY: "ghcr.io/comet-ml/opik"
 
 jobs:
 
   build-n-push-image:
     runs-on: ubuntu-latest
     defaults:
-        run:
-          working-directory: apps/${{ inputs.image }}/
+      run:
+        working-directory: apps/${{ inputs.image }}/
     steps:
-        - name: Checkout
-          uses: actions/checkout@v4.1.1
-          with:
-            ref: ${{inputs.build_from}}
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
+        with:
+          ref: ${{inputs.build_from}}
 
-        - name: Build Docker Image
-          run: |
-            DOCKER_IMAGE_NAME=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
-            echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
-            DOCKER_BUILDKIT=1 docker build --build-arg OPIK_VERSION=${{inputs.version}} -t ${DOCKER_IMAGE_NAME} .
+      - name: Build Docker Image
+        run: |
+          DOCKER_IMAGE_NAME=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}:${{ inputs.version }}
+          echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
+          
+          DOCKER_BUILDKIT=1 \
+          docker build \
+          --build-arg OPIK_VERSION=${{ inputs.version }} \
+          --build-arg SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }} \
+          -t ${DOCKER_IMAGE_NAME} 
 
-        - name: Build Docker Image for Comet integration
-          if: inputs.build_comet_image 
-          run: |
-            DOCKER_IMAGE_NAME_COMET=${{env.DOCKER_REGISTRY}}/${{inputs.image}}-comet:${{inputs.version}}
-            echo "DOCKER_IMAGE_NAME_COMET=${DOCKER_IMAGE_NAME_COMET}" | tee -a $GITHUB_ENV
-            DOCKER_BUILDKIT=1 docker build --build-arg ${{inputs.comet_build_args}} --build-arg OPIK_VERSION=${{inputs.version}} -t ${DOCKER_IMAGE_NAME_COMET} .
+      - name: Build Docker Image for Comet integration
+        if: inputs.build_comet_image
+        run: |
+          DOCKER_IMAGE_NAME=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}:${{ inputs.version }}
+          echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
+          
+          DOCKER_BUILDKIT=1 \
+          docker build \
+          --build-arg OPIK_VERSION=${{ inputs.version }} \
+          --build-arg SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }} \
+          -t ${DOCKER_IMAGE_NAME} 
 
-        - name: Login to GHCR
-          uses: docker/login-action@v3
-          with:
-            registry: ${{env.DOCKER_REGISTRY}}
-            username: "github-actions"
-            password: ${{ secrets.GITHUB_TOKEN }}
-  
-        - name: Push Docker Image
-          run: |
-            docker push ${{env.DOCKER_IMAGE_NAME}}
-            echo "Docker image pushed: ${{env.DOCKER_IMAGE_NAME}}" >> $GITHUB_STEP_SUMMARY
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{env.DOCKER_REGISTRY}}
+          username: "github-actions"
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Push Docker Image with latest tag
-          if: inputs.push_latest == 'true'
-          run: |
-            DOCKER_IMAGE_NAME_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
-            docker tag ${{env.DOCKER_IMAGE_NAME}} ${DOCKER_IMAGE_NAME_LATEST}
-            docker push ${DOCKER_IMAGE_NAME_LATEST}
-            echo "Docker image pushed: ${DOCKER_IMAGE_NAME_LATEST}" >> $GITHUB_STEP_SUMMARY
+      - name: Push Docker Image
+        run: |
+          docker push ${{env.DOCKER_IMAGE_NAME}}
+          echo "Docker image pushed: ${{env.DOCKER_IMAGE_NAME}}" >> $GITHUB_STEP_SUMMARY
 
-        - name: Push Docker Image for Comet integration
-          if: inputs.build_comet_image 
-          run: |
-            docker push ${{env.DOCKER_IMAGE_NAME_COMET}}
-            echo "Docker image pushed: ${{env.DOCKER_IMAGE_NAME_COMET}}" >> $GITHUB_STEP_SUMMARY
+      - name: Push Docker Image with latest tag
+        if: inputs.push_latest == 'true'
+        run: |
+          DOCKER_IMAGE_NAME_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
+          docker tag ${{env.DOCKER_IMAGE_NAME}} ${DOCKER_IMAGE_NAME_LATEST}
+          docker push ${DOCKER_IMAGE_NAME_LATEST}
+          echo "Docker image pushed: ${DOCKER_IMAGE_NAME_LATEST}" >> $GITHUB_STEP_SUMMARY
 
-        - name: Push Docker Image for Comet integration with latest tag
-          if: inputs.build_comet_image && inputs.push_latest == 'true'
-          run: |
-            DOCKER_IMAGE_NAME_COMET_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest
-            docker tag ${{env.DOCKER_IMAGE_NAME_COMET}} ${DOCKER_IMAGE_NAME_COMET_LATEST}
-            docker push ${DOCKER_IMAGE_NAME_COMET_LATEST}
-            echo "Docker image pushed: ${DOCKER_IMAGE_NAME_COMET_LATEST}" >> $GITHUB_STEP_SUMMARY
+      - name: Push Docker Image for Comet integration
+        if: inputs.build_comet_image
+        run: |
+          docker push ${{env.DOCKER_IMAGE_NAME_COMET}}
+          echo "Docker image pushed: ${{env.DOCKER_IMAGE_NAME_COMET}}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Push Docker Image for Comet integration with latest tag
+        if: inputs.build_comet_image && inputs.push_latest == 'true'
+        run: |
+          DOCKER_IMAGE_NAME_COMET_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest
+          docker tag ${{env.DOCKER_IMAGE_NAME_COMET}} ${DOCKER_IMAGE_NAME_COMET_LATEST}
+          docker push ${DOCKER_IMAGE_NAME_COMET_LATEST}
+          echo "Docker image pushed: ${DOCKER_IMAGE_NAME_COMET_LATEST}" >> $GITHUB_STEP_SUMMARY
 
         

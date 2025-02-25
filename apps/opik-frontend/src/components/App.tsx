@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
+import SentryErrorBoundary from "@/components/sentry/SentryErrorBoundary";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,14 +20,16 @@ function App() {
   useCustomScrollbarClass();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <QueryParamProvider adapter={WindowHistoryAdapter}>
-        <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-          <RouterProvider router={router} />
-          <Toaster />
-        </ThemeProvider>
-      </QueryParamProvider>
-    </QueryClientProvider>
+    <SentryErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <QueryParamProvider adapter={WindowHistoryAdapter}>
+          <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+            <RouterProvider router={router} />
+            <Toaster />
+          </ThemeProvider>
+        </QueryParamProvider>
+      </QueryClientProvider>
+    </SentryErrorBoundary>
   );
 }
 
