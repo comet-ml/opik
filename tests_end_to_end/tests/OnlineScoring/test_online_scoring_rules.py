@@ -1,17 +1,19 @@
-import pytest
 from playwright.sync_api import Page, expect
 from page_objects.TracesPage import TracesPage
 from page_objects.ProjectsPage import ProjectsPage
-from page_objects.AIProvidersConfigPage import AIProvidersConfigPage
 import logging
-import re
-import time
 
 logger = logging.getLogger(__name__)
 
 
 class TestOnlineScoringRules:
-    def test_create_moderation_rule(self, create_ai_provider_config, page: Page, create_project, create_10_test_traces):
+    def test_create_moderation_rule(
+        self,
+        create_ai_provider_config,
+        page: Page,
+        create_project,
+        create_10_test_traces,
+    ):
         """Test creating a moderation scoring rule.
 
         Steps:
@@ -58,16 +60,22 @@ class TestOnlineScoringRules:
         sampling_value.fill("1")
 
         # Select model
-        traces_page.page.get_by_role("combobox").filter(has_text="Select a LLM model").click()
+        traces_page.page.get_by_role("combobox").filter(
+            has_text="Select a LLM model"
+        ).click()
         traces_page.page.get_by_text("OpenAI").hover()
         traces_page.page.get_by_label("GPT 4o Mini", exact=True).click()
 
         # Select hallucination template
-        traces_page.page.get_by_role("combobox").filter(has_text="Custom LLM-as-judge").click()
+        traces_page.page.get_by_role("combobox").filter(
+            has_text="Custom LLM-as-judge"
+        ).click()
         traces_page.page.get_by_label("Moderation", exact=True).click()
 
         # Fill in variable mapping
-        variable_map = traces_page.page.get_by_placeholder("Select a key from recent trace")
+        variable_map = traces_page.page.get_by_placeholder(
+            "Select a key from recent trace"
+        )
         variable_map.click()
         variable_map.fill("output.output")
         traces_page.page.get_by_role("option", name="output.output").click()

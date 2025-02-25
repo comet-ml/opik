@@ -490,6 +490,7 @@ def create_feedback_definition_numerical_ui(client: opik.Opik, page: Page):
     except AssertionError as _:
         feedbacks_page.delete_feedback_by_name(data["name"])
 
+
 @pytest.fixture
 def create_ai_provider_config(page: Page):
     ai_providers_page = AIProvidersConfigPage(page)
