@@ -61,7 +61,7 @@ public class OpenTelemetryMapper {
                 .build();
     }
 
-    static JsonNode convertAttributesToJson(List<KeyValue> attributes) {
+    private static JsonNode convertAttributesToJson(List<KeyValue> attributes) {
         ObjectMapper mapper = JsonUtils.MAPPER;
         ObjectNode node = mapper.createObjectNode();
 
@@ -82,8 +82,6 @@ public class OpenTelemetryMapper {
         return node;
     }
 
-    static long DAY_MILLISECONDS = 24 * 60 * 60 * 1000L;
-
     /**
      * Uses 64-bit integer OpenTelemetry SpanId and its timestamp to prepare a good UUIDv7 id. This is actually
      * a good UUIDv7 (in opposition of the traceId) as its composed from an id and a timestamp, so spans will be
@@ -97,15 +95,12 @@ public class OpenTelemetryMapper {
      * (2) a routine running between Saturday 23:59:30 and Sunday 00:00:30 will be split in 2 traces; both incomplete.
      *
      * @param otelSpanId a OpenTelemetry 64-bit integer spanId
-     * @param spanTimestampMs a timestamp for the span in millis
-     * @param timeTruncate truncates the timestamp on returned UUID by a time window level
+     * @param timestampMs a timestamp for the span in millis
      * @return a valid UUIDv7
      */
-    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long spanTimestampMs, boolean timeTruncate) {
+    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long timestampMs) {
         // Prepare the 16-byte array for the UUID
         byte[] uuidBytes = new byte[16];
-
-        long timestampMs = timeTruncate ? (spanTimestampMs / DAY_MILLISECONDS) * DAY_MILLISECONDS : spanTimestampMs;
 
         // Bytes 0-5: 48-bit timestamp (big-endian)
         long ts48 = timestampMs & 0xFFFFFFFFFFFFL; // 48 bits
@@ -134,25 +129,12 @@ public class OpenTelemetryMapper {
     }
 
     /**
-     * Uses 64-bit integer OpenTelemetry SpanId and its timestamp to prepare a good UUIDv7 id. This is actually
-     * a good UUIDv7 (in opposition of the traceId) as its composed from an id and a timestamp, so spans will be
-     * properly ordered in the span table.
-     *
-     * @param otelSpanId a OpenTelemetry 64-bit integer spanId
-     * @param timestampMs a timestamp for the span in millis
-     * @return a valid UUIDv7
-     */
-    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long timestampMs) {
-        return convertOtelIdToUUIDv7(otelSpanId, timestampMs, false);
-    }
-
-    /**
      * Extracts the Unix epoch timestamp in milliseconds from a UUIDv7.
      *
      * @param uuid the UUIDv7 instance
      * @return the extracted timestamp as a long (milliseconds since Unix epoch)
      */
-    long extractTimestampFromUUIDv7(UUID uuid) {
+    private long extractTimestampFromUUIDv7(UUID uuid) {
         // Get the 64 most significant bits.
         long msb = uuid.getMostSignificantBits();
         // The top 48 bits represent the timestamp.

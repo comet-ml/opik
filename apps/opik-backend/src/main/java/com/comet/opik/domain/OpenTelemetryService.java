@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.Base64;
@@ -65,7 +66,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
             final Map<String, UUID> traceIdMapper = otelToOpikTraceIdMapper(otelSpans, projectId, workspaceId);
 
             return doStoreSpans(otelSpans, traceIdMapper, projectName);
-        }));
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     private String base64OtelId(ByteString idBytes) {
@@ -73,7 +74,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     }
 
     private String redisKey(String workspaceId, UUID projectId, String otelId) {
-        return workspaceId + ":" + projectId + ":" + otelId;
+        return "otelTraceId:" + workspaceId + ":" + projectId + ":" + otelId;
     }
 
     private Mono<Long> doStoreSpans(List<Span> otelSpans, Map<String, UUID> traceIdMapper, String projectName) {
@@ -84,7 +85,6 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                     var otelTraceIdBase64 = base64OtelId(otelSpan.getTraceId());
 
                     var opikTraceId = traceIdMapper.get(otelTraceIdBase64);
-                    log.info("'{}' -> '{}'", otelTraceIdBase64, opikTraceId);
 
                     return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId);
                 })
