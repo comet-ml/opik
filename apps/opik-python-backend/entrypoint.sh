@@ -23,9 +23,11 @@ fi
 
 echo "Docker daemon started successfully after $attempts attempts"
 
-echo "Loading the Opik Sandbox Executor Python image"
-docker load < "./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}"
-echo "Successfully loaded the Opik Sandbox Executor Python image"
+if [ -s  "./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz"]; then
+  echo "Loading the Opik Sandbox Executor Python image"
+  docker load < "./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz"
+  echo "Successfully loaded the Opik Sandbox Executor Python image"
+fi
 
 echo "Starting the Opik Python Backend server"
 gunicorn --workers 4 --bind=0.0.0.0:8000 --chdir ./src 'opik_backend:create_app()'
