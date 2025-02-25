@@ -152,7 +152,7 @@ navigation:
                 slug: langgraph
               - page: Llama Index
                 path: docs/tracing/integrations/llama_index.mdx
-                slug: llama_indec
+                slug: llama_index
               - page: Ollama
                 path: docs/tracing/integrations/ollama.mdx
                 slug: ollama
