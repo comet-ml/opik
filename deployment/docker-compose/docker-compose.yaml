@@ -82,6 +82,7 @@ services:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
     ports:
       - "3003" # OpenAPI specification port
     depends_on:
@@ -99,6 +100,7 @@ services:
     privileged: true # Required for Docker-in-Docker, so it can launch containers
     environment:
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
@@ -115,6 +117,8 @@ services:
     depends_on:
       backend:
         condition: service_started
+    environment: 
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
 
 networks:
   default:
