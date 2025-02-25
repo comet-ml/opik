@@ -303,7 +303,9 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                         input={"title": "The Hobbit"},
                         output=ANY_BUT_NONE,
                         tags=None,
-                        metadata={"created_from": "langchain",},
+                        metadata={
+                            "created_from": "langchain",
+                        },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         type="tool",
@@ -367,7 +369,10 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
         input={"title": "Documentary about Bigfoot in Paris"},
         output=None,
         tags=["tag1", "tag2"],
-        metadata={"a": "b", "created_from": "langchain",},
+        metadata={
+            "a": "b",
+            "created_from": "langchain",
+        },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         error_info={
@@ -381,7 +386,10 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                 input={"title": "Documentary about Bigfoot in Paris"},
                 output=None,
                 tags=["tag1", "tag2"],
-                metadata={"a": "b", "created_from": "langchain",},
+                metadata={
+                    "a": "b",
+                    "created_from": "langchain",
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 error_info={
@@ -395,7 +403,9 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output={"output": ANY_BUT_NONE},
-                        metadata={"created_from": "langchain",},
+                        metadata={
+                            "created_from": "langchain",
+                        },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],

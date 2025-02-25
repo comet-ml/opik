@@ -71,7 +71,10 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         input={"title": "Documentary about Bigfoot in Paris"},
         output=ANY_BUT_NONE,
         tags=["tag1", "tag2"],
-        metadata={"a": "b", "created_from": "langchain",},
+        metadata={
+            "a": "b",
+            "created_from": "langchain",
+        },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         spans=[
@@ -81,7 +84,10 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                 input={"title": "Documentary about Bigfoot in Paris"},
                 output=ANY_BUT_NONE,
                 tags=["tag1", "tag2"],
-                metadata={"a": "b", "created_from": "langchain",},
+                metadata={
+                    "a": "b",
+                    "created_from": "langchain",
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[
@@ -91,7 +97,9 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output={"output": ANY_BUT_NONE},
-                        metadata={"created_from": "langchain",},
+                        metadata={
+                            "created_from": "langchain",
+                        },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
