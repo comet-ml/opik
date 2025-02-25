@@ -14,6 +14,7 @@ export OPIK_VERSION=0.1.10
 ```
 
 Otherwise, it will use the latest images.
+
 Run docker-compose from the root of the project:
 
 ```bash
@@ -53,16 +54,13 @@ This will expose the following services to the host machine:
 - Frontend: Available on port 5173.
 
 ## Binding Ports in Docker Compose
-
-By default, Docker Compose binds exposed container ports to 0.0.0.0, making them accessible from any network interface
-on the host. To restrict access, specify a specific IP in the ports section, such as 127.0.0.1:8080:80, to limit
-exposure to the local machine.
+By default, Docker Compose binds exposed container ports to 0.0.0.0, making them accessible from any network interface on the host. To restrict access, specify a specific IP in the ports section, such as 127.0.0.1:8080:80, to limit exposure to the local machine.
 This can be done in `docker-compose.yaml` file
-
 ```
 frontend:
     ports:
       - "127.0.0.1:5173:5173" # Frontend server port
+
 ```
 
 ## Run Opik backend locally and the rest of the components with docker-compose
@@ -74,15 +72,12 @@ http://backend:8080
 ```
 
 With your localhost.
+
 For Mac/Windows (Docker Desktop):
 
 ```bash
 http://host.docker.internal:8080
 ```
-
-        Expand All
-    
-    @@ -93,6 +97,93 @@
 
 For Linux:
 
