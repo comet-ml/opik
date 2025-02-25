@@ -88,6 +88,7 @@ public interface TraceService {
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
 
     Mono<TraceThread> getThreadById(UUID projectId, String threadId);
+
 }
 
 @Slf4j

@@ -239,4 +239,5 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
                 .isEqualTo(message);
     }
+
 }

@@ -100,6 +100,7 @@ interface TraceDAO {
     Mono<Long> deleteThreads(UUID uuid, List<String> threadIds);
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
+
 }
 
 @Slf4j
@@ -1554,4 +1555,5 @@ class TraceDAOImpl implements TraceDAO {
                     .doFinally(signalType -> endSegment(segment));
         });
     }
+
 }
