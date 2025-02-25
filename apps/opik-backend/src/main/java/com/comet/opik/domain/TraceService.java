@@ -450,4 +450,5 @@ class TraceServiceImpl implements TraceService {
         return dao.findThreadById(projectId, threadId)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace Thread", threadId))));
     }
+
 }
