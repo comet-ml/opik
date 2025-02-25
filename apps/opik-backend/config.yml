@@ -118,6 +118,11 @@ redis:
   # Description: single node redis's URL
   singleNodeUrl: ${REDIS_URL:-redis://:opik@localhost:6379/0}
 
+openTelemetry:
+  # Default: 3h
+  # Description: how long it takes to expire non-used keys
+  ttl: ${OTEL_TTL_INTERVAL:-3h}
+
 # Authentication configuration. This is not enabled by default for open source installations.
 authentication:
   # Default: false
