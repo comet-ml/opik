@@ -12,7 +12,7 @@ const BreakButton = () => {
   return (
     <button
       onClick={() => setShouldBreak(true)}
-      className="p-2 bg-red-500 text-white rounded-md"
+      className="rounded-md bg-red-500 p-2 text-white"
     >
       Break the UI
     </button>
