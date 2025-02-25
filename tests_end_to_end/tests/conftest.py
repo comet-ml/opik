@@ -9,6 +9,7 @@ from page_objects.TracesPage import TracesPage
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.ExperimentsPage import ExperimentsPage
 from page_objects.PromptLibraryPage import PromptLibraryPage
+from page_objects.AIProvidersConfigPage import AIProvidersConfigPage
 from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
 from tests.sdk_helpers import (
     create_project_api,
@@ -245,7 +246,7 @@ def log_traces_with_spans_low_level(client: opik.Opik):
     Log 5 traces with spans and subspans using the low level Opik client
     Each should have their own names, tags, metadata and feedback scores to test integrity of data transmitted
     """
-
+    client.get_project
     trace_config = {
         "count": 5,
         "prefix": "client-trace-",
@@ -449,7 +450,7 @@ def create_10_test_traces(page: Page, client, create_project):
         _ = client.trace(
             name=f"trace{i}",
             project_name=proj_name,
-            input={"input": "test input"},
+            input={"input": "test input", "context": "test context"},
             output={"output": "test output"},
         )
     wait_for_number_of_traces_to_be_visible(project_name=proj_name, number_of_traces=10)
@@ -488,6 +489,18 @@ def create_feedback_definition_numerical_ui(client: opik.Opik, page: Page):
         feedbacks_page.check_feedback_not_exists_by_name(feedback_name=data["name"])
     except AssertionError as _:
         feedbacks_page.delete_feedback_by_name(data["name"])
+
+
+@pytest.fixture
+def create_ai_provider_config(page: Page):
+    ai_providers_page = AIProvidersConfigPage(page)
+    ai_providers_page.go_to_page()
+    ai_providers_page.add_provider(
+        provider_type="openai", api_key=os.environ["OPENAI_API_KEY"]
+    )
+    yield
+    ai_providers_page.go_to_page()
+    ai_providers_page.delete_provider(provider_name="OPENAI_API_KEY")
 
 
 @pytest.fixture(autouse=True)
