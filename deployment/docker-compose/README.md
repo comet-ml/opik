@@ -25,7 +25,6 @@ docker compose -f docker-compose.yaml up -d
 ## Run docker-compose with building application from latest code
 
 From the root of the project:
-
 ```bash
 cd deployment/docker-compose
 docker compose -f docker-compose.yaml up -d --build

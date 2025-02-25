@@ -32,8 +32,6 @@ on:
             description: If to push docker image with latest tag
             default: "false"
 
-
-
 env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik" 
 
@@ -49,6 +47,12 @@ jobs:
           uses: actions/checkout@v4.1.1
           with:
             ref: ${{inputs.build_from}}
+
+        - name: Save opik-sandbox-executor-python
+          if: inputs.image == 'opik-python-backend'
+          run: |
+            docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
+            docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > opik-sandbox-executor-python.tar.gz
 
         - name: Build Docker Image
           run: |
