@@ -983,9 +983,10 @@ class SpanDAO {
 
     private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection,
             Span existingSpan) {
-        if (spanUpdate.model() != null || spanUpdate.usage() != null) {
+        if (spanUpdate.model() != null || spanUpdate.usage() != null || spanUpdate.provider() != null) {
             spanUpdate = spanUpdate.toBuilder()
                     .model(spanUpdate.model() != null ? spanUpdate.model() : existingSpan.model())
+                    .provider(spanUpdate.provider() != null ? spanUpdate.provider() : existingSpan.provider())
                     .usage(spanUpdate.usage() != null ? spanUpdate.usage() : existingSpan.usage())
                     .build();
         }
@@ -1036,14 +1037,14 @@ class SpanDAO {
             // Update with new manually set cost
             statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
             statement.bind("total_estimated_cost_version", "");
-        } else
-            if (!isManualCostExist && StringUtils.isNotBlank(spanUpdate.model())
-                    && Objects.nonNull(spanUpdate.usage())) {
-                        // Calculate estimated cost only in case Span doesn't have manually set cost
-                        statement.bind("total_estimated_cost",
-                                CostService.calculateCost(spanUpdate.model(), spanUpdate.usage()).toString());
-                        statement.bind("total_estimated_cost_version", ESTIMATED_COST_VERSION);
-                    }
+        } else if (!isManualCostExist && isUpdateCostRecalculationAvailable(spanUpdate)) {
+            // Calculate estimated cost only in case Span doesn't have manually set cost
+            BigDecimal estimatedCost = CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(),
+                    spanUpdate.usage());
+            statement.bind("total_estimated_cost", estimatedCost.toString());
+            statement.bind("total_estimated_cost_version",
+                    estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
+        }
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
@@ -1068,8 +1069,7 @@ class SpanDAO {
                 .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
 
         // If we have manual cost in update OR if we can calculate it and user didn't set manual cost before
-        boolean shouldRecalculateEstimatedCost = !isManualCostExist && StringUtils.isNotBlank(spanUpdate.model())
-                && spanUpdate.usage() != null;
+        boolean shouldRecalculateEstimatedCost = !isManualCostExist && isUpdateCostRecalculationAvailable(spanUpdate);
         if (spanUpdate.totalEstimatedCost() != null || shouldRecalculateEstimatedCost) {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
@@ -1221,7 +1221,7 @@ class SpanDAO {
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
 
-        return CostService.calculateCost(model, span.usage());
+        return CostService.calculateCost(model, span.provider(), span.usage());
     }
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
@@ -1390,6 +1390,11 @@ class SpanDAO {
 
     private boolean isManualCost(Span span) {
         return span.totalEstimatedCost() != null && StringUtils.isBlank(span.totalEstimatedCostVersion());
+    }
+
+    private boolean isUpdateCostRecalculationAvailable(SpanUpdate spanUpdate) {
+        return StringUtils.isNotBlank(spanUpdate.model()) && StringUtils.isNotBlank(spanUpdate.provider())
+                && spanUpdate.usage() != null;
     }
 
     private void bindCost(Span span, Statement statement, String index) {

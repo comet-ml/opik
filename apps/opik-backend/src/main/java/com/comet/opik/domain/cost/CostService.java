@@ -12,12 +12,14 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 @Slf4j
 public class CostService {
-    private static final Map<String, ModelPrice> modelPrices = new HashMap<>();
-    private static final Set<String> providers = Set.of("openai", "vertex_ai-language-models");
+    private static final Map<String, ModelPrice> modelProviderPrices = new HashMap<>();
+    private static final Map<String, String> providersMapping = Map.of(
+            "openai", "openai",
+            "vertex_ai-language-models", "google_vertexai",
+            "gemini", "google_ai");
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
 
     static {
@@ -32,9 +34,11 @@ public class CostService {
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
             new BigDecimal("0"), SpanCostCalculator::defaultCost);
 
-    public static BigDecimal calculateCost(@Nullable String rawModelName, @Nullable Map<String, Integer> usage) {
-        ModelPrice modelPrice = Optional.ofNullable(rawModelName)
-                .map(modelPrices::get)
+    public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
+            @Nullable Map<String, Integer> usage) {
+        ModelPrice modelPrice = Optional.ofNullable(modelName)
+                .flatMap(mn -> Optional.ofNullable(provider).map(p -> mn + p))
+                .map(modelProviderPrices::get)
                 .orElse(DEFAULT_COST);
 
         return modelPrice.calculator().apply(modelPrice, Optional.ofNullable(usage).orElse(Map.of()));
@@ -49,16 +53,21 @@ public class CostService {
 
         modelCosts.forEach((modelName, modelCost) -> {
             String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-            if (providers.contains(provider)) {
+            if (providersMapping.containsKey(provider)) {
                 BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
                 BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
                 if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    modelPrices.put(modelName,
+                    modelProviderPrices.put(parseModelName(modelName) + providersMapping.get(provider),
                             new ModelPrice(inputPrice, outputPrice, SpanCostCalculator::textGenerationCost));
                 }
             }
         });
+    }
+
+    private static String parseModelName(String modelName) {
+        int prefixIndex = modelName.indexOf('/');
+        return prefixIndex == -1 ? modelName : modelName.substring(prefixIndex + 1);
     }
 }
