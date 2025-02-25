@@ -43,7 +43,7 @@ COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
 RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
 
-EXPOSE 80
+EXPOSE 5173
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
