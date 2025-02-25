@@ -1,6 +1,9 @@
 instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
 favicon: img/logo.svg
+js:
+  - path: ./custom.js
+    strategy: lazyOnload
 layout:
   searchbar-placement: header
   tabs-placement: header

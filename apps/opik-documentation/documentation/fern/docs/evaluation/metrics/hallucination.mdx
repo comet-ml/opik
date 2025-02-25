@@ -44,7 +44,8 @@ Opik uses an LLM as a Judge to detect hallucinations, for this we have a prompt 
 
 The template uses a few-shot prompting technique to detect hallucinations. The template is as follows:
 
-```You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context. Analyze the provided INPUT, CONTEXT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
+```
+You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context. Analyze the provided INPUT, CONTEXT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
 
 Guidelines:
 1. The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.
