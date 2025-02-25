@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.15.0-alpine3.20 as builder
+FROM node:20.15.0-alpine3.20 AS builder
 
 WORKDIR /opt/frontend
 
@@ -22,7 +22,8 @@ ENV NODE_OPTIONS="--max-old-space-size=8192"
 ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
-RUN if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ]; then \
+# Upload source maps to Sentry if token is provided
+RUN if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$OPIK_VERSION" ]; then \
       echo "Uploading source maps to Sentry..."; \
       npx sentry-cli --auth-token "$SENTRY_AUTH_TOKEN" \
         sourcemaps upload \
@@ -42,7 +43,7 @@ COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
 RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
 
-EXPOSE 5173
+EXPOSE 80
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
