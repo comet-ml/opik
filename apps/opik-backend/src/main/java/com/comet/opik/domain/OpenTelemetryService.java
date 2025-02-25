@@ -19,12 +19,10 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.Base64;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @ImplementedBy(OpenTelemetryServiceImpl.class)
 public interface OpenTelemetryService {
@@ -59,13 +57,15 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
             var otelSpans = traceRequest.getResourceSpansList().stream()
                     .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
                     .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
-                    .sorted(Comparator.comparing(Span::getStartTimeUnixNano))
                     .toList();
 
-            // get or create a mapping of otel trace id -> opik trace id
-            final Map<String, UUID> traceIdMapper = otelToOpikTraceIdMapper(otelSpans, projectId, workspaceId);
+            // otelTraceId -> minimum timestamp seen with that traceId
+            var otelTracesAndMinTimestamp = otelSpans.stream()
+                    .collect(Collectors.toMap(Span::getTraceId, Span::getStartTimeUnixNano, Math::min));
 
-            return doStoreSpans(otelSpans, traceIdMapper, projectName);
+            // get or create a mapping of otel trace id -> opik trace id
+            return otelToOpikTraceIdMapper(otelTracesAndMinTimestamp, projectId, workspaceId)
+                    .flatMap(traceMapper -> doStoreSpans(otelSpans, traceMapper, projectName));
         })).subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -121,43 +121,31 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 }));
     }
 
-    private Map<String, UUID> otelToOpikTraceIdMapper(List<Span> otelSpans, UUID projectId, String workspaceId) {
+    private Mono<Map<String, UUID>> otelToOpikTraceIdMapper(Map<ByteString, Long> otelTraceIds, UUID projectId,
+            String workspaceId) {
         // checks Redis for the otel traceIds in the batch; have we seen them before?
         // maps (base64 otel id -> UUIDv7 opik id)
-        final Map<String, UUID> traceIdMapper = new HashMap<>();
+        return Flux.fromIterable(otelTraceIds.entrySet()).flatMap(otelPack -> {
+            var otelTraceId = otelPack.getKey();
+            var otelTimestamp = Duration.ofNanos(otelPack.getValue()).toMillis();
 
-        otelSpans.forEach(otelSpan -> {
-            var otelTraceId = otelSpan.getTraceId();
             var otelTraceIdBase64 = base64OtelId(otelTraceId);
-
-            // do we know this traceId? if we do, skip step
-            if (traceIdMapper.containsKey(otelTraceIdBase64)) {
-                return;
-            }
 
             // checks if this key is mapped in redis
             var otelTraceIdRedisKey = redisKey(workspaceId, projectId, otelTraceIdBase64);
-            var optOpikTraceId = Optional
-                    .ofNullable((String) redisson.getBucket(otelTraceIdRedisKey).getAndExpire(REDIS_TTL).block());
+            var checkId = redisson.getBucket(otelTraceIdRedisKey).getAndExpire(REDIS_TTL);
 
-            final UUID opikTraceId;
-            if (optOpikTraceId.isPresent()) {
-                // its a known otel trace id from a previous batch, lets just reuse it
-                opikTraceId = UUID.fromString(optOpikTraceId.get());
-            } else {
+            return checkId.switchIfEmpty(Mono.defer(() -> {
                 // its an unknown otel trace id, lets create an opik trace id with this span timestamp as we sorted otel
                 // spans by time on previous step, it will be the closest time possible for the actual trace start
-                var startTimeMs = Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis();
-                opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId.toByteArray(), startTimeMs);
+                var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId.toByteArray(), otelTimestamp);
 
                 log.info("Creating mapping in Redis for otel trace id '{}' -> opik trace id '{}'", otelTraceIdRedisKey,
                         opikTraceId);
-                redisson.getBucket(otelTraceIdRedisKey).set(opikTraceId.toString(), REDIS_TTL).block();
-            }
-
-            traceIdMapper.put(otelTraceIdBase64, opikTraceId);
-        });
-
-        return traceIdMapper;
+                return redisson.getBucket(otelTraceIdRedisKey)
+                        .set(opikTraceId.toString(), REDIS_TTL)
+                        .then(Mono.just(opikTraceId.toString()));
+            })).map(opikTraceId -> Map.entry(otelTraceIdBase64, opikTraceId));
+        }).collectMap(Map.Entry::getKey, entry -> UUID.fromString((String) entry.getValue()));
     }
 }
