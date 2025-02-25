@@ -43,6 +43,8 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.Trace.TracePage;
+import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
@@ -63,7 +65,7 @@ public interface TraceService {
 
     Mono<Void> delete(Set<UUID> ids);
 
-    Mono<Trace.TracePage> find(int page, int size, TraceSearchCriteria criteria);
+    Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
     Mono<Boolean> validateTraceWorkspace(String workspaceId, Set<UUID> traceIds);
 
@@ -76,6 +78,8 @@ public interface TraceService {
     Mono<Long> getDailyCreatedCount();
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId);
+
+    Mono<TraceThreadPage> getTraceThreads(int page, int size, TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -329,7 +333,7 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     @WithSpan
-    public Mono<Trace.TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
+    public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
 
         if (criteria.projectId() != null) {
             return template.nonTransaction(connection -> dao.find(size, page, criteria, connection));
@@ -338,7 +342,7 @@ class TraceServiceImpl implements TraceService {
         return getProjectByName(criteria.projectName())
                 .flatMap(project -> template.nonTransaction(connection -> dao.find(
                         size, page, criteria.toBuilder().projectId(project.id()).build(), connection)))
-                .switchIfEmpty(Mono.just(Trace.TracePage.empty(page)));
+                .switchIfEmpty(Mono.just(TracePage.empty(page)));
     }
 
     @Override
@@ -402,5 +406,17 @@ class TraceServiceImpl implements TraceService {
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId) {
         return template
                 .nonTransaction(connection -> dao.getLastUpdatedTraceAt(projectIds, workspaceId, connection));
+    }
+
+    @Override
+    public Mono<TraceThreadPage> getTraceThreads(int page, int size, @NonNull TraceSearchCriteria criteria) {
+
+        if (criteria.projectId() != null) {
+            return dao.findThreads(size, page, criteria);
+        }
+
+        return getProjectByName(criteria.projectName())
+                .flatMap(project -> dao.findThreads(size, page, criteria.toBuilder().projectId(project.id()).build()))
+                .switchIfEmpty(Mono.just(TraceThreadPage.empty(page)));
     }
 }

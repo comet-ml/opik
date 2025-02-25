@@ -16,6 +16,7 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
@@ -64,6 +65,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
 
@@ -462,4 +464,39 @@ public class TracesResource {
         return Response.ok(feedbackScoreNames).build();
     }
 
+    @GET
+    @Path("/threads")
+    @Operation(operationId = "getTraceThreads", summary = "Get trace threads", description = "Get trace threads", responses = {
+            @ApiResponse(responseCode = "200", description = "Trace threads resource", content = @Content(schema = @Schema(implementation = TraceThreadPage.class)))})
+    public Response getTraceThreads(
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("project_name") String projectName,
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("truncate") @Schema(description = "Truncate image included in the messages") boolean truncate,
+            @QueryParam("filters") String filters) {
+
+        validateProjectNameAndProjectId(projectName, projectId);
+        var traceFilters = filtersFactory.newFilters(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
+
+        var searchCriteria = TraceSearchCriteria.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .filters(traceFilters)
+                .truncate(truncate)
+                .build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Get trace threads by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
+
+        TraceThreadPage traceThreadPage = service.getTraceThreads(page, size, searchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found trace threads by '{}', count '{}' on workspaceId '{}'", searchCriteria, traceThreadPage.size(),
+                workspaceId);
+
+        return Response.ok(traceThreadPage).build();
+    }
 }
