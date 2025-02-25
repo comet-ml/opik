@@ -6,6 +6,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -859,6 +860,7 @@ class TraceDAOImpl implements TraceDAO {
              SETTINGS join_algorithm = 'full_sorting_merge'
             ;
             """;
+
     private static final String DELETE_THREADS_BY_PROJECT_ID = """
             DELETE FROM traces
             WHERE workspace_id = :workspace_id
@@ -870,6 +872,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull TraceSortingFactory sortingFactory;
 
     @Override
     @WithSpan
@@ -1117,7 +1120,8 @@ class TraceDAOImpl implements TraceDAO {
                         .flatMapMany(this::mapToDto)
                         .collectList()
                         .flatMap(this::enhanceWithFeedbackLogs)
-                        .map(traces -> new TracePage(page, traces.size(), total, traces)));
+                        .map(traces -> new TracePage(page, traces.size(), total, traces,
+                                sortingFactory.getSortableFields())));
     }
 
     @Override

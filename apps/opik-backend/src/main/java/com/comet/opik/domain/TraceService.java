@@ -441,4 +441,5 @@ class TraceServiceImpl implements TraceService {
                 .flatMap(project -> dao.deleteThreads(project.id(), traceThreads.threadIds()))
                 .then();
     }
+
 }
