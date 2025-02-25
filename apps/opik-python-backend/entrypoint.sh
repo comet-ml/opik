@@ -23,10 +23,12 @@ fi
 
 echo "Docker daemon started successfully after $attempts attempts"
 
-if [ -s  "./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz"]; then
+if [ -s "./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz" ]; then
   echo "Loading the Opik Sandbox Executor Python image"
   docker load < "./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz"
   echo "Successfully loaded the Opik Sandbox Executor Python image"
+else
+  echo "Opik Sandbox Executor Python image not found"
 fi
 
 echo "Starting the Opik Python Backend server"
