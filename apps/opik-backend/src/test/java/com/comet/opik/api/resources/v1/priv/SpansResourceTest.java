@@ -1290,6 +1290,7 @@ class SpansResourceTest {
                     .collect(toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
                     .model("gpt-3.5-turbo-1106")
+                    .provider("openai")
                     .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
                     .build());
