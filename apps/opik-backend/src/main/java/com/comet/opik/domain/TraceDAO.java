@@ -96,6 +96,8 @@ interface TraceDAO {
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
 
     Mono<TraceThreadPage> findThreads(int size, int page, TraceSearchCriteria threadSearchCriteria);
+
+    Mono<Long> deleteThreads(UUID uuid, List<String> threadIds);
 }
 
 @Slf4j
@@ -859,6 +861,13 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    private static final String DELETE_THREADS_BY_PROJECT_ID = """
+            DELETE FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND thread_id IN :thread_ids
+            """;
+
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -1475,6 +1484,24 @@ class TraceDAOImpl implements TraceDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                     .singleOrEmpty();
+        });
+    }
+
+    @Override
+    public Mono<Long> deleteThreads(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+        Preconditions.checkArgument(!threadIds.isEmpty(), "threadIds must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(DELETE_THREADS_BY_PROJECT_ID)
+                    .bind("project_id", projectId)
+                    .bind("thread_ids", threadIds.toArray(String[]::new));
+
+            Segment segment = startSegment("traces", "Clickhouse", "deleteThreads");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMapMany(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum);
         });
     }
 }

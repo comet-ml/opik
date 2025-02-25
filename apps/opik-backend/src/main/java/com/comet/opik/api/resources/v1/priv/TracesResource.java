@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -499,4 +500,26 @@ public class TracesResource {
 
         return Response.ok(traceThreadPage).build();
     }
+
+    @POST
+    @Path("/threads/delete")
+    @Operation(operationId = "deleteTraceThreads", summary = "Delete trace threads", description = "Delete trace threads", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response deleteTraceThreads(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = DeleteTraceThreads.class))) @Valid DeleteTraceThreads traceThreads) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Delete trace threads with project_name '{}' or project_id '{}' on workspaceId '{}'",
+                traceThreads.projectName(), traceThreads.projectId(), workspaceId);
+
+        service.deleteTraceThreads(traceThreads)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted trace threads with ids '{}' on workspaceId '{}'", traceThreads.threadIds(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
 }

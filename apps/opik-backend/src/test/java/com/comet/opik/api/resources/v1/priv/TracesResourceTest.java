@@ -4,6 +4,7 @@ import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
@@ -79,6 +80,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.com.google.common.collect.Lists;
 import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -5602,10 +5604,7 @@ class TracesResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .method(HttpMethod.PATCH, Entity.json(traceUpdate))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
-                        .contains("Trace id must be a version 7 UUID");
+                assertErrorResponse(actualResponse, "Trace id must be a version 7 UUID", HttpStatus.SC_BAD_REQUEST);
             }
         }
 
@@ -6219,9 +6218,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .put(Entity.json(feedbackScore))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(errorMessage);
+                assertErrorResponse(actualResponse, errorMessage, HttpStatus.SC_UNPROCESSABLE_ENTITY);
             }
         }
 
@@ -6534,9 +6531,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .put(Entity.json(batch))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(errorMessage);
+                assertErrorResponse(actualResponse, errorMessage, HttpStatus.SC_UNPROCESSABLE_ENTITY);
             }
         }
 
@@ -6679,10 +6674,7 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("trace id must be a version 7 UUID");
+                assertErrorResponse(actualResponse, "trace id must be a version 7 UUID", 400);
             }
         }
 
@@ -6783,6 +6775,139 @@ class TracesResourceTest {
 
             fetchAndAssertResponse(names, projectId, apiKey, workspaceName);
         }
+    }
+
+    @Nested
+    @DisplayName("Trace threads Delete")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceThreadsDelete {
+
+        @Test
+        @DisplayName("when trace thread is deleted, then return no content")
+        void deleteTraceThread() {
+            var trace = createTrace().toBuilder()
+                    .threadId(UUID.randomUUID().toString())
+                    .build();
+
+            var id = create(trace, API_KEY, TEST_WORKSPACE);
+
+            traceResourceClient.deleteTraceThreads(List.of(trace.threadId()), trace.projectName(), null, API_KEY,
+                    TEST_WORKSPACE);
+
+            getAndAssertTraceNotFound(id, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when trace thread id is present in multiple projects and workspaces, then return no content and only delete the trace thread in the specified project and workspace")
+        void deleteTraceThread__whenTraceThreadIdIsPresentInMultipleProjectsAndWorkspaces__thenReturnNoContentAndOnlyDeleteTheTraceThreadInTheSpecifiedProjectAndWorkspace() {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String threadId = UUID.randomUUID().toString();
+
+            var trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .build();
+
+            var traceFromOtherProject = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .build();
+
+            var traceFromOtherWorkspace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace, traceFromOtherProject), apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(List.of(traceFromOtherWorkspace), API_KEY, TEST_WORKSPACE);
+
+            UUID otherProjectId = getProjectId(traceFromOtherProject.projectName(), workspaceName, apiKey);
+            UUID otherWorkspaceProjectId = getProjectId(traceFromOtherWorkspace.projectName(), TEST_WORKSPACE, API_KEY);
+
+            traceResourceClient.deleteTraceThreads(List.of(trace.threadId()), trace.projectName(), null, apiKey,
+                    workspaceName);
+
+            getAndAssertTraceNotFound(trace.id(), apiKey, workspaceName);
+            getAndAssert(traceFromOtherProject, otherProjectId, apiKey, workspaceName);
+            getAndAssert(traceFromOtherWorkspace, otherWorkspaceProjectId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when trace thread does not exist, then return no content")
+        void deleteTraceThread__whenTraceDoesNotExist__thenReturnNotFound() {
+            var trace = createTrace();
+            var id = create(trace, API_KEY, TEST_WORKSPACE);
+
+            traceResourceClient.deleteTraceThreads(List.of(UUID.randomUUID().toString()), trace.projectName(), null,
+                    API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when project neither project name or project id are specified, then return bad request")
+        void deleteTraceThread__whenProjectNeitherProjectNameOrProjectIdAreSpecified__thenReturnBadRequest() {
+            var trace = createTrace().toBuilder()
+                    .threadId(UUID.randomUUID().toString())
+                    .build();
+
+            var id = create(trace, API_KEY, TEST_WORKSPACE);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("threads")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(DeleteTraceThreads.builder().threadIds(List.of(trace.threadId())).build()))) {
+
+                assertErrorResponse(actualResponse,
+                        "The request body must provide either a project_name or a project_id",
+                        HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        Stream<Arguments> deleteTraceThread__whenThreadIdsIsEmpty__thenReturnBadRequest() {
+            return Stream.of(
+                    arguments(List.of(), "threadIds size must be between 1 and 1000"),
+                    arguments(null, "threadIds must not be empty"),
+                    arguments(List.of(""), "threadIds[0].<list element> must not be blank"),
+                    arguments(Lists.newArrayList((String) null), "threadIds[0].<list element> must not be blank"),
+                    arguments(List.of(" "), "threadIds[0].<list element> must not be blank"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when thread ids is empty, then return bad request")
+        void deleteTraceThread__whenThreadIdsIsEmpty__thenReturnBadRequest(List<String> threadIds,
+                String errorMessage) {
+            Trace trace = createTrace().toBuilder()
+                    .threadId(UUID.randomUUID().toString())
+                    .build();
+
+            create(trace, API_KEY, TEST_WORKSPACE);
+
+            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("threads")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity
+                            .json(DeleteTraceThreads.builder().projectId(projectId).threadIds(threadIds).build()))) {
+
+                assertErrorResponse(actualResponse, errorMessage, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+    }
+
+    private void assertErrorResponse(Response actualResponse, String message, int expected) {
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expected);
+        assertThat(actualResponse.hasEntity()).isTrue();
+        assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(message);
     }
 
     private void fetchAndAssertResponse(List<String> expectedNames, UUID projectId, String apiKey,
