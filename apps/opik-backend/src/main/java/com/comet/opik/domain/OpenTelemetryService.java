@@ -60,11 +60,11 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName) {
 
         // make sure project exists before starting processing
-        return Mono.deferContextual(ctx -> {
+        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return Mono.just(projectService.getOrCreate(workspaceId, projectName, userName).id());
-        }).flatMap(projectId -> Mono.deferContextual(ctx -> {
+            return projectService.getOrCreate(workspaceId, projectName, userName).id();
+        })).flatMap(projectId -> Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             // extracts all otel spans in the batch, sorted by start time
