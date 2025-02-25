@@ -267,6 +267,9 @@ llmProviderClient:
     # Default: 2023-06-01
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: ${LLM_PROVIDER_ANTHROPIC_VERSION:-'2023-06-01'}
+  # Default: https://openrouter.ai/api/v1
+  # Description: OpenRouter API URL
+  openRouterUrl: ${LLM_PROVIDER_OPENROUTER_URL:-https://openrouter.ai/api/v1}
 
 # Configuration for cache manager
 cacheManager:
@@ -280,6 +283,7 @@ cacheManager:
       # Default: {}
       # Description: Dynamically created caches with their respective time to live in seconds
       automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
+      workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -290,3 +294,8 @@ clickHouseLogAppender:
   # Default: PT0.500S or 500ms
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: ${CLICKHOUSE_LOG_APPENDER_FLUSH_INTERVAL_DURATION:-PT0.500S}
+
+workspaceSettings:
+  # Default: 50
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
+    maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}

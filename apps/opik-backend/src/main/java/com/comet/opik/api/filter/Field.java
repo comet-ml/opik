@@ -21,6 +21,12 @@ public interface Field {
     String USAGE_TOTAL_TOKEN_QUERY_PARAMS = "usage.total_tokens";
     String FEEDBACK_SCORES_QUERY_PARAM = "feedback_scores";
     String DURATION_QUERY_PARAM = "duration";
+    String THREAD_ID_QUERY_PARAM = "thread_id";
+    String NUMBER_OF_MESSAGES_QUERY_PARAM = "number_of_messages";
+    String FIRST_MESSAGE_QUERY_PARAM = "first_message";
+    String LAST_MESSAGE_QUERY_PARAM = "last_message";
+    String CREATED_AT_QUERY_PARAM = "created_at";
+    String LAST_UPDATED_AT_QUERY_PARAM = "last_updated_at";
 
     @JsonValue
     String getQueryParamField();

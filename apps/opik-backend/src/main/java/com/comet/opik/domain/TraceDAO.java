@@ -4,9 +4,12 @@ import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
@@ -24,6 +27,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -43,6 +47,7 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
+import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -89,6 +94,8 @@ interface TraceDAO {
     Mono<Long> getDailyTraces();
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
+
+    Mono<TraceThreadPage> findThreads(int size, int page, TraceSearchCriteria threadSearchCriteria);
 }
 
 @Slf4j
@@ -110,7 +117,8 @@ class TraceDAOImpl implements TraceDAO {
                 tags,
                 error_info,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                thread_id
             ) VALUES
                 <items:{item |
                     (
@@ -126,7 +134,8 @@ class TraceDAOImpl implements TraceDAO {
                         :tags<item.index>,
                         :error_info<item.index>,
                         :user_name,
-                        :user_name
+                        :user_name,
+                        :thread_id<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -154,7 +163,8 @@ class TraceDAOImpl implements TraceDAO {
                 error_info,
                 created_at,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                thread_id
             )
             SELECT
                 new_trace.id as id,
@@ -208,7 +218,11 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(old_trace.created_by) > 0, old_trace.created_by,
                     new_trace.created_by
                 ) as created_by,
-                new_trace.last_updated_by as last_updated_by
+                new_trace.last_updated_by as last_updated_by,
+                multiIf(
+                    LENGTH(old_trace.thread_id) > 0, old_trace.thread_id,
+                    new_trace.thread_id
+                ) as thread_id
             FROM (
                 SELECT
                     :id as id,
@@ -224,7 +238,8 @@ class TraceDAOImpl implements TraceDAO {
                     :error_info as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
-                    :user_name as last_updated_by
+                    :user_name as last_updated_by,
+                    :thread_id as thread_id
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -243,7 +258,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id
             ) SELECT
             	id,
             	project_id,
@@ -258,7 +273,8 @@ class TraceDAOImpl implements TraceDAO {
             	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
-                :user_name as last_updated_by
+                :user_name as last_updated_by,
+                <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -385,6 +401,8 @@ class TraceDAOImpl implements TraceDAO {
                   t.created_by as created_by,
                   t.last_updated_by as last_updated_by,
                   t.duration_millis as duration_millis,
+                  t.duration_millis as duration,
+                  t.thread_id as thread_id,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
                   groupUniqArrayArray(c.comments_array) as comments
@@ -430,7 +448,7 @@ class TraceDAOImpl implements TraceDAO {
              LEFT JOIN comments_agg AS c ON t.id = c.entity_id
              GROUP BY
                 t.*
-             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+             ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
              SETTINGS join_algorithm = 'full_sorting_merge'
             ;
             """;
@@ -544,7 +562,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id
             )
             SELECT
                 new_trace.id as id,
@@ -604,7 +622,11 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(old_trace.created_by) > 0, old_trace.created_by,
                     new_trace.created_by
                 ) as created_by,
-                new_trace.last_updated_by as last_updated_by
+                new_trace.last_updated_by as last_updated_by,
+                multiIf(
+                    LENGTH(old_trace.thread_id) > 0, old_trace.thread_id,
+                    new_trace.thread_id
+                ) as thread_id
             FROM (
                 SELECT
                     :id as id,
@@ -620,7 +642,8 @@ class TraceDAOImpl implements TraceDAO {
                     <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
-                    :user_name as last_updated_by
+                    :user_name as last_updated_by,
+                    <if(thread_id)> :thread_id <else> '' <endif> as thread_id
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -759,9 +782,88 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
+            SELECT
+                countDistinct(id) as count
+            FROM (
+                SELECT
+                    t.thread_id as id,
+                    t.workspace_id as workspace_id,
+                    t.project_id as project_id
+                    <if(trace_thread_filters)>,
+                    min(t.start_time) as start_time,
+                    max(t.end_time) as end_time,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                           NULL) AS duration_millis,
+                    <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                    <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                    count(DISTINCT t.id) as number_of_messages,
+                    max(t.last_updated_at) as last_updated_at,
+                    argMin(t.created_by, t.created_at) as created_by,
+                    min(t.created_at) as created_at
+                    <endif>
+                 FROM (
+                     SELECT
+                         *
+                     FROM traces t
+                     WHERE workspace_id = :workspace_id
+                     AND project_id = :project_id
+                     AND thread_id IS NOT NULL
+                     AND thread_id \\<> ''
+                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                     LIMIT 1 BY id
+                 ) AS t
+                 GROUP BY
+                    t.workspace_id, t.project_id, t.thread_id
+                 <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
+             )
+            ;
+            """;
+
+    private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
+            SELECT
+                t.thread_id as id,
+                t.workspace_id as workspace_id,
+                t.project_id as project_id,
+                min(t.start_time) as start_time,
+                max(t.end_time) as end_time,
+                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                       NULL) AS duration_millis,
+                <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                count(DISTINCT t.id) as number_of_messages,
+                max(t.last_updated_at) as last_updated_at,
+                argMin(t.created_by, t.created_at) as created_by,
+                min(t.created_at) as created_at
+             FROM (
+                 SELECT
+                     *
+                 FROM traces t
+                 WHERE workspace_id = :workspace_id
+                 AND project_id = :project_id
+                 AND thread_id IS NOT NULL
+                 AND thread_id \\<> ''
+                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                 LIMIT 1 BY id
+             ) AS t
+             GROUP BY
+                t.workspace_id, t.project_id, t.thread_id
+             <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
+             ORDER BY last_updated_at DESC, start_time ASC, end_time DESC
+             LIMIT :limit OFFSET :offset
+             SETTINGS join_algorithm = 'full_sorting_merge'
+            ;
+            """;
+
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull TraceSortingFactory sortingFactory;
 
     @Override
     @WithSpan
@@ -818,6 +920,12 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("error_info", JsonUtils.readTree(trace.errorInfo()).toString());
         } else {
             statement.bind("error_info", "");
+        }
+
+        if (trace.threadId() != null) {
+            statement.bind("thread_id", trace.threadId());
+        } else {
+            statement.bind("thread_id", "");
         }
 
         return statement;
@@ -879,6 +987,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
+
+        Optional.ofNullable(traceUpdate.threadId())
+                .ifPresent(threadId -> statement.bind("thread_id", threadId));
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
@@ -901,6 +1012,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.errorInfo())
                 .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
+
+        Optional.ofNullable(traceUpdate.threadId())
+                .ifPresent(threadId -> template.add("thread_id", threadId));
 
         return template;
     }
@@ -981,6 +1095,9 @@ class TraceDAOImpl implements TraceDAO {
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .duration(row.get("duration_millis", Double.class))
+                .threadId(Optional.ofNullable(row.get("thread_id", String.class))
+                        .filter(StringUtils::isNotEmpty)
+                        .orElse(null))
                 .build());
     }
 
@@ -994,7 +1111,8 @@ class TraceDAOImpl implements TraceDAO {
                         .flatMapMany(this::mapToDto)
                         .collectList()
                         .flatMap(this::enhanceWithFeedbackLogs)
-                        .map(traces -> new TracePage(page, traces.size(), total, traces)));
+                        .map(traces -> new TracePage(page, traces.size(), total, traces,
+                                sortingFactory.getSortableFields())));
     }
 
     @Override
@@ -1037,6 +1155,10 @@ class TraceDAOImpl implements TraceDAO {
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
 
+        var finalTemplate = template;
+        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
+                .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
+
         template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
@@ -1075,6 +1197,8 @@ class TraceDAOImpl implements TraceDAO {
                                     traceAggregationFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
+                            .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
                 });
         return template;
     }
@@ -1085,7 +1209,7 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.DURATION);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                 });
     }
 
@@ -1145,7 +1269,8 @@ class TraceDAOImpl implements TraceDAO {
                         .bind("metadata" + i, getOrDefault(trace.metadata()))
                         .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
-                                trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "");
+                                trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
+                        .bind("thread_id" + i, trace.threadId() != null ? trace.threadId() : "");
 
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());
@@ -1248,6 +1373,74 @@ class TraceDAOImpl implements TraceDAO {
                             .flatMap(Flux::fromIterable)
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                 });
+    }
+
+    private Mono<Long> countThreadTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
+        var template = newFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, traceSearchCriteria);
+
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", traceSearchCriteria.projectId());
+
+        bindSearchCriteria(traceSearchCriteria, statement);
+
+        Segment segment = startSegment("traces", "Clickhouse", "countThreads");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> endSegment(segment))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
+                .reduce(0L, Long::sum);
+    }
+
+    @Override
+    public Mono<TraceThreadPage> findThreads(int size, int page, @NonNull TraceSearchCriteria criteria) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            return countThreadTotal(criteria, connection)
+                    .flatMap(count -> {
+
+                        ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+
+                        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+
+                        var statement = connection.createStatement(template.render())
+                                .bind("project_id", criteria.projectId())
+                                .bind("limit", size)
+                                .bind("offset", (page - 1) * size);
+
+                        bindSearchCriteria(criteria, statement);
+
+                        Segment segment = startSegment("traces", "Clickhouse", "findThreads");
+
+                        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                                .flatMap(this::mapThreadToDto)
+                                .collectList()
+                                .doFinally(signalType -> endSegment(segment))
+                                .map(threads -> new TraceThreadPage(page, threads.size(), count, threads));
+                    });
+        });
+    }
+
+    private Publisher<TraceThread> mapThreadToDto(Result result) {
+        return result.map((row, rowMetadata) -> TraceThread.builder()
+                .id(row.get("id", String.class))
+                .workspaceId(row.get("workspace_id", String.class))
+                .projectId(row.get("project_id", UUID.class))
+                .startTime(row.get("start_time", Instant.class))
+                .endTime(row.get("end_time", Instant.class))
+                .duration(row.get("duration_millis", Double.class))
+                .firstMessage(Optional.ofNullable(row.get("first_message", String.class))
+                        .filter(it -> !it.isBlank())
+                        .map(JsonUtils::getJsonNodeFromString)
+                        .orElse(null))
+                .lastMessage(Optional.ofNullable(row.get("last_message", String.class))
+                        .filter(it -> !it.isBlank())
+                        .map(JsonUtils::getJsonNodeFromString)
+                        .orElse(null))
+                .numberOfMessages(row.get("number_of_messages", Long.class))
+                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .createdBy(row.get("created_by", String.class))
+                .createdAt(row.get("created_at", Instant.class))
+                .build());
     }
 
     @Override

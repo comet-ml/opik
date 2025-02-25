@@ -4,19 +4,33 @@ run-name: "TypeScript SDK Publish from ${{github.ref_name}} by @${{ github.actor
 on:
   workflow_dispatch:
     inputs:
-      version_type:
-        description: "Version increment type"
+      version:
+        type: string
         required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-        default: "patch"
+        description: Version
+        default: ""
+      is_release:
+        type: boolean
+        required: false
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: Version
+        default: ""
+      is_release:
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.inputs.version || inputs.version }}
+      IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}
     defaults:
       run:
         working-directory: sdks/typescript
@@ -38,7 +52,7 @@ jobs:
         run: npm ci
 
       - name: Update version
-        run: npm version ${{ github.event.inputs.version_type }} --no-git-tag-version
+        run: npm version ${{ env.VERSION }} --no-git-tag-version
 
       - name: Build package
         run: npm run build
@@ -51,6 +65,7 @@ jobs:
           git commit -m "Update TypeScript SDK version to $(node -p "require('./package.json').version")"
 
       - name: Publish to NPM
+        if: ${{ env.IS_RELEASE }}
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

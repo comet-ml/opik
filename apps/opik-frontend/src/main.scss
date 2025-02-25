@@ -17,7 +17,7 @@
     --tooltip: 224 17% 26%;
     --tooltip-foreground: 0 0% 100%;
 
-    --popover: 0 0% 100%;
+    --popover: 240 14% 99%;
     --popover-foreground: 222.2 84% 4.9%;
 
     --primary: 239 89% 64%;
@@ -275,10 +275,10 @@
   }
 }
 
-.comet-markdown ul {
-  @apply list-disc pl-6;
-}
-
-.comet-markdown ol {
-  @apply list-decimal pl-6;
+.comet-markdown {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  max-width: 100%;
 }

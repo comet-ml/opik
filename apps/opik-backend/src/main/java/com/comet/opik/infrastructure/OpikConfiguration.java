@@ -63,4 +63,6 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private OpenTelemetryConfig openTelemetry = new OpenTelemetryConfig();
 
+    @Valid @NotNull @JsonProperty
+    private WorkspaceSettings workspaceSettings = new WorkspaceSettings();
 }

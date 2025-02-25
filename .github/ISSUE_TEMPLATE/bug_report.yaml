@@ -39,5 +39,9 @@ body:
       required: true
   - type: textarea
     attributes:
-      label: Reproduction steps
+      label: Reproduction steps and code snippets
       description: Describe how to reproduce your bug. Please provide detailed steps and include code snippets if possible.
+  - type: textarea
+    attributes:
+      label: Error logs or stack trace
+      description: Please provide the error messages, logs, or stack trace that appear when your bug is reproduced, if possible.

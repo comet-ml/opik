@@ -12,7 +12,7 @@ public enum FieldType {
     NUMBER("number"),
     FEEDBACK_SCORES_NUMBER("feedback_scores_number"),
     DICTIONARY("dictionary"),
-    LIST("list");
+    LIST("list"),
     ;
 
     @JsonValue
