@@ -126,6 +126,9 @@ navigation:
               - page: Crewai
                 path: docs/tracing/integrations/crewai.mdx
                 slug: crewai
+              - page: DeepSeek
+                path: docs/tracing/integrations/deepseek.mdx
+                slug: deepseek
               - page: Dify
                 path: docs/tracing/integrations/dify.mdx
                 slug: dify
