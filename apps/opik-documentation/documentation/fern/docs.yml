@@ -2,8 +2,10 @@ instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
 favicon: img/logo.svg
 js:
-  - path: ./custom.js
+  - path: ./add_cookbook_banner.js
     strategy: afterInteractive
+  - path: ./dify_chatbot.js
+    strategy: lazyOnload
 layout:
   searchbar-placement: header
   tabs-placement: header
