@@ -1,7 +1,6 @@
 import * as React from "react";
 import { Input, InputProps } from "@/components/ui/input";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import debounce from "lodash/debounce";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 type InputValue = string | number | readonly string[] | undefined;
 
@@ -12,26 +11,10 @@ export interface DebounceInputProps extends Omit<InputProps, "onChange"> {
 
 const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
   ({ value, onValueChange, delay = 300, ...props }, ref) => {
-    const [localValue, setLocalValue] = useState<InputValue>(undefined);
-
-    const handleDebouncedValueChange = useMemo(
-      () => debounce(onValueChange, delay),
-      [delay, onValueChange],
-    );
-
-    useEffect(() => {
-      setLocalValue(value);
-      return () => handleDebouncedValueChange.cancel();
-    }, [handleDebouncedValueChange, value]);
-
-    const handleChange = useCallback(
-      (event: React.ChangeEvent<HTMLInputElement>) => {
-        const value = event.target.value;
-
-        setLocalValue(value);
-        handleDebouncedValueChange(value);
-      },
-      [handleDebouncedValueChange],
+    const { value: localValue, onChange } = useDebouncedValue(
+      value,
+      onValueChange,
+      delay,
     );
 
     return (
@@ -39,7 +22,7 @@ const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
         ref={ref}
         {...props}
         value={localValue ?? value}
-        onChange={handleChange}
+        onChange={onChange}
       />
     );
   },
