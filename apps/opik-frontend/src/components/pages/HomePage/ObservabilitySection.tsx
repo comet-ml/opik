@@ -7,7 +7,6 @@ import { ArrowRight } from "lucide-react";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
 import Loader from "@/components/shared/Loader/Loader";
@@ -62,10 +61,9 @@ export const COLUMNS = convertColumnDataToColumn<
       cell: FeedbackScoreListCell as never,
     },
     {
-      id: "total_estimated_cost",
-      label: "Total cost",
-      type: COLUMN_TYPE.cost,
-      cell: CostCell as never,
+      id: "trace_count",
+      label: "Trace count",
+      type: COLUMN_TYPE.number,
     },
   ],
   {},
