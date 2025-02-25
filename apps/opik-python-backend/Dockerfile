@@ -8,7 +8,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt --break-system-packages
 
 ENV PYTHON_CODE_EXECUTOR_ASSET_NAME="opik-sandbox-executor-python"
-COPY ${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz /images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz
+COPY *${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz /images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz
 
 COPY src ./src
 

@@ -25,12 +25,8 @@ docker compose -f docker-compose.yaml up -d
 ## Run docker-compose with building application from latest code
 
 From the root of the project:
-First you need to manually pull opik-sandbox-executor-python latest image and save it as tar.gz in the correct path, and then run docker compose with --build flag
-
 ```bash
 cd deployment/docker-compose
-docker pull ghcr.io/comet-ml/opik/opik-sandbox-executor-python
-docker save ghcr.io/comet-ml/opik/opik-sandbox-executor-python | gzip > ../../apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
 docker compose -f docker-compose.yaml up -d --build
 ```
 
