@@ -78,6 +78,7 @@ jobs:
                 OPIK_BASE_URL: http://localhost:5173
                 OPIK_TEST_WORKSPACE: default
                 OPIK_TEST_PROJECT_NAME: automated_tests_project
+                OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
               run: |
                 if [ "${{ github.event_name }}" == "pull_request" ]; then
                   SUITE="all_features"
