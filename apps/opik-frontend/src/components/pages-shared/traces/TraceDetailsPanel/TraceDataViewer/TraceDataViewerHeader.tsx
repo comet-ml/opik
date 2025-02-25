@@ -1,5 +1,5 @@
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 
 const LAYOUT_CONSTANTS = {
   MIN_SPACE_BETWEEN: 200,
@@ -35,11 +35,6 @@ const TraceDataViewerHeader: React.FC<TraceDataViewerHeaderProps> = ({
     }
   });
 
-  const renderedActionsPanel = useMemo(
-    () => actionsPanel(size),
-    [actionsPanel, size],
-  );
-
   return (
     <div
       ref={containerRef}
@@ -48,7 +43,7 @@ const TraceDataViewerHeader: React.FC<TraceDataViewerHeaderProps> = ({
       <div ref={titleRef} className="flex items-center gap-2 overflow-x-hidden">
         {title}
       </div>
-      <div className="flex flex-nowrap gap-2">{renderedActionsPanel}</div>
+      <div className="flex flex-nowrap gap-2">{actionsPanel(size)}</div>
     </div>
   );
 };
