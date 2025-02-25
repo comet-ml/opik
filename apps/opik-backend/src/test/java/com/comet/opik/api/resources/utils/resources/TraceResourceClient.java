@@ -215,4 +215,28 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             return response.readEntity(TraceThread.class);
         }
     }
+
+    public void assertGetTraceThreadNotFound(String threadId, UUID projectId, String apiKey, String workspace) {
+
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspace)
+                .post(Entity
+                        .json(TraceThreadIdentifier.builder().threadId(threadId).projectId(projectId).build()))) {
+
+            String message = "Trace Thread id: %s not found".formatted(threadId);
+
+            assertErrorResponse(actualResponse, message, HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    private static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        assertThat(actualResponse.hasEntity()).isTrue();
+        assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                .isEqualTo(message);
+    }
 }
