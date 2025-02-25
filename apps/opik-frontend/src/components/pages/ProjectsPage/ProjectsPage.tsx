@@ -88,6 +88,11 @@ export const DEFAULT_COLUMNS: ColumnData<ProjectWithStatistic>[] = [
     cell: CostCell as never,
   },
   {
+    id: "trace_count",
+    label: "Trace count",
+    type: COLUMN_TYPE.number,
+  },
+  {
     id: "usage.total_tokens",
     label: "Total tokens (average)",
     type: COLUMN_TYPE.number,

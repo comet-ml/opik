@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
@@ -169,5 +170,33 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
                     return scores;
                 }).toList();
+    }
+
+    public List<Trace> getByProjectName(String projectName, String apiKey, String workspace) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("project_name", projectName)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspace)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Trace.TracePage.class).content();
+        }
+    }
+
+    public void deleteTraceThreads(List<String> threadId, String projectName, UUID projectId, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(DeleteTraceThreads.builder().threadIds(threadId).projectName(projectName)
+                        .projectId(projectId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
     }
 }

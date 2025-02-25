@@ -4,6 +4,7 @@ import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -46,6 +47,7 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
+import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -92,6 +94,10 @@ interface TraceDAO {
     Mono<Long> getDailyTraces();
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
+
+    Mono<TraceThreadPage> findThreads(int size, int page, TraceSearchCriteria threadSearchCriteria);
+
+    Mono<Long> deleteThreads(UUID uuid, List<String> threadIds);
 }
 
 @Slf4j
@@ -778,6 +784,90 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
+            SELECT
+                countDistinct(id) as count
+            FROM (
+                SELECT
+                    t.thread_id as id,
+                    t.workspace_id as workspace_id,
+                    t.project_id as project_id
+                    <if(trace_thread_filters)>,
+                    min(t.start_time) as start_time,
+                    max(t.end_time) as end_time,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                           NULL) AS duration_millis,
+                    <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                    <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                    count(DISTINCT t.id) as number_of_messages,
+                    max(t.last_updated_at) as last_updated_at,
+                    argMin(t.created_by, t.created_at) as created_by,
+                    min(t.created_at) as created_at
+                    <endif>
+                 FROM (
+                     SELECT
+                         *
+                     FROM traces t
+                     WHERE workspace_id = :workspace_id
+                     AND project_id = :project_id
+                     AND thread_id IS NOT NULL
+                     AND thread_id \\<> ''
+                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                     LIMIT 1 BY id
+                 ) AS t
+                 GROUP BY
+                    t.workspace_id, t.project_id, t.thread_id
+                 <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
+             )
+            ;
+            """;
+
+    private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
+            SELECT
+                t.thread_id as id,
+                t.workspace_id as workspace_id,
+                t.project_id as project_id,
+                min(t.start_time) as start_time,
+                max(t.end_time) as end_time,
+                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                       NULL) AS duration_millis,
+                <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                count(DISTINCT t.id) as number_of_messages,
+                max(t.last_updated_at) as last_updated_at,
+                argMin(t.created_by, t.created_at) as created_by,
+                min(t.created_at) as created_at
+             FROM (
+                 SELECT
+                     *
+                 FROM traces t
+                 WHERE workspace_id = :workspace_id
+                 AND project_id = :project_id
+                 AND thread_id IS NOT NULL
+                 AND thread_id \\<> ''
+                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                 LIMIT 1 BY id
+             ) AS t
+             GROUP BY
+                t.workspace_id, t.project_id, t.thread_id
+             <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
+             ORDER BY last_updated_at DESC, start_time ASC, end_time DESC
+             LIMIT :limit OFFSET :offset
+             SETTINGS join_algorithm = 'full_sorting_merge'
+            ;
+            """;
+
+    private static final String DELETE_THREADS_BY_PROJECT_ID = """
+            DELETE FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND thread_id IN :thread_ids
+            """;
+
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -1116,6 +1206,8 @@ class TraceDAOImpl implements TraceDAO {
                                     traceAggregationFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
+                            .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
                 });
         return template;
     }
@@ -1126,7 +1218,7 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.DURATION);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                 });
     }
 
@@ -1292,6 +1384,74 @@ class TraceDAOImpl implements TraceDAO {
                 });
     }
 
+    private Mono<Long> countThreadTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
+        var template = newFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, traceSearchCriteria);
+
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", traceSearchCriteria.projectId());
+
+        bindSearchCriteria(traceSearchCriteria, statement);
+
+        Segment segment = startSegment("traces", "Clickhouse", "countThreads");
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .doFinally(signalType -> endSegment(segment))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
+                .reduce(0L, Long::sum);
+    }
+
+    @Override
+    public Mono<TraceThreadPage> findThreads(int size, int page, @NonNull TraceSearchCriteria criteria) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            return countThreadTotal(criteria, connection)
+                    .flatMap(count -> {
+
+                        ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+
+                        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+
+                        var statement = connection.createStatement(template.render())
+                                .bind("project_id", criteria.projectId())
+                                .bind("limit", size)
+                                .bind("offset", (page - 1) * size);
+
+                        bindSearchCriteria(criteria, statement);
+
+                        Segment segment = startSegment("traces", "Clickhouse", "findThreads");
+
+                        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                                .flatMap(this::mapThreadToDto)
+                                .collectList()
+                                .doFinally(signalType -> endSegment(segment))
+                                .map(threads -> new TraceThreadPage(page, threads.size(), count, threads));
+                    });
+        });
+    }
+
+    private Publisher<TraceThread> mapThreadToDto(Result result) {
+        return result.map((row, rowMetadata) -> TraceThread.builder()
+                .id(row.get("id", String.class))
+                .workspaceId(row.get("workspace_id", String.class))
+                .projectId(row.get("project_id", UUID.class))
+                .startTime(row.get("start_time", Instant.class))
+                .endTime(row.get("end_time", Instant.class))
+                .duration(row.get("duration_millis", Double.class))
+                .firstMessage(Optional.ofNullable(row.get("first_message", String.class))
+                        .filter(it -> !it.isBlank())
+                        .map(JsonUtils::getJsonNodeFromString)
+                        .orElse(null))
+                .lastMessage(Optional.ofNullable(row.get("last_message", String.class))
+                        .filter(it -> !it.isBlank())
+                        .map(JsonUtils::getJsonNodeFromString)
+                        .orElse(null))
+                .numberOfMessages(row.get("number_of_messages", Long.class))
+                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .createdBy(row.get("created_by", String.class))
+                .createdAt(row.get("created_at", Instant.class))
+                .build());
+    }
+
     @Override
     @WithSpan
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(
@@ -1324,6 +1484,24 @@ class TraceDAOImpl implements TraceDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                     .singleOrEmpty();
+        });
+    }
+
+    @Override
+    public Mono<Long> deleteThreads(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+        Preconditions.checkArgument(!threadIds.isEmpty(), "threadIds must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(DELETE_THREADS_BY_PROJECT_ID)
+                    .bind("project_id", projectId)
+                    .bind("thread_ids", threadIds.toArray(String[]::new));
+
+            Segment segment = startSegment("traces", "Clickhouse", "deleteThreads");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMapMany(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum);
         });
     }
 }

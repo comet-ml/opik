@@ -147,7 +147,10 @@ public class StatsUtils {
             metadata += metadataProvider.apply(entity) != null ? 1 : 0;
             tags += tagsProvider.apply(entity) != null ? tagsProvider.apply(entity).size() : 0;
 
-            BigDecimal cost = totalEstimatedCostProvider.apply(entity);
+            BigDecimal cost = totalEstimatedCostProvider.apply(entity) != null
+                    ? totalEstimatedCostProvider.apply(entity)
+                    : BigDecimal.ZERO;
+
             totalEstimatedCost = totalEstimatedCost.add(cost);
 
             if (cost.compareTo(BigDecimal.ZERO) > 0) {

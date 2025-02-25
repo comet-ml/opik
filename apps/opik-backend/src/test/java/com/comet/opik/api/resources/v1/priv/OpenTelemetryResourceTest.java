@@ -23,6 +23,7 @@ import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.protobuf.ByteString;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
@@ -54,7 +55,10 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -183,16 +187,8 @@ class OpenTelemetryResourceTest {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var dayMillis = 24 * 60 * 60 * 1000L;
-            var todayMidnight = (System.currentTimeMillis() / dayMillis) * dayMillis;
-
-            var otelTraceId = UUID.randomUUID().toString().getBytes();
-            var parentSpanId = UUID.randomUUID().toString().getBytes();
-
-            var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, System.currentTimeMillis(), true);
-
-            var opikParentSpanId = OpenTelemetryMapper.convertOtelIdToUUIDv7(parentSpanId, System.currentTimeMillis(),
-                    true);
+            var otelTraceId = UUID.randomUUID().toString().getBytes(); // otel uses 128-bit, but it doesnt matter
+            var parentSpanId = UUID.randomUUID().toString().getBytes();// otel uses  64-bit, but it doesnt matter
 
             // creates a batch with parent + 4-9 spans
             var otelSpans = new ArrayList<Span>();
@@ -216,6 +212,56 @@ class OpenTelemetryResourceTest {
                             .build())
                     .forEach(otelSpans::add);
 
+            // split batch in 2 small batches so we can test redis trace id mapping
+            // lets shuffle th
+            var otelSpansBatch1 = otelSpans.subList(0, batchSize / 2);
+            Collections.shuffle(otelSpansBatch1);
+            var otelSpansBatch2 = otelSpans.subList(batchSize / 2, batchSize);
+            Collections.shuffle(otelSpansBatch2);
+
+            // opik trace id should be created with the earliest timestamp in the batch;
+            // we use batch as its the first server will receive
+            var minTimestamp = otelSpansBatch1.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo)
+                    .orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+            var expectedOpikParentSpanId = OpenTelemetryMapper.convertOtelIdToUUIDv7(parentSpanId, minTimestampMs);
+
+            // send batch with the half the spans
+            sendBatch(otelSpansBatch1, projectName, workspaceName, apiKey, expected, errorMessage);
+            // send another
+            sendBatch(otelSpansBatch2, projectName, workspaceName, apiKey, expected, errorMessage);
+
+            if (expected) {
+                // the otel span batch should have created a trace with this expect traceId. Check it.
+                Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, apiKey);
+                assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+
+                var projectNameOrDefault = StringUtils.isNotEmpty(projectName)
+                        ? projectName
+                        : ProjectService.DEFAULT_PROJECT;
+
+                // the otel span batch should have created spans with this expected traceId. Check it.
+                var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                        projectNameOrDefault,
+                        workspaceName, apiKey);
+
+                assertThat(generatedSpanPage.size()).isEqualTo(otelSpansBatch1.size() + otelSpansBatch2.size());
+
+                // in the test we have root span and 1st level spans, so check if our calculated parent span appears
+                generatedSpanPage.content().forEach(span -> {
+                    if (span.parentSpanId() != null) {
+                        assertThat(span.parentSpanId()).isEqualTo(expectedOpikParentSpanId);
+                    } else {
+                        assertThat(span.id()).isEqualTo(expectedOpikParentSpanId);
+                    }
+                });
+
+            }
+        }
+
+        void sendBatch(List<Span> otelSpans, String projectName, String workspaceName, String apiKey, boolean expected,
+                ErrorMessage errorMessage) {
             byte[] requestProtobufBytes = ExportTraceServiceRequest.newBuilder()
                     .addResourceSpans(ResourceSpans.newBuilder()
                             .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(otelSpans).build())
@@ -238,15 +284,6 @@ class OpenTelemetryResourceTest {
                 if (expected) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-                    Trace trace = traceResourceClient.getById(opikTraceId, workspaceName, apiKey);
-                    assertThat(trace.id()).isEqualTo(opikTraceId);
-
-                    var projectNameOrDefault = StringUtils.isNotEmpty(projectName)
-                            ? projectName
-                            : ProjectService.DEFAULT_PROJECT;
-                    var spanPage = spanResourceClient.getByTraceIdAndProject(opikTraceId, projectNameOrDefault,
-                            workspaceName, apiKey);
-                    assertThat(spanPage.size()).isEqualTo(otelSpans.size());
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))

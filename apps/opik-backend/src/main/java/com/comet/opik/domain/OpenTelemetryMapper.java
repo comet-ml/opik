@@ -20,27 +20,32 @@ import java.util.UUID;
 @UtilityClass
 @Slf4j
 public class OpenTelemetryMapper {
+
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
      * of concepts, especially around ids.
      *
+     * We will be linking this span to a given Opik traceId precalculated with the closest timestamp we could get for
+     * it. We can extract the timestamp from this traceId and use into spanId otel -> opik conversion, so all span ids
+     * for the trace can be predictable, but using the same reference timestamp.
+     *
      * @param otelSpan an OpenTelemetry Span
+     * @param opikTraceId the Opik UUID to be used for this span
      * @return a converted Opik Span
      */
-    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan) {
+    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId) {
+        var traceTimestamp = extractTimestampFromUUIDv7(opikTraceId);
+
         var startTimeMs = Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis();
         var endTimeMs = Duration.ofNanos(otelSpan.getEndTimeUnixNano()).toMillis();
 
-        var otelTraceId = otelSpan.getTraceId();
-        var opikTraceId = convertOtelIdToUUIDv7(otelTraceId.toByteArray(), startTimeMs, true);
-
         var otelSpanId = otelSpan.getSpanId();
-        var opikSpanId = convertOtelIdToUUIDv7(otelSpanId.toByteArray(), startTimeMs, true);
+        var opikSpanId = convertOtelIdToUUIDv7(otelSpanId.toByteArray(), traceTimestamp);
 
         var otelParentSpanId = otelSpan.getParentSpanId();
         var opikParentSpanId = otelParentSpanId.isEmpty()
                 ? null
-                : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), startTimeMs, true);
+                : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), traceTimestamp);
 
         var attributes = convertAttributesToJson(otelSpan.getAttributesList());
 
@@ -56,13 +61,7 @@ public class OpenTelemetryMapper {
                 .build();
     }
 
-    /**
-     * Converts a list of protobuf KeyValue into a JsonNode, preserving their types.
-     *
-     * @param attributes a list of
-     * @return
-     */
-    protected static JsonNode convertAttributesToJson(List<KeyValue> attributes) {
+    private static JsonNode convertAttributesToJson(List<KeyValue> attributes) {
         ObjectMapper mapper = JsonUtils.MAPPER;
         ObjectNode node = mapper.createObjectNode();
 
@@ -83,8 +82,6 @@ public class OpenTelemetryMapper {
         return node;
     }
 
-    static long DAY_MILLISECONDS = 24 * 60 * 60 * 1000L;
-
     /**
      * Uses 64-bit integer OpenTelemetry SpanId and its timestamp to prepare a good UUIDv7 id. This is actually
      * a good UUIDv7 (in opposition of the traceId) as its composed from an id and a timestamp, so spans will be
@@ -98,15 +95,12 @@ public class OpenTelemetryMapper {
      * (2) a routine running between Saturday 23:59:30 and Sunday 00:00:30 will be split in 2 traces; both incomplete.
      *
      * @param otelSpanId a OpenTelemetry 64-bit integer spanId
-     * @param spanTimestampMs a timestamp for the span in millis
-     * @param timeTruncate truncates the timestamp on returned UUID by a time window level
+     * @param timestampMs a timestamp for the span in millis
      * @return a valid UUIDv7
      */
-    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long spanTimestampMs, boolean timeTruncate) {
+    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long timestampMs) {
         // Prepare the 16-byte array for the UUID
         byte[] uuidBytes = new byte[16];
-
-        long timestampMs = timeTruncate ? (spanTimestampMs / DAY_MILLISECONDS) * DAY_MILLISECONDS : spanTimestampMs;
 
         // Bytes 0-5: 48-bit timestamp (big-endian)
         long ts48 = timestampMs & 0xFFFFFFFFFFFFL; // 48 bits
@@ -135,15 +129,15 @@ public class OpenTelemetryMapper {
     }
 
     /**
-     * Uses 64-bit integer OpenTelemetry SpanId and its timestamp to prepare a good UUIDv7 id. This is actually
-     * a good UUIDv7 (in opposition of the traceId) as its composed from an id and a timestamp, so spans will be
-     * properly ordered in the span table.
+     * Extracts the Unix epoch timestamp in milliseconds from a UUIDv7.
      *
-     * @param otelSpanId a OpenTelemetry 64-bit integer spanId
-     * @param timestampMs a timestamp for the span in millis
-     * @return a valid UUIDv7
+     * @param uuid the UUIDv7 instance
+     * @return the extracted timestamp as a long (milliseconds since Unix epoch)
      */
-    public static UUID convertOtelIdToUUIDv7(byte[] otelSpanId, long timestampMs) throws Exception {
-        return convertOtelIdToUUIDv7(otelSpanId, timestampMs, false);
+    private long extractTimestampFromUUIDv7(UUID uuid) {
+        // Get the 64 most significant bits.
+        long msb = uuid.getMostSignificantBits();
+        // The top 48 bits represent the timestamp.
+        return msb >>> 16;
     }
 }
