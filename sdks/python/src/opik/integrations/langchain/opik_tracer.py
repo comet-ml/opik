@@ -61,6 +61,7 @@ class OpikTracer(BaseTracer):
     ) -> None:
         super().__init__(**kwargs)
         self._trace_default_metadata = metadata if metadata is not None else {}
+        self._trace_default_metadata["created_from"] = "langchain"
 
         if graph:
             self._trace_default_metadata["_opik_graph_definition"] = {
@@ -130,6 +131,7 @@ class OpikTracer(BaseTracer):
                 type=_get_span_type(run_dict),
                 project_name=project_name,
             )
+            span_data.update(metadata={"created_from": "langchain"})
 
             self._span_data_map[run.id] = span_data
 

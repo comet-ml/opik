@@ -21,6 +21,8 @@ class OpikCallback(BaseCallback):
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
         self._map_span_id_or_trace_id_to_token: Dict[str, Token] = {}
 
+        self._origins_metadata = {"created_from": "dspy"}
+
         self._current_callback_context: ContextVar[Optional[ContextType]] = ContextVar(
             "opik_context", default=None
         )
@@ -100,6 +102,7 @@ class OpikCallback(BaseCallback):
             input=inputs,
             type=span_type,
             project_name=project_name,
+            metadata=self._origins_metadata,
         )
         self._map_call_id_to_span_data[call_id] = span_data
 
@@ -123,6 +126,7 @@ class OpikCallback(BaseCallback):
             input=inputs,
             type=span_type,
             project_name=project_name,
+            metadata=self._origins_metadata,
         )
         self._map_call_id_to_span_data[call_id] = span_data
 
@@ -214,6 +218,7 @@ class OpikCallback(BaseCallback):
             project_name=project_name,
             provider=provider,
             model=model,
+            metadata=self._origins_metadata,
         )
         self._map_call_id_to_span_data[call_id] = span_data
 
