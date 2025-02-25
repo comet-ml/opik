@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import isUndefined from "lodash/isUndefined";
 import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
-import { X } from "lucide-react";
+import { MessageSquareMore, X } from "lucide-react";
 
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
@@ -19,6 +19,9 @@ import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { SelectItem } from "@/components/ui/select";
 import { DropdownOption } from "@/types/shared";
+import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -46,6 +49,8 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   const [categoryName, setCategoryName] = useState(
     feedbackScore?.category_name,
   );
+  const [editReason, setEditReason] = useState(false);
+
   useEffect(() => {
     setCategoryName(feedbackScore?.category_name);
   }, [feedbackScore?.category_name, traceId, spanId]);
@@ -57,6 +62,27 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     setValue(isNumber(feedbackScore?.value) ? feedbackScore?.value : "");
   }, [feedbackScore?.value, spanId, traceId]);
 
+  const handleChangeReason = useCallback(
+    (reason?: string) => {
+      setTraceFeedbackScoreMutation.mutate({
+        categoryName,
+        name,
+        spanId,
+        traceId,
+        reason,
+        value: value as number,
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [name, spanId, traceId],
+  );
+
+  const { value: reasonValue, onChange: onReasonChange } = useDebouncedValue(
+    feedbackScore?.reason,
+    handleChangeReason,
+    SET_VALUE_DEBOUNCE_DELAY,
+  );
+
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
   const deleteFeedbackScore = useCallback(() => {
@@ -65,6 +91,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
       spanId,
       name: feedbackScore?.name ?? "",
     });
+    setEditReason(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedbackScore?.name, traceId, spanId]);
 
@@ -217,11 +244,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
   return (
     <>
-      <div className="flex items-center overflow-hidden border-b border-border p-1 pl-0">
+      <div className="flex items-center overflow-hidden border-t border-border p-1 pl-0">
         <ColoredTagNew label={name} />
       </div>
       <div
-        className="flex items-center overflow-hidden border-b border-border p-1"
+        className="flex items-center overflow-hidden border-t border-border p-1"
         data-test-value={name}
       >
         {feedbackDefinition ? (
@@ -232,7 +259,19 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           <div>{feedbackScore?.value}</div>
         )}
       </div>
-      <div className="flex items-center overflow-hidden border-b border-border">
+      <div className="flex items-center justify-center overflow-hidden border-t border-border">
+        {!isUndefined(feedbackScore?.value) && (
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className={cn("size-7", editReason && "bg-[#F3F4FE]")}
+            onClick={() => setEditReason((v) => !v)}
+          >
+            <MessageSquareMore className="size-3.5" />
+          </Button>
+        )}
+      </div>
+      <div className="flex items-center overflow-hidden border-t border-border">
         {!isUndefined(feedbackScore?.value) && (
           <Button
             variant="minimal"
@@ -243,6 +282,19 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           </Button>
         )}
       </div>
+
+      {editReason && (
+        <>
+          <div className="col-span-3 px-1 pb-1">
+            <Textarea
+              placeholder="Add a reason..."
+              value={reasonValue}
+              onChange={onReasonChange}
+            />
+          </div>
+          <div></div>
+        </>
+      )}
     </>
   );
 };

@@ -95,7 +95,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
       )}
       <div className="mt-4 flex flex-col px-6">
         <div className="comet-body-s-accented pb-2">Human review</div>
-        <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,5fr)_30px] border-t border-border empty:border-transparent">
+        <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,5fr)__36px_30px] border-b border-border empty:border-transparent">
           {rows.map((row) => (
             <AnnotateRow
               key={row.name}
