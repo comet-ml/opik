@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
+import com.comet.opik.infrastructure.OpenTelemetryConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import com.google.protobuf.ByteString;
@@ -16,6 +17,7 @@ import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.Base64;
@@ -31,7 +33,7 @@ public interface OpenTelemetryService {
 }
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
+@RequiredArgsConstructor
 @Slf4j
 class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
@@ -39,8 +41,20 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     private final @NonNull SpanService spanService;
     private final @NonNull ProjectService projectService;
     private final @NonNull RedissonReactiveClient redisson;
+    private final @NonNull OpenTelemetryConfig config;
 
-    private static final Duration REDIS_TTL = Duration.ofDays(1L);
+    @Inject
+    public OpenTelemetryServiceImpl(@NonNull @Config("openTelemetry") OpenTelemetryConfig config,
+            @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
+            @NonNull ProjectService projectService,
+            @NonNull RedissonReactiveClient redisson) {
+        this.config = config;
+        this.traceService = traceService;
+        this.spanService = spanService;
+        this.projectService = projectService;
+        this.redisson = redisson;
+    }
 
     @Override
     public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName) {
@@ -133,7 +147,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
             // checks if this key is mapped in redis
             var otelTraceIdRedisKey = redisKey(workspaceId, projectId, otelTraceIdBase64);
-            var checkId = redisson.getBucket(otelTraceIdRedisKey).getAndExpire(REDIS_TTL);
+            var checkId = redisson.getBucket(otelTraceIdRedisKey).getAndExpire(config.getTtl().toJavaDuration());
 
             return checkId.switchIfEmpty(Mono.defer(() -> {
                 // its an unknown otel trace id, lets create an opik trace id with this span timestamp as we sorted otel
@@ -143,7 +157,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 log.info("Creating mapping in Redis for otel trace id '{}' -> opik trace id '{}'", otelTraceIdRedisKey,
                         opikTraceId);
                 return redisson.getBucket(otelTraceIdRedisKey)
-                        .set(opikTraceId.toString(), REDIS_TTL)
+                        .set(opikTraceId.toString(), config.getTtl().toJavaDuration())
                         .then(Mono.just(opikTraceId.toString()));
             })).map(opikTraceId -> Map.entry(otelTraceIdBase64, opikTraceId));
         }).collectMap(Map.Entry::getKey, entry -> UUID.fromString((String) entry.getValue()));
