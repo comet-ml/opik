@@ -23,6 +23,7 @@ import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
 import { LastSectionValue } from "../TraceDetailsPanel";
+import TraceDataViewerHeader from "./TraceDataViewerHeader";
 
 type TraceDataViewerProps = {
   data: Trace | Span;
@@ -67,24 +68,29 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     <div className="size-full max-w-full overflow-auto p-6">
       <div className="min-w-[400px] max-w-full overflow-x-hidden">
         <div className="mb-6 flex flex-col gap-1">
-          <div className="flex w-full items-center justify-between gap-2 overflow-x-hidden">
-            <div className="flex items-center gap-2 overflow-x-hidden">
-              <BaseTraceDataTypeIcon type={type} />
-              <div
-                data-testid="data-viewer-title"
-                className="comet-title-s truncate"
-              >
-                {data?.name}
-              </div>
-            </div>
-            <TraceDataViewerActionsPanel
-              data={data}
-              traceId={traceId}
-              spanId={spanId}
-              lastSection={lastSection}
-              setLastSection={setLastSection}
-            />
-          </div>
+          <TraceDataViewerHeader
+            title={
+              <>
+                <BaseTraceDataTypeIcon type={type} />
+                <div
+                  data-testid="data-viewer-title"
+                  className="comet-title-s truncate"
+                >
+                  {data?.name}
+                </div>
+              </>
+            }
+            actionsPanel={(layoutSize) => (
+              <TraceDataViewerActionsPanel
+                data={data}
+                traceId={traceId}
+                spanId={spanId}
+                lastSection={lastSection}
+                setLastSection={setLastSection}
+                layoutSize={layoutSize}
+              />
+            )}
+          />
           <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
             <TooltipWrapper content="Duration in seconds">
               <div

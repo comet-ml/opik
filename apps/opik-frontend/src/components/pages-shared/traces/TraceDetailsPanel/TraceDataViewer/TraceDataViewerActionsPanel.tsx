@@ -22,8 +22,10 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import { LastSection, LastSectionValue } from "../TraceDetailsPanel";
 import { cn } from "@/lib/utils";
+import { HeaderLayoutSize } from "./TraceDataViewerHeader";
 
 type TraceDataViewerActionsPanelProps = {
+  layoutSize: HeaderLayoutSize;
   data: Trace | Span;
   traceId: string;
   spanId?: string;
@@ -31,20 +33,30 @@ type TraceDataViewerActionsPanelProps = {
   setLastSection: (v: LastSectionValue) => void;
 };
 
+const isLargeLayout = (layoutSize: HeaderLayoutSize) => layoutSize === "lg";
+const formatCounter = (
+  layoutSize: HeaderLayoutSize,
+  count?: number | string,
+) => {
+  if (!count) return;
+  return isLargeLayout(layoutSize) ? `(${count})` : String(count);
+};
+
 const TraceDataViewerActionsPanel: React.FunctionComponent<
   TraceDataViewerActionsPanelProps
-> = ({ data, traceId, spanId, lastSection, setLastSection }) => {
+> = ({ data, traceId, spanId, lastSection, setLastSection, layoutSize }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const { toast } = useToast();
 
   const rows = useMemo(() => (data ? [data] : []), [data]);
+  const showFullActionLabel = isLargeLayout(layoutSize);
 
   const annotationCount = data.feedback_scores?.length;
   const commentsCount = data.comments?.length;
 
   return (
-    <div className="flex flex-nowrap gap-2">
+    <>
       <AddToDatasetDialog
         key={resetKeyRef.current}
         rows={rows}
@@ -60,7 +72,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         }}
       >
         <DatabasePlus className="size-4" />
-        <div className="hidden 3xl:block 3xl:pl-1">Add to dataset</div>
+        {showFullActionLabel && <div className="pl-1">Add to dataset</div>}
       </Button>
 
       <Button
@@ -74,13 +86,9 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         )}
       >
         <MessageSquareMore className="size-4" />
-        <div className="hidden 3xl:block 3xl:pl-1">Comments</div>
+        {showFullActionLabel && <div className="pl-1">Comments</div>}
         {Boolean(commentsCount) && (
-          <div>
-            <span className="hidden 3xl:inline">(</span>
-            {commentsCount}
-            <span className="hidden 3xl:inline">)</span>
-          </div>
+          <div>{formatCounter(layoutSize, commentsCount)}</div>
         )}
       </Button>
 
@@ -95,13 +103,9 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         )}
       >
         <PenLine className="size-4" />
-        <div className="hidden 3xl:block 3xl:pl-1">Feedback scores</div>
+        {showFullActionLabel && <div className="pl-1">Feedback scores</div>}
         {Boolean(annotationCount) && (
-          <div>
-            <span className="hidden 3xl:inline">(</span>
-            {annotationCount}
-            <span className="hidden 3xl:inline">)</span>
-          </div>
+          <div>{formatCounter(layoutSize, annotationCount)}</div>
         )}
       </Button>
 
@@ -154,7 +158,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </>
   );
 };
 
