@@ -18,7 +18,7 @@ type CompareChartContainerProps = {
 const CompareChartContainer: React.FC<CompareChartContainerProps> = ({
   title,
   children,
-  className
+  className,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -32,20 +32,17 @@ const CompareChartContainer: React.FC<CompareChartContainerProps> = ({
             className="text-muted-foreground hover:text-foreground"
           >
             {isCollapsed ? (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="size-4" />
             ) : (
-              <ChevronUp className="h-4 w-4" />
+              <ChevronUp className="size-4" />
             )}
           </button>
         </div>
-        <CardDescription className="comet-body-xs text-xs">
-        </CardDescription>
+        <CardDescription className="comet-body-xs text-xs"></CardDescription>
       </CardHeader>
       {!isCollapsed && (
         <CardContent className="px-4 pb-3">
-          <div className="h-64 w-full">
-            {children}
-          </div>
+          <div className="h-64 w-full">{children}</div>
         </CardContent>
       )}
     </Card>
