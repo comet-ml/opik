@@ -4,11 +4,17 @@
 
 import * as OpikApi from "../index";
 
-export type AutomationRuleEvaluator = OpikApi.AutomationRuleEvaluator.LlmAsJudge;
+export type AutomationRuleEvaluator =
+    | OpikApi.AutomationRuleEvaluator.LlmAsJudge
+    | OpikApi.AutomationRuleEvaluator.UserDefinedMetricPython;
 
 export namespace AutomationRuleEvaluator {
     export interface LlmAsJudge extends OpikApi.AutomationRuleEvaluatorLlmAsJudge, _Base {
         type: "llm_as_judge";
+    }
+
+    export interface UserDefinedMetricPython extends OpikApi.AutomationRuleEvaluatorUserDefinedMetricPython, _Base {
+        type: "user_defined_metric_python";
     }
 
     export interface _Base {
@@ -16,6 +22,7 @@ export namespace AutomationRuleEvaluator {
         projectId?: string;
         name: string;
         samplingRate?: number;
+        code: Record<string, unknown>;
         createdAt?: Date;
         createdBy?: string;
         lastUpdatedAt?: Date;

@@ -6,12 +6,14 @@ import * as core from "../../core";
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import { AutomationRuleEvaluatorLlmAsJudgePublic } from "./AutomationRuleEvaluatorLlmAsJudgePublic";
+import { AutomationRuleEvaluatorUserDefinedMetricPythonPublic } from "./AutomationRuleEvaluatorUserDefinedMetricPythonPublic";
 
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
+    code: core.serialization.record(core.serialization.string(), core.serialization.unknown()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -24,6 +26,7 @@ export const AutomationRuleEvaluatorObjectPublic: core.serialization.Schema<
 > = core.serialization
     .union("type", {
         llm_as_judge: AutomationRuleEvaluatorLlmAsJudgePublic.extend(_Base),
+        user_defined_metric_python: AutomationRuleEvaluatorUserDefinedMetricPythonPublic.extend(_Base),
     })
     .transform<OpikApi.AutomationRuleEvaluatorObjectPublic>({
         transform: (value) => value,
@@ -31,10 +34,16 @@ export const AutomationRuleEvaluatorObjectPublic: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluatorObjectPublic {
-    export type Raw = AutomationRuleEvaluatorObjectPublic.LlmAsJudge;
+    export type Raw =
+        | AutomationRuleEvaluatorObjectPublic.LlmAsJudge
+        | AutomationRuleEvaluatorObjectPublic.UserDefinedMetricPython;
 
     export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgePublic.Raw {
         type: "llm_as_judge";
+    }
+
+    export interface UserDefinedMetricPython extends _Base, AutomationRuleEvaluatorUserDefinedMetricPythonPublic.Raw {
+        type: "user_defined_metric_python";
     }
 
     export interface _Base {
@@ -42,6 +51,7 @@ export declare namespace AutomationRuleEvaluatorObjectPublic {
         project_id?: string | null;
         name: string;
         sampling_rate?: number | null;
+        code: Record<string, unknown>;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

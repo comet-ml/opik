@@ -7,6 +7,7 @@ import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
+from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 
 
 class Base(UniversalBaseModel):
@@ -14,6 +15,7 @@ class Base(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     name: str
     sampling_rate: typing.Optional[float] = None
+    code: typing.Dict[str, typing.Optional[typing.Any]]
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
@@ -48,4 +50,23 @@ class AutomationRuleEvaluatorPublic_LlmAsJudge(Base):
             extra = pydantic.Extra.allow
 
 
-AutomationRuleEvaluatorPublic = AutomationRuleEvaluatorPublic_LlmAsJudge
+class AutomationRuleEvaluatorPublic_UserDefinedMetricPython(Base):
+    type: typing.Literal["user_defined_metric_python"] = "user_defined_metric_python"
+    code: typing.Optional[UserDefinedMetricPythonCodePublic] = None
+
+    if IS_PYDANTIC_V2:
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
+    else:
+
+        class Config:
+            frozen = True
+            smart_union = True
+            extra = pydantic.Extra.allow
+
+
+AutomationRuleEvaluatorPublic = typing.Union[
+    AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
+]

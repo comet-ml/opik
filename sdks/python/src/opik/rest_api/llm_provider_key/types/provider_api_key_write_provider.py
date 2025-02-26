@@ -3,5 +3,5 @@
 import typing
 
 ProviderApiKeyWriteProvider = typing.Union[
-    typing.Literal["openai", "anthropic", "gemini"], typing.Any
+    typing.Literal["openai", "anthropic", "gemini", "openrouter"], typing.Any
 ]

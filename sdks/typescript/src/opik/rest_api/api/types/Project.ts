@@ -17,4 +17,5 @@ export interface Project {
     duration?: OpikApi.PercentageValues;
     totalEstimatedCost?: number;
     usage?: Record<string, number>;
+    traceCount?: number;
 }
