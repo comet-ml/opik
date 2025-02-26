@@ -18,7 +18,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-02 id:migrate-automation-rule-evaluator-logs
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs;
-DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs SYNC max_table_size_to_drop = 0;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 TO ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs TO ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1;
 
@@ -43,7 +43,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-04 id:migrate-comments
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.comments;
-DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments SYNC max_table_size_to_drop = 0;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 TO ${ANALYTICS_DB_DATABASE_NAME}.comments;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments TO ${ANALYTICS_DB_DATABASE_NAME}.comments1;
 
@@ -72,7 +72,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-06 id:migrate-dataset-items
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_items;
-DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items SYNC max_table_size_to_drop = 0;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 TO ${ANALYTICS_DB_DATABASE_NAME}.dataset_items;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items TO ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1;
 
@@ -96,7 +96,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-08 id:migrate-experiment-items
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. experiment_items;
-DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items SYNC max_table_size_to_drop = 0;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 TO ${ANALYTICS_DB_DATABASE_NAME}.experiment_items;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items TO ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1;
 
@@ -123,7 +123,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-10 id:migrate-experiments
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. experiments;
-DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments SYNC max_table_size_to_drop = 0;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 TO ${ANALYTICS_DB_DATABASE_NAME}.experiments;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments TO ${ANALYTICS_DB_DATABASE_NAME}.experiments1;
 
@@ -151,7 +151,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-12 id:migrate-feedback-scores
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. feedback_scores;
-DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores SYNC max_table_size_to_drop = 0;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 TO ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores TO ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1;
 
@@ -219,6 +219,6 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-16 id:migrate-traces
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. traces;
-DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces SYNC max_table_size_to_drop = 0;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 TO ${ANALYTICS_DB_DATABASE_NAME}.traces;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces1;
