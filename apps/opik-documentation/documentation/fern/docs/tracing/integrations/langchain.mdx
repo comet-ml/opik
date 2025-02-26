@@ -1,7 +1,3 @@
----
-subtitle: Describes how to use Opik with LangChain
----
-
 Opik provides seamless integration with LangChain, allowing you to easily log and trace your LangChain-based applications. By using the `OpikTracer` callback, you can automatically capture detailed information about your LangChain runs, including inputs, outputs, and metadata for each step in your chain.
 
 <div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
@@ -147,10 +143,12 @@ opik_tracer.flush()
 ```
 
 ## Important notes
+
 1. If you are using asynchronous streaming mode (calling `.astream()` method), the `input` field in the trace UI will be empty due to a Langchain limitation for this mode.
-However, you can find the input data inside the nested spans of this chain. 
+   However, you can find the input data inside the nested spans of this chain.
 
 2. if you are planning to use streaming with LLM-calls, and you want to calculate LLM-call tokens/cost, you need explicitly set argument `stream_usage` to `True`,
+
 ```python
 from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
