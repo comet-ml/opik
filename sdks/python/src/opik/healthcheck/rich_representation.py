@@ -71,8 +71,7 @@ def print_current_config(config: config.OpikConfig) -> None:
     console.print(table)
 
 
-def print_current_settings_validation(config_: config.OpikConfig) -> None:
-    is_valid = not config.is_misconfigured(config_, False)
+def print_config_validation(is_valid: bool, error_message: Optional[str]) -> None:
     is_valid_text = Text(
         str(is_valid), style=DEFAULT_VALUE_COLOR if is_valid else DEFAULT_ERROR_COLOR
     )
@@ -83,21 +82,8 @@ def print_current_settings_validation(config_: config.OpikConfig) -> None:
     if is_valid:
         return
 
-    is_misconfigured_for_cloud_flag, error_message = config.is_misconfigured_for_cloud(
-        config_
-    )
-    if is_misconfigured_for_cloud_flag:
-        err_msg = Text(error_message, style="red")
-        console.print(err_msg)
-        return
-
-    is_misconfigured_for_local_flag, error_message = config.is_misconfigured_for_local(
-        config_
-    )
-    if is_misconfigured_for_local_flag:
-        err_msg = Text(error_message, style="red")
-        console.print(err_msg)
-        return
+    err_msg = Text(error_message, style="red")
+    console.print(err_msg)
 
 
 def print_backend_workspace_availability(is_available: bool, err_msg: Optional[str]) -> None:
