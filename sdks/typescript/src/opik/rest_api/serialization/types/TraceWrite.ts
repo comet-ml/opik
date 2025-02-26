@@ -20,6 +20,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
         metadata: JsonNodeWrite.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
+        threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     });
 
 export declare namespace TraceWrite {
@@ -34,5 +35,6 @@ export declare namespace TraceWrite {
         metadata?: JsonNodeWrite.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfoWrite.Raw | null;
+        thread_id?: string | null;
     }
 }

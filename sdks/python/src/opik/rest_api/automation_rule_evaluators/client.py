@@ -13,7 +13,7 @@ from ..types.automation_rule_evaluator_write import AutomationRuleEvaluatorWrite
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..types.automation_rule_evaluator_public import AutomationRuleEvaluatorPublic
 from ..core.jsonable_encoder import jsonable_encoder
-from ..types.llm_as_judge_code import LlmAsJudgeCode
+from ..types.automation_rule_evaluator_update import AutomationRuleEvaluatorUpdate
 from ..types.log_page import LogPage
 from ..core.client_wrapper import AsyncClientWrapper
 
@@ -112,14 +112,20 @@ class AutomationRuleEvaluatorsClient:
 
         Examples
         --------
-        from Opik import AutomationRuleEvaluatorWrite_LlmAsJudge, OpikApi
+        from Opik import (
+            AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
+            OpikApi,
+            UserDefinedMetricPythonCodeWrite,
+        )
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
         client.automation_rule_evaluators.create_automation_rule_evaluator(
-            request=AutomationRuleEvaluatorWrite_LlmAsJudge(),
+            request=AutomationRuleEvaluatorWrite_UserDefinedMetricPython(
+                code=UserDefinedMetricPythonCodeWrite(),
+            ),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -259,26 +265,17 @@ class AutomationRuleEvaluatorsClient:
         self,
         id: str,
         *,
-        name: str,
-        code: LlmAsJudgeCode,
-        sampling_rate: float,
-        project_id: typing.Optional[str] = OMIT,
+        request: AutomationRuleEvaluatorUpdate,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        update Automation Rule Evaluator by id
+        Update Automation Rule Evaluator by id
 
         Parameters
         ----------
         id : str
 
-        name : str
-
-        code : LlmAsJudgeCode
-
-        sampling_rate : float
-
-        project_id : typing.Optional[str]
+        request : AutomationRuleEvaluatorUpdate
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -290,11 +287,9 @@ class AutomationRuleEvaluatorsClient:
         Examples
         --------
         from Opik import (
-            LlmAsJudgeCode,
-            LlmAsJudgeMessage,
-            LlmAsJudgeModelParameters,
-            LlmAsJudgeOutputSchema,
+            AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
             OpikApi,
+            UserDefinedMetricPythonCode,
         )
 
         client = OpikApi(
@@ -303,41 +298,19 @@ class AutomationRuleEvaluatorsClient:
         )
         client.automation_rule_evaluators.update_automation_rule_evaluator(
             id="id",
-            name="name",
-            code=LlmAsJudgeCode(
-                model=LlmAsJudgeModelParameters(
-                    name="name",
-                    temperature=1.1,
-                ),
-                messages=[
-                    LlmAsJudgeMessage(
-                        role="SYSTEM",
-                        content="content",
-                    )
-                ],
-                variables={"key": "value"},
-                schema=[
-                    LlmAsJudgeOutputSchema(
-                        name="name",
-                        type="BOOLEAN",
-                        description="description",
-                    )
-                ],
+            request=AutomationRuleEvaluatorUpdate_UserDefinedMetricPython(
+                code=UserDefinedMetricPythonCode(),
             ),
-            sampling_rate=1.1,
         )
         """
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
-            json={
-                "name": name,
-                "code": convert_and_respect_annotation_metadata(
-                    object_=code, annotation=LlmAsJudgeCode, direction="write"
-                ),
-                "sampling_rate": sampling_rate,
-                "project_id": project_id,
-            },
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -498,7 +471,11 @@ class AutomationRuleEvaluatorsClient:
 
         Examples
         --------
-        from Opik import AutomationRuleEvaluatorWrite_LlmAsJudge, OpikApi
+        from Opik import (
+            AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
+            OpikApi,
+            UserDefinedMetricPythonCodeWrite,
+        )
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
@@ -506,7 +483,9 @@ class AutomationRuleEvaluatorsClient:
         )
         client.automation_rule_evaluators.create_automation_rule_evaluator_deprecated(
             project_id="projectId",
-            request=AutomationRuleEvaluatorWrite_LlmAsJudge(),
+            request=AutomationRuleEvaluatorWrite_UserDefinedMetricPython(
+                code=UserDefinedMetricPythonCodeWrite(),
+            ),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -640,12 +619,9 @@ class AutomationRuleEvaluatorsClient:
     def update_automation_rule_evaluator_deprecated(
         self,
         id: str,
-        project_id_: str,
+        project_id: str,
         *,
-        name: str,
-        code: LlmAsJudgeCode,
-        sampling_rate: float,
-        project_id: typing.Optional[str] = OMIT,
+        request: AutomationRuleEvaluatorUpdate,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -655,15 +631,9 @@ class AutomationRuleEvaluatorsClient:
         ----------
         id : str
 
-        project_id_ : str
+        project_id : str
 
-        name : str
-
-        code : LlmAsJudgeCode
-
-        sampling_rate : float
-
-        project_id : typing.Optional[str]
+        request : AutomationRuleEvaluatorUpdate
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -675,11 +645,9 @@ class AutomationRuleEvaluatorsClient:
         Examples
         --------
         from Opik import (
-            LlmAsJudgeCode,
-            LlmAsJudgeMessage,
-            LlmAsJudgeModelParameters,
-            LlmAsJudgeOutputSchema,
+            AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
             OpikApi,
+            UserDefinedMetricPythonCode,
         )
 
         client = OpikApi(
@@ -688,42 +656,20 @@ class AutomationRuleEvaluatorsClient:
         )
         client.automation_rule_evaluators.update_automation_rule_evaluator_deprecated(
             id="id",
-            project_id_="projectId",
-            name="name",
-            code=LlmAsJudgeCode(
-                model=LlmAsJudgeModelParameters(
-                    name="name",
-                    temperature=1.1,
-                ),
-                messages=[
-                    LlmAsJudgeMessage(
-                        role="SYSTEM",
-                        content="content",
-                    )
-                ],
-                variables={"key": "value"},
-                schema=[
-                    LlmAsJudgeOutputSchema(
-                        name="name",
-                        type="BOOLEAN",
-                        description="description",
-                    )
-                ],
+            project_id="projectId",
+            request=AutomationRuleEvaluatorUpdate_UserDefinedMetricPython(
+                code=UserDefinedMetricPythonCode(),
             ),
-            sampling_rate=1.1,
         )
         """
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id_)}/evaluators/{jsonable_encoder(id)}",
+            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
-            json={
-                "name": name,
-                "code": convert_and_respect_annotation_metadata(
-                    object_=code, annotation=LlmAsJudgeCode, direction="write"
-                ),
-                "sampling_rate": sampling_rate,
-                "project_id": project_id,
-            },
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -899,7 +845,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi, AutomationRuleEvaluatorWrite_LlmAsJudge
+        from Opik import (
+            AsyncOpikApi,
+            AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
+            UserDefinedMetricPythonCodeWrite,
+        )
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -909,7 +859,9 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         async def main() -> None:
             await client.automation_rule_evaluators.create_automation_rule_evaluator(
-                request=AutomationRuleEvaluatorWrite_LlmAsJudge(),
+                request=AutomationRuleEvaluatorWrite_UserDefinedMetricPython(
+                    code=UserDefinedMetricPythonCodeWrite(),
+                ),
             )
 
 
@@ -1068,26 +1020,17 @@ class AsyncAutomationRuleEvaluatorsClient:
         self,
         id: str,
         *,
-        name: str,
-        code: LlmAsJudgeCode,
-        sampling_rate: float,
-        project_id: typing.Optional[str] = OMIT,
+        request: AutomationRuleEvaluatorUpdate,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        update Automation Rule Evaluator by id
+        Update Automation Rule Evaluator by id
 
         Parameters
         ----------
         id : str
 
-        name : str
-
-        code : LlmAsJudgeCode
-
-        sampling_rate : float
-
-        project_id : typing.Optional[str]
+        request : AutomationRuleEvaluatorUpdate
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1102,10 +1045,8 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         from Opik import (
             AsyncOpikApi,
-            LlmAsJudgeCode,
-            LlmAsJudgeMessage,
-            LlmAsJudgeModelParameters,
-            LlmAsJudgeOutputSchema,
+            AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
+            UserDefinedMetricPythonCode,
         )
 
         client = AsyncOpikApi(
@@ -1117,28 +1058,9 @@ class AsyncAutomationRuleEvaluatorsClient:
         async def main() -> None:
             await client.automation_rule_evaluators.update_automation_rule_evaluator(
                 id="id",
-                name="name",
-                code=LlmAsJudgeCode(
-                    model=LlmAsJudgeModelParameters(
-                        name="name",
-                        temperature=1.1,
-                    ),
-                    messages=[
-                        LlmAsJudgeMessage(
-                            role="SYSTEM",
-                            content="content",
-                        )
-                    ],
-                    variables={"key": "value"},
-                    schema=[
-                        LlmAsJudgeOutputSchema(
-                            name="name",
-                            type="BOOLEAN",
-                            description="description",
-                        )
-                    ],
+                request=AutomationRuleEvaluatorUpdate_UserDefinedMetricPython(
+                    code=UserDefinedMetricPythonCode(),
                 ),
-                sampling_rate=1.1,
             )
 
 
@@ -1147,14 +1069,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
-            json={
-                "name": name,
-                "code": convert_and_respect_annotation_metadata(
-                    object_=code, annotation=LlmAsJudgeCode, direction="write"
-                ),
-                "sampling_rate": sampling_rate,
-                "project_id": project_id,
-            },
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -1333,7 +1252,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi, AutomationRuleEvaluatorWrite_LlmAsJudge
+        from Opik import (
+            AsyncOpikApi,
+            AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
+            UserDefinedMetricPythonCodeWrite,
+        )
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -1344,7 +1267,9 @@ class AsyncAutomationRuleEvaluatorsClient:
         async def main() -> None:
             await client.automation_rule_evaluators.create_automation_rule_evaluator_deprecated(
                 project_id="projectId",
-                request=AutomationRuleEvaluatorWrite_LlmAsJudge(),
+                request=AutomationRuleEvaluatorWrite_UserDefinedMetricPython(
+                    code=UserDefinedMetricPythonCodeWrite(),
+                ),
             )
 
 
@@ -1497,12 +1422,9 @@ class AsyncAutomationRuleEvaluatorsClient:
     async def update_automation_rule_evaluator_deprecated(
         self,
         id: str,
-        project_id_: str,
+        project_id: str,
         *,
-        name: str,
-        code: LlmAsJudgeCode,
-        sampling_rate: float,
-        project_id: typing.Optional[str] = OMIT,
+        request: AutomationRuleEvaluatorUpdate,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1512,15 +1434,9 @@ class AsyncAutomationRuleEvaluatorsClient:
         ----------
         id : str
 
-        project_id_ : str
+        project_id : str
 
-        name : str
-
-        code : LlmAsJudgeCode
-
-        sampling_rate : float
-
-        project_id : typing.Optional[str]
+        request : AutomationRuleEvaluatorUpdate
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1535,10 +1451,8 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         from Opik import (
             AsyncOpikApi,
-            LlmAsJudgeCode,
-            LlmAsJudgeMessage,
-            LlmAsJudgeModelParameters,
-            LlmAsJudgeOutputSchema,
+            AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
+            UserDefinedMetricPythonCode,
         )
 
         client = AsyncOpikApi(
@@ -1550,45 +1464,23 @@ class AsyncAutomationRuleEvaluatorsClient:
         async def main() -> None:
             await client.automation_rule_evaluators.update_automation_rule_evaluator_deprecated(
                 id="id",
-                project_id_="projectId",
-                name="name",
-                code=LlmAsJudgeCode(
-                    model=LlmAsJudgeModelParameters(
-                        name="name",
-                        temperature=1.1,
-                    ),
-                    messages=[
-                        LlmAsJudgeMessage(
-                            role="SYSTEM",
-                            content="content",
-                        )
-                    ],
-                    variables={"key": "value"},
-                    schema=[
-                        LlmAsJudgeOutputSchema(
-                            name="name",
-                            type="BOOLEAN",
-                            description="description",
-                        )
-                    ],
+                project_id="projectId",
+                request=AutomationRuleEvaluatorUpdate_UserDefinedMetricPython(
+                    code=UserDefinedMetricPythonCode(),
                 ),
-                sampling_rate=1.1,
             )
 
 
         asyncio.run(main())
         """
         _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id_)}/evaluators/{jsonable_encoder(id)}",
+            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
-            json={
-                "name": name,
-                "code": convert_and_respect_annotation_metadata(
-                    object_=code, annotation=LlmAsJudgeCode, direction="write"
-                ),
-                "sampling_rate": sampling_rate,
-                "project_id": project_id,
-            },
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )

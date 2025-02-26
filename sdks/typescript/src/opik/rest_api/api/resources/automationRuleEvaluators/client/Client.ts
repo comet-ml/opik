@@ -141,7 +141,8 @@ export class AutomationRuleEvaluators {
      *
      * @example
      *     await client.automationRuleEvaluators.createAutomationRuleEvaluator({
-     *         type: "llm_as_judge"
+     *         type: "user_defined_metric_python",
+     *         code: {}
      *     })
      */
     public async createAutomationRuleEvaluator(
@@ -362,7 +363,7 @@ export class AutomationRuleEvaluators {
     }
 
     /**
-     * update Automation Rule Evaluator by id
+     * Update Automation Rule Evaluator by id
      *
      * @param {string} id
      * @param {OpikApi.AutomationRuleEvaluatorUpdate} request
@@ -370,26 +371,8 @@ export class AutomationRuleEvaluators {
      *
      * @example
      *     await client.automationRuleEvaluators.updateAutomationRuleEvaluator("id", {
-     *         name: "name",
-     *         code: {
-     *             model: {
-     *                 name: "name",
-     *                 temperature: 1.1
-     *             },
-     *             messages: [{
-     *                     role: "SYSTEM",
-     *                     content: "content"
-     *                 }],
-     *             variables: {
-     *                 "key": "value"
-     *             },
-     *             schema: [{
-     *                     name: "name",
-     *                     type: "BOOLEAN",
-     *                     description: "description"
-     *                 }]
-     *         },
-     *         samplingRate: 1.1
+     *         type: "user_defined_metric_python",
+     *         code: {}
      *     })
      */
     public async updateAutomationRuleEvaluator(
@@ -631,7 +614,8 @@ export class AutomationRuleEvaluators {
      *
      * @example
      *     await client.automationRuleEvaluators.createAutomationRuleEvaluatorDeprecated("projectId", {
-     *         type: "llm_as_judge"
+     *         type: "user_defined_metric_python",
+     *         code: {}
      *     })
      */
     public async createAutomationRuleEvaluatorDeprecated(
@@ -850,26 +834,8 @@ export class AutomationRuleEvaluators {
      *
      * @example
      *     await client.automationRuleEvaluators.updateAutomationRuleEvaluatorDeprecated("id", "projectId", {
-     *         name: "name",
-     *         code: {
-     *             model: {
-     *                 name: "name",
-     *                 temperature: 1.1
-     *             },
-     *             messages: [{
-     *                     role: "SYSTEM",
-     *                     content: "content"
-     *                 }],
-     *             variables: {
-     *                 "key": "value"
-     *             },
-     *             schema: [{
-     *                     name: "name",
-     *                     type: "BOOLEAN",
-     *                     description: "description"
-     *                 }]
-     *         },
-     *         samplingRate: 1.1
+     *         type: "user_defined_metric_python",
+     *         code: {}
      *     })
      */
     public async updateAutomationRuleEvaluatorDeprecated(

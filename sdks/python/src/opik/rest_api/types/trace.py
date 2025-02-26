@@ -40,6 +40,8 @@ class Trace(UniversalBaseModel):
     Duration in milliseconds as a decimal number to support sub-millisecond precision
     """
 
+    thread_id: typing.Optional[str] = None
+
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
             extra="allow", frozen=True

@@ -16,4 +16,5 @@ export interface TraceWrite {
     metadata?: OpikApi.JsonNodeWrite;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoWrite;
+    threadId?: string;
 }

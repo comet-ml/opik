@@ -6,12 +6,14 @@ import typing
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
+from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
 
 
 class Base(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     name: str
     sampling_rate: typing.Optional[float] = None
+    code: typing.Dict[str, typing.Optional[typing.Any]]
     action: typing.Optional[typing.Literal["evaluator"]] = None
 
     if IS_PYDANTIC_V2:
@@ -42,4 +44,23 @@ class AutomationRuleEvaluatorWrite_LlmAsJudge(Base):
             extra = pydantic.Extra.allow
 
 
-AutomationRuleEvaluatorWrite = AutomationRuleEvaluatorWrite_LlmAsJudge
+class AutomationRuleEvaluatorWrite_UserDefinedMetricPython(Base):
+    type: typing.Literal["user_defined_metric_python"] = "user_defined_metric_python"
+    code: typing.Optional[UserDefinedMetricPythonCodeWrite] = None
+
+    if IS_PYDANTIC_V2:
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
+    else:
+
+        class Config:
+            frozen = True
+            smart_union = True
+            extra = pydantic.Extra.allow
+
+
+AutomationRuleEvaluatorWrite = typing.Union[
+    AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
+]

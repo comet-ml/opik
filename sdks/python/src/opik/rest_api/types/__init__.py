@@ -6,6 +6,7 @@ from .auth_details_holder import AuthDetailsHolder
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
+    AutomationRuleEvaluator_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
 from .automation_rule_evaluator_llm_as_judge_public import (
@@ -17,16 +18,38 @@ from .automation_rule_evaluator_llm_as_judge_write import (
 from .automation_rule_evaluator_object_public import (
     AutomationRuleEvaluatorObjectPublic,
     AutomationRuleEvaluatorObjectPublic_LlmAsJudge,
+    AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
     AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
 )
-from .automation_rule_evaluator_update import AutomationRuleEvaluatorUpdate
+from .automation_rule_evaluator_update import (
+    AutomationRuleEvaluatorUpdate,
+    AutomationRuleEvaluatorUpdate_LlmAsJudge,
+    AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
+)
+from .automation_rule_evaluator_update_llm_as_judge import (
+    AutomationRuleEvaluatorUpdateLlmAsJudge,
+)
+from .automation_rule_evaluator_update_user_defined_metric_python import (
+    AutomationRuleEvaluatorUpdateUserDefinedMetricPython,
+)
+from .automation_rule_evaluator_user_defined_metric_python import (
+    AutomationRuleEvaluatorUserDefinedMetricPython,
+)
+from .automation_rule_evaluator_user_defined_metric_python_public import (
+    AutomationRuleEvaluatorUserDefinedMetricPythonPublic,
+)
+from .automation_rule_evaluator_user_defined_metric_python_write import (
+    AutomationRuleEvaluatorUserDefinedMetricPythonWrite,
+)
 from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite,
     AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
@@ -227,8 +250,14 @@ from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
+from .trace_thread import TraceThread
+from .trace_thread_page import TraceThreadPage
 from .trace_write import TraceWrite
 from .usage import Usage
+from .user_defined_metric_python_code import UserDefinedMetricPythonCode
+from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
+from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .workspace_metadata import WorkspaceMetadata
 from .workspace_trace_count import WorkspaceTraceCount
 
 __all__ = [
@@ -241,13 +270,24 @@ __all__ = [
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
     "AutomationRuleEvaluatorObjectPublic",
     "AutomationRuleEvaluatorObjectPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate",
+    "AutomationRuleEvaluatorUpdateLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
+    "AutomationRuleEvaluatorUpdate_LlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorUserDefinedMetricPython",
+    "AutomationRuleEvaluatorUserDefinedMetricPythonPublic",
+    "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
+    "AutomationRuleEvaluatorWrite_UserDefinedMetricPython",
     "AutomationRuleEvaluator_LlmAsJudge",
+    "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
     "BiInformation",
@@ -437,7 +477,13 @@ __all__ = [
     "TraceCountResponse",
     "TracePagePublic",
     "TracePublic",
+    "TraceThread",
+    "TraceThreadPage",
     "TraceWrite",
     "Usage",
+    "UserDefinedMetricPythonCode",
+    "UserDefinedMetricPythonCodePublic",
+    "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceMetadata",
     "WorkspaceTraceCount",
 ]

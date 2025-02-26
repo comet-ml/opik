@@ -201,7 +201,7 @@ export class Traces {
         request: OpikApi.GetTracesByProjectRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<OpikApi.TracePagePublic> {
-        const { page, size, projectName, projectId, filters, truncate } = request;
+        const { page, size, projectName, projectId, filters, truncate, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -225,6 +225,10 @@ export class Traces {
 
         if (truncate != null) {
             _queryParams["truncate"] = truncate.toString();
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
         }
 
         const _response = await core.fetcher({
@@ -759,6 +763,76 @@ export class Traces {
     }
 
     /**
+     * Delete trace threads
+     *
+     * @param {OpikApi.DeleteTraceThreads} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.deleteTraceThreads({
+     *         threadIds: ["thread_ids"]
+     *     })
+     */
+    public async deleteTraceThreads(
+        request: OpikApi.DeleteTraceThreads,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/delete",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.DeleteTraceThreads.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/traces/threads/delete.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
      * Delete traces
      *
      * @param {OpikApi.BatchDelete} request
@@ -1061,6 +1135,186 @@ export class Traces {
                 throw new errors.OpikApiTimeoutError(
                     "Timeout exceeded when calling GET /v1/private/traces/{traceId}/comments/{commentId}.",
                 );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * Get trace thread
+     *
+     * @param {OpikApi.TraceThreadIdentifier} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.traces.getTraceThread({
+     *         projectId: "project_id",
+     *         threadId: "thread_id"
+     *     })
+     */
+    public async getTraceThread(
+        request: OpikApi.TraceThreadIdentifier,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<OpikApi.TraceThread> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/retrieve",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.TraceThreadIdentifier.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.TraceThread.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/traces/threads/retrieve.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * Get trace threads
+     *
+     * @param {OpikApi.GetTraceThreadsRequest} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.getTraceThreads()
+     */
+    public async getTraceThreads(
+        request: OpikApi.GetTraceThreadsRequest = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<OpikApi.TraceThreadPage> {
+        const { page, size, projectName, projectId, truncate, filters } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (page != null) {
+            _queryParams["page"] = page.toString();
+        }
+
+        if (size != null) {
+            _queryParams["size"] = size.toString();
+        }
+
+        if (projectName != null) {
+            _queryParams["project_name"] = projectName;
+        }
+
+        if (projectId != null) {
+            _queryParams["project_id"] = projectId;
+        }
+
+        if (truncate != null) {
+            _queryParams["truncate"] = truncate.toString();
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return serializers.TraceThreadPage.parseOrThrow(_response.body, {
+                unrecognizedObjectKeys: "passthrough",
+                allowUnrecognizedUnionMembers: true,
+                allowUnrecognizedEnumValues: true,
+                breadcrumbsPrefix: ["response"],
+            });
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/traces/threads.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,

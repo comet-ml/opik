@@ -27,6 +27,7 @@ export const ProjectDetailed: core.serialization.ObjectSchema<
     duration: PercentageValuesDetailed.optional(),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+    traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
 });
 
 export declare namespace ProjectDetailed {
@@ -43,5 +44,6 @@ export declare namespace ProjectDetailed {
         duration?: PercentageValuesDetailed.Raw | null;
         total_estimated_cost?: number | null;
         usage?: Record<string, number> | null;
+        trace_count?: number | null;
     }
 }

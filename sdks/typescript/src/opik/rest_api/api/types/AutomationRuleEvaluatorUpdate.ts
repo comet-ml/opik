@@ -4,9 +4,26 @@
 
 import * as OpikApi from "../index";
 
-export interface AutomationRuleEvaluatorUpdate {
-    name: string;
-    code: OpikApi.LlmAsJudgeCode;
-    samplingRate: number;
-    projectId?: string;
+export type AutomationRuleEvaluatorUpdate =
+    | OpikApi.AutomationRuleEvaluatorUpdate.LlmAsJudge
+    | OpikApi.AutomationRuleEvaluatorUpdate.UserDefinedMetricPython;
+
+export namespace AutomationRuleEvaluatorUpdate {
+    export interface LlmAsJudge extends OpikApi.AutomationRuleEvaluatorUpdateLlmAsJudge, _Base {
+        type: "llm_as_judge";
+    }
+
+    export interface UserDefinedMetricPython
+        extends OpikApi.AutomationRuleEvaluatorUpdateUserDefinedMetricPython,
+            _Base {
+        type: "user_defined_metric_python";
+    }
+
+    export interface _Base {
+        name: string;
+        samplingRate?: number;
+        code: Record<string, unknown>;
+        projectId?: string;
+        action?: "evaluator";
+    }
 }

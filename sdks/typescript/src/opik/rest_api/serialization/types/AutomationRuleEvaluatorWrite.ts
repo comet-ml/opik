@@ -6,11 +6,13 @@ import * as core from "../../core";
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import { AutomationRuleEvaluatorLlmAsJudgeWrite } from "./AutomationRuleEvaluatorLlmAsJudgeWrite";
+import { AutomationRuleEvaluatorUserDefinedMetricPythonWrite } from "./AutomationRuleEvaluatorUserDefinedMetricPythonWrite";
 
 const _Base = core.serialization.object({
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
+    code: core.serialization.record(core.serialization.string(), core.serialization.unknown()),
     action: core.serialization.stringLiteral("evaluator").optional(),
 });
 export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
@@ -19,6 +21,7 @@ export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
 > = core.serialization
     .union("type", {
         llm_as_judge: AutomationRuleEvaluatorLlmAsJudgeWrite.extend(_Base),
+        user_defined_metric_python: AutomationRuleEvaluatorUserDefinedMetricPythonWrite.extend(_Base),
     })
     .transform<OpikApi.AutomationRuleEvaluatorWrite>({
         transform: (value) => value,
@@ -26,16 +29,21 @@ export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluatorWrite {
-    export type Raw = AutomationRuleEvaluatorWrite.LlmAsJudge;
+    export type Raw = AutomationRuleEvaluatorWrite.LlmAsJudge | AutomationRuleEvaluatorWrite.UserDefinedMetricPython;
 
     export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgeWrite.Raw {
         type: "llm_as_judge";
+    }
+
+    export interface UserDefinedMetricPython extends _Base, AutomationRuleEvaluatorUserDefinedMetricPythonWrite.Raw {
+        type: "user_defined_metric_python";
     }
 
     export interface _Base {
         project_id?: string | null;
         name: string;
         sampling_rate?: number | null;
+        code: Record<string, unknown>;
         action?: "evaluator" | null;
     }
 }

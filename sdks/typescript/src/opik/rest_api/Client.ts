@@ -14,10 +14,12 @@ import { Datasets } from "./api/resources/datasets/client/Client";
 import { Experiments } from "./api/resources/experiments/client/Client";
 import { FeedbackDefinitions } from "./api/resources/feedbackDefinitions/client/Client";
 import { LlmProviderKey } from "./api/resources/llmProviderKey/client/Client";
+import { OpenTelemetryIngestion } from "./api/resources/openTelemetryIngestion/client/Client";
 import { Projects } from "./api/resources/projects/client/Client";
 import { Prompts } from "./api/resources/prompts/client/Client";
 import { Spans } from "./api/resources/spans/client/Client";
 import { Traces } from "./api/resources/traces/client/Client";
+import { Workspaces } from "./api/resources/workspaces/client/Client";
 
 export declare namespace OpikApiClient {
     export interface Options {
@@ -55,10 +57,12 @@ export class OpikApiClient {
     protected _experiments: Experiments | undefined;
     protected _feedbackDefinitions: FeedbackDefinitions | undefined;
     protected _llmProviderKey: LlmProviderKey | undefined;
+    protected _openTelemetryIngestion: OpenTelemetryIngestion | undefined;
     protected _projects: Projects | undefined;
     protected _prompts: Prompts | undefined;
     protected _spans: Spans | undefined;
     protected _traces: Traces | undefined;
+    protected _workspaces: Workspaces | undefined;
 
     constructor(protected readonly _options: OpikApiClient.Options = {}) {}
 
@@ -94,6 +98,10 @@ export class OpikApiClient {
         return (this._llmProviderKey ??= new LlmProviderKey(this._options));
     }
 
+    public get openTelemetryIngestion(): OpenTelemetryIngestion {
+        return (this._openTelemetryIngestion ??= new OpenTelemetryIngestion(this._options));
+    }
+
     public get projects(): Projects {
         return (this._projects ??= new Projects(this._options));
     }
@@ -108,6 +116,10 @@ export class OpikApiClient {
 
     public get traces(): Traces {
         return (this._traces ??= new Traces(this._options));
+    }
+
+    public get workspaces(): Workspaces {
+        return (this._workspaces ??= new Workspaces(this._options));
     }
 
     /**

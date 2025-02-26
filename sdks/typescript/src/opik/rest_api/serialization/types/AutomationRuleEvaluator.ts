@@ -6,12 +6,14 @@ import * as core from "../../core";
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import { AutomationRuleEvaluatorLlmAsJudge } from "./AutomationRuleEvaluatorLlmAsJudge";
+import { AutomationRuleEvaluatorUserDefinedMetricPython } from "./AutomationRuleEvaluatorUserDefinedMetricPython";
 
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
+    code: core.serialization.record(core.serialization.string(), core.serialization.unknown()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -24,6 +26,7 @@ export const AutomationRuleEvaluator: core.serialization.Schema<
 > = core.serialization
     .union("type", {
         llm_as_judge: AutomationRuleEvaluatorLlmAsJudge.extend(_Base),
+        user_defined_metric_python: AutomationRuleEvaluatorUserDefinedMetricPython.extend(_Base),
     })
     .transform<OpikApi.AutomationRuleEvaluator>({
         transform: (value) => value,
@@ -31,10 +34,14 @@ export const AutomationRuleEvaluator: core.serialization.Schema<
     });
 
 export declare namespace AutomationRuleEvaluator {
-    export type Raw = AutomationRuleEvaluator.LlmAsJudge;
+    export type Raw = AutomationRuleEvaluator.LlmAsJudge | AutomationRuleEvaluator.UserDefinedMetricPython;
 
     export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudge.Raw {
         type: "llm_as_judge";
+    }
+
+    export interface UserDefinedMetricPython extends _Base, AutomationRuleEvaluatorUserDefinedMetricPython.Raw {
+        type: "user_defined_metric_python";
     }
 
     export interface _Base {
@@ -42,6 +49,7 @@ export declare namespace AutomationRuleEvaluator {
         project_id?: string | null;
         name: string;
         sampling_rate?: number | null;
+        code: Record<string, unknown>;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;
