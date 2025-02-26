@@ -1,7 +1,7 @@
 --liquibase formatted sql
 
 --changeset liyaka:change-tables-to-replicated-01 id:create-automation-rule-evaluator-logs
-CREATE TABLE automation_rule_evaluator_logs1
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1
 (
     `timestamp` DateTime64(9, 'UTC') DEFAULT now64(9),
     `workspace_id` String,
@@ -14,16 +14,16 @@ ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/opik_dev/automation_rul
 ORDER BY (workspace_id, rule_id, timestamp)
 TTL toDateTime(timestamp + toIntervalMonth(6))
 SETTINGS index_granularity = 8192;
---rollback DROP TABLE automation_rule_evaluator_logs1;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1;
 
 --changeset liyaka:change-tables-to-replicated-02 id:migrate-automation-rule-evaluator-logs
-ALTER TABLE automation_rule_evaluator_logs1 ATTACH PARTITION tuple() FROM automation_rule_evaluator_logs;
-DROP TABLE automation_rule_evaluator_logs SYNC max_table_size_to_drop = 0;
-RENAME TABLE automation_rule_evaluator_logs1 TO automation_rule_evaluator_logs;
---rollback RENAME TABLE automation_rule_evaluator_logs TO automation_rule_evaluator_logs1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs SYNC max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 TO ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs TO ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1;
 
 --changeset liyaka:change-tables-to-replicated-03 id:create-comments
-CREATE TABLE comments1
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.comments1
 (
     `id` FixedString(36),
     `entity_id` FixedString(36),
@@ -39,16 +39,16 @@ CREATE TABLE comments1
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/comments','{replica}',last_updated_at)
 ORDER BY (workspace_id, project_id, entity_id, id)
 SETTINGS index_granularity = 8192;
---rollback DROP TABLE comments1;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1;
 
 --changeset liyaka:change-tables-to-replicated-04 id:migrate-comments
-ALTER TABLE comments1 ATTACH PARTITION tuple() FROM comments;
-DROP TABLE comments SYNC max_table_size_to_drop = 0;
-RENAME TABLE comments1 TO comments;
---rollback RENAME TABLE comments TO comments1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.comments;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments SYNC max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 TO ${ANALYTICS_DB_DATABASE_NAME}.comments;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments TO ${ANALYTICS_DB_DATABASE_NAME}.comments1;
 
 --changeset liyaka:change-tables-to-replicated-05 id:create-dataset-items
-CREATE TABLE IF NOT EXISTS dataset_items1
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1
 (
     `workspace_id` String,
     `dataset_id` FixedString(36),
@@ -68,16 +68,16 @@ CREATE TABLE IF NOT EXISTS dataset_items1
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/dataset_items', '{replica}',last_updated_at)
 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id)
 SETTINGS index_granularity = 8192;
---rollback DROP TABLE dataset_items1;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1;
 
 --changeset liyaka:change-tables-to-replicated-06 id:migrate-dataset-items
-ALTER TABLE dataset_items1 ATTACH PARTITION tuple() FROM dataset_items;
-DROP TABLE dataset_items SYNC max_table_size_to_drop = 0;
-RENAME TABLE dataset_items1 TO dataset_items;
---rollback RENAME TABLE dataset_items TO dataset_items1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_items;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items SYNC max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 TO ${ANALYTICS_DB_DATABASE_NAME}.dataset_items;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items TO ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1;
 
 --changeset liyaka:change-tables-to-replicated-07 id:create-experiment-items
-CREATE TABLE IF NOT EXISTS experiment_items1
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1
 (
     `id` FixedString(36),
     `experiment_id` FixedString(36),
@@ -92,16 +92,16 @@ CREATE TABLE IF NOT EXISTS experiment_items1
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/experiment_items', '{replica}', last_updated_at)
 ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id)
 SETTINGS index_granularity = 8192;
---rollback DROP TABLE experiment_items1;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1;
 
 --changeset liyaka:change-tables-to-replicated-08 id:migrate-experiment-items
-ALTER TABLE experiment_items1 ATTACH PARTITION tuple() FROM experiment_items;
-DROP TABLE experiment_items SYNC max_table_size_to_drop = 0;
-RENAME TABLE experiment_items1 TO experiment_items;
---rollback RENAME TABLE experiment_items TO experiment_items1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. experiment_items;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items SYNC max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 TO ${ANALYTICS_DB_DATABASE_NAME}.experiment_items;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items TO ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1;
 
 --changeset liyaka:change-tables-to-replicated-09 id:create-experiments
-CREATE TABLE IF NOT EXISTS experiments1
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiments1
 (
     `workspace_id` String,
     `dataset_id` FixedString(36),
@@ -119,16 +119,16 @@ CREATE TABLE IF NOT EXISTS experiments1
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/experiments', '{replica}', last_updated_at)
 ORDER BY (workspace_id, dataset_id, id)
 SETTINGS index_granularity = 8192;
---rollback DROP TABLE experiments1;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1;
 
 --changeset liyaka:change-tables-to-replicated-10 id:migrate-experiments
-ALTER TABLE experiments1 ATTACH PARTITION tuple() FROM experiments;
-DROP TABLE experiments SYNC max_table_size_to_drop = 0;
-RENAME TABLE experiments1 TO experiments;
---rollback RENAME TABLE experiments TO experiments1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. experiments;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments SYNC max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 TO ${ANALYTICS_DB_DATABASE_NAME}.experiments;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments TO ${ANALYTICS_DB_DATABASE_NAME}.experiments1;
 
 --changeset liyaka:change-tables-to-replicated-11 id:create-feedback-scores
-CREATE TABLE IF NOT EXISTS feedback_scores1
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1
 (
     `entity_id` FixedString(36),
     `entity_type` Enum8('unknown' = 0, 'span' = 1, 'trace' = 2),
@@ -147,16 +147,16 @@ CREATE TABLE IF NOT EXISTS feedback_scores1
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/feedback_scores', '{replica}', last_updated_at)
 ORDER BY (workspace_id, project_id, entity_type, entity_id, name)
 SETTINGS index_granularity = 8192;
---rollback DROP TABLE feedback_scores1;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1;
 
 --changeset liyaka:change-tables-to-replicated-12 id:migrate-feedback-scores
-ALTER TABLE feedback_scores1 ATTACH PARTITION tuple() FROM feedback_scores;
-DROP TABLE feedback_scores SYNC max_table_size_to_drop = 0;
-RENAME TABLE feedback_scores1 TO feedback_scores;
---rollback RENAME TABLE feedback_scores TO feedback_scores1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. feedback_scores;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores SYNC max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 TO ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores TO ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1;
 
 --changeset liyaka:change-tables-to-replicated-13 id:create-spans
-CREATE TABLE IF NOT EXISTS spans1
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans1
 (
     `id` FixedString(36),
     `workspace_id` String,
@@ -185,16 +185,16 @@ CREATE TABLE IF NOT EXISTS spans1
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/spans', '{replica}', last_updated_at)
 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id)
 SETTINGS index_granularity = 8192;
---rollback DROP TABLE spans1;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1;
 
 --changeset liyaka:change-tables-to-replicated-14 id:migrate-spans
-ALTER TABLE spans1 ATTACH PARTITION tuple() FROM spans;
-DROP TABLE spans SYNC SETTINGS max_table_size_to_drop = 0;
-RENAME TABLE spans1 TO spans;
---rollback RENAME TABLE spans TO spans1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. spans;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans SYNC SETTINGS max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1 TO ${ANALYTICS_DB_DATABASE_NAME}.spans;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans TO ${ANALYTICS_DB_DATABASE_NAME}.spans1;
 
 --changeset liyaka:change-tables-to-replicated-15 id:create-traces
-CREATE TABLE IF NOT EXISTS traces1
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces1
 (
     `id` FixedString(36),
     `workspace_id` String,
@@ -215,10 +215,10 @@ CREATE TABLE IF NOT EXISTS traces1
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/traces', '{replica}',last_updated_at)
 ORDER BY (workspace_id, project_id, id)
 SETTINGS index_granularity = 8192;
---rollback DROP TABLE traces1;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1;
 
 --changeset liyaka:change-tables-to-replicated-16 id:migrate-traces
-ALTER TABLE traces1 ATTACH PARTITION tuple() FROM traces;
-DROP TABLE traces SYNC max_table_size_to_drop = 0;
-RENAME TABLE traces1 TO traces;
---rollback RENAME TABLE traces TO traces1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}. traces;
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces SYNC max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 TO ${ANALYTICS_DB_DATABASE_NAME}.traces;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces1;
