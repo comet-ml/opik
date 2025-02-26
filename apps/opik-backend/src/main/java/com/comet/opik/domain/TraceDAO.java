@@ -401,6 +401,20 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_id
             )
+            <if(feedback_scores_empty_filters)>
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+            )
+            <endif>
             SELECT
                   t.id as id,
                   t.workspace_id as workspace_id,
@@ -434,6 +448,9 @@ class TraceDAOImpl implements TraceDAO {
                  <if(trace_aggregation_filters)>
                  LEFT JOIN spans_agg s ON t.id = s.trace_id
                  <endif>
+                 <if(feedback_scores_empty_filters)>
+                     LEFT JOIN fsc ON fsc.entity_id = traces.id
+                 <endif>
                  WHERE workspace_id = :workspace_id
                  AND project_id = :project_id
                  <if(filters)> AND <filters> <endif>
@@ -456,6 +473,9 @@ class TraceDAOImpl implements TraceDAO {
                  <endif>
                  <if(trace_aggregation_filters)>
                  AND <trace_aggregation_filters>
+                 <endif>
+                 <if(feedback_scores_empty_filters)>
+                 AND <feedback_scores_empty_filters>
                  <endif>
                  ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                  LIMIT 1 BY id
@@ -492,6 +512,20 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
+            <if(feedback_scores_empty_filters)>
+             WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+            )
+            <endif>
             SELECT
                 count(id) as count
             FROM (
@@ -509,6 +543,9 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration_millis
                     FROM traces
+                    <if(feedback_scores_empty_filters)>
+                        LEFT JOIN fsc ON fsc.entity_id = traces.id
+                    <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(filters)> AND <filters> <endif>
@@ -528,6 +565,9 @@ class TraceDAOImpl implements TraceDAO {
                         GROUP BY entity_id
                         HAVING <feedback_scores_filters>
                     )
+                    <endif>
+                    <if(feedback_scores_empty_filters)>
+                    AND <feedback_scores_empty_filters>
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -1279,6 +1319,9 @@ class TraceDAOImpl implements TraceDAO {
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
                             .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_EMPTY)
+                            .ifPresent(scoresEmptyFilter -> template.add("feedback_scores_empty_filters",
+                                    scoresEmptyFilter));
                 });
         return template;
     }
@@ -1290,6 +1333,7 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_EMPTY);
                 });
     }
 
