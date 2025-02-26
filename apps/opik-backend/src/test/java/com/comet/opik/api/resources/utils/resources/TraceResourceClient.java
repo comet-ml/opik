@@ -8,6 +8,8 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
@@ -199,4 +201,43 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
+
+    public TraceThread getTraceThread(String threadId, UUID projectId, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(TraceThread.class);
+        }
+    }
+
+    public void assertGetTraceThreadNotFound(String threadId, UUID projectId, String apiKey, String workspace) {
+
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspace)
+                .post(Entity
+                        .json(TraceThreadIdentifier.builder().threadId(threadId).projectId(projectId).build()))) {
+
+            String message = "Trace Thread id: %s not found".formatted(threadId);
+
+            assertErrorResponse(actualResponse, message, HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    private static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        assertThat(actualResponse.hasEntity()).isTrue();
+        assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                .isEqualTo(message);
+    }
+
 }
