@@ -3198,6 +3198,71 @@ class SpansResourceTest {
                     unexpectedSpans);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void getSpansByProject__whenFilterByIsEmpty__thenReturnSpansFiltered(
+                boolean useStreamSearch, Operator operator,
+                Function<List<Span>, List<Span>> getExpectedSpans,
+                Function<List<Span>, List<Span>> getUnexpectedSpans) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> {
+                        Instant now = Instant.now();
+                        return span.toBuilder()
+                                .projectId(null)
+                                .projectName(projectName)
+                                .feedbackScores(span.feedbackScores().stream()
+                                        .map(feedbackScore -> feedbackScore.toBuilder()
+                                                .value(podamFactory.manufacturePojo(BigDecimal.class))
+                                                .build())
+                                        .collect(Collectors.toList()))
+                                .startTime(now)
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            spans.set(0, spans.getFirst().toBuilder().feedbackScores(null).build());
+            spans.forEach(expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
+            spans.subList(1, spans.size()).forEach(
+                    span -> span.feedbackScores().forEach(
+                            feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
+
+            var expectedSpans = getExpectedSpans.apply(spans);
+            var unexpectedSpans = getUnexpectedSpans.apply(spans);
+
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(SpanField.FEEDBACK_SCORES_EMPTY)
+                            .operator(operator)
+                            .value("")
+                            .build());
+
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    unexpectedSpans);
+        }
+
+        Stream<Arguments> getSpansByProject__whenFilterByIsEmpty__thenReturnSpansFiltered() {
+            return Stream.of(
+                    arguments(
+                            Boolean.TRUE,
+                            Operator.IS_EMPTY,
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
+                    arguments(
+                            Boolean.TRUE,
+                            Operator.IS_NOT_EMPTY,
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())));
+        }
+
         static Stream<Filter> getSpansByProject__whenFilterInvalidOperatorForFieldType__thenReturn400() {
             return Stream.of(
                     SpanFilter.builder()
