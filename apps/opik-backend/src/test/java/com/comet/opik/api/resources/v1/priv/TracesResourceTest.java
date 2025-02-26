@@ -4189,33 +4189,34 @@ class TracesResourceTest {
             assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
         }
 
-        private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId) {
-            return expectedTraces.size() == 0
-                    ? List.of()
-                    : List.of(TraceThread.builder()
-                            .firstMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
-                                    .findFirst().get().input())
-                            .lastMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                    .findFirst().get().output())
-                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                                    expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).get()
-                                            .startTime(),
-                                    expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime()))
-                            .projectId(projectId)
-                            .createdBy(USER)
-                            .startTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
-                                    .findFirst().get().startTime())
-                            .endTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                    .findFirst().get().endTime())
-                            .numberOfMessages(expectedTraces.size())
-                            .id(threadId)
-                            .createdAt(expectedTraces.stream().sorted(Comparator.comparing(Trace::createdAt))
-                                    .findFirst().get().createdAt())
-                            .lastUpdatedAt(expectedTraces.stream()
-                                    .sorted(Comparator.comparing(Trace::lastUpdatedAt).reversed()).findFirst().get()
-                                    .lastUpdatedAt())
-                            .build());
-        }
+    }
+
+    private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId) {
+        return expectedTraces.size() == 0
+                ? List.of()
+                : List.of(TraceThread.builder()
+                        .firstMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
+                                .findFirst().get().input())
+                        .lastMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
+                                .findFirst().get().output())
+                        .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).get()
+                                        .startTime(),
+                                expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime()))
+                        .projectId(projectId)
+                        .createdBy(USER)
+                        .startTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
+                                .findFirst().get().startTime())
+                        .endTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
+                                .findFirst().get().endTime())
+                        .numberOfMessages(expectedTraces.size())
+                        .id(threadId)
+                        .createdAt(expectedTraces.stream().sorted(Comparator.comparing(Trace::createdAt))
+                                .findFirst().get().createdAt())
+                        .lastUpdatedAt(expectedTraces.stream()
+                                .sorted(Comparator.comparing(Trace::lastUpdatedAt).reversed()).findFirst().get()
+                                .lastUpdatedAt())
+                        .build());
     }
 
     @Nested
@@ -6906,6 +6907,64 @@ class TracesResourceTest {
                 assertErrorResponse(actualResponse, errorMessage, HttpStatus.SC_UNPROCESSABLE_ENTITY);
             }
         }
+    }
+
+    @Nested
+    @DisplayName("Get Trace Threads")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetTraceThread {
+
+        @Test
+        @DisplayName("when trace thread is retrieved, then return trace thread")
+        void getTraceThread() {
+
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var traces = IntStream.range(0, 5)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .threadId(threadId)
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+            var expectedTraces = traceResourceClient.getByProjectName(projectName, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+
+            var expectedThread = getExpectedThreads(expectedTraces, projectId, threadId);
+
+            assertThat(List.of(actualThread))
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_TRACES)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                    .isEqualTo(expectedThread);
+        }
+
+        @Test
+        @DisplayName("when trace thread does not exist, then return not found")
+        void getTraceThread__whenTraceThreadDoesNotExist__thenReturnNotFound() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var traces = IntStream.range(0, 5)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .threadId(UUID.randomUUID().toString())
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            traceResourceClient.assertGetTraceThreadNotFound(threadId, projectId, API_KEY, TEST_WORKSPACE);
+        }
+
     }
 
     private void assertErrorResponse(Response actualResponse, String message, int expected) {
