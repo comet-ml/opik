@@ -29,8 +29,8 @@ def run(show_installed_packages: bool = True) -> None:
     rich_representation.print_current_config(config_obj)
 
     rich_representation.print_header("current configuration validation")
-    is_valid, err_msg = checks.get_config_validation_results(config_obj)
-    rich_representation.print_config_validation(is_valid, err_msg)
+    is_misconfigured, err_msg = config_obj.get_misconfiguration_validation_results()
+    rich_representation.print_config_validation(not is_misconfigured, err_msg)
 
     rich_representation.print_header("checking backend workspace availability")
     is_available, err_msg = checks.get_backend_workspace_availability()

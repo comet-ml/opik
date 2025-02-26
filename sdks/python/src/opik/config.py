@@ -261,7 +261,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
             is determined to be misconfigured. Defaults to False.
         """
 
-        is_misconfigured_flag, error_message = self.get_config_validation_results()
+        is_misconfigured_flag, error_message = (
+            self.get_misconfiguration_validation_results()
+        )
 
         if is_misconfigured_flag:
             if show_misconfiguration_message:
@@ -276,6 +278,14 @@ class OpikConfig(pydantic_settings.BaseSettings):
         return False
 
     def is_misconfigured_for_cloud(self) -> Tuple[bool, Optional[str]]:
+        """
+        Determines if the current Opik configuration is misconfigured for cloud logging.
+
+        Returns:
+            Tuple[bool, Optional[str]]: A tuple where the first element is a boolean indicating if
+            the configuration is misconfigured for cloud logging, and the second element is either
+            an error message indicating the reason for misconfiguration or None.
+        """
         cloud_installation = url_helpers.get_base_url(
             self.url_override
         ) == url_helpers.get_base_url(OPIK_URL_CLOUD)
@@ -298,6 +308,14 @@ class OpikConfig(pydantic_settings.BaseSettings):
         return False, None
 
     def is_misconfigured_for_local(self) -> Tuple[bool, Optional[str]]:
+        """
+        Determines if the current setup is misconfigured for a local open-source installation.
+
+        Returns:
+            Tuple[bool, Optional[str]]: A tuple where the first element is a boolean indicating if
+            the configuration is misconfigured for local logging, and the second element is either
+            an error message indicating the reason for misconfiguration or None.
+        """
         localhost_installation = (
             "localhost" in self.url_override
         )  # does not detect all OSS installations
@@ -319,20 +337,34 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         return False, None
 
-    def get_config_validation_results(self) -> Tuple[bool, Optional[str]]:
+    def get_misconfiguration_validation_results(self) -> Tuple[bool, Optional[str]]:
+        """
+        Validates the current configuration and identifies any misconfigurations
+        for either cloud or local environments. This method checks both cloud
+        and local configurations and determines the validity of each, returning
+        a boolean indicator of success or failure and an optional error message
+        if there is an issue.
+
+        Returns:
+            Tuple[bool, Optional[str]]: A tuple where the first element indicates
+            whether the configuration is misconfigured (True for misconfigured, False for valid).
+            The second element is an optional string that contains
+            an error message if there is a configuration issue, or None if the
+            configuration is valid.
+        """
         is_misconfigured_for_cloud_flag, error_message = (
             self.is_misconfigured_for_cloud()
         )
         if is_misconfigured_for_cloud_flag:
-            return False, error_message
+            return True, error_message
 
         is_misconfigured_for_local_flag, error_message = (
             self.is_misconfigured_for_local()
         )
         if is_misconfigured_for_local_flag:
-            return False, error_message
+            return True, error_message
 
-        return True, None
+        return False, None
 
 
 def update_session_config(key: str, value: Any) -> None:

@@ -2,7 +2,7 @@ from typing import Optional, Tuple
 
 import httpx
 
-from opik import Opik, config
+from opik import Opik
 
 
 def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
