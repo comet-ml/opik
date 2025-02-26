@@ -1,5 +1,6 @@
 instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
+    custom-domain: https://www.comet.com/docs/opik/
 favicon: img/logo.svg
 js:
   - path: ./add_cookbook_banner.js
