@@ -1,22 +1,16 @@
-import pathlib
-from typing import Any, Dict, Optional, Tuple
+from typing import Optional
 
-import httpx
 from rich import align
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-import opik
-from opik import Opik, config, environment
+from opik import config, environment
 from opik.config import OpikConfig
-from opik.healthcheck import checks
-
 
 DEFAULT_KEY_COLOR = "green"
 DEFAULT_VALUE_COLOR = "blue"
 DEFAULT_ERROR_COLOR = "red"
-
 
 console = Console()
 
@@ -36,7 +30,6 @@ def print_installed_packages() -> None:
         version = Text(version, style=DEFAULT_VALUE_COLOR)
 
         console.print(name, "==", version, sep="")
-
 
 
 def print_versions(python_version: str, opik_version: str) -> None:

@@ -1,8 +1,6 @@
-
 import opik
-from opik import environment, config
-
 import opik.healthcheck.rich_representation
+from opik import config, environment
 from opik.healthcheck import checks
 
 

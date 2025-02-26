@@ -1,4 +1,3 @@
-import pathlib
 from typing import Optional, Tuple
 
 import httpx
