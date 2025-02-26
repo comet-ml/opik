@@ -15,10 +15,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.protobuf.ByteString;
 import com.redis.testcontainers.RedisContainer;
@@ -51,7 +48,6 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -260,7 +256,7 @@ class OpenTelemetryResourceTest {
         @MethodSource("credentials")
         @DisplayName("ingest otel traces via json")
         public void testOtelJsonRequests(String apiKey, String projectName, boolean expected,
-                                         io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             // using example payload from integration; it will be protobuffed when ingested,
             // so we just need to make sure the parsing works
