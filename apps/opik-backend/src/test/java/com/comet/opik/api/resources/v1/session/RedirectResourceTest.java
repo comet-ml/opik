@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.session;
 
 import com.comet.opik.api.Dataset;
-import com.comet.opik.api.EMErrorResponse;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -135,7 +135,7 @@ class RedirectResourceTest {
                         .withQueryParam("id", equalTo(NON_EXISTING_WORKSPACE_ID))
                         .willReturn(WireMock.badRequest().withHeader("Content-Type", "application/json")
                                 .withJsonBody(JsonUtils.readTree(
-                                        new EMErrorResponse(NO_SUCH_WORKSPACE.formatted(NON_EXISTING_WORKSPACE_ID),
+                                        new ReactServiceErrorResponse(NO_SUCH_WORKSPACE.formatted(NON_EXISTING_WORKSPACE_ID),
                                                 400)))));
     }
 
@@ -236,6 +236,6 @@ class RedirectResourceTest {
         return Stream.of(
                 arguments(WORKSPACE_NAME, WORKSPACE_NAME, 303),
                 arguments(WORKSPACE_NAME, null, 303),
-                arguments(NON_EXISTING_WORKSPACE_NAME, null, 400));
+                arguments(NON_EXISTING_WORKSPACE_NAME, null, 404));
     }
 }

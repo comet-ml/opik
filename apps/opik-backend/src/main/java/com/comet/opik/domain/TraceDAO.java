@@ -348,13 +348,11 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_DETAILS_BY_ID = """
-            SELECT
+            SELECT DISTINCT
                 workspace_id,
                 project_id
             FROM traces
             WHERE id = :id
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
             ;
             """;
 

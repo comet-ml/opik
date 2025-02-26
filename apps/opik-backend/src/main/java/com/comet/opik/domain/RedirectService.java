@@ -1,14 +1,15 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.EMErrorResponse;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.infrastructure.DeploymentConfig;
+import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -21,6 +22,10 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.UUID;
+
+import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
+import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 
 @ImplementedBy(RedirectServiceImpl.class)
 public interface RedirectService {
@@ -38,7 +43,6 @@ public interface RedirectService {
 class RedirectServiceImpl implements RedirectService {
 
     private static final String DEFAULT_BASE_URL = "http://localhost:5173/";
-    private static final String DEFAULT_WORKSPACE_NAME = "default";
     private static final String PROJECT_REDIRECT_URL = "%s/%s/projects/%s/traces";
     private static final String DATASET_REDIRECT_URL = "%s/%s/datasets/%s/items";
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
@@ -88,6 +92,8 @@ class RedirectServiceImpl implements RedirectService {
             return DEFAULT_WORKSPACE_NAME;
         }
 
+        log.info("Request react service for workspace name by id: {}", workspaceId);
+        InstrumentAsyncUtils.Segment segment = startSegment("redirect", "React", "getWorkspaceNameById");
         try (var response = client.target(URI.create(config.getBaseUrl()))
                 .path("api")
                 .path("workspaces")
@@ -96,7 +102,10 @@ class RedirectServiceImpl implements RedirectService {
                 .request()
                 .get()) {
 
+            log.info("Request react service for workspace name by id: {} completed", workspaceId);
             return getWorkspaceNameFromResponse(response);
+        } finally {
+            endSegment(segment);
         }
     }
 
@@ -104,8 +113,9 @@ class RedirectServiceImpl implements RedirectService {
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
             return response.readEntity(String.class);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(EMErrorResponse.class);
-            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            log.error("Not found workspace by Id : {}", errorResponse.msg());
+            throw new NotFoundException(errorResponse.msg());
         }
 
         log.error("Unexpected error while getting workspace name: {}", response.getStatus());

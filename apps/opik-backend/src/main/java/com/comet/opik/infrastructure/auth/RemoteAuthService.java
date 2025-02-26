@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.EMErrorResponse;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import jakarta.inject.Provider;
@@ -21,9 +21,9 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.URI;
 import java.util.Optional;
 
-import static com.comet.opik.api.EMErrorResponse.MISSING_API_KEY;
-import static com.comet.opik.api.EMErrorResponse.MISSING_WORKSPACE;
-import static com.comet.opik.api.EMErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
+import static com.comet.opik.api.ReactServiceErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -139,14 +139,14 @@ class RemoteAuthService implements AuthService {
             }
             return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            var errorResponse = response.readEntity(EMErrorResponse.class);
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
             throw new ClientErrorException(errorResponse.msg(), Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             // EM never returns FORBIDDEN as of now
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(EMErrorResponse.class);
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
             throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
         }
         log.error("Unexpected error while authenticating user, received status code: {}", response.getStatus());
