@@ -1,6 +1,7 @@
 import logging
 from opik import jsonable_encoder
 from typing import Any, Dict, List, Mapping, Optional, Tuple
+import copy
 from .. import prompt
 
 LOGGER = logging.getLogger(__name__)
@@ -16,6 +17,8 @@ def build_metadata_and_prompt_versions(
 
     if experiment_config is None:
         experiment_config = {}
+    else:
+        experiment_config = copy.deepcopy(experiment_config)
 
     if not isinstance(experiment_config, Mapping):
         LOGGER.error(
