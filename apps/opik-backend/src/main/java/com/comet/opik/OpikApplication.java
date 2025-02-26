@@ -20,6 +20,8 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
+import com.comet.opik.infrastructure.otel.OtelJsonMessageBodyReader;
+import com.comet.opik.infrastructure.otel.OtelProtobufMessageBodyReader;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
@@ -108,5 +110,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 
         jersey.register(JsonProcessingExceptionMapper.class);
+
+        jersey.register(OtelProtobufMessageBodyReader.class);
+        jersey.register(OtelJsonMessageBodyReader.class);
     }
 }

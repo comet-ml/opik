@@ -5,23 +5,19 @@ import com.comet.opik.domain.OpenTelemetryService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
-import com.comet.opik.utils.JsonUtils;
-import com.google.protobuf.util.JsonFormat;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
 
 @Path("/v1/private/otel/v1")
@@ -37,39 +33,15 @@ public class OpenTelemetryResource {
     @Path("/traces")
     @POST
     @Consumes("application/x-protobuf")
-    public Response receiveProtobufTraces(InputStream in) {
-        try {
-            // Parse the incoming Protobuf message
-            var traceRequest = ExportTraceServiceRequest.parseFrom(in);
-
-            return handleOtelTraceRequest(traceRequest);
-        } catch (IOException e) {
-            // Log the error and return a 400 Bad Request response
-            log.error("Error parsing Protobuf payload", e);
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Invalid Protobuf payload")
-                    .build();
-        }
+    public Response receiveProtobufTraces(ExportTraceServiceRequest request) {
+        return handleOtelTraceRequest(request);
     }
 
     @Path("/traces")
     @POST
-    @Consumes("application/json")
-    public Response receiveJsonTraces(@RequestBody String jsonPayload) {
-        try {
-            var payload = JsonUtils.sanitizeJson(jsonPayload);
-            var traceRequest = ExportTraceServiceRequest.newBuilder();
-
-            // Parse the incoming JSON into the builder.
-            JsonFormat.parser().merge(payload, traceRequest);
-            return handleOtelTraceRequest(traceRequest.build());
-        } catch (IOException e) {
-            // Log the error and return a 400 Bad Request response
-            log.error("Error parsing JSON payload", e);
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Failed to parse JSON: " + e.getMessage())
-                    .build();
-        }
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response receiveJsonTraces(ExportTraceServiceRequest request) {
+        return handleOtelTraceRequest(request);
     }
 
     private Response handleOtelTraceRequest(ExportTraceServiceRequest traceRequest) {
@@ -93,5 +65,4 @@ public class OpenTelemetryResource {
         // Return a successful HTTP response
         return Response.ok().build();
     }
-
 }
