@@ -182,8 +182,8 @@ class Opik:
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
             error_info: The dictionary with error information (typically used when the trace function has failed).
-            thread_id: A user-defined identifier for a conversation (thread) to link the trace to.
-                The identifier has to be unique per project.
+            thread_id: Used to group multiple traces into a thread.
+                The identifier is user-defined and has to be unique per project.
 
         Returns:
             trace.Trace: The created trace object.

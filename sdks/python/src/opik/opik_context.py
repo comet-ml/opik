@@ -102,8 +102,8 @@ def update_current_trace(
         metadata: The metadata of the trace.
         tags: The tags of the trace.
         feedback_scores: The feedback scores of the trace.
-        thread_id: A user-defined identifier for a conversation (thread) to link the trace to.
-            The identifier has to be unique per project.
+        thread_id: Used to group multiple traces into a thread.
+            The identifier is user-defined and has to be unique per project.
     """
     new_params = {
         "name": name,

@@ -52,8 +52,8 @@ class Trace:
             output: The output data for the trace.
             tags: A list of tags to be associated with the trace.
             error_info: The dictionary with error information (typically used when the trace function has failed).
-            thread_id: A user-defined identifier for a conversation (thread) to link the trace to.
-                The identifier has to be unique per project.
+            thread_id: Used to group multiple traces into a thread.
+                The identifier is user-defined and has to be unique per project.
 
         Returns:
             None
@@ -92,8 +92,8 @@ class Trace:
             output: The output data for the trace.
             tags: A list of tags to be associated with the trace.
             error_info: The dictionary with error information (typically used when the trace function has failed).
-            thread_id: A user-defined identifier for a conversation (thread) to link the trace to.
-                The identifier has to be unique per project.
+            thread_id: Used to group multiple traces into a thread.
+                The identifier is user-defined and has to be unique per project.
 
         Returns:
             None
