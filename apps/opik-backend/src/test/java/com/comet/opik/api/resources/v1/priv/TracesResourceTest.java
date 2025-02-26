@@ -3412,7 +3412,7 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(String filterValue,
+        void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(Operator operator,
                                                                                            Function<List<Trace>, List<Trace>> getExpectedTraces,
                                                                                            Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -3446,7 +3446,7 @@ class TracesResourceTest {
             var filters = List.of(
                     TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES_EMPTY)
-                            .operator(Operator.IS_EMPTY)
+                            .operator(operator)
                             .value("")
                             .build());
             getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces,
@@ -3455,10 +3455,10 @@ class TracesResourceTest {
 
         private Stream<Arguments> getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
             return Stream.of(
-                    Arguments.of(Boolean.TRUE.toString(),
+                    Arguments.of(Operator.IS_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size())),
-                    Arguments.of(Boolean.FALSE.toString(),
+                    Arguments.of(Operator.IS_NOT_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst())));
         }
