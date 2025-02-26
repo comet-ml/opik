@@ -14,12 +14,9 @@ import { ChartContainer } from "@/components/ui/chart";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
-import { getExperimentColorsConfig } from "@/lib/charts";
+import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 
-type RadarDataPoint = {
-  name: string;
-  [key: string]: string | number;
-};
+export type RadarDataPoint = Record<string, string | number>;
 
 type CompareRadarChartProps = {
   data: RadarDataPoint[];
@@ -31,13 +28,15 @@ const CompareRadarChart: React.FC<CompareRadarChartProps> = ({
   experiments,
 }) => {
   const config = useMemo(() => {
-    return getExperimentColorsConfig(experiments.map((exp) => exp.name));
+    const names = experiments.map((exp) => exp.name);
+
+    return getDefaultHashedColorsChartConfig(names);
   }, [experiments]);
 
   // Calculate domain based on data values
   const domain = useMemo(() => {
     const allValues = data
-      .flatMap((d) => experiments.map((exp) => d[exp.name]))
+      .flatMap((d) => experiments.map((exp) => d[exp.name] as number))
       .filter((v) => v !== undefined);
 
     const min = Math.min(...allValues);

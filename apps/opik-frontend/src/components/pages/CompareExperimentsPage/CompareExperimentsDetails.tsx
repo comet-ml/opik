@@ -15,13 +15,30 @@ import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
 import DateTag from "@/components/shared/DateTag/DateTag";
-import CompareRadarChart from "./charts/CompareRadarChart";
+import CompareRadarChart, { RadarDataPoint } from "./charts/CompareRadarChart";
 import CompareChartContainer from "./charts/CompareChartContainer";
-import { getExperimentColorsConfig } from "@/lib/charts";
+import { getDefaultHashedColorsChartConfig, hexToRgba } from "@/lib/charts";
+import { getUniqueExperiments } from "./helpers";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
   experiments: Experiment[];
+};
+
+const getTagStyleVariables = (color?: string) => {
+  if (!color)
+    return {
+      "--tag-color": "#808080",
+      "--bg-tag-color": hexToRgba("#808080", 0.15),
+    } as React.CSSProperties;
+
+  const tagColor = color;
+  const bgTagColor = hexToRgba(tagColor, 0.15);
+
+  return {
+    "--tag-color": tagColor,
+    "--bg-tag-color": bgTagColor,
+  } as React.CSSProperties;
 };
 
 const CompareExperimentsDetails: React.FunctionComponent<
@@ -75,21 +92,27 @@ const CompareExperimentsDetails: React.FunctionComponent<
     ).sort();
   }, [scoreMap]);
 
+  const uniqueExperiments = useMemo(() => {
+    return getUniqueExperiments(experiments);
+  }, [experiments]);
+
   const radarData = useMemo(() => {
     if (!isCompare) return [];
 
     return scoreColumns.map((name) => {
-      const dataPoint: Record<string, string | number> = { name };
-      experiments.forEach((exp) => {
+      const dataPoint: RadarDataPoint = { name };
+      uniqueExperiments.forEach((exp) => {
         dataPoint[exp.name] = scoreMap[exp.id]?.[name] || 0;
       });
       return dataPoint;
     });
-  }, [scoreColumns, experiments, scoreMap, isCompare]);
+  }, [scoreColumns, uniqueExperiments, scoreMap, isCompare]);
 
   const experimentColors = useMemo(() => {
-    return getExperimentColorsConfig(experiments.map((exp) => exp.name));
-  }, [experiments]);
+    const names = uniqueExperiments.map((exp) => exp.name);
+
+    return Object.values(getDefaultHashedColorsChartConfig(names));
+  }, [uniqueExperiments]);
 
   const renderCompareFeedbackScoresButton = () => {
     if (!isCompare) return null;
@@ -120,20 +143,10 @@ const CompareExperimentsDetails: React.FunctionComponent<
           <Tag
             size="lg"
             variant="gray"
-            className="flex items-center gap-2"
-            style={{
-              backgroundColor: `${experimentColors[experiments[1]?.name]
-                ?.color}15`,
-              color: experimentColors[experiments[1]?.name]?.color,
-              borderColor: experimentColors[experiments[1]?.name]?.color,
-              borderWidth: "1px",
-              borderStyle: "solid",
-            }}
+            className="flex items-center gap-2 border border-[var(--tag-color)] bg-[var(--bg-tag-color)] text-[var(--tag-color)]"
+            style={getTagStyleVariables(experimentColors[1]?.color)}
           >
-            <FlaskConical
-              className="size-4 shrink-0"
-              style={{ color: experimentColors[experiments[1]?.name]?.color }}
-            />
+            <FlaskConical className="size-4 shrink-0" />
             <div className="truncate">{experiments[1]?.name}</div>
           </Tag>
         ) : (
@@ -149,27 +162,20 @@ const CompareExperimentsDetails: React.FunctionComponent<
             <Tag
               size="lg"
               variant="gray"
-              className="flex items-center gap-2"
-              style={{
-                backgroundColor: `${experimentColors[experiment?.name]
-                  ?.color}15`,
-                color: experimentColors[experiment?.name]?.color,
-                borderColor: experimentColors[experiment?.name]?.color,
-                borderWidth: "1px",
-                borderStyle: "solid",
-              }}
+              className="flex items-center gap-2 border border-[var(--tag-color)] bg-[var(--bg-tag-color)] text-[var(--tag-color)]"
+              style={getTagStyleVariables(experimentColors[0]?.color)}
             >
-              <FlaskConical
-                className="size-4 shrink-0"
-                style={{ color: experimentColors[experiment?.name]?.color }}
-              />
+              <FlaskConical className="size-4 shrink-0 text-[var(--tag-color)]" />
               <div className="truncate">{experiment?.name}</div>
             </Tag>
             <span className="text-nowrap">compared against</span>
             {tag}
           </div>
           <CompareChartContainer title="Feedback Score Comparison">
-            <CompareRadarChart data={radarData} experiments={experiments} />
+            <CompareRadarChart
+              data={radarData}
+              experiments={uniqueExperiments}
+            />
           </CompareChartContainer>
         </>
       );

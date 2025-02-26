@@ -1,13 +1,8 @@
 import React, { ReactNode, useState } from "react";
 import { cn } from "@/lib/utils";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type CompareChartContainerProps = {
   title: string;
@@ -27,7 +22,8 @@ const CompareChartContainer: React.FC<CompareChartContainerProps> = ({
       <CardHeader className="space-y-0.5 px-4 pt-3">
         <div className="flex items-center justify-between">
           <CardTitle className="comet-body-s-accented">{title}</CardTitle>
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="text-muted-foreground hover:text-foreground"
           >
@@ -36,9 +32,8 @@ const CompareChartContainer: React.FC<CompareChartContainerProps> = ({
             ) : (
               <ChevronUp className="size-4" />
             )}
-          </button>
+          </Button>
         </div>
-        <CardDescription className="comet-body-xs text-xs"></CardDescription>
       </CardHeader>
       {!isCollapsed && (
         <CardContent className="px-4 pb-3">

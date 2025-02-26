@@ -1,5 +1,6 @@
 import uniq from "lodash/uniq";
 import { AverageFeedbackScore, ROW_HEIGHT } from "@/types/shared";
+import { Experiment } from "@/types/datasets";
 
 interface GetFeedbackScoreMapArguments {
   experiments: {
@@ -77,5 +78,24 @@ export const getFeedbackScoresForExperimentsAsRows = ({
       name: key,
       ...data,
     } as FeedbackScoreData;
+  });
+};
+
+export const getUniqueExperiments = (experiments: Experiment[]) => {
+  const nameOccurrences = new Map<string, number>();
+
+  return experiments.map((experiment) => {
+    const { name } = experiment;
+    const currentCount = nameOccurrences.get(name) ?? 0;
+
+    nameOccurrences.set(name, currentCount + 1);
+
+    const uniqueExperiment = { ...experiment };
+
+    if (currentCount > 0) {
+      uniqueExperiment.name = `${name}${currentCount}`;
+    }
+
+    return uniqueExperiment;
   });
 };
