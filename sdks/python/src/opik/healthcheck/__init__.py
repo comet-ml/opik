@@ -17,8 +17,9 @@ def run(show_installed_packages: bool = True) -> None:
     rich_representation.print_versions(python_version, opik_version)
 
     if show_installed_packages:
-        rich_representation.print_header("libraries installed")
-        rich_representation.print_installed_packages()
+        rich_representation.print_header("packages installed")
+        installed_packages = environment.get_installed_packages()
+        rich_representation.print_installed_packages(installed_packages)
 
     config_obj = config.OpikConfig()
 

@@ -1,11 +1,11 @@
-from typing import Optional
+from typing import Dict, Optional
 
 from rich import align
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from opik import config, environment
+from opik import config
 from opik.config import OpikConfig
 
 DEFAULT_KEY_COLOR = "green"
@@ -32,8 +32,8 @@ def print_header(text: str) -> None:
     console.print(header_text)
 
 
-def print_installed_packages() -> None:
-    for name, version in sorted(environment.get_installed_packages().items()):
+def print_installed_packages(packages: Dict[str, str]) -> None:
+    for name, version in sorted(packages.items()):
         name = make_key_text(name)
         version = make_value_text(version)
 
