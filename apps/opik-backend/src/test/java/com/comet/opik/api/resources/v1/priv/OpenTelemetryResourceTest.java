@@ -10,16 +10,12 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.protobuf.ByteString;
 import com.redis.testcontainers.RedisContainer;
@@ -52,11 +48,11 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -111,12 +107,8 @@ class OpenTelemetryResourceTest {
                 MY_SQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
-    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
-
     private String baseURI;
     private ClientSupport client;
-    private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
 
@@ -138,7 +130,6 @@ class OpenTelemetryResourceTest {
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
-        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
@@ -181,6 +172,7 @@ class OpenTelemetryResourceTest {
 
         @ParameterizedTest
         @MethodSource("credentials")
+        @DisplayName("ingest otel traces via protobuf")
         public void testOtelProtobufRequests(String apiKey, String projectName, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
@@ -228,9 +220,9 @@ class OpenTelemetryResourceTest {
             var expectedOpikParentSpanId = OpenTelemetryMapper.convertOtelIdToUUIDv7(parentSpanId, minTimestampMs);
 
             // send batch with the half the spans
-            sendBatch(otelSpansBatch1, projectName, workspaceName, apiKey, expected, errorMessage);
+            sendProtobufTraces(otelSpansBatch1, projectName, workspaceName, apiKey, expected, errorMessage);
             // send another
-            sendBatch(otelSpansBatch2, projectName, workspaceName, apiKey, expected, errorMessage);
+            sendProtobufTraces(otelSpansBatch2, projectName, workspaceName, apiKey, expected, errorMessage);
 
             if (expected) {
                 // the otel span batch should have created a trace with this expect traceId. Check it.
@@ -260,17 +252,35 @@ class OpenTelemetryResourceTest {
             }
         }
 
-        void sendBatch(List<Span> otelSpans, String projectName, String workspaceName, String apiKey, boolean expected,
-                ErrorMessage errorMessage) {
-            byte[] requestProtobufBytes = ExportTraceServiceRequest.newBuilder()
-                    .addResourceSpans(ResourceSpans.newBuilder()
-                            .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(otelSpans).build())
-                            .build())
-                    .build()
-                    .toByteArray();
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("ingest otel traces via json")
+        public void testOtelJsonRequests(String apiKey, String projectName, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+
+            // using example payload from integration; it will be protobuffed when ingested,
+            // so we just need to make sure the parsing works
+            String payload2 = "{\"resourceSpans\":[{\"resource\":{\"attributes\":[{\"key\":\"service.name\",\"value\":{\"stringValue\":\"my-service\"}}]},\"scopeSpans\":[{\"spans\":[{\"traceId\":\"%s\",\"spanId\":\"%s\",\"name\":\"example-span\",\"kind\":\"SPAN_KIND_SERVER\",\"startTimeUnixNano\":\"%d\",\"endTimeUnixNano\":\"1623456790000000000\"}]}]}]}";
+
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            String otelTraceId = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().getBytes());
+            String spanId = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().getBytes());
+            long startTimeUnixNano = System.currentTimeMillis() * 1_000_000;
+
+            String injectedPayload = String.format(payload2, otelTraceId, spanId, startTimeUnixNano);
+
+            Entity<String> payload = Entity.json(injectedPayload);
+
+            sendBatch(payload, "application/json", projectName, workspaceName, apiKey, expected, errorMessage);
+        }
+
+        void sendBatch(Entity<?> payload, String mediaType, String projectName, String workspaceName, String apiKey,
+                boolean expected, ErrorMessage errorMessage) {
 
             var requestBuilder = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .request("application/x-protobuf")
+                    .request(mediaType)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName);
 
@@ -278,8 +288,7 @@ class OpenTelemetryResourceTest {
                 requestBuilder.header(RequestContext.PROJECT_NAME, projectName);
             }
 
-            try (Response actualResponse = requestBuilder.post(
-                    Entity.entity(requestProtobufBytes, "application/x-protobuf"))) {
+            try (Response actualResponse = requestBuilder.post(payload)) {
 
                 if (expected) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
@@ -288,9 +297,23 @@ class OpenTelemetryResourceTest {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(errorMessage);
-
                 }
             }
+        }
+
+        void sendProtobufTraces(List<Span> otelSpans, String projectName, String workspaceName, String apiKey,
+                boolean expected, ErrorMessage errorMessage) {
+
+            var protoBuilder = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(otelSpans).build())
+                            .build())
+                    .build();
+
+            byte[] requestProtobufBytes = protoBuilder.toByteArray();
+            var payload = Entity.entity(requestProtobufBytes, "application/x-protobuf");
+
+            sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, errorMessage);
         }
     }
 }
