@@ -11,15 +11,19 @@ While telemetry is experimental ([docs](https://sdk.vercel.ai/docs/ai-sdk-core/t
 ```ts
 const result = await generateText({
   model: openai("gpt-4o"),
-  prompt: "Write a short story about a cat.",
+  prompt: "Tell a joke",
   experimental_telemetry: { isEnabled: true },
 });
 ```
 
-To collect the traces in Opik, you need to add the `OpikExporter` to your application, first you have to set your Opik API key.
+To collect the traces in Opik, you need to add the `OpikExporter` to your application, first you have to set your environment variables
 
 ```bash filename=".env"
 OPIK_API_KEY="<opik-api-key>"
+OPIK_URL_OVERRIDE=https://www.comet.com/opik/api # in case you are using the Cloud version
+OPIK_PROJECT_NAME="<custom-project-name>"
+OPIK_WORKSPACE="<your-workspace>"
+OPENAI_API_KEY="<openai-api-key>" # in case you are using an OpenAI model
 ```
 
 ```ts
@@ -40,7 +44,7 @@ Install dependencies:
 npm install opik @vercel/otel @opentelemetry/api-logs @opentelemetry/instrumentation @opentelemetry/sdk-logs
 ```
 
-Add `OpikExporter` to your instrumentation:
+Add `OpikExporter` to your instrumentation file:
 
 ```ts filename="instrumentation.ts"
 import { registerOTel } from "@vercel/otel";
@@ -80,9 +84,9 @@ async function main() {
   const result = await generateText({
     model: openai("gpt-4o"),
     maxTokens: 50,
-    prompt: "Invent a new holiday and describe its traditions.",
+    prompt: "What is love?",
     experimental_telemetry: OpikExporter.getSettings({
-      name: "custom-trace-name",
+      name: "opik-nodejs-example",
     }),
   });
 
@@ -103,7 +107,7 @@ Done! All traces that contain AI SDK spans are automatically captured in Opik.
 ```ts
 const result = await generateText({
   model: openai("gpt-4o"),
-  prompt: "Write a short story about a cat.",
+  prompt: "Tell a joke",
   experimental_telemetry: OpikExporter.getSettings({
     name: "custom-trace-name",
   }),
@@ -117,11 +121,3 @@ Use the logger level to see the more verbose logs of the exporter.
 ```bash filename=".env"
 OPIK_LOG_LEVEL=DEBUG
 ```
-
-## Troubleshooting
-
-- You need to be on `"ai": "^3.3.0"` to use the telemetry feature. In case of any issues, please update to the latest version.
-- On NextJS, make sure that you only have a single instrumentation file.
-- If you use Sentry, make sure to either:
-  - set `skipOpenTelemetrySetup: true` in Sentry.init
-  - follow Sentry's docs on how to manually set up Sentry with OTEL
