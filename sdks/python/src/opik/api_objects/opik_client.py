@@ -163,13 +163,14 @@ class Opik:
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
         Create and log a new trace.
 
         Args:
-            id: The unique identifier for the trace, if not provided a new ID will be generated. Must be a valid [UUIDv8](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
+            id: The unique identifier for the trace, if not provided a new ID will be generated. Must be a valid UUIDv7 ID.
             name: The name of the trace.
             start_time: The start time of the trace. If not provided, the current local time will be used.
             end_time: The end time of the trace.
@@ -204,6 +205,7 @@ class Opik:
             metadata=metadata,
             tags=tags,
             error_info=error_info,
+            thread_id=thread_id,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(workspace=self._workspace, project_name=project_name)
@@ -312,8 +314,8 @@ class Opik:
         Create and log a new span.
 
         Args:
-            trace_id: The unique identifier for the trace. If not provided, a new ID will be generated. Must be a valid [UUIDv8](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
-            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv8](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
+            trace_id: The unique identifier for the trace. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
+            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
             parent_span_id: The unique identifier for the parent span.
             name: The name of the span.
             type: The type of the span. Default is "general".

@@ -40,6 +40,7 @@ class Trace:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[Any]] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
     ) -> None:
         """
         End the trace and update its attributes.
@@ -69,6 +70,7 @@ class Trace:
             output=output,
             tags=tags,
             error_info=error_info,
+            thread_id=thread_id,
         )
 
     def update(
@@ -79,6 +81,7 @@ class Trace:
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[Any]] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
     ) -> None:
         """
         Update the trace attributes.
@@ -103,6 +106,7 @@ class Trace:
             output=output,
             tags=tags,
             error_info=error_info,
+            thread_id=thread_id,
         )
         self._streamer.put(update_trace_message)
 
