@@ -47,6 +47,9 @@ spec:
     files:
       {{- toYaml . | nindent 8 }}
     {{- end }}
+    {{- with .Values.clickhouse.configuration.additional_configuration }}
+    {{- toYaml . | nindent 6 }}
+    {{- end }}
     {{- end }}
     
     {{- if .Values.zookeeper.enabled }}
