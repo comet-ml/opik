@@ -55,6 +55,7 @@ public class FilterQueryBuilder {
     private static final String CREATED_AT_ANALYTICS_DB = "created_at";
     private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
+    private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -111,9 +112,9 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
-                            FieldType.EMPTY, "fsc.feedback_scores_count = 0")))
+                            FieldType.EMPTY, "%1$s = 0")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
-                            FieldType.EMPTY, "fsc.feedback_scores_count > 0")))
+                            FieldType.EMPTY, "%1$s > 0")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -133,6 +134,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
+                    .put(TraceField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
