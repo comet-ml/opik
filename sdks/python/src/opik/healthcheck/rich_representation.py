@@ -10,11 +10,13 @@ from rich.text import Text
 import opik
 from opik import Opik, config, environment
 
-console = Console()
 
 DEFAULT_KEY_COLOR = "green"
 DEFAULT_VALUE_COLOR = "blue"
 DEFAULT_ERROR_COLOR = "red"
+
+
+console = Console()
 
 
 def print_header(text: str) -> None:
@@ -34,6 +36,7 @@ def print_installed_packages() -> None:
         console.print(name, "==", version, sep="")
 
 
+
 def print_versions() -> None:
     python_version = environment.get_python_version()
     python_version_label = Text("Python version:", style=DEFAULT_KEY_COLOR)
@@ -44,10 +47,6 @@ def print_versions() -> None:
     console.print(python_version_label, python_version)
     console.print(opik_version_label, opik_version)
 
-
-def get_config_file_details() -> Tuple[pathlib.Path, bool]:
-    config_obj = config.OpikConfig()
-    return config_obj.config_file_fullpath, config_obj.is_config_file_exists
 
 
 def print_config_file_details() -> None:
@@ -106,27 +105,6 @@ def print_current_settings_validation() -> None:
         return
 
 
-def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
-    is_available = False
-    err_msg = None
-
-    try:
-        config_obj = config.OpikConfig()
-        opik_obj = Opik(_config=config_obj)
-        opik_obj.auth_check()
-        is_available = True
-    except httpx.ConnectError as e:
-        err_msg = (
-            f"Error while checking backend workspace availability: {e}\n\n"
-            "Can't connect to the backend service. If you are using local Opik deployment, "
-            "please check https://www.comet.com/docs/opik/self-host/local_deployment\n\n"
-            "If you are using cloud version - please check your internet connection."
-        )
-    except Exception as e:
-        err_msg = f"Error while checking backend workspace availability: {e}"
-
-    return is_available, err_msg
-
 
 def print_backend_workspace_availability() -> None:
     is_available, err_msg = get_backend_workspace_availability()
@@ -142,3 +120,4 @@ def print_backend_workspace_availability() -> None:
     if err_msg:
         err_msg = Text(err_msg, style="red")
         console.print(err_msg)
+

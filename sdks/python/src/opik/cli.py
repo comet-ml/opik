@@ -7,7 +7,7 @@ from importlib import metadata
 import click
 from rich.console import Console
 
-from opik.healthcheck import tools as healthcheck_tools
+from opik import healthcheck as opik_healthcheck
 from opik.configurator import configure as opik_configure, interactive_helpers
 
 console = Console()
@@ -186,27 +186,7 @@ def healthcheck(show_installed_packages: bool = True) -> None:
     verification of library installations, and checking the availability of the backend workspace.
     Prints all relevant information to assist in debugging and diagnostics.
     """
-    healthcheck_tools.print_header("healthcheck started")
-
-    healthcheck_tools.print_versions()
-
-    if show_installed_packages:
-        healthcheck_tools.print_header("libraries installed")
-        healthcheck_tools.print_installed_packages()
-
-    healthcheck_tools.print_header("configuration file")
-    healthcheck_tools.print_config_file_details()
-
-    healthcheck_tools.print_header("current settings")
-    healthcheck_tools.print_current_config()
-
-    healthcheck_tools.print_header("current settings validation")
-    healthcheck_tools.print_current_settings_validation()
-
-    healthcheck_tools.print_header("checking backend workspace availability")
-    healthcheck_tools.print_backend_workspace_availability()
-
-    healthcheck_tools.print_header("healthcheck completed")
+    opik_healthcheck.run(show_installed_packages)
 
 
 if __name__ == "__main__":
