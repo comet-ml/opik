@@ -111,9 +111,9 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
-                            FieldType.BOOLEAN, "fsc.feedback_scores_count = 0")))
+                            FieldType.EMPTY, "fsc.feedback_scores_count = 0")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
-                            FieldType.BOOLEAN, "fsc.feedback_scores_count > 0")))
+                            FieldType.EMPTY, "fsc.feedback_scores_count > 0")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(

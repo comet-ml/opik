@@ -54,7 +54,7 @@ public class FiltersFactory {
                     },
                     FieldType.DICTIONARY, (value, key) -> StringUtils.isNotBlank(value) && StringUtils.isNotBlank(key),
                     FieldType.LIST, (value, key) -> StringUtils.isNotBlank(value),
-                    FieldType.BOOLEAN, (value, key) -> true));
+                    FieldType.EMPTY, (value, key) -> true));
 
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
