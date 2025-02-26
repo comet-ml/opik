@@ -1,7 +1,7 @@
-from pathlib import Path
+import pathlib
 from typing import Optional, Tuple
 
-from httpx import ConnectError
+import httpx
 from rich import align
 from rich.console import Console
 from rich.table import Table
@@ -45,7 +45,7 @@ def print_versions() -> None:
     console.print(opik_version_label, opik_version)
 
 
-def get_config_file_details() -> Tuple[Path, bool]:
+def get_config_file_details() -> Tuple[pathlib.Path, bool]:
     config_obj = config.OpikConfig()
     return config_obj.config_file_fullpath, config_obj.is_config_file_exists
 
@@ -115,7 +115,7 @@ def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
         opik_obj = Opik(_config=config_obj)
         opik_obj.auth_check()
         is_available = True
-    except ConnectError as e:
+    except httpx.ConnectError as e:
         err_msg = (
             f"Error while checking backend workspace availability: {e}\n\n"
             "Can't connect to the backend service. If you are using local Opik deployment, "
