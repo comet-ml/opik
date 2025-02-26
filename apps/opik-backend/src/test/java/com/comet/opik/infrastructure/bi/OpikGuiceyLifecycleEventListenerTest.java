@@ -9,7 +9,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.ClassOrderer;
 import org.junit.jupiter.api.Nested;
@@ -178,10 +177,5 @@ class OpikGuiceyLifecycleEventListenerTest {
             Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
             Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
         }
-    }
-
-    @AfterAll
-    static void tearDown() {
-        MYSQL_CONTAINER.stop();
     }
 }

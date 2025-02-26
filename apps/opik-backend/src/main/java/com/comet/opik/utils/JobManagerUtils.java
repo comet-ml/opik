@@ -1,26 +1,26 @@
 package com.comet.opik.utils;
 
 import io.dropwizard.jobs.JobManager;
+import jakarta.inject.Singleton;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.experimental.UtilityClass;
 
-@UtilityClass
+@Getter
+@Singleton
 public class JobManagerUtils {
 
-    @Getter
-    private static JobManager jobManager;
+    private JobManager jobManager;
 
-    public static synchronized void setJobManager(@NonNull JobManager jobManager) {
+    public synchronized void setJobManager(@NonNull JobManager jobManager) {
 
-        if (JobManagerUtils.jobManager != null) {
+        if (this.jobManager != null) {
             throw new IllegalStateException("JobManager already set");
         }
 
-        JobManagerUtils.jobManager = jobManager;
+        this.jobManager = jobManager;
     }
 
-    public static synchronized void clearJobManager() {
-        jobManager = null;
+    public synchronized void clearJobManager() {
+        this.jobManager = null;
     }
 }

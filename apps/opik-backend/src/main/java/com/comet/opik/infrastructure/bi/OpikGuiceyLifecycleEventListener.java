@@ -35,7 +35,8 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setupDailyJob();
             }
 
-            case GuiceyLifecycle.ApplicationStopped -> JobManagerUtils.clearJobManager();
+            case GuiceyLifecycle.ApplicationStopped ->
+                injector.get().getInstance(JobManagerUtils.class).clearJobManager();
         }
     }
 
@@ -53,7 +54,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             JobConfiguration configuration = injectorEvent.getConfiguration();
             var jobManager = new GuiceJobManager(configuration, injector.get());
             injectorEvent.getEnvironment().lifecycle().manage(jobManager);
-            JobManagerUtils.setJobManager(jobManager);
+            injector.get().getInstance(JobManagerUtils.class).setJobManager(jobManager);
             log.info("Jobs installed.");
         }
     }
@@ -102,7 +103,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     }
 
     private Scheduler getJobManager() {
-        return JobManagerUtils.getJobManager().getScheduler();
+        return injector.get().getInstance(JobManagerUtils.class).getJobManager().getScheduler();
     }
 
 }

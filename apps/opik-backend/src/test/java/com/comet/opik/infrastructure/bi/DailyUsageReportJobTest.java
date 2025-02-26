@@ -162,7 +162,7 @@ class DailyUsageReportJobTest {
     }
 
     @Test
-    void test() throws SchedulerException {
+    void test(JobManagerUtils jobManagerUtils) throws SchedulerException {
 
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
@@ -178,7 +178,7 @@ class DailyUsageReportJobTest {
 
         var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
 
-        JobManagerUtils.getJobManager().getScheduler().scheduleJob(trigger);
+        jobManagerUtils.getJobManager().getScheduler().scheduleJob(trigger);
 
         Awaitility
                 .await()

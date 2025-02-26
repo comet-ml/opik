@@ -504,9 +504,10 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <threadCount>4</threadCount>
-                    <useUnlimitedThreads>false</useUnlimitedThreads>
-                    <reuseForks>true</reuseForks>
+                    <threadCount>2</threadCount> <!-- Max 2 concurrent tests -->
+                    <useUnlimitedThreads>false</useUnlimitedThreads> <!-- Limit threads to threadCount -->
+                    <forkCount>0</forkCount> <!-- Number of forks -->
+                    <reuseForks>true</reuseForks> <!-- Reuse forks for better performance -->
                 </configuration>
             </plugin>
             <plugin>

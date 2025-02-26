@@ -8,6 +8,9 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.ToString;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Getter
 public class OpikConfiguration extends JobConfiguration {
 
@@ -65,4 +68,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private WorkspaceSettings workspaceSettings = new WorkspaceSettings();
+
+    @JsonProperty("quartz")
+    public Map<String, String> quartzConfiguration = new HashMap<>();
 }

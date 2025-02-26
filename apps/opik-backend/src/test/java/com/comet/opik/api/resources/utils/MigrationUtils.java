@@ -28,7 +28,8 @@ public class MigrationUtils {
         runDbMigration(connection, MYSQL_CHANGELOG_FILE, parameters);
     }
 
-    public static void runDbMigration(Connection connection, String changeLogFile, Map<String, String> parameters) {
+    public static synchronized void runDbMigration(Connection connection, String changeLogFile,
+            Map<String, String> parameters) {
         try {
             var database = DatabaseFactory.getInstance()
                     .findCorrectDatabaseImplementation(new JdbcConnection(connection));

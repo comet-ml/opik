@@ -19,7 +19,8 @@ public class MySQLContainerUtils {
                 .withDatabaseName("opik")
                 .withPassword("opik")
                 .withUsername("opik")
-                .withReuse(reusable);
+                .withReuse(reusable)
+                .withCommand("--max_connections=500");
     }
 
     public static Map<String, String> migrationParameters() {

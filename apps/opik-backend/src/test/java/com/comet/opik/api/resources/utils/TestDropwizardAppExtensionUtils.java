@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 
@@ -208,6 +209,9 @@ public class TestDropwizardAppExtensionUtils {
                         configs.add("%s: %s".formatted(customConfig.key(), customConfig.value()));
                     });
         }
+
+        configs.add(
+                "quartz.org.quartz.scheduler.instanceName: TestScheduler-%s".formatted(UUID.randomUUID().toString()));
 
         return TestDropwizardAppExtension.forApp(OpikApplication.class)
                 .config("src/test/resources/config-test.yml")
