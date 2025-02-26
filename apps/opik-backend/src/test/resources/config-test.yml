@@ -257,4 +257,4 @@ clickHouseLogAppender:
 deployment:
   # Default: http://localhost:5173/
   # Description: Base url for Opik deployment
-  baseUrl: ''
+  baseUrl: 'default'
