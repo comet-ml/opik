@@ -1,6 +1,12 @@
 instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
+    custom-domain: https://www.comet.com/docs/opik/
 favicon: img/logo.svg
+js:
+  - path: ./add_cookbook_banner.js
+    strategy: afterInteractive
+  - path: ./dify_chatbot.js
+    strategy: lazyOnload
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -123,6 +129,9 @@ navigation:
               - page: Crewai
                 path: docs/tracing/integrations/crewai.mdx
                 slug: crewai
+              - page: DeepSeek
+                path: docs/tracing/integrations/deepseek.mdx
+                slug: deepseek
               - page: Dify
                 path: docs/tracing/integrations/dify.mdx
                 slug: dify
@@ -146,7 +155,7 @@ navigation:
                 slug: langgraph
               - page: Llama Index
                 path: docs/tracing/integrations/llama_index.mdx
-                slug: llama_indec
+                slug: llama_index
               - page: Ollama
                 path: docs/tracing/integrations/ollama.mdx
                 slug: ollama

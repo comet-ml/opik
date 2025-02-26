@@ -24,7 +24,12 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.9", "3.10", "3.11", "3.12"]
+        python_version: [
+          # "3.9", skipped because asyncio requires async context in 3.9 to create a client
+          "3.10",
+          "3.11",
+          "3.12"
+        ]
 
     steps:
       - name: Check out code

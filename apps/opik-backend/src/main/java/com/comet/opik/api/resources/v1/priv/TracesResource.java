@@ -14,6 +14,8 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchCriteria;
+import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
@@ -499,6 +501,30 @@ public class TracesResource {
                 workspaceId);
 
         return Response.ok(traceThreadPage).build();
+    }
+
+    @POST
+    @Path("/threads/retrieve")
+    @Operation(operationId = "getTraceThread", summary = "Get trace thread", description = "Get trace thread", responses = {
+            @ApiResponse(responseCode = "200", description = "Trace thread resource", content = @Content(schema = @Schema(implementation = TraceThread.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response getTraceThread(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.projectId(),
+                identifier.threadId(), workspaceId);
+
+        TraceThread thread = service.getThreadById(identifier.projectId(), identifier.threadId())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Got trace thread by id '{}', project id '{}' on workspace_id '{}'", identifier.threadId(),
+                identifier.projectId(), workspaceId);
+
+        return Response.ok(thread).build();
     }
 
     @POST

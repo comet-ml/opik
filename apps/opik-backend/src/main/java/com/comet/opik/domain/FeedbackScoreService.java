@@ -72,7 +72,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     @Override
     public Mono<Void> scoreTrace(@NonNull UUID traceId, @NonNull FeedbackScore score) {
         return traceDAO.getProjectIdFromTrace(traceId)
-                .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
+                .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId.toString())))
                 .flatMap(projectId -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId))
                 .then();
     }
@@ -81,7 +81,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     public Mono<Void> scoreSpan(@NonNull UUID spanId, @NonNull FeedbackScore score) {
 
         return spanDAO.getProjectIdFromSpan(spanId)
-                .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
+                .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId.toString())))
                 .flatMap(projectId -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId))
                 .then();
     }

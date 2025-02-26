@@ -56,7 +56,10 @@ def test_langchain__happyflow(
             "output": "I'm sorry, I don't think I'm talented enough to write a synopsis"
         },
         tags=["tag1", "tag2"],
-        metadata={"a": "b"},
+        metadata={
+            "a": "b",
+            "created_from": "langchain",
+        },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         project_name=expected_project_name,
@@ -67,7 +70,10 @@ def test_langchain__happyflow(
                 input={"title": "Documentary about Bigfoot in Paris"},
                 output=ANY_DICT,
                 tags=["tag1", "tag2"],
-                metadata={"a": "b"},
+                metadata={
+                    "a": "b",
+                    "created_from": "langchain",
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
@@ -78,7 +84,9 @@ def test_langchain__happyflow(
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output=ANY_DICT,
-                        metadata={},
+                        metadata={
+                            "created_from": "langchain",
+                        },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
@@ -105,6 +113,7 @@ def test_langchain__happyflow(
                             "options": {"stop": None},
                             "batch_size": 1,
                             "metadata": ANY_BUT_NONE,
+                            "created_from": "langchain",
                         },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
@@ -210,7 +219,10 @@ def test_langchain__distributed_headers__happyflow(
                         tags=["tag1", "tag2"],
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        metadata={"a": "b"},
+                        metadata={
+                            "a": "b",
+                            "created_from": "langchain",
+                        },
                         project_name=project_name,
                         spans=[
                             SpanModel(
@@ -219,7 +231,9 @@ def test_langchain__distributed_headers__happyflow(
                                 name="PromptTemplate",
                                 input={"title": "Documentary about Bigfoot in Paris"},
                                 output=ANY_DICT,
-                                metadata={},
+                                metadata={
+                                    "created_from": "langchain",
+                                },
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
@@ -243,6 +257,7 @@ def test_langchain__distributed_headers__happyflow(
                                         "_type": "fake-list",
                                         "stop": None,
                                     },
+                                    "created_from": "langchain",
                                     "options": {"stop": None},
                                     "batch_size": 1,
                                     "metadata": ANY_BUT_NONE,
@@ -324,7 +339,10 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                             "output": "I'm sorry, I don't think I'm talented enough to write a synopsis"
                         },
                         tags=["tag1", "tag2"],
-                        metadata={"a": "b"},
+                        metadata={
+                            "a": "b",
+                            "created_from": "langchain",
+                        },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
@@ -335,7 +353,9 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                 name="PromptTemplate",
                                 input={"title": "Documentary about Bigfoot in Paris"},
                                 output={"output": ANY_BUT_NONE},
-                                metadata={},
+                                metadata={
+                                    "created_from": "langchain",
+                                },
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
@@ -359,6 +379,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                         "_type": "fake-list",
                                         "stop": None,
                                     },
+                                    "created_from": "langchain",
                                     "options": {"stop": None},
                                     "batch_size": 1,
                                     "metadata": ANY_BUT_NONE,
@@ -437,7 +458,10 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                     "output": "I'm sorry, I don't think I'm talented enough to write a synopsis"
                 },
                 tags=["tag1", "tag2"],
-                metadata={"a": "b"},
+                metadata={
+                    "a": "b",
+                    "created_from": "langchain",
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[
@@ -447,7 +471,9 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output=ANY_DICT,
-                        metadata={},
+                        metadata={
+                            "created_from": "langchain",
+                        },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
@@ -470,6 +496,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                                 "_type": "fake-list",
                                 "stop": None,
                             },
+                            "created_from": "langchain",
                             "options": {"stop": None},
                             "batch_size": 1,
                             "metadata": ANY_BUT_NONE,
@@ -543,7 +570,10 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                     "output": "I'm sorry, I don't think I'm talented enough to write a synopsis"
                 },
                 tags=["tag1", "tag2"],
-                metadata={"a": "b"},
+                metadata={
+                    "a": "b",
+                    "created_from": "langchain",
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[
@@ -553,7 +583,9 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                         name="PromptTemplate",
                         input={"title": "Documentary about Bigfoot in Paris"},
                         output={"output": ANY_BUT_NONE},
-                        metadata={},
+                        metadata={
+                            "created_from": "langchain",
+                        },
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
@@ -576,6 +608,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                                 "_type": "fake-list",
                                 "stop": None,
                             },
+                            "created_from": "langchain",
                             "options": {"stop": None},
                             "batch_size": 1,
                             "metadata": ANY_BUT_NONE,
