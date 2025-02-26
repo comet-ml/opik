@@ -6,18 +6,12 @@ import httpx
 from opik import Opik, config
 
 
-def get_config_file_details() -> Tuple[pathlib.Path, bool]:
-    config_obj = config.OpikConfig()
-    return config_obj.config_file_fullpath, config_obj.is_config_file_exists
-
-
-def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
+def get_backend_workspace_availability(config: config.OpikConfig) -> Tuple[bool, Optional[str]]:
     is_available = False
     err_msg = None
 
     try:
-        config_obj = config.OpikConfig()
-        opik_obj = Opik(_config=config_obj)
+        opik_obj = Opik(_config=config)
         opik_obj.auth_check()
         is_available = True
     except httpx.ConnectError as e:

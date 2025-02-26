@@ -1,5 +1,5 @@
 import pathlib
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from rich import align
@@ -9,6 +9,8 @@ from rich.text import Text
 
 import opik
 from opik import Opik, config, environment
+from opik.config import OpikConfig
+from opik.healthcheck import checks
 
 
 DEFAULT_KEY_COLOR = "green"
@@ -37,33 +39,28 @@ def print_installed_packages() -> None:
 
 
 
-def print_versions() -> None:
-    python_version = environment.get_python_version()
+def print_versions(python_version: str, opik_version: str) -> None:
     python_version_label = Text("Python version:", style=DEFAULT_KEY_COLOR)
     python_version = Text(python_version, style=DEFAULT_VALUE_COLOR)
     opik_version_label = Text("Opik version:", style=DEFAULT_KEY_COLOR)
-    opik_version = Text(opik.__version__, style=DEFAULT_VALUE_COLOR)
+    opik_version = Text(opik_version, style=DEFAULT_VALUE_COLOR)
 
     console.print(python_version_label, python_version)
     console.print(opik_version_label, opik_version)
 
 
-
-def print_config_file_details() -> None:
-    file_path, is_exists = get_config_file_details()
-
+def print_config_file_details(config: OpikConfig) -> None:
     file_path_label = Text("Config file path:", style=DEFAULT_KEY_COLOR)
-    file_path = Text(str(file_path), style=DEFAULT_VALUE_COLOR)
+    file_path = Text(str(config.config_file_fullpath), style=DEFAULT_VALUE_COLOR)
     is_exists_label = Text("Config file exists:", style=DEFAULT_KEY_COLOR)
-    is_exists = Text(str(is_exists), style=DEFAULT_VALUE_COLOR)
+    is_exists = Text(str(config.is_config_file_exists), style=DEFAULT_VALUE_COLOR)
 
     console.print(file_path_label, file_path)
     console.print(is_exists_label, is_exists)
 
 
-def print_current_config() -> None:
-    config_obj = config.OpikConfig()
-    current_config_values = config_obj.get_current_config_with_api_key_hidden()
+def print_current_config(config: config.OpikConfig) -> None:
+    current_config_values = config.get_current_config_with_api_key_hidden()
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Setting", style=DEFAULT_KEY_COLOR)
     table.add_column("Value", style=DEFAULT_VALUE_COLOR)
@@ -74,10 +71,8 @@ def print_current_config() -> None:
     console.print(table)
 
 
-def print_current_settings_validation() -> None:
-    config_obj = config.OpikConfig()
-
-    is_valid = not config.is_misconfigured(config_obj, False)
+def print_current_settings_validation(config_: config.OpikConfig) -> None:
+    is_valid = not config.is_misconfigured(config_, False)
     is_valid_text = Text(
         str(is_valid), style=DEFAULT_VALUE_COLOR if is_valid else DEFAULT_ERROR_COLOR
     )
@@ -89,7 +84,7 @@ def print_current_settings_validation() -> None:
         return
 
     is_misconfigured_for_cloud_flag, error_message = config.is_misconfigured_for_cloud(
-        config_obj
+        config_
     )
     if is_misconfigured_for_cloud_flag:
         err_msg = Text(error_message, style="red")
@@ -97,7 +92,7 @@ def print_current_settings_validation() -> None:
         return
 
     is_misconfigured_for_local_flag, error_message = config.is_misconfigured_for_local(
-        config_obj
+        config_
     )
     if is_misconfigured_for_local_flag:
         err_msg = Text(error_message, style="red")
@@ -105,10 +100,7 @@ def print_current_settings_validation() -> None:
         return
 
 
-
-def print_backend_workspace_availability() -> None:
-    is_available, err_msg = get_backend_workspace_availability()
-
+def print_backend_workspace_availability(is_available: bool, err_msg: Optional[str]) -> None:
     is_available_text = Text(
         str(is_available),
         style=DEFAULT_VALUE_COLOR if is_available else DEFAULT_ERROR_COLOR,
@@ -120,4 +112,3 @@ def print_backend_workspace_availability() -> None:
     if err_msg:
         err_msg = Text(err_msg, style="red")
         console.print(err_msg)
-
