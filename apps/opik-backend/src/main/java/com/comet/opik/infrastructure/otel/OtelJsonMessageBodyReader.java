@@ -8,7 +8,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.Provider;
-import org.apache.commons.text.StringEscapeUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,25 +30,19 @@ public class OtelJsonMessageBodyReader<T extends Message> implements MessageBody
             InputStream entityStream) throws IOException {
         try {
             // Parse JSON to a map
-            var jsonNode = JsonUtils.MAPPER.readTree(entityStream);
+            var jsonNode = JsonUtils.getJsonNodeFromString(entityStream);
+
+            if (jsonNode.isTextual()) {
+                jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
+            }
 
             // Convert JSON to Protobuf using JsonFormat
             Message.Builder builder = (Message.Builder) type.getMethod("newBuilder").invoke(null);
-            var jsonString = sanitizeJson(jsonNode.toString());
-
-            JsonFormat.parser().merge(jsonString, builder);
+            JsonFormat.parser().merge(jsonNode.toString(), builder);
 
             return (T) builder.build();
         } catch (Exception e) {
             throw new IOException("Failed to parse JSON to Protobuf", e);
         }
-    }
-
-    public static String sanitizeJson(String jsonPayload) {
-        String sanitizedPayload = jsonPayload.trim();
-        if (sanitizedPayload.startsWith("\"") && sanitizedPayload.endsWith("\"")) {
-            sanitizedPayload = sanitizedPayload.substring(1, sanitizedPayload.length() - 1);
-        }
-        return StringEscapeUtils.unescapeJson(sanitizedPayload);
     }
 }
