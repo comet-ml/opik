@@ -261,25 +261,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
             is determined to be misconfigured. Defaults to False.
         """
 
-        is_misconfigured_for_cloud_flag, error_message = (
-            self.is_misconfigured_for_cloud()
-        )
+        is_misconfigured_flag, error_message = self.get_config_validation_results()
 
-        if is_misconfigured_for_cloud_flag:
-            if show_misconfiguration_message:
-                print()
-                LOGGER.error(
-                    "========================\n"
-                    f"{error_message}\n"
-                    "==============================\n"
-                )
-            return True
-
-        is_misconfigured_for_local_flag, error_message = (
-            self.is_misconfigured_for_local()
-        )
-
-        if is_misconfigured_for_local_flag:
+        if is_misconfigured_flag:
             if show_misconfiguration_message:
                 print()
                 LOGGER.error(
@@ -334,6 +318,21 @@ class OpikConfig(pydantic_settings.BaseSettings):
             return True, error_message
 
         return False, None
+
+    def get_config_validation_results(self) -> Tuple[bool, Optional[str]]:
+        is_misconfigured_for_cloud_flag, error_message = (
+            self.is_misconfigured_for_cloud()
+        )
+        if is_misconfigured_for_cloud_flag:
+            return False, error_message
+
+        is_misconfigured_for_local_flag, error_message = (
+            self.is_misconfigured_for_local()
+        )
+        if is_misconfigured_for_local_flag:
+            return False, error_message
+
+        return True, None
 
 
 def update_session_config(key: str, value: Any) -> None:
