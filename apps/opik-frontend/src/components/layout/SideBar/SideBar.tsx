@@ -1,6 +1,8 @@
-import React, { MouseEventHandler, useState } from "react";
+import React, { MouseEventHandler, useState, useEffect } from "react";
 import isNumber from "lodash/isNumber";
 import { Link, useMatchRoute } from "@tanstack/react-router";
+import { FaGithub } from "react-icons/fa";
+
 import {
   Book,
   Database,
@@ -67,13 +69,6 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: LucideHome,
         label: "Home",
       },
-      // {
-      //   id: "chat",
-      //   path: "/$workspaceName/chat",
-      //   type: MENU_ITEM_TYPE.router,
-      //   icon: BotMessageSquare,
-      //   label: "Chat (Experimental)",
-      // },
     ],
   },
   {
@@ -217,10 +212,31 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 }) => {
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
   const [openQuickstart, setOpenQuickstart] = useState(false);
+  const [starCount, setStarCount] = useState<string>("");
 
   const matchRoute = useMatchRoute();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const LogoComponent = usePluginsStore((state) => state.Logo);
+
+  useEffect(() => {
+    const fetchStarCount = async () => {
+      try {
+        const response = await fetch(
+          "https://api.github.com/repos/comet-ml/opik",
+        );
+        const data = await response.json();
+        const count = data.stargazers_count;
+        setStarCount(
+          count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count.toString(),
+        );
+      } catch (error) {
+        console.error("Failed to fetch GitHub stars:", error);
+        setStarCount("5k");
+      }
+    };
+
+    fetchStarCount();
+  }, []);
 
   const isHomePath = matchRoute({
     to: HOME_PATH,
@@ -414,6 +430,20 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
           <div className="flex flex-col gap-4">
             <Separator />
             <ul className="flex flex-col gap-1">
+              <li className="mb-2">
+                <a
+                  href="https://github.com/comet-ml/opik"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-1 inline-flex items-center gap-2 rounded-md border px-1.5 py-1 hover:bg-primary-foreground data-[status=active]:bg-primary-100"
+                >
+                  <FaGithub />
+                  <span className="comet-body-s">Star</span>
+                  <span className="rounded-lg bg-gray-100 px-1.5 py-0.5 text-xs">
+                    {starCount}
+                  </span>
+                </a>
+              </li>
               {renderItems(bottomMenuItems)}
             </ul>
           </div>
