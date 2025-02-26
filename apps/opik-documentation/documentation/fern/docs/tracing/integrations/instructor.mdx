@@ -65,6 +65,12 @@ user_info = client.chat.completions.create(
 print(user_info)
 ```
 
+Thanks to the `track_openai` method, all the calls made to OpenAI will be logged to the Opik platform. This approach also works well if you are also using the `opik.track` decorator as it will automatically log the LLM call made with Instructor to the relevant trace.
+
+<Frame>
+  <img src="/img/tracing/instructor_integration.png" />
+</Frame>
+
 ## Supported LLM providers
 
 Opik supports the OpenAI, Anthropic and Gemini LLM providers, feel free to create a [Github issue](https://github.com/comet-ml/opik/issues/new) if you would like
