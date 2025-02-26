@@ -22,6 +22,7 @@ class ProjectDetailed(UniversalBaseModel):
     duration: typing.Optional[PercentageValuesDetailed] = None
     total_estimated_cost: typing.Optional[float] = None
     usage: typing.Optional[typing.Dict[str, float]] = None
+    trace_count: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
