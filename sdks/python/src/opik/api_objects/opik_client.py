@@ -170,7 +170,7 @@ class Opik:
         Create and log a new trace.
 
         Args:
-            id: The unique identifier for the trace, if not provided a new ID will be generated. Must be a valid UUIDv7 ID.
+            id: The unique identifier for the trace, if not provided a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
             name: The name of the trace.
             start_time: The start time of the trace. If not provided, the current local time will be used.
             end_time: The end time of the trace.
@@ -372,6 +372,7 @@ class Opik:
                 metadata=metadata,
                 tags=tags,
                 error_info=error_info,
+                thread_id=None,
             )
             self._streamer.put(create_trace_message)
 
