@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Optional, Tuple
-from unittest.mock import patch
 
 from httpx import ConnectError
 from rich import align
@@ -35,7 +34,7 @@ def print_installed_packages() -> None:
         console.print(name, "==", version, sep="")
 
 
-def print_version() -> None:
+def print_versions() -> None:
     python_version = environment.get_python_version()
     python_version_label = Text("Python version:", style=DEFAULT_KEY_COLOR)
     python_version = Text(python_version, style=DEFAULT_VALUE_COLOR)
@@ -112,11 +111,9 @@ def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
     err_msg = None
 
     try:
-        # supress showing configuration errors
-        with patch("opik.config.is_misconfigured", lambda *args, **kwargs: False):
-            opik = Opik()
-
-        opik.auth_check()
+        config_obj = config.OpikConfig()
+        opik_obj = Opik(_config=config_obj)
+        opik_obj.auth_check()
         is_available = True
     except ConnectError as e:
         err_msg = (

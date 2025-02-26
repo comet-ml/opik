@@ -188,7 +188,7 @@ def healthcheck(show_installed_packages: bool = True) -> None:
     """
     healthcheck_tools.print_header("healthcheck started")
 
-    healthcheck_tools.print_opik_version()
+    healthcheck_tools.print_versions()
 
     if show_installed_packages:
         healthcheck_tools.print_header("libraries installed")
