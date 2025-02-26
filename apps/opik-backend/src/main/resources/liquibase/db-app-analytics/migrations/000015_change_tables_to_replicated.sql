@@ -210,7 +210,8 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces1
     `last_updated_at` DateTime64(9, 'UTC') DEFAULT now64(9),
     `created_by` String DEFAULT '',
     `last_updated_by` String DEFAULT '',
-    `error_info` String DEFAULT ''
+    `error_info` String DEFAULT '',
+    `thread_id` String
 )
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/traces', '{replica}',last_updated_at)
 ORDER BY (workspace_id, project_id, id)
