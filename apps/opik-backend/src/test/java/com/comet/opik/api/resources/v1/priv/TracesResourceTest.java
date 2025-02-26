@@ -1078,6 +1078,7 @@ class TracesResourceTest {
                                                 .key(getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
+                                case EMPTY -> Stream.of(); // no validation is applied to empty type
                                 default -> Stream.of(TraceFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
