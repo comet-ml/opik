@@ -4,6 +4,7 @@ import uniq from "lodash/uniq";
 import isUndefined from "lodash/isUndefined";
 import { BooleanParam, useQueryParam } from "use-query-params";
 import { FlaskConical, Maximize2, Minimize2, PenLine } from "lucide-react";
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
@@ -15,6 +16,10 @@ import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
 import DateTag from "@/components/shared/DateTag/DateTag";
+import ExperimentChartContainer from '../ExperimentsPage/charts/ExperimentChartContainer';
+import CompareRadarChart from './charts/CompareRadarChart';
+import CompareChartContainer from './charts/CompareChartContainer';
+import { getExperimentColorsConfig } from "@/lib/charts";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -72,6 +77,22 @@ const CompareExperimentsDetails: React.FunctionComponent<
     ).sort();
   }, [scoreMap]);
 
+  const radarData = useMemo(() => {
+    if (!isCompare) return [];
+    
+    return scoreColumns.map(name => {
+      const dataPoint: any = { name };
+      experiments.forEach(exp => {
+        dataPoint[exp.name] = scoreMap[exp.id]?.[name] || 0;
+      });
+      return dataPoint;
+    });
+  }, [scoreColumns, experiments, scoreMap, isCompare]);
+
+  const experimentColors = useMemo(() => {
+    return getExperimentColorsConfig(experiments.map(exp => exp.name));
+  }, [experiments]);
+
   const renderCompareFeedbackScoresButton = () => {
     if (!isCompare) return null;
 
@@ -98,8 +119,22 @@ const CompareExperimentsDetails: React.FunctionComponent<
     if (isCompare) {
       const tag =
         experimentsIds.length === 2 ? (
-          <Tag size="lg" variant="gray" className="flex items-center gap-2">
-            <FlaskConical className="size-4 shrink-0" />
+          <Tag 
+            size="lg" 
+            variant="gray" 
+            className="flex items-center gap-2"
+            style={{
+              backgroundColor: `${experimentColors[experiments[1]?.name]?.color}15`,
+              color: experimentColors[experiments[1]?.name]?.color,
+              borderColor: experimentColors[experiments[1]?.name]?.color,
+              borderWidth: '1px',
+              borderStyle: 'solid'
+            }}
+          >
+            <FlaskConical 
+              className="size-4 shrink-0"
+              style={{ color: experimentColors[experiments[1]?.name]?.color }}
+            />
             <div className="truncate">{experiments[1]?.name}</div>
           </Tag>
         ) : (
@@ -109,15 +144,34 @@ const CompareExperimentsDetails: React.FunctionComponent<
         );
 
       return (
-        <div className="flex h-11 items-center gap-2">
-          <span className="text-nowrap">Baseline of</span>
-          <Tag size="lg" variant="gray" className="flex items-center gap-2">
-            <FlaskConical className="size-4 shrink-0" />
-            <div className="truncate">{experiment?.name}</div>
-          </Tag>
-          <span className="text-nowrap">compared against</span>
-          {tag}
-        </div>
+        <>
+          <div className="flex h-11 items-center gap-2">
+            <span className="text-nowrap">Baseline of</span>
+            <Tag 
+              size="lg" 
+              variant="gray" 
+              className="flex items-center gap-2"
+              style={{
+                backgroundColor: `${experimentColors[experiment?.name]?.color}15`,
+                color: experimentColors[experiment?.name]?.color,
+                borderColor: experimentColors[experiment?.name]?.color,
+                borderWidth: '1px',
+                borderStyle: 'solid'
+              }}
+            >
+              <FlaskConical 
+                className="size-4 shrink-0"
+                style={{ color: experimentColors[experiment?.name]?.color }}
+              />
+              <div className="truncate">{experiment?.name}</div>
+            </Tag>
+            <span className="text-nowrap">compared against</span>
+            {tag}
+          </div>
+          <CompareChartContainer title="Feedback Score Comparison">
+            <CompareRadarChart data={radarData} experiments={experiments} />
+          </CompareChartContainer>
+        </>
       );
     } else {
       return (
