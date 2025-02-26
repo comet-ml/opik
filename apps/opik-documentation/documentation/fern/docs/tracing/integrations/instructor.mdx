@@ -1,0 +1,127 @@
+[Instructor](https://github.com/instructor-ai/instructor) is a Python library for working with structured outputs
+for LLMs built on top of Pydantic. It provides a simple way to manage schema validations, retries and streaming responses.
+
+<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
+  <span style="margin-right: 10px;">
+    You can check out the Colab Notebook if you'd like to jump straight to the code:
+  </span>
+  <a
+    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/instructor.ipynb"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    <img
+      src="https://colab.research.google.com/assets/colab-badge.svg"
+      alt="Open In Colab"
+      style="vertical-align: middle;"
+    />
+  </a>
+</div>
+
+## Getting started
+
+First, ensure you have both `opik` and `instructor` installed:
+
+```bash
+pip install opik instructor
+```
+
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or
+if you are using the Cloud platform your API key:
+
+```bash {pytest_codeblocks_skip=true}
+opik configure
+```
+
+## Using Opik with Instructor library
+
+To use Opik with Instructor, we are going to rely on the existing Opik integrations with popular LLM providers.
+
+For all the integrations, we will first add tracking to the LLM client and then pass it to the Instructor library:
+
+```python
+from opik.integrations.openai import track_openai
+import instructor
+from pydantic import BaseModel
+from openai import OpenAI
+
+# We will first create the OpenAI client and add the `track_openai` method to log data to Opik
+openai_client = track_openai(OpenAI())
+
+# Patch the OpenAI client for Instructor
+client = instructor.from_openai(openai_client)
+
+# Define your desired output structure
+class UserInfo(BaseModel):
+    name: str
+    age: int
+
+user_info = client.chat.completions.create(
+    model="gpt-4o-mini",
+    response_model=UserInfo,
+    messages=[{"role": "user", "content": "John Doe is 30 years old."}],
+)
+
+print(user_info)
+```
+
+## Supported LLM providers
+
+Opik supports the OpenAI, Anthropic and Gemini LLM providers, feel free to create a [Github issue](https://github.com/comet-ml/opik/issues/new) if you would like
+us to support more providers.
+
+<Tabs>
+    <Tab value="openai" title="OpenAI">
+
+```python
+from opik.integrations.openai import track_openai
+import instructor
+from openai import OpenAI
+
+# Add Opik tracking
+openai_client = track_openai(OpenAI())
+
+# Patch the OpenAI client for Instructor
+client = instructor.from_openai(openai_client)
+```
+
+    </Tab>
+     <Tab value="anthropic" title="Anthropic">
+
+```python
+from opik.integrations.anthropic import track_anthropic
+import instructor
+from anthropic import Anthropic
+
+# Add Opik tracking
+anthropic_client = track_anthropic(Anthropic())
+
+# Patch the Anthropic client for Instructor
+client = instructor.from_openai(anthropic_client)
+```
+
+    </Tab>
+     <Tab value="gemini" title="Gemini">
+
+```python
+from opik.integrations.genai import track_genai
+import instructor
+import google.generativeai as genai
+
+# Add Opik tracking
+genai_client = track_genai(genai.GenerativeModel(
+    model_name="models/gemini-1.5-flash-latest",  # model defaults to "gemini-pro"
+))
+
+# Patch the GenAI client for Instructor
+client = instructor.from_openai(
+    genai_client,
+    mode=instructor.Mode.GEMINI_JSON
+)
+```
+
+    </Tab>
+
+</Tabs>
+
+You can read more about how to use the Instructor library in [their documentation](https://python.useinstructor.com/).
