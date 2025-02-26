@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AuthDetailsHolder;
-import com.comet.opik.api.AuthenticationErrorResponse;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -38,9 +38,9 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
-import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
-import static com.comet.opik.api.AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
+import static com.comet.opik.api.ReactServiceErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
@@ -137,7 +137,7 @@ class AuthenticationResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE, 401)))));
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/opik/auth"))

@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
@@ -72,6 +73,8 @@ interface TraceDAO {
     Mono<Void> delete(Set<UUID> ids, Connection connection);
 
     Mono<Trace> findById(UUID id, Connection connection);
+
+    Mono<TraceDetails> getTraceDetailsById(UUID id, Connection connection);
 
     Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
 
@@ -341,6 +344,15 @@ class TraceDAOImpl implements TraceDAO {
             ) AS c ON t.id = c.entity_id
             GROUP BY
                 t.*
+            ;
+            """;
+
+    private static final String SELECT_DETAILS_BY_ID = """
+            SELECT DISTINCT
+                workspace_id,
+                project_id
+            FROM traces
+            WHERE id = :id
             ;
             """;
 
@@ -1073,6 +1085,16 @@ class TraceDAOImpl implements TraceDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
+    private Flux<? extends Result> getDetailsById(UUID id, Connection connection) {
+        var statement = connection.createStatement(SELECT_DETAILS_BY_ID)
+                .bind("id", id);
+
+        Segment segment = startSegment("traces", "Clickhouse", "getDetailsById");
+
+        return Flux.from(statement.execute())
+                .doFinally(signalType -> endSegment(segment));
+    }
+
     @Override
     @WithSpan
     public Mono<Void> delete(@NonNull UUID id, @NonNull Connection connection) {
@@ -1099,6 +1121,13 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMap(this::mapToDto)
                 .flatMap(trace -> enhanceWithFeedbackLogs(List.of(trace)))
                 .flatMap(traces -> Mono.justOrEmpty(traces.stream().findFirst()))
+                .singleOrEmpty();
+    }
+
+    @Override
+    public Mono<TraceDetails> getTraceDetailsById(@NonNull UUID id, @NonNull Connection connection) {
+        return getDetailsById(id, connection)
+                .flatMap(this::mapToTraceDetails)
                 .singleOrEmpty();
     }
 
@@ -1142,6 +1171,13 @@ class TraceDAOImpl implements TraceDAO {
                 .threadId(Optional.ofNullable(row.get("thread_id", String.class))
                         .filter(StringUtils::isNotEmpty)
                         .orElse(null))
+                .build());
+    }
+
+    private Publisher<TraceDetails> mapToTraceDetails(Result result) {
+        return result.map((row, rowMetadata) -> TraceDetails.builder()
+                .projectId(row.get("project_id", String.class))
+                .workspaceId(row.get("workspace_id", String.class))
                 .build());
     }
 

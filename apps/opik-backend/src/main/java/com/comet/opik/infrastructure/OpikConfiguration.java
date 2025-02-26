@@ -65,4 +65,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private WorkspaceSettings workspaceSettings = new WorkspaceSettings();
+
+    @Valid @NotNull @JsonProperty
+    private DeploymentConfig deployment = new DeploymentConfig();
 }

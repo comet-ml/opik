@@ -15,6 +15,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.*;
 public interface AuthService {
 
     void authenticate(HttpHeaders headers, Cookie sessionToken, String path);
+    void authenticateSession(Cookie sessionToken);
 }
 
 @RequiredArgsConstructor
@@ -35,5 +36,10 @@ class AuthServiceImpl implements AuthService {
         }
 
         throw new ClientErrorException("Workspace not found", Response.Status.NOT_FOUND);
+    }
+
+    @Override
+    public void authenticateSession(Cookie sessionToken) {
+        // no authentication for local installations
     }
 }
