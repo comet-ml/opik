@@ -50,7 +50,7 @@ class Opik:
         host: Optional[str] = None,
         api_key: Optional[str] = None,
         _use_batching: bool = False,
-        _config: Optional[config.OpikConfig] = None,
+        _show_misconfiguration_message: bool = True,
     ) -> None:
         """
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.
@@ -62,39 +62,35 @@ class Opik:
             api_key: The API key for Opik. This parameter is ignored for local installations.
             _use_batching: intended for internal usage in specific conditions only.
                 Enabling it is unsafe and can lead to data loss.
-            _config: intended for internal usage in specific conditions only.
-                The configuration object to be used. If not provided, a new instance will be created.
+            _show_misconfiguration_message: intended for internal usage in specific conditions only.
+                Print a warning message if the Opik server is not configured properly.
         Returns:
             None
         """
 
-        if _config is None:
-            _config = config.get_from_user_inputs(
-                project_name=project_name,
-                workspace=workspace,
-                url_override=host,
-                api_key=api_key,
-            )
-        elif any(arg is not None for arg in [project_name, host, api_key, workspace]):
-            LOGGER.warning(
-                "Config object was provided, that way provided `project_name`, `workspace`, "
-                "`host`, or `api_key` arguments will be ignored."
-            )
+        config_ = config.get_from_user_inputs(
+            project_name=project_name,
+            workspace=workspace,
+            url_override=host,
+            api_key=api_key,
+        )
 
-        config.is_misconfigured(_config, show_misconfiguration_message=True)
-        self._config = _config
+        config_.is_misconfigured(
+            show_misconfiguration_message=_show_misconfiguration_message,
+        )
+        self._config = config_
 
-        self._workspace: str = _config.workspace
-        self._project_name: str = _config.project_name
-        self._flush_timeout: Optional[int] = _config.default_flush_timeout
+        self._workspace: str = config_.workspace
+        self._project_name: str = config_.project_name
+        self._flush_timeout: Optional[int] = config_.default_flush_timeout
         self._project_name_most_recent_trace: Optional[str] = None
         self._use_batching = _use_batching
 
         self._initialize_streamer(
-            base_url=_config.url_override,
-            workers=_config.background_workers,
-            api_key=_config.api_key,
-            check_tls_certificate=_config.check_tls_certificate,
+            base_url=config_.url_override,
+            workers=config_.background_workers,
+            api_key=config_.api_key,
+            check_tls_certificate=config_.check_tls_certificate,
             use_batching=_use_batching,
         )
         atexit.register(self.end, timeout=self._flush_timeout)

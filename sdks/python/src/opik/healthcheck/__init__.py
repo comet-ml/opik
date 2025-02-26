@@ -36,7 +36,7 @@ def run(show_installed_packages: bool = True) -> None:
     rich_representation.print_config_validation(is_valid, err_msg)
 
     rich_representation.print_header("checking backend workspace availability")
-    is_available, err_msg = checks.get_backend_workspace_availability(config_obj)
+    is_available, err_msg = checks.get_backend_workspace_availability()
     rich_representation.print_backend_workspace_availability(is_available, err_msg)
 
     rich_representation.print_header("healthcheck completed")
