@@ -12,6 +12,8 @@ public enum FilterStrategy {
     DATASET_ITEM,
     FEEDBACK_SCORES,
     TRACE_THREAD,
+    DURATION,
+    FEEDBACK_SCORES_EMPTY,
     ;
 
     public static final String DYNAMIC_FIELD = ":dynamicField%1$d";

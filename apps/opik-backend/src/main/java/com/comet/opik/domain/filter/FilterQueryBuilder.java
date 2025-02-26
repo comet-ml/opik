@@ -110,8 +110,8 @@ public class FilterQueryBuilder {
                             FieldType.NUMBER, "%1$s <= :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
-                    .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
-                            FieldType.FEEDBACK_SCORES_NUMBER, "entity_id IS NOT NULL")))
+                    .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
+                            FieldType.BOOLEAN, "fsc.feedback_scores_count > 0")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -222,7 +222,10 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
-                    .build())));
+                    .build()),
+            FilterStrategy.FEEDBACK_SCORES_EMPTY, ImmutableSet.<Field>builder()
+                    .add(TraceField.FEEDBACK_SCORES_EMPTY)
+                    .build()));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,

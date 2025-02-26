@@ -20,6 +20,7 @@ public interface Field {
     String USAGE_PROMPT_TOKENS_QUERY_PARAM = "usage.prompt_tokens";
     String USAGE_TOTAL_TOKEN_QUERY_PARAMS = "usage.total_tokens";
     String FEEDBACK_SCORES_QUERY_PARAM = "feedback_scores";
+    String FEEDBACK_SCORES_EMPTY_QUERY_PARAM = "feedback_scores_empty";
     String DURATION_QUERY_PARAM = "duration";
     String THREAD_ID_QUERY_PARAM = "thread_id";
     String NUMBER_OF_MESSAGES_QUERY_PARAM = "number_of_messages";

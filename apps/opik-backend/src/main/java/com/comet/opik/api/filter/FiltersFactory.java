@@ -53,7 +53,8 @@ public class FiltersFactory {
                         }
                     },
                     FieldType.DICTIONARY, (value, key) -> StringUtils.isNotBlank(value) && StringUtils.isNotBlank(key),
-                    FieldType.LIST, (value, key) -> StringUtils.isNotBlank(value)));
+                    FieldType.LIST, (value, key) -> StringUtils.isNotBlank(value),
+                    FieldType.BOOLEAN, (value, key) -> true));
 
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
@@ -87,11 +88,6 @@ public class FiltersFactory {
     }
 
     private Filter toValidAndDecoded(Filter filter) {
-        // value-less operators, no need to validate or decode
-        if (List.of(Operator.IS_EMPTY, Operator.IS_NOT_EMPTY).contains(filter.operator())) {
-            return filter;
-        }
-
         // Decode the value as first thing prior to any validation
         filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
         if (filterQueryBuilder.toAnalyticsDbOperator(filter) == null) {
