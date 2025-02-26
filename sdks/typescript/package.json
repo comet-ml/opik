@@ -51,7 +51,7 @@
   "scripts": {
     "build": "tsup",
     "watch": "tsup --watch",
-    "lint": "eslint '**/*.{ts,tsx}'",
+    "lint": "eslint --config eslint.config.js",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
     "test": "vitest"
