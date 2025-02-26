@@ -198,7 +198,7 @@ def healthcheck(show_installed_packages: bool = True) -> None:
     healthcheck_tools.print_config_file_details()
 
     healthcheck_tools.print_header("current settings")
-    healthcheck_tools.print_current_settings()
+    healthcheck_tools.print_current_config()
 
     healthcheck_tools.print_header("current settings validation")
     healthcheck_tools.print_current_settings_validation()

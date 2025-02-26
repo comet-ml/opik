@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Optional, Tuple
 from unittest.mock import patch
 
 from httpx import ConnectError
@@ -63,21 +63,14 @@ def print_config_file_details() -> None:
     console.print(is_exists_label, is_exists)
 
 
-def get_current_settings() -> Dict[str, Any]:
+def print_current_config() -> None:
     config_obj = config.OpikConfig()
-    settings = config_obj.model_dump()
-    if settings.get("api_key") is not None:
-        settings["api_key"] = "*** HIDDEN ***"
-    return settings
-
-
-def print_current_settings() -> None:
-    current_settings = get_current_settings()
+    current_config_values = config_obj.get_current_config_with_api_key_hidden()
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Setting", style=DEFAULT_KEY_COLOR)
     table.add_column("Value", style=DEFAULT_VALUE_COLOR)
 
-    for key, value in sorted(current_settings.items()):
+    for key, value in sorted(current_config_values.items()):
         table.add_row(key, str(value))
 
     console.print(table)

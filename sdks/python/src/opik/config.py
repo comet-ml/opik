@@ -242,6 +242,15 @@ class OpikConfig(pydantic_settings.BaseSettings):
     def is_config_file_exists(self) -> bool:
         return self.config_file_fullpath.exists()
 
+    def get_current_config_with_api_key_hidden(self) -> Dict[str, Any]:
+        """
+        Retrieves the current configuration with the API key value masked.
+        """
+        current_values = self.model_dump()
+        if current_values.get("api_key") is not None:
+            current_values["api_key"] = "*** HIDDEN ***"
+        return current_values
+
 
 def update_session_config(key: str, value: Any) -> None:
     _SESSION_CACHE_DICT[key] = value
