@@ -695,6 +695,7 @@ class ProjectMetricsResourceTest {
         private BigDecimal createSpans(
                 String projectName, Instant marker) {
             var MODEL_NAME = "gpt-3.5-turbo";
+            var provider = "openai";
 
             List<Trace> traces = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
@@ -708,6 +709,7 @@ class ProjectMetricsResourceTest {
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .model(MODEL_NAME)
+                            .provider(provider)
                             .usage(Map.of(
                                     "prompt_tokens", RANDOM.nextInt(),
                                     "completion_tokens", RANDOM.nextInt()))
@@ -718,7 +720,7 @@ class ProjectMetricsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
             return spans.stream()
-                    .map(span -> CostService.calculateCost(MODEL_NAME, span.usage()))
+                    .map(span -> CostService.calculateCost(MODEL_NAME, provider, span.usage()))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
     }

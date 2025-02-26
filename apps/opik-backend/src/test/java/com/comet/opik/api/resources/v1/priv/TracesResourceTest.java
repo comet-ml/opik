@@ -1363,6 +1363,7 @@ class TracesResourceTest {
                         .map(span -> span.toBuilder()
                                 .usage(spanResourceClient.getTokenUsage())
                                 .model(spanResourceClient.randomModel().toString())
+                                .provider(spanResourceClient.provider())
                                 .traceId(trace.id())
                                 .projectName(projectName)
                                 .feedbackScores(null)
@@ -2119,6 +2120,7 @@ class TracesResourceTest {
                             .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
                                     "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
                             .model("gpt-3.5-turbo-1106")
+                            .provider("openai")
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toList());
@@ -2178,6 +2180,7 @@ class TracesResourceTest {
                             .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
                                     "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
                             .model("gpt-3.5-turbo-1106")
+                            .provider("openai")
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toList());
@@ -3791,7 +3794,7 @@ class TracesResourceTest {
 
     private BigDecimal calculateEstimatedCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostService.calculateCost(span.model(), span.usage()))
+                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -4725,6 +4728,7 @@ class TracesResourceTest {
                             .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
                                     "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
                             .model(model)
+                            .provider("openai")
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toList());
