@@ -182,6 +182,10 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return OpenaiModelName.values()[randomNumber(0, OpenaiModelName.values().length - 1)];
     }
 
+    public String provider() {
+        return "openai";
+    }
+
     private int randomNumber(int min, int max) {
         return PodamUtils.getIntegerInRange(min, max);
     }

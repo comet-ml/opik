@@ -1450,6 +1450,7 @@ class ProjectsResourceTest {
                     .map(span -> span.toBuilder()
                             .usage(spanResourceClient.getTokenUsage())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .traceId(trace.id())
                             .projectName(trace.projectName())
                             .totalEstimatedCost(null)
