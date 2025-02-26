@@ -3244,9 +3244,8 @@ class SpansResourceTest {
                             .value("")
                             .build());
 
-            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName, expectedSpans,
-                    spans,
-                    unexpectedSpans);
+            getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
+                    expectedSpans.reversed(), spans, unexpectedSpans);
         }
 
         Stream<Arguments> getSpansByProject__whenFilterByIsEmpty__thenReturnSpansFiltered() {
@@ -3258,6 +3257,16 @@ class SpansResourceTest {
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
                     arguments(
                             Boolean.TRUE,
+                            Operator.IS_NOT_EMPTY,
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())),
+                    arguments(
+                            Boolean.FALSE,
+                            Operator.IS_EMPTY,
+                            (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
+                            (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
+                    arguments(
+                            Boolean.FALSE,
                             Operator.IS_NOT_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())));

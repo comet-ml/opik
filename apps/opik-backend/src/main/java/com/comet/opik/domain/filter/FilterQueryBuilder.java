@@ -166,6 +166,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(SpanField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -229,6 +230,7 @@ public class FilterQueryBuilder {
                     .build()),
             FilterStrategy.FEEDBACK_SCORES_EMPTY, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES_EMPTY)
+                    .add(SpanField.FEEDBACK_SCORES_EMPTY)
                     .build()));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
