@@ -7,7 +7,6 @@ import lombok.Data;
 
 @Data
 public class DeploymentConfig {
-    @Valid @NotEmpty
-    @JsonProperty
+    @Valid @NotEmpty @JsonProperty
     private String baseUrl;
 }

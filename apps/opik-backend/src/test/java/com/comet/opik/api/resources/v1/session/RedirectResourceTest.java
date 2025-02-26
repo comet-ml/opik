@@ -135,7 +135,8 @@ class RedirectResourceTest {
                         .withQueryParam("id", equalTo(NON_EXISTING_WORKSPACE_ID))
                         .willReturn(WireMock.badRequest().withHeader("Content-Type", "application/json")
                                 .withJsonBody(JsonUtils.readTree(
-                                        new ReactServiceErrorResponse(NO_SUCH_WORKSPACE.formatted(NON_EXISTING_WORKSPACE_ID),
+                                        new ReactServiceErrorResponse(
+                                                NO_SUCH_WORKSPACE.formatted(NON_EXISTING_WORKSPACE_ID),
                                                 400)))));
     }
 
