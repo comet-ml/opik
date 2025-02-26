@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.AuthenticationConfig;
@@ -26,6 +26,8 @@ import org.mockito.Mockito;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -87,7 +89,7 @@ class RemoteAuthServiceTest {
                 .willReturn(aResponse().withStatus(remoteAuthStatusCode)
                         .withHeader("Content-Type", "application/json")
                         .withJsonBody(JsonUtils.readTree(
-                                new AuthenticationErrorResponse("test error message",
+                                new ReactServiceErrorResponse("test error message",
                                         remoteAuthStatusCode)))));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
@@ -110,7 +112,7 @@ class RemoteAuthServiceTest {
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock("", apiKey), null, "/priv/something"))
                 .isInstanceOf(ClientErrorException.class)
-                .hasMessageContaining(AuthenticationErrorResponse.MISSING_WORKSPACE);
+                .hasMessageContaining(MISSING_WORKSPACE);
     }
 
     @Test
@@ -121,7 +123,7 @@ class RemoteAuthServiceTest {
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock(workspaceName, ""), null, "/priv/something"))
                 .isInstanceOf(ClientErrorException.class)
-                .hasMessage(AuthenticationErrorResponse.MISSING_API_KEY);
+                .hasMessage(MISSING_API_KEY);
     }
 
     private RemoteAuthService getService(RequestContext requestContext) {

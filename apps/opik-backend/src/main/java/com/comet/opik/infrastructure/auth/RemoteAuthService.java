@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import jakarta.inject.Provider;
@@ -21,10 +21,15 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.URI;
 import java.util.Optional;
 
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
+import static com.comet.opik.api.ReactServiceErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
+
 @RequiredArgsConstructor
 @Slf4j
 class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
+    private static final String NOT_LOGGED_USER = "Please login first";
 
     private final @NonNull Client client;
     private final @NonNull AuthenticationConfig.UrlConfig apiKeyAuthUrl;
@@ -50,7 +55,7 @@ class RemoteAuthService implements AuthService {
                 .orElse("");
         if (currentWorkspaceName.isBlank()) {
             log.warn("Workspace name is missing");
-            throw new ClientErrorException(AuthenticationErrorResponse.MISSING_WORKSPACE, Response.Status.FORBIDDEN);
+            throw new ClientErrorException(MISSING_WORKSPACE, Response.Status.FORBIDDEN);
         }
         if (sessionToken != null) {
             authenticateUsingSessionToken(sessionToken, currentWorkspaceName, path);
@@ -59,11 +64,19 @@ class RemoteAuthService implements AuthService {
         authenticateUsingApiKey(headers, currentWorkspaceName, path);
     }
 
+    @Override
+    public void authenticateSession(Cookie sessionToken) {
+        if (sessionToken == null || StringUtils.isBlank(sessionToken.getValue())) {
+            log.info("No cookies found");
+            throw new ClientErrorException(NOT_LOGGED_USER, Response.Status.FORBIDDEN);
+        }
+    }
+
     private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path) {
         if (ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName)) {
             log.warn("Default workspace name is not allowed for UI authentication");
             throw new ClientErrorException(
-                    AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+                    NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
         try (var response = client.target(URI.create(uiAuthUrl.url()))
                 .request()
@@ -80,7 +93,7 @@ class RemoteAuthService implements AuthService {
         var apiKey = Optional.ofNullable(headers.getHeaderString(HttpHeaders.AUTHORIZATION)).orElse("");
         if (apiKey.isBlank()) {
             log.info("API key not found in headers");
-            throw new ClientErrorException(AuthenticationErrorResponse.MISSING_API_KEY, Response.Status.UNAUTHORIZED);
+            throw new ClientErrorException(MISSING_API_KEY, Response.Status.UNAUTHORIZED);
         }
         var credentials = validateApiKeyAndGetCredentials(workspaceName, apiKey, path);
         if (credentials.shouldCache()) {
@@ -126,14 +139,14 @@ class RemoteAuthService implements AuthService {
             }
             return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            var errorResponse = response.readEntity(AuthenticationErrorResponse.class);
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
             throw new ClientErrorException(errorResponse.msg(), Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             // EM never returns FORBIDDEN as of now
             throw new ClientErrorException(
-                    AuthenticationErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
+                    NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(AuthenticationErrorResponse.class);
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
             throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
         }
         log.error("Unexpected error while authenticating user, received status code: {}", response.getStatus());
