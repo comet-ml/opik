@@ -1,6 +1,7 @@
 import React, { MouseEventHandler, useState } from "react";
 import isNumber from "lodash/isNumber";
 import { Link, useMatchRoute } from "@tanstack/react-router";
+
 import {
   Book,
   Database,
@@ -31,6 +32,7 @@ import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import GitHubStarListItem from "@/components/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
 
 enum MENU_ITEM_TYPE {
   link = "link",
@@ -67,13 +69,6 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: LucideHome,
         label: "Home",
       },
-      // {
-      //   id: "chat",
-      //   path: "/$workspaceName/chat",
-      //   type: MENU_ITEM_TYPE.router,
-      //   icon: BotMessageSquare,
-      //   label: "Chat (Experimental)",
-      // },
     ],
   },
   {
@@ -414,6 +409,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
           <div className="flex flex-col gap-4">
             <Separator />
             <ul className="flex flex-col gap-1">
+              <GitHubStarListItem expanded={expanded} />
               {renderItems(bottomMenuItems)}
             </ul>
           </div>

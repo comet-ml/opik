@@ -1,0 +1,55 @@
+import React, { useMemo } from "react";
+import isNumber from "lodash/isNumber";
+import GitHubIcon from "@/icons/github.svg?react";
+
+import useGitHubStarts from "@/api/external/useGitHubStarts";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export interface GitHubStarListItemProps {
+  expanded: boolean;
+}
+
+const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
+  expanded,
+}) => {
+  const { data } = useGitHubStarts({});
+
+  const starCount = useMemo(() => {
+    const count = data?.stargazers_count;
+    return isNumber(count)
+      ? count >= 1000
+        ? `${(count / 1000).toFixed(1)}k`
+        : count.toString()
+      : "5k";
+  }, [data?.stargazers_count]);
+
+  return (
+    <li className="mb-2">
+      <Button
+        variant="outline"
+        size="sm"
+        className={cn(expanded ? "ml-1 gap-2" : "size-9")}
+        asChild
+      >
+        <a
+          href="https://github.com/comet-ml/opik"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <GitHubIcon />
+          {expanded && (
+            <>
+              <span className="comet-body-s">Star</span>
+              <span className="rounded-lg bg-gray-100 px-1.5 py-0.5 text-xs">
+                {starCount}
+              </span>
+            </>
+          )}
+        </a>
+      </Button>
+    </li>
+  );
+};
+
+export default GitHubStarListItem;
