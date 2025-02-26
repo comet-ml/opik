@@ -74,7 +74,7 @@ class OpikSpanBridge(tracing.Span):
             value: The tag value.
         """
         coerced_value = tracing_utils.coerce_tag_value(value)
-        self._span.update(metadata={key: coerced_value})
+        self._span.update(metadata={key: coerced_value, "created_from": "haystack"})
         self._data[key] = value
 
     def set_content_tag(self, key: str, value: Any) -> None:
