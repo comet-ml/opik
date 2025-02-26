@@ -26,16 +26,22 @@ def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
     return is_available, err_msg
 
 
-def get_config_validation_results(config_: config.OpikConfig) -> Tuple[bool, Optional[str]]:
+def get_config_validation_results(
+    config_: config.OpikConfig,
+) -> Tuple[bool, Optional[str]]:
     is_valid = not config_.is_misconfigured(show_misconfiguration_message=False)
     if is_valid:
         return True, None
 
-    is_misconfigured_for_cloud_flag, error_message = config_.is_misconfigured_for_cloud()
+    is_misconfigured_for_cloud_flag, error_message = (
+        config_.is_misconfigured_for_cloud()
+    )
     if is_misconfigured_for_cloud_flag:
         return False, error_message
 
-    is_misconfigured_for_local_flag, error_message = config_.is_misconfigured_for_local()
+    is_misconfigured_for_local_flag, error_message = (
+        config_.is_misconfigured_for_local()
+    )
     if is_misconfigured_for_local_flag:
         return False, error_message
 

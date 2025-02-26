@@ -79,7 +79,10 @@ def print_config_validation(is_valid: bool, error_message: Optional[str]) -> Non
     console.print(err_msg)
 
 
-def print_backend_workspace_availability(is_available: bool, err_msg: Optional[str]) -> None:
+def print_backend_workspace_availability(
+    is_available: bool,
+    err_msg: Optional[str],
+) -> None:
     is_available_text = Text(
         str(is_available),
         style=DEFAULT_VALUE_COLOR if is_available else DEFAULT_ERROR_COLOR,

@@ -261,7 +261,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
             is determined to be misconfigured. Defaults to False.
         """
 
-        is_misconfigured_for_cloud_flag, error_message = self.is_misconfigured_for_cloud()
+        is_misconfigured_for_cloud_flag, error_message = (
+            self.is_misconfigured_for_cloud()
+        )
 
         if is_misconfigured_for_cloud_flag:
             if show_misconfiguration_message:
@@ -273,7 +275,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
                 )
             return True
 
-        is_misconfigured_for_local_flag, error_message = self.is_misconfigured_for_local()
+        is_misconfigured_for_local_flag, error_message = (
+            self.is_misconfigured_for_local()
+        )
 
         if is_misconfigured_for_local_flag:
             if show_misconfiguration_message:
@@ -316,7 +320,11 @@ class OpikConfig(pydantic_settings.BaseSettings):
         workspace_is_default = self.workspace == OPIK_WORKSPACE_DEFAULT_NAME
         tracking_disabled = self.track_disable
 
-        if localhost_installation and not workspace_is_default and not tracking_disabled:
+        if (
+            localhost_installation
+            and not workspace_is_default
+            and not tracking_disabled
+        ):
             error_message = (
                 "Open source installations do not support workspace specification. Only `default` is available.\n"
                 "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration\n"

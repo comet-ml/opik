@@ -1,7 +1,6 @@
 import opik
-import opik.healthcheck.rich_representation
 from opik import config, environment
-from opik.healthcheck import checks
+from opik.healthcheck import checks, rich_representation
 
 
 def run(show_installed_packages: bool = True) -> None:
