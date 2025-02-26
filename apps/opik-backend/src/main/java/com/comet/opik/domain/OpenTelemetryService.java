@@ -122,6 +122,8 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .metadata(rootSpan.metadata())
                             .build();
 
+                    log.info("Trying to create trace: {}", trace);
+
                     return traceService.create(trace);
                 })
                 .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))

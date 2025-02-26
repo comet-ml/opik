@@ -5,7 +5,10 @@ import com.comet.opik.domain.OpenTelemetryService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.google.protobuf.util.JsonFormat;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -34,30 +37,12 @@ public class OpenTelemetryResource {
     @Path("/traces")
     @POST
     @Consumes("application/x-protobuf")
-    public Response receiveTraces(InputStream in) {
-        var projectName = requestContext.get().getHeaders()
-                .getOrDefault(RequestContext.PROJECT_NAME, List.of(ProjectService.DEFAULT_PROJECT))
-                .getFirst();
-        var userName = requestContext.get().getUserName();
-        var workspaceId = requestContext.get().getWorkspaceId();
-
+    public Response receiveProtobufTraces(InputStream in) {
         try {
             // Parse the incoming Protobuf message
-            ExportTraceServiceRequest traceRequest = ExportTraceServiceRequest.parseFrom(in);
+            var traceRequest = ExportTraceServiceRequest.parseFrom(in);
 
-            log.info("Received spans batch via OpenTelemetry for project '{}' in workspaceId '{}'", projectName,
-                    workspaceId);
-
-            Long stored = openTelemetryService
-                    .parseAndStoreSpans(traceRequest, projectName)
-                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
-                    .block();
-
-            log.info("Stored {} spans via OpenTelemetry for project '{}' in workspaceId '{}'", stored, projectName,
-                    workspaceId);
-
-            // Return a successful HTTP response
-            return Response.ok().build();
+            return handleOtelTraceRequest(traceRequest);
         } catch (IOException e) {
             // Log the error and return a 400 Bad Request response
             log.error("Error parsing Protobuf payload", e);
@@ -66,4 +51,47 @@ public class OpenTelemetryResource {
                     .build();
         }
     }
+
+    @Path("/traces")
+    @POST
+    @Consumes("application/json")
+    public Response receiveJsonTraces(@RequestBody String jsonPayload) {
+        try {
+            var payload = JsonUtils.sanitizeJson(jsonPayload);
+            var traceRequest = ExportTraceServiceRequest.newBuilder();
+
+            // Parse the incoming JSON into the builder.
+            JsonFormat.parser().merge(payload, traceRequest);
+            return handleOtelTraceRequest(traceRequest.build());
+        } catch (IOException e) {
+            // Log the error and return a 400 Bad Request response
+            log.error("Error parsing JSON payload", e);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("Failed to parse JSON: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    private Response handleOtelTraceRequest(ExportTraceServiceRequest traceRequest) {
+        var projectName = requestContext.get().getHeaders()
+                .getOrDefault(RequestContext.PROJECT_NAME, List.of(ProjectService.DEFAULT_PROJECT))
+                .getFirst();
+        var userName = requestContext.get().getUserName();
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Received spans batch via OpenTelemetry for project '{}' in workspaceId '{}'", projectName,
+                workspaceId);
+
+        Long stored = openTelemetryService
+                .parseAndStoreSpans(traceRequest, projectName)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
+                .block();
+
+        log.info("Stored {} spans via OpenTelemetry for project '{}' in workspaceId '{}'", stored, projectName,
+                workspaceId);
+
+        // Return a successful HTTP response
+        return Response.ok().build();
+    }
+
 }

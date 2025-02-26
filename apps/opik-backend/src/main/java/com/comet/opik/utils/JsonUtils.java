@@ -14,6 +14,7 @@ import dev.ai4j.openai4j.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.text.StringEscapeUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -106,5 +107,13 @@ public class JsonUtils {
         try (InputStream inputStream = JsonUtils.class.getClassLoader().getResourceAsStream(fileName)) {
             return MAPPER.readValue(inputStream, valueTypeRef);
         }
+    }
+
+    public static String sanitizeJson(String jsonPayload) {
+        String sanitizedPayload = jsonPayload.trim();
+        if (sanitizedPayload.startsWith("\"") && sanitizedPayload.endsWith("\"")) {
+            sanitizedPayload = sanitizedPayload.substring(1, sanitizedPayload.length() - 1);
+        }
+        return StringEscapeUtils.unescapeJson(sanitizedPayload);
     }
 }
