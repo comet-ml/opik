@@ -84,9 +84,6 @@
   "engines": {
     "node": ">=18"
   },
-  "overrides": {
-    "esbuild": "^0.25.0"
-  },
   "dependencies": {
     "ansi-escapes": "^7.0.0",
     "ini": "^5.0.0",
