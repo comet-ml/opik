@@ -226,11 +226,12 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             setSearchText={setSearch}
             placeholder="Search by ID"
             className="w-[320px]"
+            dimension="sm"
           ></SearchInput>
         </div>
         <div className="flex items-center gap-2">
           <RulesActionsPanel rules={selectedRows} projectId={projectId} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -238,7 +239,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" onClick={handleNewRuleClick}>
+          <Button variant="default" size="sm" onClick={handleNewRuleClick}>
             Create new rule
           </Button>
         </div>

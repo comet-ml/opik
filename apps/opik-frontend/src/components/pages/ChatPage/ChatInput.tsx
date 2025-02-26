@@ -169,11 +169,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             onClick={handleButtonClick}
             disabled={isDisabledButton}
           >
-            {isRunning ? (
-              <Square className="size-4" />
-            ) : (
-              <Play className="size-4" />
-            )}
+            {isRunning ? <Square /> : <Play />}
           </Button>
         </TooltipWrapper>
       </div>

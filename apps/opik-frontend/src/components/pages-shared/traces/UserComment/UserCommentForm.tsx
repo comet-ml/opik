@@ -12,7 +12,7 @@ const CancelButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <Button {...buttonProps} variant="outline" size="icon-xs" ref={ref}>
         <span className="sr-only">Cancel edit comment</span>
-        <X className="size-3.5" />
+        <X />
       </Button>
     );
   },
@@ -40,7 +40,7 @@ const SubmitButton = React.forwardRef<
       disabled={!isValid || !isDirty || buttonProps.disabled}
     >
       <span className="sr-only">Approve edit comment</span>
-      <SubmitIcon className="size-3.5" />
+      <SubmitIcon />
     </Button>
   );
 });

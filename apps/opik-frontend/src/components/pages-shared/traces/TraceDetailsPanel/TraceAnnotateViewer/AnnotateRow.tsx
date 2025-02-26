@@ -239,7 +239,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             size="icon-sm"
             onClick={deleteFeedbackScore}
           >
-            <X className="size-4" />
+            <X />
           </Button>
         )}
       </div>

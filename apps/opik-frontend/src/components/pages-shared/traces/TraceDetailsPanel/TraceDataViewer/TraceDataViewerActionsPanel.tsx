@@ -71,7 +71,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
           resetKeyRef.current = resetKeyRef.current + 1;
         }}
       >
-        <DatabasePlus className="size-4" />
+        <DatabasePlus className="size-3.5" />
         {showFullActionLabel && <div className="pl-1">Add to dataset</div>}
       </Button>
 
@@ -85,7 +85,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
             "bg-primary-100 hover:bg-primary-100",
         )}
       >
-        <MessageSquareMore className="size-4" />
+        <MessageSquareMore className="size-3.5" />
         {showFullActionLabel && <div className="pl-1">Comments</div>}
         {Boolean(commentsCount) && (
           <div>{formatCounter(layoutSize, commentsCount)}</div>
@@ -102,7 +102,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
             "bg-primary-100 hover:bg-primary-100",
         )}
       >
-        <PenLine className="size-4" />
+        <PenLine className="size-3.5" />
         {showFullActionLabel && <div className="pl-1">Feedback scores</div>}
         {Boolean(annotationCount) && (
           <div>{formatCounter(layoutSize, annotationCount)}</div>
@@ -113,7 +113,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="icon-sm">
             <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
+            <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
