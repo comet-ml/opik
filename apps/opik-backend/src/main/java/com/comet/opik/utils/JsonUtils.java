@@ -44,6 +44,14 @@ public class JsonUtils {
         }
     }
 
+    public static JsonNode getJsonNodeFromString(@NonNull InputStream value) {
+        try {
+            return MAPPER.readTree(value);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public JsonNode readTree(@NonNull Object content) {
         return MAPPER.convertValue(content, JsonNode.class);
     }

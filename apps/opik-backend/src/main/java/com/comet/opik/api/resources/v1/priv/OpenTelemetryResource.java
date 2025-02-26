@@ -12,13 +12,12 @@ import jakarta.inject.Provider;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
 
 @Path("/v1/private/otel/v1")
@@ -34,36 +33,36 @@ public class OpenTelemetryResource {
     @Path("/traces")
     @POST
     @Consumes("application/x-protobuf")
-    public Response receiveTraces(InputStream in) {
+    public Response receiveProtobufTraces(ExportTraceServiceRequest request) {
+        return handleOtelTraceRequest(request);
+    }
+
+    @Path("/traces")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response receiveJsonTraces(ExportTraceServiceRequest request) {
+        return handleOtelTraceRequest(request);
+    }
+
+    private Response handleOtelTraceRequest(ExportTraceServiceRequest traceRequest) {
         var projectName = requestContext.get().getHeaders()
                 .getOrDefault(RequestContext.PROJECT_NAME, List.of(ProjectService.DEFAULT_PROJECT))
                 .getFirst();
         var userName = requestContext.get().getUserName();
         var workspaceId = requestContext.get().getWorkspaceId();
 
-        try {
-            // Parse the incoming Protobuf message
-            ExportTraceServiceRequest traceRequest = ExportTraceServiceRequest.parseFrom(in);
+        log.info("Received spans batch via OpenTelemetry for project '{}' in workspaceId '{}'", projectName,
+                workspaceId);
 
-            log.info("Received spans batch via OpenTelemetry for project '{}' in workspaceId '{}'", projectName,
-                    workspaceId);
+        Long stored = openTelemetryService
+                .parseAndStoreSpans(traceRequest, projectName)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
+                .block();
 
-            Long stored = openTelemetryService
-                    .parseAndStoreSpans(traceRequest, projectName)
-                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
-                    .block();
+        log.info("Stored {} spans via OpenTelemetry for project '{}' in workspaceId '{}'", stored, projectName,
+                workspaceId);
 
-            log.info("Stored {} spans via OpenTelemetry for project '{}' in workspaceId '{}'", stored, projectName,
-                    workspaceId);
-
-            // Return a successful HTTP response
-            return Response.ok().build();
-        } catch (IOException e) {
-            // Log the error and return a 400 Bad Request response
-            log.error("Error parsing Protobuf payload", e);
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Invalid Protobuf payload")
-                    .build();
-        }
+        // Return a successful HTTP response
+        return Response.ok().build();
     }
 }
