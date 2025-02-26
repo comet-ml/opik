@@ -11,6 +11,7 @@ from rich.table import Table
 from rich.text import Text
 
 from opik import Opik, config
+from opik.environment import get_installed_packages
 
 console = Console()
 
@@ -26,13 +27,6 @@ def print_header(text: str) -> None:
 
     console.print()
     console.print(header_text)
-
-
-def get_installed_packages() -> Dict[str, str]:
-    installed_packages = {
-        pkg.metadata["Name"]: pkg.version for pkg in metadata.distributions()
-    }
-    return installed_packages
 
 
 def print_installed_packages() -> None:
