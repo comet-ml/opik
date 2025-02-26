@@ -111,9 +111,6 @@ class OpenTelemetryResourceTest {
                 MY_SQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
-    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
-
     private String baseURI;
     private ClientSupport client;
     private TraceResourceClient traceResourceClient;
@@ -175,30 +172,6 @@ class OpenTelemetryResourceTest {
                                     .withJsonBody(JsonUtils.readTree(
                                             new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("ingest otel traces via json")
-        public void testOtelJsonRequests(String apiKey, String projectName, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-
-            // using example payload from integration; it will be protobuffed when ingested,
-            // so we just need to make sure the parsing works
-            String payload2 = "{\"resourceSpans\":[{\"resource\":{\"attributes\":[{\"key\":\"service.name\",\"value\":{\"stringValue\":\"my-service\"}}]},\"scopeSpans\":[{\"spans\":[{\"traceId\":\"%s\",\"spanId\":\"%s\",\"name\":\"example-span\",\"kind\":\"SPAN_KIND_SERVER\",\"startTimeUnixNano\":\"%d\",\"endTimeUnixNano\":\"1623456790000000000\"}]}]}]}";
-
-            String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
-
-            String otelTraceId = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().getBytes());
-            String spanId = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().getBytes());
-            long startTimeUnixNano = System.currentTimeMillis() * 1_000_000;
-
-            String injectedPayload = String.format(payload2, otelTraceId, spanId, startTimeUnixNano);
-
-            Entity<String> payload = Entity.json(injectedPayload);
-
-            sendBatch(payload, "application/json", projectName, workspaceName, apiKey, expected, errorMessage);
         }
 
         @ParameterizedTest
@@ -281,6 +254,30 @@ class OpenTelemetryResourceTest {
                 });
 
             }
+        }
+
+        @ParameterizedTest
+        @MethodSource("credentials")
+        @DisplayName("ingest otel traces via json")
+        public void testOtelJsonRequests(String apiKey, String projectName, boolean expected,
+                                         io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+
+            // using example payload from integration; it will be protobuffed when ingested,
+            // so we just need to make sure the parsing works
+            String payload2 = "{\"resourceSpans\":[{\"resource\":{\"attributes\":[{\"key\":\"service.name\",\"value\":{\"stringValue\":\"my-service\"}}]},\"scopeSpans\":[{\"spans\":[{\"traceId\":\"%s\",\"spanId\":\"%s\",\"name\":\"example-span\",\"kind\":\"SPAN_KIND_SERVER\",\"startTimeUnixNano\":\"%d\",\"endTimeUnixNano\":\"1623456790000000000\"}]}]}]}";
+
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            String otelTraceId = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().getBytes());
+            String spanId = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().getBytes());
+            long startTimeUnixNano = System.currentTimeMillis() * 1_000_000;
+
+            String injectedPayload = String.format(payload2, otelTraceId, spanId, startTimeUnixNano);
+
+            Entity<String> payload = Entity.json(injectedPayload);
+
+            sendBatch(payload, "application/json", projectName, workspaceName, apiKey, expected, errorMessage);
         }
 
         void sendBatch(Entity<?> payload, String mediaType, String projectName, String workspaceName, String apiKey,
