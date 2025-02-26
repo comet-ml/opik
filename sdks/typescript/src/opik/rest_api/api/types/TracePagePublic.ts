@@ -9,4 +9,5 @@ export interface TracePagePublic {
     size?: number;
     total?: number;
     content?: OpikApi.TracePublic[];
+    sortableBy?: string[];
 }

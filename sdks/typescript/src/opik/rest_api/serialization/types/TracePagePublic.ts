@@ -15,6 +15,7 @@ export const TracePagePublic: core.serialization.ObjectSchema<
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
     content: core.serialization.list(TracePublic).optional(),
+    sortableBy: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace TracePagePublic {
@@ -23,5 +24,6 @@ export declare namespace TracePagePublic {
         size?: number | null;
         total?: number | null;
         content?: TracePublic.Raw[] | null;
+        sortableBy?: string[] | null;
     }
 }
