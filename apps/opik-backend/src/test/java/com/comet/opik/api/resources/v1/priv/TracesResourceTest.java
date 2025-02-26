@@ -3413,8 +3413,8 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource
         void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(Operator operator,
-                                                                                           Function<List<Trace>, List<Trace>> getExpectedTraces,
-                                                                                           Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3449,7 +3449,8 @@ class TracesResourceTest {
                             .operator(operator)
                             .value("")
                             .build());
-            getAndAssertPage(workspaceName, projectName, filters, traces, expectedTraces.reversed(), unexpectedTraces,
+            getAndAssertPage(workspaceName, projectName, null, filters, traces, expectedTraces.reversed(),
+                    unexpectedTraces,
                     apiKey);
         }
 
@@ -3945,6 +3946,7 @@ class TracesResourceTest {
             case STRING, LIST, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
             case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME -> Instant.now().toString();
+            case EMPTY -> "";
         };
     }
 
@@ -3952,6 +3954,7 @@ class TracesResourceTest {
         return switch (field.getType()) {
             case STRING, NUMBER, DATE_TIME, LIST -> null;
             case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case EMPTY -> "";
         };
     }
 
@@ -3959,6 +3962,7 @@ class TracesResourceTest {
         return switch (field.getType()) {
             case STRING, DICTIONARY, LIST -> " ";
             case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case EMPTY -> "";
         };
     }
 
