@@ -27,6 +27,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
@@ -4182,9 +4183,11 @@ class DatasetsResourceTest {
                         .experimentId(experimentId)
                         .input(trace.input())
                         .output(trace.output())
-                        .feedbackScores(Stream.of(score)
-                                .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
-                                .toList())
+                        .feedbackScores(score == null
+                                ? null
+                                : Stream.of(score)
+                                        .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                        .toList())
                         .build();
 
                 experimentItems.add(experimentItem);
@@ -4286,6 +4289,78 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
+        }
+
+        @Test
+        void find__whenFilteringFeedbackScoresEmpty__thenReturnMatchingRows() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> datasetItems = new ArrayList<>();
+            createDatasetItems(datasetItems);
+            var batch = DatasetItemBatch.builder()
+                    .items(datasetItems)
+                    .datasetId(datasetId)
+                    .build();
+            putAndAssert(batch, workspaceName, apiKey);
+
+            String projectName = RandomStringUtils.randomAlphanumeric(20);
+            List<Trace> traces = new ArrayList<>();
+            createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
+
+            UUID experimentId = GENERATOR.generate();
+
+            List<FeedbackScoreBatchItem> scores = new ArrayList<>();
+            createScores(traces.subList(1, traces.size()), projectName, scores);
+            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+
+            List<ExperimentItem> experimentItems = new ArrayList<>();
+            createExperimentItems(datasetItems, traces, Stream
+                    .concat(Stream.of((FeedbackScoreBatchItem) null), scores.stream()).collect(Collectors.toList()),
+                    experimentId, experimentItems);
+
+            createAndAssert(
+                    ExperimentItemsBatch.builder()
+                            .experimentItems(Set.copyOf(experimentItems))
+                            .build(),
+                    apiKey,
+                    workspaceName);
+
+            Set<Column> columns = getColumns(datasetItems.stream().map(DatasetItem::data).toList());
+
+            var isEmptyFilter = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY.getQueryParamField())
+                            .operator(Operator.IS_EMPTY)
+                            .value("")
+                            .build());
+
+            var actualPageIsEmpty = assertDatasetExperimentPage(datasetId, experimentId, isEmptyFilter, apiKey,
+                    workspaceName,
+                    columns, List.of(datasetItems.getFirst()));
+
+            assertDatasetItemExperiments(actualPageIsEmpty, List.of(datasetItems.getFirst()),
+                    List.of(experimentItems.getFirst()));
+
+            var isNotEmptyFilter = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY.getQueryParamField())
+                            .operator(Operator.IS_NOT_EMPTY)
+                            .value("")
+                            .build());
+
+            var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,
+                    workspaceName,
+                    columns, datasetItems.subList(1, datasetItems.size()));
+
+            assertDatasetItemExperiments(actualPageIsNotEmpty, datasetItems.subList(1, datasetItems.size()),
+                    experimentItems.subList(1, experimentItems.size()));
         }
 
         @ParameterizedTest
@@ -4490,7 +4565,8 @@ class DatasetsResourceTest {
                 : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
     }
 
-    private DatasetItemPage assertDatasetExperimentPage(UUID datasetId, UUID experimentId, List<Filter> filters,
+    private DatasetItemPage assertDatasetExperimentPage(UUID datasetId, UUID experimentId,
+            List<? extends Filter> filters,
             String apiKey, String workspaceName, Set<Column> columns, List<DatasetItem> datasetItems) {
         try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .path(datasetId.toString())
