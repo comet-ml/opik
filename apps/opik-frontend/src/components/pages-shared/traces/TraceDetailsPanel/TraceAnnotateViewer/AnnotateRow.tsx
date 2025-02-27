@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import isUndefined from "lodash/isUndefined";
 import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
@@ -19,9 +19,10 @@ import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { SelectItem } from "@/components/ui/select";
 import { DropdownOption } from "@/types/shared";
-import { cn } from "@/lib/utils";
+import { cn, updateTextAreaHeight } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -33,12 +34,6 @@ type AnnotateRowProps = {
   traceId: string;
 };
 
-const categoryOptionLabelRenderer = (name: string, value?: number | string) => {
-  if (!value) return name;
-
-  return `${name} (${value})`;
-};
-
 const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   name,
   feedbackDefinition,
@@ -46,6 +41,8 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   spanId,
   traceId,
 }) => {
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+
   const [categoryName, setCategoryName] = useState(
     feedbackScore?.category_name,
   );
@@ -53,7 +50,12 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
   useEffect(() => {
     setCategoryName(feedbackScore?.category_name);
+    setEditReason(false);
   }, [feedbackScore?.category_name, traceId, spanId]);
+
+  useEffect(() => {
+    setEditReason(false);
+  }, [traceId, spanId]);
 
   const [value, setValue] = useState<number | "">(
     isNumber(feedbackScore?.value) ? feedbackScore?.value : "",
@@ -74,14 +76,19 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [name, spanId, traceId],
+    [name, value, spanId, traceId],
   );
 
-  const { value: reasonValue, onChange: onReasonChange } = useDebouncedValue(
-    feedbackScore?.reason,
-    handleChangeReason,
-    SET_VALUE_DEBOUNCE_DELAY,
-  );
+  const onChangeTextAreaTriggered = useCallback(() => {
+    updateTextAreaHeight(textAreaRef.current);
+  }, []);
+
+  const { value: reasonValue, onChange: onReasonChange } = useDebouncedValue({
+    initialValue: feedbackScore?.reason,
+    onDebouncedChange: handleChangeReason,
+    delay: SET_VALUE_DEBOUNCE_DELAY,
+    onChangeTriggered: onChangeTextAreaTriggered,
+  });
 
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
@@ -264,9 +271,22 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           <Button
             variant="outline"
             size="icon-sm"
-            className={cn("size-7", editReason && "bg-[#F3F4FE]")}
+            className={cn(
+              "size-7 relative group/reason-btn",
+              editReason &&
+                "bg-[#F3F4FE] active:bg-[#F3F4FE] hover:bg-[#F3F4FE]",
+            )}
             onClick={() => setEditReason((v) => !v)}
           >
+            {!isUndefined(reasonValue) && (
+              <div
+                className={cn(
+                  "absolute right-1 top-1 size-[8px] rounded-full border-2 border-white bg-primary group-hover/reason-btn:border-primary-foreground",
+                  editReason &&
+                    "border-[#F3F4FE] group-hover/reason-btn:border-[#F3F4FE]",
+                )}
+              />
+            )}
             <MessageSquareMore className="size-3.5" />
           </Button>
         )}
@@ -290,6 +310,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
               placeholder="Add a reason..."
               value={reasonValue}
               onChange={onReasonChange}
+              className="min-h-12 resize-none overflow-hidden"
+              ref={(e) => {
+                textAreaRef.current = e;
+                updateTextAreaHeight(e, 48);
+              }}
             />
           </div>
           <div></div>

@@ -12,6 +12,8 @@ export interface TraceFeedbackScore {
   name: string;
   source: FEEDBACK_SCORE_TYPE;
   value: number;
+  last_updated_by: string;
+  last_updated_at: string;
 }
 
 export interface BaseTraceDataErrorInfo {

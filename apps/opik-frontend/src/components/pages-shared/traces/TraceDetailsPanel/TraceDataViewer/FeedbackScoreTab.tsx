@@ -7,17 +7,14 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTable from "@/components/shared/DataTable/DataTable";
-import TagCell from "@/components/shared/DataTableCells/TagCell";
+import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
+import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
 
 export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
   {
     id: "source",
     label: "Source",
     type: COLUMN_TYPE.list,
-    cell: TagCell as never,
-    customMeta: {
-      colored: false,
-    },
     size: 100,
   },
   {
@@ -25,13 +22,20 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
     label: "Key",
     type: COLUMN_TYPE.string,
     size: 100,
-    cell: TagCell as never,
+    cell: FeedbackScoreNameCell as never,
   },
   {
     id: "value",
     label: "Score",
     type: COLUMN_TYPE.number,
     cell: FeedbackScoreValueCell as never,
+    size: 100,
+  },
+  {
+    id: "reason",
+    label: "Reason",
+    type: COLUMN_TYPE.list,
+    cell: FeedbackScoreReasonCell as never,
     size: 100,
   },
   {

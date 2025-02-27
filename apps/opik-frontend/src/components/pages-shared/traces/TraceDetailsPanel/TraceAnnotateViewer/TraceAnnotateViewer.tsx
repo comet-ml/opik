@@ -89,6 +89,8 @@ const TraceAnnotateViewer: React.FunctionComponent<
               label={score.name}
               value={score.value}
               reason={score.reason}
+              lastUpdatedAt={score.last_updated_at}
+              lastUpdatedBy={score.last_updated_by}
             />
           ))}
         </div>

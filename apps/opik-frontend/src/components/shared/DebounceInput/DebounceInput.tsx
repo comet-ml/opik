@@ -11,11 +11,11 @@ export interface DebounceInputProps extends Omit<InputProps, "onChange"> {
 
 const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
   ({ value, onValueChange, delay = 300, ...props }, ref) => {
-    const { value: localValue, onChange } = useDebouncedValue(
-      value,
-      onValueChange,
+    const { value: localValue, onChange } = useDebouncedValue({
+      initialValue: value,
+      onDebouncedChange: onValueChange,
       delay,
-    );
+    });
 
     return (
       <Input
