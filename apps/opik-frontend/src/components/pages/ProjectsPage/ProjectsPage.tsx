@@ -88,6 +88,11 @@ export const DEFAULT_COLUMNS: ColumnData<ProjectWithStatistic>[] = [
     cell: CostCell as never,
   },
   {
+    id: "trace_count",
+    label: "Trace count",
+    type: COLUMN_TYPE.number,
+  },
+  {
     id: "usage.total_tokens",
     label: "Total tokens (average)",
     type: COLUMN_TYPE.number,
@@ -308,10 +313,11 @@ const ProjectsPage: React.FunctionComponent = () => {
           setSearchText={setSearch}
           placeholder="Search by name"
           className="w-[320px]"
+          dimension="sm"
         ></SearchInput>
         <div className="flex items-center gap-2">
           <ProjectsActionsPanel projects={selectedRows} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -319,7 +325,7 @@ const ProjectsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" onClick={handleNewProjectClick}>
+          <Button variant="default" size="sm" onClick={handleNewProjectClick}>
             Create new project
           </Button>
         </div>

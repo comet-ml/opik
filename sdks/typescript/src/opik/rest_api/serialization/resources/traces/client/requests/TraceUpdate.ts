@@ -18,6 +18,7 @@ export const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw,
         metadata: JsonNode.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
+        threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     });
 
 export declare namespace TraceUpdate {
@@ -30,5 +31,6 @@ export declare namespace TraceUpdate {
         metadata?: JsonNode.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfo.Raw | null;
+        thread_id?: string | null;
     }
 }

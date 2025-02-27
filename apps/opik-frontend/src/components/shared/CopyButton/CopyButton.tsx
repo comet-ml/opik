@@ -60,7 +60,7 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
           className={className}
           onClick={copyClickHandler}
         >
-          <Copy className="size-4" />
+          <Copy />
         </Button>
       </TooltipWrapper>
     );

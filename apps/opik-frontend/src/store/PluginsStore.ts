@@ -4,6 +4,7 @@ import { create } from "zustand";
 import WorkspacePreloader from "@/components/shared/WorkspacePreloader/WorkspacePreloader";
 import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
 import { FrameworkIntegrationsProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
+import { CommentsViewerCoreProps } from "@/components/pages-shared/traces/TraceDetailsPanel/CommentsViewer/CommentsViewerCore";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -15,6 +16,7 @@ type PluginStore = {
   ApiKeyCard: React.ComponentType | null;
   ConfigureEnvCode: React.ComponentType | null;
   EvaluationExamples: React.ComponentType | null;
+  CommentsViewer: React.ComponentType<CommentsViewerCoreProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -28,6 +30,7 @@ const PLUGIN_NAMES = [
   "GoogleColabCard",
   "ApiKeyCard",
   "ConfigureEnvCode",
+  "CommentsViewer",
   "WorkspacePreloader",
   "EvaluationExamples",
   "init",
@@ -42,6 +45,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   ApiKeyCard: null,
   WorkspacePreloader: null,
   ConfigureEnvCode: null,
+  CommentsViewer: null,
   EvaluationExamples: null,
   init: null,
   setupPlugins: async (folderName: string) => {

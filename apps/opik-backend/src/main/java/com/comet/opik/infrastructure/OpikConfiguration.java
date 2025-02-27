@@ -60,4 +60,12 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
 
+    @Valid @NotNull @JsonProperty
+    private OpenTelemetryConfig openTelemetry = new OpenTelemetryConfig();
+
+    @Valid @NotNull @JsonProperty
+    private WorkspaceSettings workspaceSettings = new WorkspaceSettings();
+
+    @Valid @NotNull @JsonProperty
+    private DeploymentConfig deployment = new DeploymentConfig();
 }

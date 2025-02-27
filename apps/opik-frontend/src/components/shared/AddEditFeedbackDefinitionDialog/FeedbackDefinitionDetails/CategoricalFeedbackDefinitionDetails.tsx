@@ -124,7 +124,7 @@ const CategoricalFeedbackDefinitionDetails: React.FunctionComponent<
                   });
                 }}
               >
-                <X className="size-4" />
+                <X />
               </Button>
             ) : null}
           </div>

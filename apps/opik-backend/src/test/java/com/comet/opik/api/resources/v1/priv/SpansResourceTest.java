@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
@@ -11,6 +10,7 @@ import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
@@ -257,7 +257,7 @@ class SpansResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 
@@ -562,7 +562,7 @@ class SpansResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 
@@ -1290,6 +1290,7 @@ class SpansResourceTest {
                     .collect(toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
                     .model("gpt-3.5-turbo-1106")
+                    .provider("openai")
                     .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
                     .build());
@@ -3804,9 +3805,11 @@ class SpansResourceTest {
 
     @ParameterizedTest
     @MethodSource
-    void createAndGetCost(Map<String, Integer> usage, String model, JsonNode metadata, BigDecimal manualCost) {
+    void createAndGetCost(Map<String, Integer> usage, String model, String provider, JsonNode metadata,
+            BigDecimal manualCost) {
         var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
                 .model(model)
+                .provider(provider)
                 .metadata(metadata)
                 .usage(usage)
                 .totalEstimatedCost(manualCost)
@@ -3822,6 +3825,7 @@ class SpansResourceTest {
                                 : Optional.ofNullable(metadata)
                                         .map(md -> md.get("model"))
                                         .map(JsonNode::asText).orElse(""),
+                        provider,
                         usage);
 
         Span span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
@@ -3841,31 +3845,31 @@ class SpansResourceTest {
         return Stream.of(
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "gpt-3.5-turbo-1106",
+                        "gpt-3.5-turbo-1106", "openai",
                         null, null),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "gemini-1.5-pro-preview-0514",
+                        "gemini-1.5-pro-preview-0514", "google_vertexai",
                         null, null),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "gpt-3.5-turbo-1106",
+                        "gpt-3.5-turbo-1106", "openai",
                         metadata,
                         null),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        null,
+                        null, "openai",
                         metadata,
                         null),
-                Arguments.of(null, "gpt-3.5-turbo-1106", null, null),
-                Arguments.of(null, "unknown-model", null, null),
-                Arguments.of(null, null, null, null),
+                Arguments.of(null, "gpt-3.5-turbo-1106", "openai", null, null),
+                Arguments.of(null, "unknown-model", "openai", null, null),
+                Arguments.of(null, null, null, null, null),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "gpt-3.5-turbo-1106",
+                        "gpt-3.5-turbo-1106", "openai",
                         null,
                         podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)),
-                Arguments.of(null, null, null,
+                Arguments.of(null, null, null, null,
                         podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)));
     }
 
@@ -4387,6 +4391,7 @@ class SpansResourceTest {
                     .projectName(null)
                     .parentSpanId(null)
                     .model("gpt-4o-2024-08-06")
+                    .provider("openai")
                     .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
                     .totalEstimatedCost(initialManualCost)
@@ -4414,6 +4419,7 @@ class SpansResourceTest {
             } else {
                 expectedCost = CostService.calculateCost(
                         expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model(),
+                        expectedSpanUpdate.provider() != null ? expectedSpanUpdate.provider() : expectedSpan.provider(),
                         expectedSpanUpdate.usage() != null ? expectedSpanUpdate.usage() : expectedSpan.usage());
             }
 
@@ -4427,6 +4433,8 @@ class SpansResourceTest {
         Stream<Arguments> update__whenCostIsChanged__thenAcceptUpdate() {
             return Stream.of(
                     arguments(SpanUpdate.builder().model("gpt-4o-2024-05-13").totalEstimatedCost(null).build(), null),
+                    arguments(SpanUpdate.builder().model("gemini-1.5-pro-002").provider("google_ai")
+                            .totalEstimatedCost(null).build(), null),
                     arguments(SpanUpdate.builder()
                             .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
@@ -5804,6 +5812,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -5842,6 +5851,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -5920,6 +5930,7 @@ class SpansResourceTest {
                             .type(type)
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -5961,6 +5972,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6010,6 +6022,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6053,6 +6066,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6094,6 +6108,7 @@ class SpansResourceTest {
                             .startTime(generateStartTime())
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6137,6 +6152,7 @@ class SpansResourceTest {
                             .startTime(generateStartTime())
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6182,6 +6198,7 @@ class SpansResourceTest {
                             .name(spanName)
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6228,6 +6245,7 @@ class SpansResourceTest {
                             .startTime(generateStartTime())
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6270,6 +6288,7 @@ class SpansResourceTest {
                             .startTime(Instant.now().minusSeconds(60 * 5))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6315,6 +6334,7 @@ class SpansResourceTest {
                             .startTime(Instant.now().minusSeconds(60 * 5))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6359,6 +6379,7 @@ class SpansResourceTest {
                             .startTime(Instant.now().plusSeconds(60 * 5))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6406,6 +6427,7 @@ class SpansResourceTest {
                             .startTime(Instant.now().plusSeconds(60 * 5))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6452,6 +6474,7 @@ class SpansResourceTest {
                             .startTime(generateStartTime())
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6495,6 +6518,7 @@ class SpansResourceTest {
                             .startTime(generateStartTime())
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6536,6 +6560,7 @@ class SpansResourceTest {
                             .startTime(generateStartTime())
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6580,6 +6605,7 @@ class SpansResourceTest {
                                     "version\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6629,6 +6655,7 @@ class SpansResourceTest {
                                     "version\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6679,6 +6706,7 @@ class SpansResourceTest {
                                             "version\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6728,6 +6756,7 @@ class SpansResourceTest {
                                     "version\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6777,6 +6806,7 @@ class SpansResourceTest {
                                     "version\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6826,6 +6856,7 @@ class SpansResourceTest {
                                     "four\",\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6876,6 +6907,7 @@ class SpansResourceTest {
                                             "version\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6925,6 +6957,7 @@ class SpansResourceTest {
                                     "version\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -6974,6 +7007,7 @@ class SpansResourceTest {
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -7024,6 +7058,7 @@ class SpansResourceTest {
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .build())
                     .collect(toCollection(ArrayList::new));
@@ -7069,6 +7104,7 @@ class SpansResourceTest {
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .build())
                     .collect(toCollection(ArrayList::new));
@@ -7114,6 +7150,7 @@ class SpansResourceTest {
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .build())
                     .collect(toCollection(ArrayList::new));
@@ -7156,6 +7193,7 @@ class SpansResourceTest {
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -7204,6 +7242,7 @@ class SpansResourceTest {
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .build())
                     .collect(toCollection(ArrayList::new));
@@ -7249,6 +7288,7 @@ class SpansResourceTest {
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .build())
                     .collect(toCollection(ArrayList::new));
@@ -7294,6 +7334,7 @@ class SpansResourceTest {
                                             "Chat-GPT 4.0\"}]}"))
                             .feedbackScores(null)
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .build())
                     .collect(toCollection(ArrayList::new));
@@ -7336,6 +7377,7 @@ class SpansResourceTest {
                             .feedbackScores(null)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -7391,6 +7433,7 @@ class SpansResourceTest {
                     .startTime(generateStartTime())
                     .feedbackScores(null)
                     .model(spanResourceClient.randomModel().toString())
+                    .provider(spanResourceClient.provider())
                     .usage(mergeUsage(usageKey, randomNumber(1, 8)))
                     .totalEstimatedCost(null)
                     .build());
@@ -7451,6 +7494,7 @@ class SpansResourceTest {
                             .feedbackScores(null)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(mergeUsage(usageKey, 123))
                             .totalEstimatedCost(null)
                             .build())
@@ -7497,6 +7541,7 @@ class SpansResourceTest {
                             .feedbackScores(null)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(mergeUsage(usageKey, 123))
                             .totalEstimatedCost(null)
                             .build())
@@ -7543,6 +7588,7 @@ class SpansResourceTest {
                             .feedbackScores(null)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(mergeUsage(usageKey, 456))
                             .totalEstimatedCost(null)
                             .build())
@@ -7590,6 +7636,7 @@ class SpansResourceTest {
                             .feedbackScores(null)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(mergeUsage(usageKey, 456))
                             .totalEstimatedCost(null)
                             .build())
@@ -7635,6 +7682,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .build())
@@ -7698,6 +7746,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .feedbackScores(updateFeedbackScore(
@@ -7758,6 +7807,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .feedbackScores(updateFeedbackScore(span.feedbackScores(), 2, 1234.5678))
@@ -7813,6 +7863,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .totalEstimatedCost(null)
                             .feedbackScores(updateFeedbackScore(span.feedbackScores(), 2, 2345.6789))
@@ -7867,6 +7918,7 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .startTime(generateStartTime())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .usage(spanResourceClient.getTokenUsage())
                             .feedbackScores(updateFeedbackScore(span.feedbackScores(), 2, 2345.6789))
                             .totalEstimatedCost(null)

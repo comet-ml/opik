@@ -1,9 +1,8 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.domain.DummyLockService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -27,8 +26,8 @@ import org.mockito.Mockito;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_API_KEY;
-import static com.comet.opik.api.AuthenticationErrorResponse.MISSING_WORKSPACE;
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
+import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -41,42 +40,39 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class RemoteAuthServiceTest {
     private Client client;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
-        wireMock = WireMockUtils.startWireMock();
-    }
+    private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
 
     @BeforeAll
     void setUpAll() {
         client = TestHttpClientUtils.client();
-        wireMock.server().start();
+        WIRE_MOCK.server().start();
     }
 
     @AfterAll
     void tearDownAll() {
-        wireMock.server().stop();
+        WIRE_MOCK.server().stop();
     }
 
     @AfterEach
     void afterEach() {
-        wireMock.server().resetAll();
+        WIRE_MOCK.server().resetAll();
     }
 
     @Test
     void testAuthSuccessful() throws JsonProcessingException {
         var workspaceId = UUID.randomUUID();
-        var user = RandomStringUtils.randomAlphabetic(10);
-        var workspaceName = RandomStringUtils.randomAlphabetic(10);
-        var apiKey = RandomStringUtils.randomAlphabetic(10);
-
-        wireMock.server().stubFor(post("/auth")
+        var user = "user-" + RandomStringUtils.secure().nextAlphanumeric(20);
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(20);
+        var apiKey = "apiKey" + RandomStringUtils.secure().nextAlphanumeric(20);
+        WIRE_MOCK.server().stubFor(post("/auth")
                 .willReturn(okJson(new ObjectMapper()
-                        .writeValueAsString(new RemoteAuthService.AuthResponse(user, workspaceId.toString())))));
-        RequestContext requestContext = new RequestContext();
+                        .writeValueAsString(RemoteAuthService.AuthResponse.builder()
+                                .user(user)
+                                .workspaceId(workspaceId.toString())
+                                .build()))));
 
+        var requestContext = new RequestContext();
         var service = getService(requestContext);
-
         service.authenticate(getHeadersMock(workspaceName, apiKey), null, "/priv/something");
 
         assertThat(requestContext.getWorkspaceId()).isEqualTo(workspaceId.toString());
@@ -87,14 +83,13 @@ class RemoteAuthServiceTest {
     @ParameterizedTest
     @MethodSource
     void testUnauthorized(int remoteAuthStatusCode, Class<? extends Exception> expected) {
-        var workspaceName = RandomStringUtils.randomAlphabetic(10);
-        var apiKey = RandomStringUtils.randomAlphabetic(10);
-
-        wireMock.server()
-                .stubFor(post("/auth").willReturn(aResponse().withStatus(remoteAuthStatusCode)
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(20);
+        var apiKey = "apiKey" + RandomStringUtils.secure().nextAlphanumeric(20);
+        WIRE_MOCK.server().stubFor(post("/auth")
+                .willReturn(aResponse().withStatus(remoteAuthStatusCode)
                         .withHeader("Content-Type", "application/json")
                         .withJsonBody(JsonUtils.readTree(
-                                new AuthenticationErrorResponse("test error message",
+                                new ReactServiceErrorResponse("test error message",
                                         remoteAuthStatusCode)))));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
@@ -111,8 +106,8 @@ class RemoteAuthServiceTest {
 
     @Test
     void testAuthNoWorkspace() {
-        var apiKey = RandomStringUtils.randomAlphabetic(10);
-        wireMock.server().stubFor(post("/auth").willReturn(ok()));
+        var apiKey = "apiKey" + RandomStringUtils.secure().nextAlphanumeric(20);
+        WIRE_MOCK.server().stubFor(post("/auth").willReturn(ok()));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock("", apiKey), null, "/priv/something"))
@@ -122,8 +117,8 @@ class RemoteAuthServiceTest {
 
     @Test
     void testAuthNoApiKey() {
-        var workspaceName = RandomStringUtils.randomAlphabetic(10);
-        wireMock.server().stubFor(post("/auth").willReturn(ok()));
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(20);
+        WIRE_MOCK.server().stubFor(post("/auth").willReturn(ok()));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock(workspaceName, ""), null, "/priv/something"))
@@ -133,17 +128,15 @@ class RemoteAuthServiceTest {
 
     private RemoteAuthService getService(RequestContext requestContext) {
         return new RemoteAuthService(client,
-                new AuthenticationConfig.UrlConfig(wireMock.server().url("/auth")),
-                new AuthenticationConfig.UrlConfig(wireMock.server().url("/")),
-                () -> requestContext, new NoopCacheService(), new DummyLockService());
+                new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("/auth")),
+                new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("/")),
+                () -> requestContext, new NoopCacheService());
     }
 
     private HttpHeaders getHeadersMock(String workspaceName, String apiKey) {
         var headersMock = Mockito.mock(HttpHeaders.class);
-
         Mockito.when(headersMock.getHeaderString(RequestContext.WORKSPACE_HEADER)).thenReturn(workspaceName);
         Mockito.when(headersMock.getHeaderString(HttpHeaders.AUTHORIZATION)).thenReturn(apiKey);
-
         return headersMock;
     }
 }

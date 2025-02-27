@@ -113,6 +113,11 @@ redis:
   # Description: single node redis's URL
   singleNodeUrl: redis://:opik@localhost:6379/0
 
+openTelemetry:
+  # Default: 3h
+  # Description: how long it takes to expire non-used keys
+  ttl: 3h
+
 # Authentication configuration. This is not enabled by default for open source installations.
 authentication:
   # Default: false
@@ -247,3 +252,9 @@ clickHouseLogAppender:
   # Default: PT0.500S or 500ms
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: PT0.500S
+
+# Configuration for deployment details
+deployment:
+  # Default: http://localhost:5173/
+  # Description: Base url for Opik deployment
+  baseUrl: 'default'

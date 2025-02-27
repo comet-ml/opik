@@ -33,7 +33,12 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     : "";
 
   const Reason = reason ? (
-    <TooltipWrapper content={reason} delayDuration={100}>
+    <TooltipWrapper
+      content={reason}
+      delayDuration={100}
+      className="comet-body-xs max-w-[400px] border border-slate-200 bg-soft-background p-2 text-foreground-secondary"
+      showArrow={false}
+    >
       <MessageSquareMore className="size-3.5 text-light-slate" />
     </TooltipWrapper>
   ) : null;
@@ -52,7 +57,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       />
       <div
         data-testid="feedback-score-tag-label"
-        className="comet-body-s-accented truncate leading-none text-muted-slate"
+        className="comet-body-s-accented truncate text-muted-slate"
       >
         {label}
       </div>
@@ -75,7 +80,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
           )}
           onClick={() => onDelete(label)}
         >
-          <CircleX className="size-3.5" />
+          <CircleX />
         </Button>
       )}
     </div>

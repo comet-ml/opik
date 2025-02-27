@@ -24,7 +24,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages/ExperimentsShared/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
@@ -55,6 +55,7 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -221,6 +222,17 @@ const ExperimentsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
+      mapColumnDataFields<GroupedExperiment, GroupedExperiment>({
+        id: "comments",
+        label: "Comments",
+        type: COLUMN_TYPE.list,
+        cell: CommentsCell as never,
+        customMeta: {
+          // TODO open the sidebar
+          callback: () => {},
+          asId: true,
+        },
+      }),
       generateActionsColumDef({
         cell: ExperimentRowActionsCell,
       }),
@@ -268,6 +280,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
             setSearchText={setSearch}
             placeholder="Search by name"
             className="w-[320px]"
+            dimension="sm"
           ></SearchInput>
           <ExperimentsFiltersButton
             datasetId={datasetId!}
@@ -276,15 +289,15 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <TooltipWrapper content="Refresh experiments list">
             <Button
               variant="outline"
-              size="icon"
+              size="icon-sm"
               className="shrink-0"
               onClick={() => refetch()}
             >
-              <RotateCw className="size-4" />
+              <RotateCw />
             </Button>
           </TooltipWrapper>
           <ColumnsButton
@@ -294,8 +307,12 @@ const ExperimentsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="outline" onClick={handleNewExperimentClick}>
-            <Info className="mr-2 size-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleNewExperimentClick}
+          >
+            <Info className="mr-2 size-3.5" />
             Create new experiment
           </Button>
         </div>

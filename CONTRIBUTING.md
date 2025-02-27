@@ -148,38 +148,105 @@ pre-commit run --all-files
 
 The Opik frontend is a React application that is located in `apps/opik-frontend`.
 
-In order to run the frontend locally, you need to have `npm` installed. Once installed, you can run the frontend locally using the following command:
+If you want to run the front-end locally and see your changes instantly on saving files, follow this guide:
 
-```bash
-# Run the backend locally with the flag "--local-fe"
-./build_and_run.sh --local-fe
+#### Prerequisites
 
-cd apps/opik-frontend
+1. Ensure you have **Node.js** installed.
 
-# Install dependencies - Only needs to be run once
-npm install
+#### Steps
 
-# Run the frontend locally
-npm run start
-```
+#### 1. Configure the Environment Variables
 
-You can then access the development frontend at `http://localhost:5173/`. Any change you make to the frontend will be updated in real-time.
+- Navigate to `apps/opik-frontend/.env.development` and update it with the following values:
 
-> You will need to open the FE using `http://localhost:5173/` ignoring the output from the `npm run start` command which will recommend to open `http://localhost:5174/`. In case `http://localhost:5174/` is opened, the BE will not be accessible.
+  ```ini
+  VITE_BASE_URL=/
+  VITE_BASE_API_URL=http://localhost:8080
+  ```
 
-Before submitting a PR, please ensure that your code passes the test suite, the linter and the type checker:
+#### 2. Enable CORS in the Back-End
 
-```bash
-cd apps/opik-frontend
+- Open `deployment/docker-compose/docker-compose.yaml` and in the `services.backend.environment` section,
+  add `CORS: true` to allow cross-origin requests.
 
-npm run e2e
-npm run lint
-npm run typecheck
-```
+  It should look like this:
+
+  ```yaml
+  ...
+  OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
+  CORS: true
+  ...
+  ```
+
+#### 3. Start the Services
+
+- Run the following command to start the necessary services and expose the required ports:
+
+  ```bash
+  docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
+  ```
+
+#### 4. Verify the Back-End is Running
+
+- Wait for the images to build and containers to start.
+- To confirm that the back-end is running, open the following URL in your browser:
+
+  ```
+  http://localhost:8080/is-alive/ver
+  ```
+
+    - If you see a version number displayed, the back-end is running successfully.
+
+#### 5. Install Front-End Dependencies
+
+- Navigate to the front-end project directory:
+
+  ```bash
+  cd opik/apps/opik-frontend
+  ```
+
+- Install the necessary dependencies:
+
+  ```bash
+  npm install
+  ```
+
+#### 6. Start the Front-End
+
+- Run the following command to start the front-end:
+
+  ```bash
+  npm run start
+  ```
+
+- Once the script completes, open your browser and go to:
+
+  ```
+  http://localhost:5174/
+  ```
+
+  You should see the app running! 🎉
+
+### Notes:
+
+- Another built front-end version will be available at `http://localhost:5173/`.  
+  This version is used for checking builds, but you can also use it for the same purposes if needed.
+
+
+- Before submitting a PR, please ensure that your code passes the test suite, the linter and the type checker:
+
+  ```bash
+  cd apps/opik-frontend
+  
+  npm run e2e
+  npm run lint
+  npm run typecheck
+  ```
 
 ### Contributing to the backend
 
-In order to run the external services (Clickhouse, MySQL, Redis), you can use the `build_and_run.sh` script or `docker-compose`:
+In order to run the external services (Clickhouse, MySQL, Redis), you can use `docker-compose`:
 
 ```bash
 cd deployment/docker-compose

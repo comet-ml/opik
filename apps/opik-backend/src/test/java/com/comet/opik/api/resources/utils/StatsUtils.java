@@ -107,7 +107,7 @@ public class StatsUtils {
                                 .stream()
                                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().intValue()));
 
-                        return CostService.calculateCost(span.model(), usage);
+                        return CostService.calculateCost(span.model(), span.provider(), usage);
                     }
 
                     return BigDecimal.ZERO;
@@ -147,7 +147,10 @@ public class StatsUtils {
             metadata += metadataProvider.apply(entity) != null ? 1 : 0;
             tags += tagsProvider.apply(entity) != null ? tagsProvider.apply(entity).size() : 0;
 
-            BigDecimal cost = totalEstimatedCostProvider.apply(entity);
+            BigDecimal cost = totalEstimatedCostProvider.apply(entity) != null
+                    ? totalEstimatedCostProvider.apply(entity)
+                    : BigDecimal.ZERO;
+
             totalEstimatedCost = totalEstimatedCost.add(cost);
 
             if (cost.compareTo(BigDecimal.ZERO) > 0) {
@@ -369,7 +372,7 @@ public class StatsUtils {
 
     public static BigDecimal aggregateSpansCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostService.calculateCost(span.model(), span.usage()))
+                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

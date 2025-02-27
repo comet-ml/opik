@@ -1,6 +1,12 @@
 instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
+    custom-domain: https://www.comet.com/docs/opik/
 favicon: img/logo.svg
+js:
+  - path: ./add_cookbook_banner.js
+    strategy: afterInteractive
+  - path: ./dify_chatbot.js
+    strategy: lazyOnload
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -123,6 +129,9 @@ navigation:
               - page: Crewai
                 path: docs/tracing/integrations/crewai.mdx
                 slug: crewai
+              - page: DeepSeek
+                path: docs/tracing/integrations/deepseek.mdx
+                slug: deepseek
               - page: Dify
                 path: docs/tracing/integrations/dify.mdx
                 slug: dify
@@ -141,12 +150,15 @@ navigation:
               - page: Haystack
                 path: docs/tracing/integrations/haystack.mdx
                 slug: haystack
+              - page: Instructor
+                path: docs/tracing/integrations/instructor.mdx
+                slug: instructor
               - page: LangGraph
                 path: docs/tracing/integrations/langgraph.mdx
                 slug: langgraph
               - page: Llama Index
                 path: docs/tracing/integrations/llama_index.mdx
-                slug: llama_indec
+                slug: llama_index
               - page: Ollama
                 path: docs/tracing/integrations/ollama.mdx
                 slug: ollama
@@ -156,6 +168,9 @@ navigation:
               - page: Ragas
                 path: docs/tracing/integrations/ragas.mdx
                 slug: ragas
+              - page: Vercel AI SDK
+                path: docs/tracing/integrations/vercel-ai-sdk.mdx
+                slug: vercel-ai-sdk
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
                 slug: watsonx
@@ -321,6 +336,9 @@ navigation:
           - page: Haystack
             path: docs/cookbook/haystack.mdx
             slug: haystack
+          - page: Instructor
+            path: docs/cookbook/instructor.mdx
+            slug: instructor
           - page: LangGraph
             path: docs/cookbook/langgraph.mdx
             slug: langgraph
@@ -376,6 +394,9 @@ navigation:
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
+    permanent: true
+  - source: "/docs/opik/reference/rest_api/:slug/"
+    destination: "/docs/opik/reference/rest-api/overview"
     permanent: true
   - source: "/docs/opik/reference/rest_api/opik-rest-api/"
     destination: "/docs/opik/reference/rest-api/overview"

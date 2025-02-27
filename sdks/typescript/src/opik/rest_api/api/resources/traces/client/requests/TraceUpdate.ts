@@ -19,4 +19,5 @@ export interface TraceUpdate {
     metadata?: OpikApi.JsonNode;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfo;
+    threadId?: string;
 }

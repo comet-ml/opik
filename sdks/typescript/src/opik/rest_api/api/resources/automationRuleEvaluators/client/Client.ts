@@ -136,16 +136,16 @@ export class AutomationRuleEvaluators {
     /**
      * Create automation rule evaluator
      *
-     * @param {OpikApi.AutomationRuleEvaluatorWrite} request
+     * @param {unknown} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
      *     await client.automationRuleEvaluators.createAutomationRuleEvaluator({
-     *         type: "llm_as_judge"
+     *         "key": "value"
      *     })
      */
     public async createAutomationRuleEvaluator(
-        request: OpikApi.AutomationRuleEvaluatorWrite,
+        request?: unknown,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<void> {
         const _response = await core.fetcher({
@@ -169,7 +169,7 @@ export class AutomationRuleEvaluators {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.AutomationRuleEvaluatorWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: request,
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
@@ -294,7 +294,7 @@ export class AutomationRuleEvaluators {
         id: string,
         request: OpikApi.GetEvaluatorByIdRequest = {},
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<OpikApi.AutomationRuleEvaluatorPublic> {
+    ): Promise<unknown> {
         const { projectId } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -329,12 +329,7 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.AutomationRuleEvaluatorPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return _response.body;
         }
 
         if (_response.error.reason === "status-code") {
@@ -362,39 +357,20 @@ export class AutomationRuleEvaluators {
     }
 
     /**
-     * update Automation Rule Evaluator by id
+     * Update Automation Rule Evaluator by id
      *
      * @param {string} id
-     * @param {OpikApi.AutomationRuleEvaluatorUpdate} request
+     * @param {unknown} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
      *     await client.automationRuleEvaluators.updateAutomationRuleEvaluator("id", {
-     *         name: "name",
-     *         code: {
-     *             model: {
-     *                 name: "name",
-     *                 temperature: 1.1
-     *             },
-     *             messages: [{
-     *                     role: "SYSTEM",
-     *                     content: "content"
-     *                 }],
-     *             variables: {
-     *                 "key": "value"
-     *             },
-     *             schema: [{
-     *                     name: "name",
-     *                     type: "BOOLEAN",
-     *                     description: "description"
-     *                 }]
-     *         },
-     *         samplingRate: 1.1
+     *         "key": "value"
      *     })
      */
     public async updateAutomationRuleEvaluator(
         id: string,
-        request: OpikApi.AutomationRuleEvaluatorUpdate,
+        request?: unknown,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<void> {
         const _response = await core.fetcher({
@@ -418,7 +394,7 @@ export class AutomationRuleEvaluators {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.AutomationRuleEvaluatorUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: request,
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
@@ -626,17 +602,17 @@ export class AutomationRuleEvaluators {
      * Create automation rule evaluator Deprecated
      *
      * @param {string} projectId
-     * @param {OpikApi.AutomationRuleEvaluatorWrite} request
+     * @param {unknown} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
      *     await client.automationRuleEvaluators.createAutomationRuleEvaluatorDeprecated("projectId", {
-     *         type: "llm_as_judge"
+     *         "key": "value"
      *     })
      */
     public async createAutomationRuleEvaluatorDeprecated(
         projectId: string,
-        request: OpikApi.AutomationRuleEvaluatorWrite,
+        request?: unknown,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<void> {
         const _response = await core.fetcher({
@@ -660,7 +636,7 @@ export class AutomationRuleEvaluators {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.AutomationRuleEvaluatorWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: request,
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
@@ -780,7 +756,7 @@ export class AutomationRuleEvaluators {
         projectId: string,
         id: string,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<OpikApi.AutomationRuleEvaluatorPublic> {
+    ): Promise<unknown> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -808,12 +784,7 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.AutomationRuleEvaluatorPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return _response.body;
         }
 
         if (_response.error.reason === "status-code") {
@@ -845,37 +816,18 @@ export class AutomationRuleEvaluators {
      *
      * @param {string} id
      * @param {string} projectId
-     * @param {OpikApi.AutomationRuleEvaluatorUpdate} request
+     * @param {unknown} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
      *     await client.automationRuleEvaluators.updateAutomationRuleEvaluatorDeprecated("id", "projectId", {
-     *         name: "name",
-     *         code: {
-     *             model: {
-     *                 name: "name",
-     *                 temperature: 1.1
-     *             },
-     *             messages: [{
-     *                     role: "SYSTEM",
-     *                     content: "content"
-     *                 }],
-     *             variables: {
-     *                 "key": "value"
-     *             },
-     *             schema: [{
-     *                     name: "name",
-     *                     type: "BOOLEAN",
-     *                     description: "description"
-     *                 }]
-     *         },
-     *         samplingRate: 1.1
+     *         "key": "value"
      *     })
      */
     public async updateAutomationRuleEvaluatorDeprecated(
         id: string,
         projectId: string,
-        request: OpikApi.AutomationRuleEvaluatorUpdate,
+        request?: unknown,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<void> {
         const _response = await core.fetcher({
@@ -899,7 +851,7 @@ export class AutomationRuleEvaluators {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.AutomationRuleEvaluatorUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: request,
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,

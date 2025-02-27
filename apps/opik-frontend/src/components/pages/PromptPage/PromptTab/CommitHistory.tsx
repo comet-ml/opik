@@ -63,7 +63,7 @@ const CommitHistory = ({
                     variant="minimal"
                     onClick={() => handleCopyClick(version.commit)}
                   >
-                    <Copy className="size-3 shrink-0" />
+                    <Copy />
                   </Button>
                 </TooltipWrapper>
               )}

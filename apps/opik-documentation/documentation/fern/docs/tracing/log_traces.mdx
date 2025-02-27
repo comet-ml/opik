@@ -1,9 +1,3 @@
----
-subtitle: >-
-  Describes how to log LLM calls to the Opik platform using function decorators,
-  integrations or the low level client.
----
-
 <Tip>
   If you are just getting started with Opik, we recommend first checking out the [Quickstart](/quickstart) guide that
   will walk you through the process of logging your first LLM call.
@@ -446,6 +440,31 @@ client = Opik()
 client.flush()
 ```
 
+#### Copying traces to a new project
+
+You can copy traces between projects using the [`copy_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.copy_traces) method. This
+method allows you to move traces from one project to another without having to re-log them.
+
+```python
+from opik import Opik
+
+client = Opik()
+
+client.copy_traces(
+    project_name="<name of the project where the traces were created>",
+    destination_project_name="<name of the new project>"
+)
+```
+
+<Note>
+By default, the `copy_traces` method will not delete the traces in the source project. You can optionally set
+the `delete_original_project` parameter to `true` to delete the traces in the source project after copying them.
+
+This is not recommended, instead we recommend moving the traces and once everything has been migrated you can delete
+the source project from the UI.
+
+</Note>
+
 ## Logging with the JS / TS SDK
 
 You can log your LLM calls using the Opik typescript SDK `opik`. We are actively adding functionality to the TypeScript SDK,
@@ -473,7 +492,7 @@ import { Opik } from "opik";
 // Create a new Opik client with your configuration
 const client = new Opik({
   apiKey: "<your-api-key>",
-  host: "https://www.comet.com/opik/api",
+  apiUrl: "https://www.comet.com/opik/api",
   projectName: "<your-project-name>",
   workspaceName: "<your-workspace-name>",
 });

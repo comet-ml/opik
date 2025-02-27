@@ -53,7 +53,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                 size="icon-sm"
                 onClick={onRemoveMessage}
               >
-                <Trash className="size-3.5" />
+                <Trash />
               </Button>
             </TooltipWrapper>
             <TooltipWrapper content="Copy to input">
@@ -62,7 +62,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                 size="icon-sm"
                 onClick={onCopyToEditMessage}
               >
-                <ClipboardPaste className="size-3.5" />
+                <ClipboardPaste />
               </Button>
             </TooltipWrapper>
             <CopyButton

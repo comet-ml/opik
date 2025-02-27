@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.TestComparators;
-import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
@@ -11,6 +10,7 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
@@ -236,7 +236,7 @@ class ProjectsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 
@@ -428,7 +428,7 @@ class ProjectsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 
@@ -1450,6 +1450,7 @@ class ProjectsResourceTest {
                     .map(span -> span.toBuilder()
                             .usage(spanResourceClient.getTokenUsage())
                             .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .traceId(trace.id())
                             .projectName(trace.projectName())
                             .totalEstimatedCost(null)

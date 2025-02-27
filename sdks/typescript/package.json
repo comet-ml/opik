@@ -1,7 +1,7 @@
 {
   "name": "opik",
   "description": "Opik TypeScript and JavaScript SDK",
-  "version": "0.3.0",
+  "version": "1.5.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
@@ -83,9 +83,6 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "overrides": {
-    "esbuild": "^0.25.0"
   },
   "dependencies": {
     "ansi-escapes": "^7.0.0",

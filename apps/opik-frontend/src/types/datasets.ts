@@ -59,6 +59,7 @@ export interface Experiment {
   trace_count: number;
   created_at: string;
   last_updated_at: string;
+  comments?: Comment[];
 }
 
 export interface ExperimentItem {

@@ -78,6 +78,7 @@ jobs:
                 OPIK_BASE_URL: http://localhost:5173
                 OPIK_TEST_WORKSPACE: default
                 OPIK_TEST_PROJECT_NAME: automated_tests_project
+                OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
               run: |
                 if [ "${{ github.event_name }}" == "pull_request" ]; then
                   SUITE="all_features"
@@ -90,21 +91,21 @@ jobs:
 
                 # Run the appropriate test suite
                 if [ "$SUITE" == "projects" ]; then
-                    pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --setup-show
+                    pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium
                 elif [ "$SUITE" == "traces" ]; then
-                    pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --setup-show
+                    pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium
                 elif [ "$SUITE" == "datasets" ]; then
-                    pytest -s tests/Datasets/ --browser chromium --setup-show
+                    pytest -s tests/Datasets/ --browser chromium
                 elif [ "$SUITE" == "experiments" ]; then
-                    pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium --setup-show
+                    pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium
                 elif [ "$SUITE" == "prompts" ]; then
-                    pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium --setup-show
+                    pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium
                 elif [ "$SUITE" == "feedback_definitions" ]; then
-                    pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium --setup-show
+                    pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium
                 elif [ "$SUITE" == "sanity" ]; then
-                    pytest -s -m sanity --browser chromium --setup-show
+                    pytest -s -m sanity --browser chromium
                 elif [ "$SUITE" == "all_features" ]; then
-                    pytest -s tests --browser chromium --setup-show
+                    pytest -s tests --browser chromium
                 fi
 
             - name: Stop Opik server (Local)

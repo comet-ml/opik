@@ -1,12 +1,15 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
@@ -128,7 +131,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
@@ -141,7 +144,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .method(HttpMethod.PATCH, Entity.json(traceUpdate))) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
@@ -170,4 +173,66 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                     return scores;
                 }).toList();
     }
+
+    public List<Trace> getByProjectName(String projectName, String apiKey, String workspace) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("project_name", projectName)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspace)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
+
+            return response.readEntity(Trace.TracePage.class).content();
+        }
+    }
+
+    public void deleteTraceThreads(List<String> threadId, String projectName, UUID projectId, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(DeleteTraceThreads.builder().threadIds(threadId).projectName(projectName)
+                        .projectId(projectId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public TraceThread getTraceThread(String threadId, UUID projectId, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
+
+            return response.readEntity(TraceThread.class);
+        }
+    }
+
+    public Response getTraceThreadResponse(String threadId, UUID projectId, String apiKey, String workspace) {
+        return callRetrieveThreads(threadId, projectId, apiKey, workspace);
+    }
+
+    private Response callRetrieveThreads(String threadId, UUID projectId, String apiKey, String workspace) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspace)
+                .post(Entity
+                        .json(TraceThreadIdentifier.builder().threadId(threadId).projectId(projectId).build()));
+    }
+
 }

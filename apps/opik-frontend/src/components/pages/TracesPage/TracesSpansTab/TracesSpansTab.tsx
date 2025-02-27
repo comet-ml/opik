@@ -52,13 +52,17 @@ import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import TraceDetailsPanel, {
+  LastSectionParam,
+  LastSectionValue,
+} from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { DEFAULT_COLUMN_PINNING } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -183,7 +187,6 @@ export const TRACES_PAGE_FILTERS_COLUMNS = [
   },
 
   ...SHARED_COLUMNS,
-
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
@@ -237,6 +240,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const [size = 100, setSize] = useQueryParam("size", NumberParam, {
+    updateType: "replaceIn",
+  });
+
+  const [, setLastSection] = useQueryParam("lastSection", LastSectionParam, {
     updateType: "replaceIn",
   });
 
@@ -402,7 +409,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [rowSelection, rows]);
 
   const handleRowClick = useCallback(
-    (row?: Trace | Span) => {
+    (row?: Trace | Span, lastSection?: LastSectionValue) => {
       if (!row) return;
       if (type === TRACE_DATA_TYPE.traces) {
         setTraceId((state) => (row.id === state ? "" : row.id));
@@ -411,8 +418,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         setTraceId((row as Span).trace_id);
         setSpanId((state) => (row.id === state ? "" : row.id));
       }
+
+      if (lastSection) {
+        setLastSection(lastSection);
+      }
     },
-    [setTraceId, setSpanId, type],
+    [setTraceId, setSpanId, type, setLastSection],
   );
 
   const columns = useMemo(() => {
@@ -437,6 +448,24 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
         scoresColumnsData,
+        {
+          columnsOrder: scoresColumnsOrder,
+          selectedColumns,
+        },
+      ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        [
+          {
+            id: "comments",
+            label: "Comments",
+            type: COLUMN_TYPE.list,
+            cell: CommentsCell as never,
+            customMeta: {
+              callback: handleRowClick,
+              asId: true,
+            },
+          },
+        ],
         {
           columnsOrder: scoresColumnsOrder,
           selectedColumns,
@@ -498,6 +527,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
+  const columnsMenuList = useMemo(
+    () => [...TRACES_PAGE_COLUMNS, { id: "comments", label: "Comments" }],
+    [],
+  );
+
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
@@ -515,6 +549,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             setSearchText={setSearch}
             placeholder="Search by ID"
             className="w-[320px]"
+            dimension="sm"
           ></SearchInput>
           <FiltersButton
             columns={TRACES_PAGE_FILTERS_COLUMNS}
@@ -531,7 +566,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
           />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <TooltipWrapper
             content={`Refresh ${
               type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
@@ -539,14 +574,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           >
             <Button
               variant="outline"
-              size="icon"
+              size="icon-sm"
               className="shrink-0"
               onClick={() => {
                 refetch();
                 refetchStatistic();
               }}
             >
-              <RotateCw className="size-4" />
+              <RotateCw />
             </Button>
           </TooltipWrapper>
           <DataTableRowHeightSelector
@@ -554,7 +589,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={TRACES_PAGE_COLUMNS}
+            columns={columnsMenuList}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

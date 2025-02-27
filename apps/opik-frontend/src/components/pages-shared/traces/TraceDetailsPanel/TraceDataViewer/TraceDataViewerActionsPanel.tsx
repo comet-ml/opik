@@ -1,6 +1,13 @@
 import React, { useMemo, useRef, useState } from "react";
 import copy from "clipboard-copy";
-import { Copy, Database, MoreHorizontal, PenLine, Share } from "lucide-react";
+import {
+  Copy,
+  MessageSquareMore,
+  MoreHorizontal,
+  PenLine,
+  Share,
+} from "lucide-react";
+import DatabasePlus from "@/icons/database-plus.svg?react";
 
 import { Span, Trace } from "@/types/traces";
 import { Button } from "@/components/ui/button";
@@ -13,26 +20,43 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
+import { LastSection, LastSectionValue } from "../TraceDetailsPanel";
+import { cn } from "@/lib/utils";
+import { HeaderLayoutSize } from "./TraceDataViewerHeader";
 
 type TraceDataViewerActionsPanelProps = {
+  layoutSize: HeaderLayoutSize;
   data: Trace | Span;
   traceId: string;
   spanId?: string;
-  annotateOpen: boolean;
-  setAnnotateOpen: (open: boolean) => void;
+  lastSection?: LastSectionValue | null;
+  setLastSection: (v: LastSectionValue) => void;
+};
+
+const isLargeLayout = (layoutSize: HeaderLayoutSize) => layoutSize === "lg";
+const formatCounter = (
+  layoutSize: HeaderLayoutSize,
+  count?: number | string,
+) => {
+  if (!count) return;
+  return isLargeLayout(layoutSize) ? `(${count})` : String(count);
 };
 
 const TraceDataViewerActionsPanel: React.FunctionComponent<
   TraceDataViewerActionsPanelProps
-> = ({ data, traceId, spanId, annotateOpen, setAnnotateOpen }) => {
+> = ({ data, traceId, spanId, lastSection, setLastSection, layoutSize }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const { toast } = useToast();
 
   const rows = useMemo(() => (data ? [data] : []), [data]);
+  const showFullActionLabel = isLargeLayout(layoutSize);
+
+  const annotationCount = data.feedback_scores?.length;
+  const commentsCount = data.comments?.length;
 
   return (
-    <div className="flex flex-nowrap gap-2">
+    <>
       <AddToDatasetDialog
         key={resetKeyRef.current}
         rows={rows}
@@ -47,24 +71,49 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
           resetKeyRef.current = resetKeyRef.current + 1;
         }}
       >
-        <Database className="mr-2 size-4" />
-        Add to dataset
+        <DatabasePlus className="size-3.5" />
+        {showFullActionLabel && <div className="pl-1">Add to dataset</div>}
       </Button>
-      {!annotateOpen && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setAnnotateOpen(true)}
-        >
-          <PenLine className="mr-2 size-4" />
-          Annotate
-        </Button>
-      )}
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setLastSection(LastSection.Comments)}
+        className={cn(
+          "gap-1",
+          lastSection === LastSection.Comments &&
+            "bg-primary-100 hover:bg-primary-100",
+        )}
+      >
+        <MessageSquareMore className="size-3.5" />
+        {showFullActionLabel && <div className="pl-1">Comments</div>}
+        {Boolean(commentsCount) && (
+          <div>{formatCounter(layoutSize, commentsCount)}</div>
+        )}
+      </Button>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setLastSection(LastSection.Annotations)}
+        className={cn(
+          "gap-1",
+          lastSection === LastSection.Annotations &&
+            "bg-primary-100 hover:bg-primary-100",
+        )}
+      >
+        <PenLine className="size-3.5" />
+        {showFullActionLabel && <div className="pl-1">Feedback scores</div>}
+        {Boolean(annotationCount) && (
+          <div>{formatCounter(layoutSize, annotationCount)}</div>
+        )}
+      </Button>
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="icon-sm">
             <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
+            <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
@@ -109,7 +158,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </>
   );
 };
 
