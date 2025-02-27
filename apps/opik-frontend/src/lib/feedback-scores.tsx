@@ -174,3 +174,12 @@ export const generateDeleteMutation =
     (feedbackScores || []).filter(
       (feedbackScore) => feedbackScore.name !== name,
     );
+
+export const categoryOptionLabelRenderer = (
+  name: string,
+  value?: number | string,
+) => {
+  if (!value) return name;
+
+  return `${name} (${value})`;
+};
