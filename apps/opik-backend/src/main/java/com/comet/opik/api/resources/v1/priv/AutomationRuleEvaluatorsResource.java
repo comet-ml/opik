@@ -154,7 +154,7 @@ public class AutomationRuleEvaluatorsResource {
     })
     public Response deleteEvaluators(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete,
-            @NotNull @QueryParam("project_id") UUID projectId) {
+            @QueryParam("project_id") UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'",
                 batchDelete.ids().size(),
