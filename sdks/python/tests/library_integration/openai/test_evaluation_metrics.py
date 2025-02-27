@@ -69,7 +69,6 @@ def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__hap
 
 
 def test__no_opik_configured__answer_relevance(
-    context,
     configure_opik_not_configured,
 ):
     answer_relevance_metric = metrics.AnswerRelevance()
