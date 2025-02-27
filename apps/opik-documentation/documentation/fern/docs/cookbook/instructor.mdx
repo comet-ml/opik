@@ -31,11 +31,11 @@ if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
-## Integrating with Instructor using OpenAI
+## Using Opik with Instructor library
 
 In order to log traces from Instructor into Opik, we are going to patch the `instructor` library. This will log each LLM call to the Opik platform.
 
-In this notebook we will focus on the OpenAI client but this will also work for other clients like Anthropic, Bedrock, etc.
+For all the integrations, we will first add tracking to the LLM client and then pass it to the Instructor library:
 
 
 ```python
@@ -52,10 +52,12 @@ openai_client = track_openai(OpenAI())
 # Patch the OpenAI client for Instructor
 client = instructor.from_openai(openai_client)
 
+
 # Define your desired output structure
 class UserInfo(BaseModel):
     name: str
     age: int
+
 
 user_info = client.chat.completions.create(
     model="gpt-4o-mini",
@@ -115,13 +117,12 @@ import instructor
 import google.generativeai as genai
 
 # Add Opik tracking
-genai_client = track_genai(genai.GenerativeModel(
-    model_name="models/gemini-1.5-flash-latest",
-))
+genai_client = track_genai(
+    genai.GenerativeModel(
+        model_name="models/gemini-1.5-flash-latest",
+    )
+)
 
 # Patch the GenAI client for Instructor
-client = instructor.from_openai(
-    genai_client,
-    mode=instructor.Mode.GEMINI_JSON
-)
+client = instructor.from_openai(genai_client, mode=instructor.Mode.GEMINI_JSON)
 ```
