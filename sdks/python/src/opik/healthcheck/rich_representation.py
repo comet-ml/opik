@@ -66,7 +66,7 @@ def print_current_config(config: config.OpikConfig) -> None:
     table.add_column("Setting", style=DEFAULT_KEY_COLOR)
     table.add_column("Value", style=DEFAULT_VALUE_COLOR)
 
-    current_config_values = config.get_current_config_with_api_key_hidden()
+    current_config_values = config.as_dict(mask_api_key=True)
     for key, value in sorted(current_config_values.items()):
         if key != "sentry_dsn":
             table.add_row(key, str(value))

@@ -75,7 +75,7 @@ class Opik:
             api_key=api_key,
         )
 
-        config_.is_misconfigured(
+        config_.misconfiguration_detected(
             show_misconfiguration_message=_show_misconfiguration_message,
         )
         self._config = config_
