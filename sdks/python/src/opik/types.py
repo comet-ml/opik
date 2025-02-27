@@ -1,7 +1,7 @@
 import dataclasses
 import sys
 
-from typing import Literal, Optional, Union
+from typing import Dict, Literal, Optional, Union
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
@@ -31,6 +31,12 @@ class UsageDict(TypedDict):
 
     total_tokens: int
     """The total number of tokens used, including both prompt and completion."""
+
+    completion_tokens_details: NotRequired[Dict[str, int]]
+    """ The details of tokens used for the completion."""
+
+    prompt_tokens_details: NotRequired[Dict[str, int]]
+    """ The details of tokens used for the prompt."""
 
 
 class UsageDictGoogle(UsageDict):

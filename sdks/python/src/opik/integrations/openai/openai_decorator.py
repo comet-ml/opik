@@ -1,27 +1,26 @@
 import logging
 from typing import (
-    List,
     Any,
-    Dict,
-    Optional,
+    AsyncIterator,
     Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
     Tuple,
     Union,
-    Iterator,
-    AsyncIterator,
 )
 
+import openai
+from openai import _types as _openai_types
+from openai.types.chat import chat_completion_chunk
+
 from opik import dict_utils
-from opik.decorator import base_track_decorator, arguments_helpers
+from opik.decorator import arguments_helpers, base_track_decorator
+from opik.integrations.openai import chat_completion_chunks_aggregator
 from . import stream_patchers
 
-import openai
-from openai.types.chat import chat_completion, chat_completion_chunk
-from openai import _types as _openai_types
-
 LOGGER = logging.getLogger(__name__)
-
-CreateCallResult = Union[chat_completion.ChatCompletion, List[Any]]
 
 KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "function_call"]
 RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
@@ -92,8 +91,8 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,
-            chat_completion.ChatCompletion,
-        )  # this also includes the subclass - parsed_chat_completion.ParsedChatCompletion
+            chat_completion_chunks_aggregator.ChatCompletionChunksAggregated,
+        )
 
         result_dict = output.model_dump(mode="json")
         output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
