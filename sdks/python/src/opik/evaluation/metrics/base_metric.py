@@ -39,7 +39,7 @@ class BaseMetric(abc.ABC):
 
         config = opik_config.OpikConfig()
 
-        if track and opik_config.is_misconfigured(config) is False:
+        if track and config.is_misconfigured() is False:
             self.score = opik.track(name=self.name)(self.score)  # type: ignore
             self.ascore = opik.track(name=self.name)(self.ascore)  # type: ignore
 

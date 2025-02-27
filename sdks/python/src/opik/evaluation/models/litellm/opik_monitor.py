@@ -35,7 +35,7 @@ def enabled_in_config() -> bool:
 @functools.lru_cache
 def opik_is_misconfigured() -> bool:
     config_ = config.OpikConfig()
-    return config.is_misconfigured(config_)
+    return config_.is_misconfigured()
 
 
 def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
