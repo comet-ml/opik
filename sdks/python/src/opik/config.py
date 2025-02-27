@@ -254,6 +254,11 @@ class OpikConfig(pydantic_settings.BaseSettings):
             OPIK_URL_CLOUD
         )
 
+    @property
+    def is_localhost_installation(self) -> bool:
+        # does not detect all OSS installations, only the localhost ones
+        return "localhost" in self.url_override
+
     def get_current_config_with_api_key_hidden(self) -> Dict[str, Any]:
         """
         Retrieves the current configuration with the API key value masked.
@@ -325,14 +330,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
             the configuration is misconfigured for local logging, and the second element is either
             an error message indicating the reason for misconfiguration or None.
         """
-        localhost_installation = (
-            "localhost" in self.url_override
-        )  # does not detect all OSS installations
+
         workspace_is_default = self.workspace == OPIK_WORKSPACE_DEFAULT_NAME
         tracking_disabled = self.track_disable
 
         if (
-            localhost_installation
+            self.is_localhost_installation
             and not workspace_is_default
             and not tracking_disabled
         ):
