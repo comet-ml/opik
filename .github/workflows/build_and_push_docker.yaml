@@ -54,22 +54,14 @@ jobs:
           run: |
             DOCKER_IMAGE_NAME=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
             echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
-            DOCKER_BUILDKIT=1 \
-            docker build \
-            --build-arg OPIK_VERSION=${{ inputs.version }} \
-            --build-arg SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }} \
-            -t ${DOCKER_IMAGE_NAME} .
+            DOCKER_BUILDKIT=1 docker build --build-arg OPIK_VERSION=${{inputs.version}} -t ${DOCKER_IMAGE_NAME} .
 
         - name: Build Docker Image for Comet integration
           if: inputs.build_comet_image 
           run: |
             DOCKER_IMAGE_NAME_COMET=${{env.DOCKER_REGISTRY}}/${{inputs.image}}-comet:${{inputs.version}}
             echo "DOCKER_IMAGE_NAME_COMET=${DOCKER_IMAGE_NAME_COMET}" | tee -a $GITHUB_ENV
-            DOCKER_BUILDKIT=1 \
-            docker build \
-            --build-arg OPIK_VERSION=${{ inputs.version }} \
-            --build-arg SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }} \
-            -t ${DOCKER_IMAGE_NAME} .
+            DOCKER_BUILDKIT=1 docker build --build-arg OPIK_VERSION=${{inputs.version}} -t ${DOCKER_IMAGE_NAME} .
             
         - name: Login to GHCR
           uses: docker/login-action@v3

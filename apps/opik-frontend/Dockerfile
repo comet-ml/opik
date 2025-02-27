@@ -22,19 +22,6 @@ ENV NODE_OPTIONS="--max-old-space-size=8192"
 ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
-# Upload source maps to Sentry if token is provided
-RUN if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$OPIK_VERSION" ]; then \
-      echo "Uploading source maps to Sentry..."; \
-      npx sentry-cli --auth-token "$SENTRY_AUTH_TOKEN" \
-        sourcemaps upload \
-        --org "$SENTRY_ORG" \
-        --project "$SENTRY_PROJECT" \
-        --release "$OPIK_VERSION" \
-        /opt/frontend/dist; \
-    else \
-      echo "Source maps for Sentry will not be uploaded. Missing required environment variables."; \
-    fi
-
 # Production stage
 FROM nginx:1.27.4-alpine3.21
 
