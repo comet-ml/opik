@@ -48,6 +48,7 @@ jobs:
             - name: Install Test Dependencies
               run: |
                 pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+                pip install allure-pytest
                 playwright install
 
             - name: Install Opik (Local)
