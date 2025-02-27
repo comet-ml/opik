@@ -80,7 +80,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
           )}
           onClick={() => onDelete(label)}
         >
-          <CircleX className="size-3.5" />
+          <CircleX />
         </Button>
       )}
     </div>

@@ -170,13 +170,14 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             setSearchText={setSearch}
             placeholder="Search by name"
             className="w-[320px]"
+            dimension="sm"
           ></SearchInput>
         </div>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />
           {isCompare && (
             <>
-              <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+              <Separator orientation="vertical" className="mx-1 h-4" />
               <div className="flex items-center space-x-2">
                 <Label htmlFor="show-doff-only">Show differences only</Label>
                 <Switch

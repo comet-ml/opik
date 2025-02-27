@@ -90,7 +90,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
   const isEdit = Boolean(providerKey);
   const isCloudProvider =
     provider === "" ||
-    PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.cloud;
+    PROVIDERS[provider]?.locationType === PROVIDER_LOCATION_TYPE.cloud;
 
   const title = isEdit
     ? "Edit AI provider configuration"

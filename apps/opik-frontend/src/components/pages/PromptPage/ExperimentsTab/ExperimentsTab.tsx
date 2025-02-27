@@ -293,6 +293,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             setSearchText={setSearch}
             placeholder="Search by name"
             className="w-[320px]"
+            dimension="sm"
           ></SearchInput>
           <ExperimentsFiltersButton
             datasetId={datasetId}
@@ -301,7 +302,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         </div>
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

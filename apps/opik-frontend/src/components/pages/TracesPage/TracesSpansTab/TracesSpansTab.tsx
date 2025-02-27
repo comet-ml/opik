@@ -549,6 +549,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             setSearchText={setSearch}
             placeholder="Search by ID"
             className="w-[320px]"
+            dimension="sm"
           ></SearchInput>
           <FiltersButton
             columns={TRACES_PAGE_FILTERS_COLUMNS}
@@ -565,7 +566,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
           />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <TooltipWrapper
             content={`Refresh ${
               type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"
@@ -573,14 +574,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           >
             <Button
               variant="outline"
-              size="icon"
+              size="icon-sm"
               className="shrink-0"
               onClick={() => {
                 refetch();
                 refetchStatistic();
               }}
             >
-              <RotateCw className="size-4" />
+              <RotateCw />
             </Button>
           </TooltipWrapper>
           <DataTableRowHeightSelector

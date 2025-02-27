@@ -98,7 +98,7 @@ const Menu: React.FC<MenuProps> = ({ children }) => {
           )}
         >
           <span className="sr-only">Actions menu</span>
-          <MoreHorizontal className="size-3.5" />
+          <MoreHorizontal />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
