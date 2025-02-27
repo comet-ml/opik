@@ -31,6 +31,8 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   const [inputValue, setInputValue] = useState(() => 
     filter.value ? formatDate(filter.value as string) : ""
   );
+  const [pendingDate, setPendingDate] = useState<Date | undefined>(undefined);
+  const [pendingTime, setPendingTime] = useState<string>("00:00");
   const lastFilterValue = useRef(filter.value);
   
   const date = useMemo(
@@ -52,10 +54,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
 
   const debouncedUpdateFilter = useCallback(
     debounce((newValue: string | "") => {
-      // Don't update if the value hasn't changed
       if (newValue === filter.value) return;
-
-      // Validate the date before updating
       if (newValue && !dayjs(newValue).isValid()) return;
 
       lastFilterValue.current = newValue;
@@ -67,33 +66,38 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
     [filter, onChange]
   );
 
+  const getTimeFromDate = (date: Date | undefined) => {
+    if (!date) return "00:00";
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  };
+
   const onSelectDate = (value: Date | undefined) => {
     if (!value) {
-      setInputValue("");
-      debouncedUpdateFilter("");
+      setPendingDate(undefined);
       return;
     }
 
     try {
-      // Preserve the current time when changing date
-      if (date) {
+      // If there's a pending date, preserve its time
+      if (pendingDate) {
+        value.setHours(pendingDate.getHours());
+        value.setMinutes(pendingDate.getMinutes());
+      } else if (date) {
+        // If no pending date but we have a current date, use its time
         value.setHours(date.getHours());
         value.setMinutes(date.getMinutes());
       } else {
-        // Set default time to start of day if no previous time
+        // Default to start of day
         value.setHours(0);
         value.setMinutes(0);
         value.setSeconds(0);
         value.setMilliseconds(0);
       }
 
-      const newValue = value.toISOString();
-      setInputValue(formatDate(newValue));
-      debouncedUpdateFilter(newValue);
+      setPendingDate(value);
     } catch (error) {
       console.error("Invalid date:", error);
     }
-    setOpen(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,6 +120,45 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
       }
     }
   };
+
+  const handleTimeChange = (timeString: string) => {
+    setPendingTime(timeString);
+    if (!pendingDate) return;
+
+    try {
+      const [hours, minutes] = timeString.split(':').map(Number);
+      const newDate = new Date(pendingDate);
+      newDate.setHours(hours);
+      newDate.setMinutes(minutes);
+      setPendingDate(newDate);
+    } catch (error) {
+      console.error("Invalid time:", error);
+    }
+  };
+
+  // Handle popover close
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    
+    if (!isOpen && pendingDate) {
+      // When closing, apply the pending changes
+      const newValue = pendingDate.toISOString();
+      setInputValue(formatDate(newValue));
+      debouncedUpdateFilter(newValue);
+      
+      // Reset pending states
+      setPendingDate(undefined);
+      setPendingTime("00:00");
+    }
+  };
+
+  // Initialize pending values when opening the popover
+  React.useEffect(() => {
+    if (open && date) {
+      setPendingDate(new Date(date));
+      setPendingTime(getTimeFromDate(date));
+    }
+  }, [open, date]);
 
   // Cleanup debounce on unmount
   React.useEffect(() => {
@@ -144,7 +187,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
               placeholder="MM/DD/YY HH:mm A"
               className="w-full pr-10"
             />
-            <Popover open={open} onOpenChange={setOpen}>
+            <Popover open={open} onOpenChange={handleOpenChange}>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
@@ -157,9 +200,11 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
               <PopoverContent className="w-auto p-0" align="end">
                 <Calendar
                   mode="single"
-                  selected={date}
+                  selected={pendingDate || date}
                   onSelect={onSelectDate}
                   initialFocus
+                  selectedTime={pendingTime}
+                  onTimeChange={handleTimeChange}
                 />
               </PopoverContent>
             </Popover>
