@@ -1,5 +1,6 @@
 import OpenAIIcon from "@/icons/integrations/openai.svg?react";
 import AnthropicIcon from "@/icons/integrations/anthropic.svg?react";
+import OpenRouterIcon from "@/icons/integrations/open_router.svg?react";
 import OllamaIcon from "@/icons/integrations/ollama.svg?react";
 
 import {
@@ -54,6 +55,15 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyName: "ANTHROPIC_API_KEY",
     apiKeyURL: "https://console.anthropic.com/settings/keys",
     defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_LATEST,
+    locationType: PROVIDER_LOCATION_TYPE.cloud,
+  },
+  [PROVIDER_TYPE.OPEN_ROUTER]: {
+    label: "OpenRouter",
+    value: PROVIDER_TYPE.OPEN_ROUTER,
+    icon: OpenRouterIcon,
+    apiKeyName: "OPENROUTER_API_KEY",
+    apiKeyURL: "https://openrouter.ai/keys",
+    defaultModel: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
     locationType: PROVIDER_LOCATION_TYPE.cloud,
   },
   [PROVIDER_TYPE.OLLAMA]: {

@@ -3,10 +3,12 @@ import { generateRandomString } from "@/lib/utils";
 import {
   DEFAULT_ANTHROPIC_CONFIGS,
   DEFAULT_OPEN_AI_CONFIGS,
+  DEFAULT_OPEN_ROUTER_CONFIGS,
 } from "@/constants/llm";
 import {
   LLMAnthropicConfigsType,
   LLMOpenAIConfigsType,
+  LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
@@ -36,6 +38,20 @@ export const getDefaultConfigByProvider = (
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
     } as LLMAnthropicConfigsType;
+  }
+
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    return {
+      maxTokens: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS,
+      temperature: DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE,
+      topP: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P,
+      topK: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_K,
+      frequencyPenalty: DEFAULT_OPEN_ROUTER_CONFIGS.FREQUENCY_PENALTY,
+      presencePenalty: DEFAULT_OPEN_ROUTER_CONFIGS.PRESENCE_PENALTY,
+      repetitionPenalty: DEFAULT_OPEN_ROUTER_CONFIGS.REPETITION_PENALTY,
+      minP: DEFAULT_OPEN_ROUTER_CONFIGS.MIN_P,
+      topA: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_A,
+    } as LLMOpenRouterConfigsType;
   }
 
   return {};

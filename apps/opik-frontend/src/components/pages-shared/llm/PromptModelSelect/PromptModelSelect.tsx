@@ -53,6 +53,7 @@ const PromptModelSelect = ({
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const modelProviderMapRef = useRef<Record<string, PROVIDER_TYPE>>({});
 
   const [openConfigDialog, setOpenConfigDialog] = React.useState(false);
   const [filterValue, setFilterValue] = useState("");
@@ -77,6 +78,14 @@ const PromptModelSelect = ({
     const filteredByConfiguredProviders = pick(
       getProviderModels(),
       configuredProviderKeys,
+    );
+
+    Object.entries(filteredByConfiguredProviders).forEach(
+      ([pn, providerModels]) => {
+        providerModels.forEach(({ value }) => {
+          modelProviderMapRef.current[value] = pn as PROVIDER_TYPE;
+        });
+      },
     );
 
     return Object.entries(filteredByConfiguredProviders)
@@ -133,7 +142,10 @@ const PromptModelSelect = ({
 
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
-      onChange(value, openProviderMenu as PROVIDER_TYPE);
+      const modelProvider = openProviderMenu
+        ? (openProviderMenu as PROVIDER_TYPE)
+        : modelProviderMapRef.current[value];
+      onChange(value, modelProvider);
     },
     [onChange, openProviderMenu],
   );

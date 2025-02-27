@@ -27,6 +27,18 @@ export const DEFAULT_ANTHROPIC_CONFIGS = {
   TOP_P: 1,
 };
 
+export const DEFAULT_OPEN_ROUTER_CONFIGS = {
+  MAX_TOKENS: 0,
+  TEMPERATURE: 1,
+  TOP_P: 1,
+  TOP_K: 0,
+  FREQUENCY_PENALTY: 0,
+  PRESENCE_PENALTY: 0,
+  REPETITION_PENALTY: 1,
+  MIN_P: 0,
+  TOP_A: 0,
+};
+
 export const LLM_PROMPT_CUSTOM_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
   description:
