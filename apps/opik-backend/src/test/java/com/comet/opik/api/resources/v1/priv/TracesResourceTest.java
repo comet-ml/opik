@@ -35,6 +35,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TraceAssertions;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
@@ -6962,7 +6963,13 @@ class TracesResourceTest {
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
-            traceResourceClient.assertGetTraceThreadNotFound(threadId, projectId, API_KEY, TEST_WORKSPACE);
+            try (var actualResponse = traceResourceClient.getTraceThreadResponse(threadId, projectId, API_KEY,
+                    TEST_WORKSPACE)) {
+
+                String message = "Trace Thread id: %s not found".formatted(threadId);
+
+                TraceAssertions.assertErrorResponse(actualResponse, message, HttpStatus.SC_NOT_FOUND);
+            }
         }
 
     }

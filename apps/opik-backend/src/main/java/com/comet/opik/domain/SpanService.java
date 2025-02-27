@@ -85,7 +85,7 @@ public class SpanService {
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
-        return spanDAO.getById(id).switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id.toString()))));
+        return spanDAO.getById(id).switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))));
     }
 
     @WithSpan

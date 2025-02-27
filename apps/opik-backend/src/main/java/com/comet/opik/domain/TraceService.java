@@ -316,7 +316,7 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<Trace> get(@NonNull UUID id) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
-                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id.toString()))));
+                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))));
     }
 
     @Override
