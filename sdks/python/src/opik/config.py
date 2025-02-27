@@ -240,7 +240,19 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def is_config_file_exists(self) -> bool:
+        """
+        Determines whether the configuration file exists at the specified path.
+        """
         return self.config_file_fullpath.exists()
+
+    @property
+    def is_cloud_installation(self) -> bool:
+        """
+        Determine if the installation type is a cloud installation.
+        """
+        return url_helpers.get_base_url(self.url_override) == url_helpers.get_base_url(
+            OPIK_URL_CLOUD
+        )
 
     def get_current_config_with_api_key_hidden(self) -> Dict[str, Any]:
         """
@@ -286,16 +298,14 @@ class OpikConfig(pydantic_settings.BaseSettings):
             the configuration is misconfigured for cloud logging, and the second element is either
             an error message indicating the reason for misconfiguration or None.
         """
-        cloud_installation = url_helpers.get_base_url(
-            self.url_override
-        ) == url_helpers.get_base_url(OPIK_URL_CLOUD)
         workspace_is_default = self.workspace == OPIK_WORKSPACE_DEFAULT_NAME
         api_key_configured = self.api_key is not None
         tracking_disabled = self.track_disable
 
         if (
-            cloud_installation
-            and (not api_key_configured or workspace_is_default)
+            self.is_cloud_installation
+            and not api_key_configured
+            or workspace_is_default
             and not tracking_disabled
         ):
             error_message = (

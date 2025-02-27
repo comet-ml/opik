@@ -33,7 +33,7 @@ def run(show_installed_packages: bool = True) -> None:
     is_misconfigured, err_msg = config_obj.get_misconfiguration_validation_results()
     rich_representation.print_config_validation(not is_misconfigured, err_msg)
 
-    rich_representation.print_header("checking backend workspace availability")
+    rich_representation.print_header("backend workspace availability")
     is_available, err_msg = checks.get_backend_workspace_availability()
     rich_representation.print_backend_workspace_availability(is_available, err_msg)
 
