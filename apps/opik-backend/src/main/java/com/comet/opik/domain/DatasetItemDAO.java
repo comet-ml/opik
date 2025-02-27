@@ -405,7 +405,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                  FROM feedback_scores_final
                  GROUP BY entity_id
             ),
-            <endif>  
+            <endif>
             experiment_items_final AS (
             	SELECT
             		ei.*
