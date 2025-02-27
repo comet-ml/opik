@@ -43,6 +43,7 @@ export interface BaseTraceData {
 }
 
 export interface Trace extends BaseTraceData {
+  thread_id?: string;
   project_id: string;
   workspace_name?: string;
 }
@@ -66,4 +67,18 @@ export type BASE_TRACE_DATA_TYPE = SPAN_TYPE | "trace";
 export interface AgentGraphData {
   format: "mermaid";
   data: string;
+}
+
+export interface Thread {
+  id: string;
+  project_id: string;
+  start_time: string;
+  end_time: string;
+  duration: number;
+  first_message: object;
+  last_message: object;
+  number_of_messages: number;
+  last_updated_at: string;
+  created_by: string;
+  created_at: string;
 }

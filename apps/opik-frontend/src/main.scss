@@ -282,4 +282,18 @@
   font-weight: 400;
   letter-spacing: 0.02em;
   max-width: 100%;
+
+  pre code {
+    font-size: 0.875rem !important;
+  }
+}
+
+.json-view_github.dark {
+  color: white;
+  --json-property: white;
+  --json-index: white;
+  --json-number: white;
+  --json-string: white;
+  --json-boolean: white;
+  --json-null: white;
 }
