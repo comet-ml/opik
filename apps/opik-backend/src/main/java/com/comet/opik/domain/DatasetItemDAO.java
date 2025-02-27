@@ -836,7 +836,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(selectStatement))
                             .doFinally(signalType -> endSegment(segmentContent))
-                            .flatMap(result -> DatasetItemResultMapper.mapItem(result, true))
+                            .flatMap(DatasetItemResultMapper::mapItem)
                             .collectList()
                             .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
