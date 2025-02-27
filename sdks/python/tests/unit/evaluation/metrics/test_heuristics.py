@@ -1,6 +1,6 @@
 import pytest
 
-from opik.evaluation.metrics.exceptions import MetricComputationError
+from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics.heuristics import equals, levenshtein_ratio, regex_match
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU, CorpusBLEU
