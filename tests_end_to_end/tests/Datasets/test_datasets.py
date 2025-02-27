@@ -11,6 +11,7 @@ from sdk_helpers import (
 import opik
 import logging
 import allure
+
 logger = logging.getLogger(__name__)
 
 
@@ -226,7 +227,9 @@ class TestDatasetsCrud:
         ],
     )
     @allure.id("D4")
-    @allure.title("Dataset deletion - {dataset_fixture} and delete via {deletion_method}")
+    @allure.title(
+        "Dataset deletion - {dataset_fixture} and delete via {deletion_method}"
+    )
     def test_dataset_deletion(
         self, request, page: Page, client: opik.Opik, dataset_fixture, deletion_method
     ):

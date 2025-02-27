@@ -17,6 +17,7 @@ from Datasets.datasets_utils import (
 import opik
 import logging
 import allure
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +32,9 @@ class TestDatasetItemsCrud:
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
     @pytest.mark.sanity
     @allure.id("D5")
-    @allure.title("Dataset item insertion - {dataset_creation_fixture} and {dataset_insert}")
+    @allure.title(
+        "Dataset item insertion - {dataset_creation_fixture} and {dataset_insert}"
+    )
     def test_dataset_item_insertion(
         self,
         request,

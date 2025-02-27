@@ -11,11 +11,11 @@ from sdk_helpers import (
 )
 import logging
 import allure
+
 logger = logging.getLogger(__name__)
 
 
 class TestTracesCrud:
-
     @pytest.mark.parametrize("traces_number", [25])
     @pytest.mark.parametrize(
         "create_traces",
@@ -106,7 +106,6 @@ class TestTracesCrud:
                 f"Expected count: {traces_number}\n"
                 f"Error: {str(e)}"
             ) from e
-
 
     @pytest.mark.parametrize("traces_number", [10])
     @pytest.mark.parametrize(

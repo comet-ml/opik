@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 class TestProjectsCrud:
-    @pytest.mark.parametrize("project_fixture", ["create_project_api", "create_project_ui"])
+    @pytest.mark.parametrize(
+        "project_fixture", ["create_project_api", "create_project_ui"]
+    )
     @pytest.mark.sanity
     @allure.id("P1")
     @allure.title("Basic project creation - {project_fixture}")

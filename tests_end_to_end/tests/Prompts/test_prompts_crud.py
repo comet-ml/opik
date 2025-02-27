@@ -6,6 +6,7 @@ from page_objects.PromptLibraryPage import PromptLibraryPage
 from page_objects.PromptPage import PromptPage
 import logging
 import allure
+
 logger = logging.getLogger(__name__)
 
 
