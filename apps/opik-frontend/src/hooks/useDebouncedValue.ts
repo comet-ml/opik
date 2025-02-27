@@ -32,7 +32,7 @@ export const useDebouncedValue = <TData>({
       debouncedCallback(newValue);
       onChangeTriggered?.();
     },
-    [debouncedCallback],
+    [debouncedCallback, onChangeTriggered],
   );
 
   return {
