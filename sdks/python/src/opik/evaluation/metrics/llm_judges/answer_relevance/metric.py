@@ -8,7 +8,7 @@ from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
 
 from . import templates
-from ... import exceptions
+from opik import exceptions
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,10 +47,10 @@ class AnswerRelevance(base_metric.BaseMetric):
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
         name: str = "answer_relevance_metric",
         few_shot_examples: Optional[
-            List[templates.FewShotExampleWithContextAnswerRelevance],
+            List[templates.FewShotExampleWithContextAnswerRelevance]
         ] = None,
         few_shot_examples_no_context: Optional[
-            List[templates.FewShotExampleNoContextAnswerRelevance],
+            List[templates.FewShotExampleNoContextAnswerRelevance]
         ] = None,
         require_context: bool = True,
         track: bool = True,
@@ -63,7 +63,7 @@ class AnswerRelevance(base_metric.BaseMetric):
         self._init_model(model)
         self._init_few_shot_examples(
             few_shot_examples_with_context=few_shot_examples,
-            few_shot_examples_no_context=few_shot_examples_no_context
+            few_shot_examples_no_context=few_shot_examples_no_context,
         )
 
     def _init_model(
@@ -73,32 +73,34 @@ class AnswerRelevance(base_metric.BaseMetric):
             self._model = model
         else:
             self._model = models_factory.get(model_name=model)
-    
 
     def _init_few_shot_examples(
         self,
         few_shot_examples_with_context: Optional[
-            List[templates.FewShotExampleWithContextAnswerRelevance],
+            List[templates.FewShotExampleWithContextAnswerRelevance]
         ],
         few_shot_examples_no_context: Optional[
-            List[templates.FewShotExampleNoContextAnswerRelevance],
-        ]
+            List[templates.FewShotExampleNoContextAnswerRelevance]
+        ],
     ) -> None:
         self._few_shot_examples_no_context = (
             few_shot_examples_no_context
             if few_shot_examples_no_context
             else templates.FEW_SHOT_EXAMPLES_NO_CONTEXT
         )
-        
+
         self._few_shot_examples_with_context = (
             few_shot_examples_with_context
             if few_shot_examples_with_context
             else templates.FEW_SHOT_EXAMPLES_WITH_CONTEXT
         )
-        
 
     def score(
-        self, input: str, output: str, context: Optional[List[str]] = None, **ignored_kwargs: Any
+        self,
+        input: str,
+        output: str,
+        context: Optional[List[str]] = None,
+        **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
         Calculate the answer relevance score for the given input-output pair.
@@ -106,7 +108,7 @@ class AnswerRelevance(base_metric.BaseMetric):
         Args:
             input: The input text (question) to be evaluated.
             output: The output text (answer) to be evaluated.
-            context: A list of context strings relevant to the input. If no context is given, the 
+            context: A list of context strings relevant to the input. If no context is given, the
                 metric is calculated in no-context mode (the prompt template will not refer to context at all)
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
@@ -114,26 +116,9 @@ class AnswerRelevance(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the answer relevance score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        if context is None:
-            if self._require_context:
-                raise exceptions.MetricComputationError(
-                    f"{self.name} requires context by default. If you want to allow execution in no-context mode, "
-                    f"enable it via `AnswerRelevancy(require_context=False)"
-                )
-
-            llm_query = templates.generate_query_no_context(
-                input=input,
-                output=output,
-                few_shot_examples=self._few_shot_examples_no_context
-            )
-        else:
-            llm_query = templates.generate_query_with_context(
-                input=input,
-                output=output,
-                context=context,
-                few_shot_examples=self._few_shot_examples_with_context
-            )
-
+        llm_query = self._generate_llm_query(
+            input=input, output=output, context=context
+        )
 
         model_output = self._model.generate_string(
             input=llm_query, response_format=AnswerRelevanceResponseFormat
@@ -141,7 +126,11 @@ class AnswerRelevance(base_metric.BaseMetric):
         return self._parse_model_output(model_output)
 
     async def ascore(
-        self, input: str, output: str, context: List[str], **ignored_kwargs: Any
+        self,
+        input: str,
+        output: str,
+        context: Optional[List[str]] = None,
+        **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
         Asynchronously calculate the answer relevance score for the given input-output pair.
@@ -158,7 +147,9 @@ class AnswerRelevance(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: A ScoreResult object with the answer relevance score and reason.
         """
-        llm_query = templates.generate_query_with_context(input=input, output=output, context=context)
+        llm_query = self._generate_llm_query(
+            input=input, output=output, context=context
+        )
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=AnswerRelevanceResponseFormat
         )
@@ -180,3 +171,28 @@ class AnswerRelevance(base_metric.BaseMetric):
             raise exceptions.MetricComputationError(
                 logging_messages.ANSWER_RELEVANCE_SCORE_CALC_FAILED
             )
+
+    def _generate_llm_query(
+        self, input: str, output: str, context: Optional[List[str]]
+    ) -> str:
+        if not context:
+            if self._require_context:
+                raise exceptions.MetricComputationError(
+                    f"{self.name} requires context by default. If you want to allow execution in no-context mode, "
+                    f"enable it via `AnswerRelevancy(require_context=False)"
+                )
+
+            llm_query = templates.generate_query_no_context(
+                input=input,
+                output=output,
+                few_shot_examples=self._few_shot_examples_no_context,
+            )
+        else:
+            llm_query = templates.generate_query_with_context(
+                input=input,
+                output=output,
+                context=context,
+                few_shot_examples=self._few_shot_examples_with_context,
+            )
+
+        return llm_query

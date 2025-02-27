@@ -1,6 +1,7 @@
 import pytest
 
 from opik.evaluation import metrics
+from opik import exceptions
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -13,14 +14,7 @@ def assert_score_result(result):
     assert len(result.reason) > 0
 
 
-@pytest.mark.parametrize(
-    argnames="context",
-    argvalues=[
-        None,
-        ["France is a country in Europe."],
-    ],
-)
-def test__answer_relevance(context):
+def test__answer_relevance__context_provided_happyflow():
     import os
 
     os.environ["OPIK_DISABLE_LITELLM_MODELS_MONITORING"] = "True"
@@ -29,10 +23,38 @@ def test__answer_relevance(context):
     result = answer_relevance_metric.score(
         input="What's the capital of France?",
         output="The capital of France is Paris.",
-        context=context,
+        context=["France is a country in Europe."],
     )
 
     assert_score_result(result)
+
+
+def test__answer_relevance__no_context_provided__error_raised():
+    import os
+
+    os.environ["OPIK_DISABLE_LITELLM_MODELS_MONITORING"] = "True"
+    answer_relevance_metric = metrics.AnswerRelevance()
+
+    with pytest.raises(exceptions.MetricComputationError):
+        _ = answer_relevance_metric.score(
+            input="What's the capital of France?",
+            output="The capital of France is Paris.",
+            context=[],
+        )
+
+    with pytest.raises(exceptions.MetricComputationError):
+        _ = answer_relevance_metric.score(
+            input="What's the capital of France?",
+            output="The capital of France is Paris.",
+            context=None,
+        )
+    
+
+    with pytest.raises(exceptions.MetricComputationError):
+        _ = answer_relevance_metric.score(
+            input="What's the capital of France?",
+            output="The capital of France is Paris.",
+        )
 
 
 @pytest.mark.parametrize(

@@ -9,12 +9,14 @@ class FewShotExampleWithContextAnswerRelevance(TypedDict):
     answer_relevance_score: float
     reason: str
 
+
 class FewShotExampleNoContextAnswerRelevance(TypedDict):
     title: str
     input: str
     output: str
     answer_relevance_score: float
     reason: str
+
 
 FEW_SHOT_EXAMPLES_WITH_CONTEXT: List[FewShotExampleWithContextAnswerRelevance] = [
     {
@@ -160,6 +162,7 @@ def generate_query_with_context(
         {context}
         ***
     """
+
 
 def generate_query_no_context(
     input: str,
