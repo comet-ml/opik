@@ -29,6 +29,13 @@ class CommentResultMapper {
                 .build());
     }
 
+    static List<Comment> getComments(Object commentsRaw) {
+        if (commentsRaw instanceof List[] commentsArray) {
+            return getComments(commentsArray);
+        }
+        return null;
+    }
+
     static List<Comment> getComments(List[] commentsArrays) {
         if (ArrayUtils.isEmpty(commentsArrays)) {
             return null;

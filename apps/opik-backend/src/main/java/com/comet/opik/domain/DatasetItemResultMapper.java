@@ -26,6 +26,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Column.ColumnType;
+import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.domain.FeedbackScoreMapper.getFeedbackScores;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static java.util.function.Predicate.not;
@@ -36,7 +37,7 @@ class DatasetItemResultMapper {
     private DatasetItemResultMapper() {
     }
 
-    static List<ExperimentItem> getExperimentItems(List[] experimentItemsArrays) {
+    static List<ExperimentItem> getExperimentItems(List[] experimentItemsArrays, boolean withComments) {
         if (ArrayUtils.isEmpty(experimentItemsArrays)) {
             return null;
         }
@@ -56,6 +57,7 @@ class DatasetItemResultMapper {
                         .lastUpdatedAt(Instant.parse(experimentItem.get(8).toString()))
                         .createdBy(experimentItem.get(9).toString())
                         .lastUpdatedBy(experimentItem.get(10).toString())
+                        .comments(withComments ? getComments(experimentItem.get(11)) : null)
                         .build())
                 .toList();
 
@@ -101,6 +103,10 @@ class DatasetItemResultMapper {
     }
 
     static Publisher<DatasetItem> mapItem(Result results) {
+        return mapItem(results, false);
+    }
+
+    static Publisher<DatasetItem> mapItem(Result results, boolean withComments) {
         return results.map((row, rowMetadata) -> {
 
             Map<String, JsonNode> data = getData(row);
@@ -117,7 +123,7 @@ class DatasetItemResultMapper {
                             .filter(s -> !s.isBlank())
                             .map(UUID::fromString)
                             .orElse(null))
-                    .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class)))
+                    .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class), withComments))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdAt(row.get("created_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
