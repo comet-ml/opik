@@ -304,8 +304,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         if (
             self.is_cloud_installation
-            and not api_key_configured
-            or workspace_is_default
+            and (not api_key_configured or workspace_is_default)
             and not tracking_disabled
         ):
             error_message = (
