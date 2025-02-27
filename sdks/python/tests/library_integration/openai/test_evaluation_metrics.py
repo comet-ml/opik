@@ -48,7 +48,6 @@ def test__answer_relevance__no_context_provided__error_raised():
             output="The capital of France is Paris.",
             context=None,
         )
-    
 
     with pytest.raises(exceptions.MetricComputationError):
         _ = answer_relevance_metric.score(
