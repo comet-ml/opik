@@ -94,6 +94,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       <TooltipWrapper content="Add to dataset">
         <Button
           variant="outline"
+          size="sm"
           onClick={() => {
             setOpen(1);
             resetKeyRef.current = resetKeyRef.current + 1;
@@ -113,14 +114,14 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         <TooltipWrapper content="Delete">
           <Button
             variant="outline"
-            size="icon"
+            size="icon-sm"
             onClick={() => {
               setOpen(2);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
             disabled={disabled}
           >
-            <Trash className="size-4" />
+            <Trash />
           </Button>
         </TooltipWrapper>
       )}

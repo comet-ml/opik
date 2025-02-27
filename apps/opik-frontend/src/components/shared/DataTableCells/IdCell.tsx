@@ -38,7 +38,7 @@ const IdCell = (context: CellContext<unknown, string>) => {
             className="hidden group-hover:inline-flex"
             onClick={copyClickHandler}
           >
-            <Copy className="size-3.5" />
+            <Copy />
           </Button>
         </div>
       </TooltipWrapper>

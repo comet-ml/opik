@@ -120,9 +120,11 @@ const AIProvidersTab = () => {
             setSearchText={setSearch}
             className="w-[320px]"
             placeholder="Search by name"
+            dimension="sm"
           />
           <Button
             onClick={handleAddConfigurationClick}
+            size="sm"
             disabled={areAllProvidersConfigured(providerKeys)}
           >
             Add configuration

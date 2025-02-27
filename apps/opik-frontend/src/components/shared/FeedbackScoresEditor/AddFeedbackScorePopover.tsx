@@ -229,8 +229,8 @@ const AddFeedbackScorePopover: React.FunctionComponent<
       open={open}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" size="icon-sm" className="size-7">
-          <Plus className="size-4" />
+        <Button variant="outline" size="icon-xs">
+          <Plus />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="p-4" align="end">

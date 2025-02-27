@@ -129,13 +129,22 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     <>
       <div>
         <div className="flex items-center justify-between">
-          <Button variant="outline" onClick={() => setRequestChartOpen(true)}>
-            <ChartLineIcon className="mr-2 size-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setRequestChartOpen(true)}
+          >
+            <ChartLineIcon className="mr-2 size-3.5" />
             Request a chart
           </Button>
 
           <div className="w-48">
-            <SelectBox value={days} onChange={setDays} options={DAYS_OPTIONS} />
+            <SelectBox
+              value={days}
+              onChange={setDays}
+              options={DAYS_OPTIONS}
+              className="h-8"
+            />
           </div>
         </div>
 

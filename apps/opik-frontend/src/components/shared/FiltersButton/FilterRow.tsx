@@ -86,7 +86,7 @@ export const FilterRow = <TColumnData,>({
           size="icon-xs"
           onClick={() => onRemove(filter.id)}
         >
-          <X className="size-4" />
+          <X />
         </Button>
       </td>
     </tr>

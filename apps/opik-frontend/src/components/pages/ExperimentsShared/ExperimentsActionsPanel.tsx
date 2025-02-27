@@ -76,24 +76,25 @@ const ExperimentsActionsPanel: React.FunctionComponent<
       <TooltipWrapper content="Compare experiments">
         <Button
           variant="outline"
+          size="sm"
           onClick={handleCompareClick}
           disabled={disabled}
         >
-          <Split className="mr-2 size-4" />
+          <Split className="mr-2 size-3.5" />
           Compare
         </Button>
       </TooltipWrapper>
       <TooltipWrapper content="Delete">
         <Button
           variant="outline"
-          size="icon"
+          size="icon-sm"
           onClick={() => {
             setOpen(2);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
         >
-          <Trash className="size-4" />
+          <Trash />
         </Button>
       </TooltipWrapper>
     </div>

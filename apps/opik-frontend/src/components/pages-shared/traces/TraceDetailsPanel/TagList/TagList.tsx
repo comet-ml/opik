@@ -107,7 +107,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
             size="icon-sm"
             className="size-7"
           >
-            <Plus className="size-4" />
+            <Plus />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[420px] p-6" align="end">

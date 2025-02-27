@@ -599,7 +599,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             columnsToExport={columnsToExport}
             experimentName={experiments?.[0]?.name}
           />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}

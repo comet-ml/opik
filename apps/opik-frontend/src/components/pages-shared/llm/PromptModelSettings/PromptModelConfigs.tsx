@@ -71,7 +71,7 @@ const PromptModelConfigs = ({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size={size} disabled={disabled}>
-          <Settings2 className="size-3.5" />
+          <Settings2 />
         </Button>
       </DropdownMenuTrigger>
 

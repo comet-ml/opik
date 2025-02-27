@@ -132,7 +132,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             onClick={() => onRowChange(-1)}
             data-testid="side-panel-previous"
           >
-            <ArrowUp className="size-3.5" />
+            <ArrowUp />
           </Button>
         </TooltipWrapper>
         <TooltipWrapper content={`Next ${entity}`} hotkeys={DOWN_HOTKEYS}>
@@ -143,7 +143,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             onClick={() => onRowChange(1)}
             data-testid="side-panel-next"
           >
-            <ArrowDown className="size-3.5" />
+            <ArrowDown />
           </Button>
         </TooltipWrapper>
       </>
@@ -178,7 +178,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                     size="icon-sm"
                     onClick={onClose}
                   >
-                    <X className="size-3.5" />
+                    <X />
                   </Button>
                 </TooltipWrapper>
                 {renderNavigation()}

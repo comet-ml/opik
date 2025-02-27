@@ -139,8 +139,8 @@ const ColumnsButton = <TColumnData,>({
   return (
     <DropdownMenu onOpenChange={openStateChangeHandler}>
       <DropdownMenuTrigger asChild>
-        <Button variant="secondary">
-          <Columns3 className="mr-2 size-4" />
+        <Button variant="secondary" size="sm">
+          <Columns3 className="mr-2 size-3.5" />
           Columns
         </Button>
       </DropdownMenuTrigger>

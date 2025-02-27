@@ -67,16 +67,21 @@ const useLocalAIProviderData = () => {
 
   const getLocalAIProviderData = useCallback((provider: PROVIDER_TYPE) => {
     let retVal: LocalAIProviderData | undefined = undefined;
-    const config = PROVIDERS[provider] as LOCAL_PROVIDER_OPTION_TYPE;
-    const lsData = localStorage.getItem(config.lsKey);
+    const config = PROVIDERS[provider] as
+      | LOCAL_PROVIDER_OPTION_TYPE
+      | undefined;
 
-    if (lsData) {
-      const providerData: LocalAIProviderData | undefined = safelyParseJSON(
-        lsData,
-        true,
-      );
+    if (config) {
+      const lsData = localStorage.getItem(config.lsKey);
 
-      retVal = isEmpty(providerData) ? undefined : providerData;
+      if (lsData) {
+        const providerData: LocalAIProviderData | undefined = safelyParseJSON(
+          lsData,
+          true,
+        );
+
+        retVal = isEmpty(providerData) ? undefined : providerData;
+      }
     }
 
     return retVal;

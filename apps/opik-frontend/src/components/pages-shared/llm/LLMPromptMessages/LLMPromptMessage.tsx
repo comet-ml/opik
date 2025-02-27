@@ -115,7 +115,7 @@ const LLMPromptMessage = ({
                 size="icon-sm"
                 onClick={onRemoveMessage}
               >
-                <Trash className="size-3.5" />
+                <Trash />
               </Button>
             </TooltipWrapper>
           )}
@@ -125,7 +125,7 @@ const LLMPromptMessage = ({
               size="icon-sm"
               onClick={onDuplicateMessage}
             >
-              <CopyPlus className="size-3.5" />
+              <CopyPlus />
             </Button>
           </TooltipWrapper>
           {!hideDragButton && (
@@ -135,7 +135,7 @@ const LLMPromptMessage = ({
               size="icon-sm"
               {...listeners}
             >
-              <GripHorizontal className="size-3.5" />
+              <GripHorizontal />
             </Button>
           )}
         </div>

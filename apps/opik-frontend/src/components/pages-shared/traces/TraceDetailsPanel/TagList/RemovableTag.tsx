@@ -32,7 +32,7 @@ const RemovableTag: React.FunctionComponent<RemovableTagProps> = ({
           className="hidden group-hover:flex"
           onClick={() => onDelete(label)}
         >
-          <CircleX className="size-4" />
+          <CircleX />
         </Button>
       </div>
     </Tag>

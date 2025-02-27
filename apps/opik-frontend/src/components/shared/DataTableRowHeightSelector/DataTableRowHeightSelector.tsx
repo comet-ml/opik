@@ -23,16 +23,16 @@ const DataTableRowHeightSelector: React.FunctionComponent<
       type="single"
       value={type}
       onValueChange={handleTypeChange}
-      size="icon"
+      size="icon-sm"
     >
       <ToggleGroupItem value={ROW_HEIGHT.small} aria-label="Small size">
-        <Rows4 className="size-4" />
+        <Rows4 />
       </ToggleGroupItem>
       <ToggleGroupItem value={ROW_HEIGHT.medium} aria-label="Medium size">
-        <Rows3 className="size-4" />
+        <Rows3 />
       </ToggleGroupItem>
       <ToggleGroupItem value={ROW_HEIGHT.large} aria-label="Large size">
-        <Rows2 className="size-4" />
+        <Rows2 />
       </ToggleGroupItem>
     </ToggleGroup>
   );

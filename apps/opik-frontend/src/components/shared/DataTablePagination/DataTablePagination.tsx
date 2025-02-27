@@ -54,7 +54,7 @@ const DataTablePagination = ({
           disabled={disabledPrevious}
           onClick={() => pageChange(1)}
         >
-          <ChevronFirst className="size-4" />
+          <ChevronFirst />
         </Button>
         <Button
           variant="outline"
@@ -62,7 +62,7 @@ const DataTablePagination = ({
           disabled={disabledPrevious}
           onClick={() => pageChange(page - 1)}
         >
-          <ChevronLeft className="size-4" />
+          <ChevronLeft />
         </Button>
         <div className="flex flex-row items-center gap-1">
           <DropdownMenu>
@@ -97,7 +97,7 @@ const DataTablePagination = ({
           disabled={disabledNext}
           onClick={() => pageChange(page + 1)}
         >
-          <ChevronRight className="size-4" />
+          <ChevronRight />
         </Button>
         <Button
           variant="outline"
@@ -105,7 +105,7 @@ const DataTablePagination = ({
           disabled={disabledNext}
           onClick={() => pageChange(totalPages)}
         >
-          <ChevronLast className="size-4" />
+          <ChevronLast />
         </Button>
       </div>
     </div>

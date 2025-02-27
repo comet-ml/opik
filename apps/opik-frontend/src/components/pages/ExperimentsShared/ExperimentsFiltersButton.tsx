@@ -56,8 +56,8 @@ const ExperimentsFiltersButton: React.FunctionComponent<
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>
-        <Button variant="secondary">
-          <FilterIcon className="mr-2 size-4" />
+        <Button variant="secondary" size="sm">
+          <FilterIcon className="mr-2 size-3.5" />
           Filters ({datasetId === "" ? 0 : 1})
         </Button>
       </PopoverTrigger>

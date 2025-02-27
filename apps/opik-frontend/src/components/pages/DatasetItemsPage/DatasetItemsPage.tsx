@@ -255,7 +255,7 @@ const DatasetItemsPage = () => {
         <div className="flex items-center gap-2"></div>
         <div className="flex items-center gap-2">
           <DatasetItemsActionsPanel datasetItems={selectedRows} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
@@ -267,7 +267,11 @@ const DatasetItemsPage = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" onClick={handleNewDatasetItemClick}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewDatasetItemClick}
+          >
             Create dataset item
           </Button>
         </div>
