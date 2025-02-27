@@ -173,6 +173,7 @@ public class FilterQueryBuilder {
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
@@ -231,6 +232,7 @@ public class FilterQueryBuilder {
             FilterStrategy.FEEDBACK_SCORES_EMPTY, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES_EMPTY)
                     .add(SpanField.FEEDBACK_SCORES_EMPTY)
+                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY)
                     .build()));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(

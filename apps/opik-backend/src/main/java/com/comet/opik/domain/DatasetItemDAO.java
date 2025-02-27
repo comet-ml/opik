@@ -237,6 +237,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      * Counts dataset items only if there's a matching experiment item.
      */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT = """
+            <if(feedback_scores_empty_filters)>
+            WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+            )
+            <endif>
                 SELECT
                    COUNT(DISTINCT di.id) AS count
                 FROM (
@@ -256,11 +269,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         dataset_item_id,
                         trace_id
                     FROM experiment_items ei
-                    <if(experiment_item_filters || feedback_scores_filters)>
+                    <if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters)>
                     INNER JOIN (
                         SELECT
                             id
                         FROM traces
+                        <if(feedback_scores_empty_filters)>
+                            LEFT JOIN fsc ON fsc.entity_id = traces.id
+                        <endif>
                         WHERE workspace_id = :workspace_id
                         <if(experiment_item_filters)>
                         AND <experiment_item_filters>
@@ -280,6 +296,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             GROUP BY entity_id
                             HAVING <feedback_scores_filters>
                         )
+                        <endif>
+                        <if(feedback_scores_empty_filters)>
+                        AND <feedback_scores_empty_filters>
                         <endif>
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
@@ -380,10 +399,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ),  experiment_items_final AS (
+            ),
+            <if(feedback_scores_empty_filters)>
+            fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM feedback_scores_final
+                 GROUP BY entity_id
+            ),
+            <endif>  
+            experiment_items_final AS (
             	SELECT
             		ei.*
             	FROM experiment_items_scope ei
+            	<if(feedback_scores_empty_filters)>
+                    LEFT JOIN fsc ON fsc.entity_id = trace_id
+                <endif>
             	WHERE workspace_id = :workspace_id
             	<if(experiment_item_filters || feedback_scores_filters)>
                 AND trace_id IN (
@@ -406,6 +435,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                AND <feedback_scores_empty_filters>
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
             )
@@ -783,6 +815,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
+
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_EMPTY)
+                            .ifPresent(scoresEmptyFilter -> template.add("feedback_scores_empty_filters",
+                                    scoresEmptyFilter));
                 });
 
         return template;
@@ -794,6 +830,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_ITEM);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_EMPTY);
                 });
     }
 
