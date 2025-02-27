@@ -68,7 +68,8 @@ def print_current_config(config: config.OpikConfig) -> None:
 
     current_config_values = config.get_current_config_with_api_key_hidden()
     for key, value in sorted(current_config_values.items()):
-        table.add_row(key, str(value))
+        if key != "sentry_dsn":
+            table.add_row(key, str(value))
 
     console.print(table)
 
