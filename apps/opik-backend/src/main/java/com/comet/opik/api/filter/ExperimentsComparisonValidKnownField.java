@@ -12,6 +12,7 @@ public enum ExperimentsComparisonValidKnownField implements Field {
 
     OUTPUT(OUTPUT_QUERY_PARAM, FieldType.STRING),
     FEEDBACK_SCORES(FEEDBACK_SCORES_QUERY_PARAM, FieldType.FEEDBACK_SCORES_NUMBER),
+    FEEDBACK_SCORES_EMPTY(FEEDBACK_SCORES_EMPTY_QUERY_PARAM, FieldType.EMPTY),
     ;
 
     private final String queryParamField;
