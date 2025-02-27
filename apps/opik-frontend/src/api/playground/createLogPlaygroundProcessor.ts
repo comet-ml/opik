@@ -80,6 +80,7 @@ const USAGE_FIELDS_TO_SEND = [
 const getTraceFromRun = (run: LogQueueParams): LogTrace => {
   return {
     id: v7(),
+    thread_id: "some_thread_id_1", // TODO lala delete
     projectName: PLAYGROUND_PROJECT_NAME,
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,

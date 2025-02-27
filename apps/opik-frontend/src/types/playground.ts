@@ -60,6 +60,7 @@ export type ChatCompletionResponse =
   | ChatCompletionProviderErrorMessageType;
 
 export interface LogTrace {
+  thread_id: string; // TODO lala delete
   id: string;
   projectName: string;
   name: string;

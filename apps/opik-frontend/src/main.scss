@@ -283,3 +283,13 @@
   letter-spacing: 0.02em;
   max-width: 100%;
 }
+
+.json-view_github.dark {
+  color: white;
+  --json-property: white;
+  --json-index: white;
+  --json-number: white;
+  --json-string: #F1F1F1;
+  --json-boolean: white;
+  --json-null: white;
+}
