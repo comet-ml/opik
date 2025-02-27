@@ -44,38 +44,36 @@ export const generateSearchByIDFilters = (search?: string) => {
 };
 
 const processTimeFilter: (filter: Filter) => Filter | Filter[] = (filter) => {
-  switch (filter.operator) {
-    case "=":
-      return [
-        {
-          ...filter,
-          operator: ">",
-          value: makeStartOfDay(filter.value as string),
-        },
-        {
-          ...filter,
-          operator: "<",
-          value: makeEndOfDay(filter.value as string),
-        },
-      ];
-    case ">":
-    case "<=":
-      return [
-        {
-          ...filter,
-          value: makeEndOfDay(filter.value as string),
-        },
-      ];
-    case "<":
-    case ">=":
-      return [
-        {
-          ...filter,
-          value: makeStartOfDay(filter.value as string),
-        },
-      ];
-    default:
-      return filter;
+  if (!filter.value) {
+    return filter;
+  }
+
+  try {
+    switch (filter.operator) {
+      case "=":
+        return filter;
+      case ">":
+      case "<=":
+        return [
+          {
+            ...filter,
+            value: filter.value,
+          },
+        ];
+      case "<":
+      case ">=":
+        return [
+          {
+            ...filter,
+            value: filter.value,
+          },
+        ];
+      default:
+        return filter;
+    }
+  } catch (error) {
+    console.error("Error processing time filter:", error);
+    return filter;
   }
 };
 
@@ -85,8 +83,12 @@ const processDurationFilter: (filter: Filter) => Filter = (filter) => ({
 });
 
 const processFiltersArray = (filters: Filter[]) => {
+  if (!Array.isArray(filters)) return [];
+  
   return flatten(
     filters.map((filter) => {
+      if (!filter) return filter;
+      
       switch (filter.type) {
         case COLUMN_TYPE.time:
           return processTimeFilter(filter);
@@ -108,14 +110,16 @@ export const processFilters = (
   } = {};
   const processedFilters: Filter[] = [];
 
-  if (filters && filters.length > 0) {
-    processFiltersArray(filters).forEach((f) => processedFilters.push(f));
+  if (filters && Array.isArray(filters) && filters.length > 0) {
+    processFiltersArray(filters).forEach((f) => {
+      if (f) processedFilters.push(f);
+    });
   }
 
-  if (additionalFilters && additionalFilters.length > 0) {
-    processFiltersArray(additionalFilters).forEach((f) =>
-      processedFilters.push(f),
-    );
+  if (additionalFilters && Array.isArray(additionalFilters) && additionalFilters.length > 0) {
+    processFiltersArray(additionalFilters).forEach((f) => {
+      if (f) processedFilters.push(f);
+    });
   }
 
   if (processedFilters.length > 0) {

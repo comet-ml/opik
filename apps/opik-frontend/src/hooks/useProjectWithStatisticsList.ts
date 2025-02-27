@@ -41,32 +41,36 @@ export default function useProjectWithStatisticsList(
   );
 
   const data = useMemo(() => {
-    if (projectsData) {
-      let statisticMap: Record<string, ProjectStatistic> = {};
+    const defaultResponse = { content: [], total: 0 };
 
-      if (projectsStatisticData && projectsStatisticData.content?.length > 0) {
-        statisticMap = projectsStatisticData.content.reduce<
-          Record<string, ProjectStatistic>
-        >((acc, statistic) => {
-          acc[statistic.project_id!] = statistic;
-          return acc;
-        }, {});
-      }
-
-      return {
-        ...projectsData,
-        content: projectsData.content.map((project) => {
-          return statisticMap
-            ? {
-                ...project,
-                ...statisticMap[project.id],
-              }
-            : project;
-        }),
-      };
+    if (!projectsData?.content) {
+      return defaultResponse;
     }
 
-    return { content: [], total: 0 };
+    let statisticMap: Record<string, ProjectStatistic> = {};
+
+    if (projectsStatisticData?.content?.length > 0) {
+      statisticMap = projectsStatisticData.content.reduce<
+        Record<string, ProjectStatistic>
+      >((acc, statistic) => {
+        if (statistic?.project_id) {
+          acc[statistic.project_id] = statistic;
+        }
+        return acc;
+      }, {});
+    }
+
+    return {
+      ...projectsData,
+      content: projectsData.content.map((project) => {
+        return project?.id && statisticMap[project.id]
+          ? {
+              ...project,
+              ...statisticMap[project.id],
+            }
+          : project;
+      }),
+    };
   }, [projectsData, projectsStatisticData]);
 
   return {
