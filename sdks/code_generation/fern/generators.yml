@@ -11,7 +11,7 @@ groups:
           location: local-file-system
           path: ../../python/src/opik/rest_api
       - name: fernapi/fern-typescript-node-sdk
-        version: 0.48.5
+        version: 0.48.7
         output:
           location: local-file-system
           path: ../../typescript/src/opik/rest_api

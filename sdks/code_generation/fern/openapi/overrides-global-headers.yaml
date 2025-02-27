@@ -5,3 +5,16 @@ x-fern-global-headers:
   - header: Comet-Workspace
     name: workspaceName
     optional: true
+
+components:
+  schemas:
+    AutomationRuleEvaluator:
+      x-fern-ignore: true
+    AutomationRuleEvaluatorUpdate:
+      x-fern-ignore: true
+    AutomationRuleEvaluator_Write:
+      x-fern-ignore: true
+    AutomationRuleEvaluator_Public:
+      x-fern-ignore: true
+    AutomationRuleEvaluatorObject_Public:
+      x-fern-ignore: true
