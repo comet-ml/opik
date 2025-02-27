@@ -74,15 +74,15 @@ def print_current_config(config: config.OpikConfig) -> None:
     console.print(table)
 
 
-def print_config_validation(is_valid: bool, error_message: Optional[str]) -> None:
-    is_valid_text = Text(
-        str(is_valid), style=DEFAULT_VALUE_COLOR if is_valid else DEFAULT_ERROR_COLOR
+def print_config_scan_results(misconfiguration_detected: bool, error_message: Optional[str]) -> None:
+    is_misconfigured_text = Text(
+        str(misconfiguration_detected), style=DEFAULT_ERROR_COLOR if misconfiguration_detected else DEFAULT_VALUE_COLOR
     )
-    is_valid_label = make_key_text("Current configuration is valid:")
+    issues_found_label = make_key_text("Configuration issues found:")
 
-    console.print(is_valid_label, is_valid_text)
+    console.print(issues_found_label, is_misconfigured_text)
 
-    if is_valid:
+    if not misconfiguration_detected:
         return
 
     err_msg = Text(error_message, style=DEFAULT_ERROR_COLOR)
