@@ -77,12 +77,13 @@ const CompareExperimentsActionsPanel: React.FC<
       <TooltipWrapper content="Compare experiments">
         <Button
           variant="outline"
+          size="sm"
           onClick={() => {
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
         >
-          <Split className="mr-2 size-4" />
+          <Split className="mr-2 size-3.5" />
           Compare
         </Button>
       </TooltipWrapper>

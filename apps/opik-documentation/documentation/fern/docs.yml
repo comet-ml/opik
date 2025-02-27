@@ -150,6 +150,9 @@ navigation:
               - page: Haystack
                 path: docs/tracing/integrations/haystack.mdx
                 slug: haystack
+              - page: Instructor
+                path: docs/tracing/integrations/instructor.mdx
+                slug: instructor
               - page: LangGraph
                 path: docs/tracing/integrations/langgraph.mdx
                 slug: langgraph
@@ -333,6 +336,9 @@ navigation:
           - page: Haystack
             path: docs/cookbook/haystack.mdx
             slug: haystack
+          - page: Instructor
+            path: docs/cookbook/instructor.mdx
+            slug: instructor
           - page: LangGraph
             path: docs/cookbook/langgraph.mdx
             slug: langgraph
@@ -388,6 +394,9 @@ navigation:
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
+    permanent: true
+  - source: "/docs/opik/reference/rest_api/:slug/"
+    destination: "/docs/opik/reference/rest-api/overview"
     permanent: true
   - source: "/docs/opik/reference/rest_api/opik-rest-api/"
     destination: "/docs/opik/reference/rest-api/overview"

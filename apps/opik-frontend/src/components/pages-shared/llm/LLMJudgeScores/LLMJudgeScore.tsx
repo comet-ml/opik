@@ -169,7 +169,7 @@ const LLMJudgeScore = ({
                   onClick={() => setIsEditing(true)}
                   type="button"
                 >
-                  <Pencil className="size-3.5" />
+                  <Pencil />
                 </Button>
               </TooltipWrapper>
             ) : (
@@ -195,7 +195,7 @@ const LLMJudgeScore = ({
                 className="shrink-0"
                 disabled={hideRemoveButton}
               >
-                <Trash className="size-3.5" />
+                <Trash />
               </Button>
             </TooltipWrapper>
           </div>

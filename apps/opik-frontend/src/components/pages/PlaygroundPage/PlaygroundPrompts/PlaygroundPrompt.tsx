@@ -226,7 +226,7 @@ const PlaygroundPrompt = ({
               size="icon-sm"
               onClick={handleDuplicatePrompt}
             >
-              <CopyPlus className="size-3.5" />
+              <CopyPlus />
             </Button>
           </TooltipWrapper>
 
@@ -236,7 +236,7 @@ const PlaygroundPrompt = ({
               size="icon-sm"
               onClick={() => deletePrompt(promptId)}
             >
-              <Trash className="size-3.5" />
+              <Trash />
             </Button>
           </TooltipWrapper>
         </div>
