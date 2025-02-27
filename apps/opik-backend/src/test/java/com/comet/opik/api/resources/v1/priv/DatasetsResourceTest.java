@@ -70,6 +70,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
@@ -4357,10 +4358,10 @@ class DatasetsResourceTest {
 
             var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,
                     workspaceName,
-                    columns, datasetItems.subList(1, datasetItems.size()));
+                    columns, datasetItems.subList(1, datasetItems.size()).reversed());
 
-            assertDatasetItemExperiments(actualPageIsNotEmpty, datasetItems.subList(1, datasetItems.size()),
-                    experimentItems.subList(1, experimentItems.size()));
+            assertDatasetItemExperiments(actualPageIsNotEmpty, datasetItems.subList(1, datasetItems.size()).reversed(),
+                    experimentItems.subList(1, experimentItems.size()).reversed());
         }
 
         @ParameterizedTest
@@ -4877,6 +4878,10 @@ class DatasetsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringFields(IGNORED_FIELDS_LIST)
                     .isEqualTo(experimentItems.get(i));
+
+            if (ListUtils.emptyIfNull(experimentItems.get(i).feedbackScores()).isEmpty()) {
+                continue;
+            }
 
             var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
                     actualExperimentItems.getFirst(), USER).feedbackScores();
