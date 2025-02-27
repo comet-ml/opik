@@ -1,12 +1,12 @@
+import functools
 import getpass
 import logging
 import os
 import platform
 import socket
 import sys
-import functools
-
-from typing import Literal
+from importlib import metadata
+from typing import Dict, Literal
 
 import opik.config
 from opik import url_helpers
@@ -129,3 +129,14 @@ def in_colab() -> bool:
 
     ipy = IPython.get_ipython()
     return "google.colab" in str(ipy)
+
+
+@functools.lru_cache
+def get_installed_packages() -> Dict[str, str]:
+    """
+    Retrieve a dictionary of installed packages with their versions.
+    """
+    installed_packages = {
+        pkg.metadata["Name"]: pkg.version for pkg in metadata.distributions()
+    }
+    return installed_packages
