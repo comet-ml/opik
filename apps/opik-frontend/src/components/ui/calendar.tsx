@@ -20,39 +20,44 @@ function Calendar({
 }: CalendarProps) {
   // Convert 24hr time to 12hr format with period
   const convert24to12 = (hour24: number): [number, string] => {
-    const period = hour24 >= 12 ? 'PM' : 'AM';
+    const period = hour24 >= 12 ? "PM" : "AM";
     const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
     return [hour12, period];
   };
 
   const convert12to24 = (hour12: number, period: string): number => {
-    if (period === 'PM' && hour12 < 12) return hour12 + 12;
-    if (period === 'AM' && hour12 === 12) return 0;
+    if (period === "PM" && hour12 < 12) return hour12 + 12;
+    if (period === "AM" && hour12 === 12) return 0;
     return hour12;
   };
 
   // Parse initial time
-  const [hours24, minutes] = selectedTime?.split(':').map(Number) || [0, 0];
+  const [hours24, minutes] = selectedTime?.split(":").map(Number) || [0, 0];
   const [hour12, initialPeriod] = convert24to12(hours24);
   const [period, setPeriod] = React.useState(initialPeriod);
 
-  const handleTimeChange = (type: 'hours' | 'minutes' | 'period', value: string) => {
+  const handleTimeChange = (
+    type: "hours" | "minutes" | "period",
+    value: string,
+  ) => {
     if (!onTimeChange) return;
 
     let newHours = hours24;
     let newMinutes = minutes;
 
-    if (type === 'hours') {
+    if (type === "hours") {
       const hour12 = parseInt(value);
       newHours = convert12to24(hour12, period);
-    } else if (type === 'minutes') {
+    } else if (type === "minutes") {
       newMinutes = parseInt(value);
-    } else if (type === 'period') {
+    } else if (type === "period") {
       setPeriod(value);
       newHours = convert12to24(hour12, value);
     }
 
-    const newTime = `${newHours.toString().padStart(2, '0')}:${newMinutes.toString().padStart(2, '0')}`;
+    const newTime = `${newHours.toString().padStart(2, "0")}:${newMinutes
+      .toString()
+      .padStart(2, "0")}`;
     onTimeChange(newTime);
   };
 
@@ -62,7 +67,8 @@ function Calendar({
         showOutsideDays={showOutsideDays}
         className={cn("p-3", className)}
         classNames={{
-          months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+          months:
+            "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
           month: "space-y-4",
           caption: "flex justify-center pt-1 relative items-center",
           caption_label: "text-sm font-medium",
@@ -102,55 +108,58 @@ function Calendar({
         {...props}
       />
       {onTimeChange && (
-        <div className="border-t px-3 pb-3 pt-3">
+        <div className="border-t p-3">
           <div className="flex items-center justify-center gap-2">
             <div className="relative">
               <div className="relative">
                 <select
-                  value={hour12.toString().padStart(2, '0')}
-                  onChange={(e) => handleTimeChange('hours', e.target.value)}
-                  className="h-9 rounded-[6px] border-[1px] border-input bg-background pl-3 pr-8 py-1 text-sm ring-offset-background focus:outline-none focus:ring-[1px] focus:ring-ring focus:rounded-[6px] appearance-none cursor-pointer"
+                  value={hour12.toString().padStart(2, "0")}
+                  onChange={(e) => handleTimeChange("hours", e.target.value)}
+                  className="h-9 cursor-pointer appearance-none rounded-[6px] border border-input bg-background py-1 pl-3 pr-8 text-sm ring-offset-background focus:rounded-[6px] focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   {Array.from({ length: 12 }, (_, i) => {
                     const hour = i + 1;
                     return (
-                      <option key={hour} value={hour.toString().padStart(2, '0')}>
-                        {hour.toString().padStart(2, '0')}
+                      <option
+                        key={hour}
+                        value={hour.toString().padStart(2, "0")}
+                      >
+                        {hour.toString().padStart(2, "0")}
                       </option>
                     );
                   })}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 opacity-50" />
               </div>
             </div>
             <span className="text-sm font-medium">:</span>
             <div className="relative">
               <div className="relative">
                 <select
-                  value={minutes.toString().padStart(2, '0')}
-                  onChange={(e) => handleTimeChange('minutes', e.target.value)}
-                  className="h-9 rounded-[6px] border-[1px] border-input bg-background pl-3 pr-8 py-1 text-sm ring-offset-background focus:outline-none focus:ring-[1px] focus:ring-ring focus:rounded-[6px] appearance-none cursor-pointer"
+                  value={minutes.toString().padStart(2, "0")}
+                  onChange={(e) => handleTimeChange("minutes", e.target.value)}
+                  className="h-9 cursor-pointer appearance-none rounded-[6px] border border-input bg-background py-1 pl-3 pr-8 text-sm ring-offset-background focus:rounded-[6px] focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   {Array.from({ length: 60 }, (_, i) => (
-                    <option key={i} value={i.toString().padStart(2, '0')}>
-                      {i.toString().padStart(2, '0')}
+                    <option key={i} value={i.toString().padStart(2, "0")}>
+                      {i.toString().padStart(2, "0")}
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 opacity-50" />
               </div>
             </div>
             <div className="relative">
               <div className="relative">
                 <select
                   value={period}
-                  onChange={(e) => handleTimeChange('period', e.target.value)}
-                  className="h-9 rounded-[6px] border-[1px] border-input bg-background pl-3 pr-8 py-1 text-sm ring-offset-background focus:outline-none focus:ring-[1px] focus:ring-ring focus:rounded-[6px] appearance-none cursor-pointer"
+                  onChange={(e) => handleTimeChange("period", e.target.value)}
+                  className="h-9 cursor-pointer appearance-none rounded-[6px] border border-input bg-background py-1 pl-3 pr-8 text-sm ring-offset-background focus:rounded-[6px] focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="AM">AM</option>
                   <option value="PM">PM</option>
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 opacity-50" />
               </div>
             </div>
           </div>

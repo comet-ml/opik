@@ -2,7 +2,6 @@ import React, { useMemo, useState, useRef, useCallback } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import debounce from "lodash/debounce";
 
-import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -28,21 +27,18 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   onChange,
 }) => {
   const [open, setOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(() => 
-    filter.value ? formatDate(filter.value as string) : ""
+  const [inputValue, setInputValue] = useState(() =>
+    filter.value ? formatDate(filter.value as string) : "",
   );
   const [pendingDate, setPendingDate] = useState<Date | undefined>(undefined);
   const [pendingTime, setPendingTime] = useState<string>("00:00");
   const lastFilterValue = useRef(filter.value);
-  
-  const date = useMemo(
-    () => {
-      if (!filter.value) return undefined;
-      const parsed = dayjs(filter.value);
-      return parsed.isValid() ? parsed.toDate() : undefined;
-    },
-    [filter.value],
-  );
+
+  const date = useMemo(() => {
+    if (!filter.value) return undefined;
+    const parsed = dayjs(filter.value);
+    return parsed.isValid() ? parsed.toDate() : undefined;
+  }, [filter.value]);
 
   // Only update input value when filter value changes from external sources
   React.useEffect(() => {
@@ -53,7 +49,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   }, [filter.value]);
 
   const debouncedUpdateFilter = useCallback(
-    debounce((newValue: string | "") => {
+    (newValue: string | "") => {
       if (newValue === filter.value) return;
       if (newValue && !dayjs(newValue).isValid()) return;
 
@@ -62,13 +58,22 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
         ...filter,
         value: newValue,
       });
-    }, 500),
-    [filter, onChange]
+    },
+    [filter, onChange],
   );
+
+  const debouncedFilterRef = useRef(debounce(debouncedUpdateFilter, 500));
+
+  // Use the debounced function through the ref
+  const handleFilterUpdate = useCallback((newValue: string | "") => {
+    debouncedFilterRef.current(newValue);
+  }, []);
 
   const getTimeFromDate = (date: Date | undefined) => {
     if (!date) return "00:00";
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    return `${String(date.getHours()).padStart(2, "0")}:${String(
+      date.getMinutes(),
+    ).padStart(2, "0")}`;
   };
 
   const onSelectDate = (value: Date | undefined) => {
@@ -103,18 +108,22 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setInputValue(newValue);
-    
+
     if (!newValue) {
-      debouncedUpdateFilter("");
+      handleFilterUpdate("");
       return;
     }
-    
-    const parsedDate = dayjs(newValue, ["MM/DD/YY HH:mm A", "MM/DD/YYYY HH:mm A"], true);
-    
+
+    const parsedDate = dayjs(
+      newValue,
+      ["MM/DD/YY HH:mm A", "MM/DD/YYYY HH:mm A"],
+      true,
+    );
+
     if (parsedDate.isValid()) {
       try {
         const isoString = parsedDate.toISOString();
-        debouncedUpdateFilter(isoString);
+        handleFilterUpdate(isoString);
       } catch (error) {
         console.error("Invalid date:", error);
       }
@@ -126,7 +135,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
     if (!pendingDate) return;
 
     try {
-      const [hours, minutes] = timeString.split(':').map(Number);
+      const [hours, minutes] = timeString.split(":").map(Number);
       const newDate = new Date(pendingDate);
       newDate.setHours(hours);
       newDate.setMinutes(minutes);
@@ -139,13 +148,13 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   // Handle popover close
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
-    
+
     if (!isOpen && pendingDate) {
       // When closing, apply the pending changes
       const newValue = pendingDate.toISOString();
       setInputValue(formatDate(newValue));
-      debouncedUpdateFilter(newValue);
-      
+      handleFilterUpdate(newValue);
+
       // Reset pending states
       setPendingDate(undefined);
       setPendingTime("00:00");
@@ -160,12 +169,13 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
     }
   }, [open, date]);
 
-  // Cleanup debounce on unmount
+  // Update cleanup to use the ref
   React.useEffect(() => {
+    const currentDebounced = debouncedFilterRef.current;
     return () => {
-      debouncedUpdateFilter.cancel();
+      currentDebounced.cancel();
     };
-  }, [debouncedUpdateFilter]);
+  }, []);
 
   return (
     <>

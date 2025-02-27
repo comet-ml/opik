@@ -49,15 +49,16 @@ export default function useProjectWithStatisticsList(
 
     let statisticMap: Record<string, ProjectStatistic> = {};
 
-    if (projectsStatisticData?.content?.length > 0) {
-      statisticMap = projectsStatisticData.content.reduce<
-        Record<string, ProjectStatistic>
-      >((acc, statistic) => {
-        if (statistic?.project_id) {
-          acc[statistic.project_id] = statistic;
-        }
-        return acc;
-      }, {});
+    if (projectsStatisticData && projectsStatisticData.content && projectsStatisticData.content.length > 0) {
+      statisticMap = projectsStatisticData.content.reduce<Record<string, ProjectStatistic>>(
+        (acc, statistic) => {
+          if (statistic?.project_id) {
+            acc[statistic.project_id] = statistic;
+          }
+          return acc;
+        },
+        {},
+      );
     }
 
     return {
