@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import isUndefined from "lodash/isUndefined";
 import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
-import { MessageSquareMore, Trash, X } from "lucide-react";
+import { Copy, MessageSquareMore, Trash, X } from "lucide-react";
 
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
@@ -24,7 +24,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import CopyButton from "@/components/shared/CopyButton/CopyButton";
+import copy from "clipboard-copy";
+import { useToast } from "@/components/ui/use-toast";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -44,6 +45,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   traceId,
 }) => {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const { toast } = useToast();
 
   const [categoryName, setCategoryName] = useState(
     feedbackScore?.category_name,
@@ -66,10 +68,10 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     setValue(isNumber(feedbackScore?.value) ? feedbackScore?.value : "");
   }, [feedbackScore?.value, spanId, traceId]);
 
-  const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
+  const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
 
   const deleteFeedbackScore = useCallback(() => {
-    feedbackScoreDeleteMutation.mutate({
+    feedbackScoreDelete({
       traceId,
       spanId,
       name: feedbackScore?.name ?? "",
@@ -121,6 +123,14 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     delay: SET_VALUE_DEBOUNCE_DELAY,
     onChange: onChangeTextAreaTriggered,
   });
+
+  const handleCopyReasonClick = async (reasonValue: string) => {
+    await copy(reasonValue);
+
+    toast({
+      description: "Commit successfully copied to clipboard",
+    });
+  };
 
   const renderOptions = (feedbackDefinition: FeedbackDefinition) => {
     if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
@@ -313,25 +323,28 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
               placeholder="Add a reason..."
               value={reasonValue}
               onChange={onReasonChange}
-              className="min-h-9 resize-none overflow-hidden py-1.5 pr-16"
+              className="min-h-6 resize-none overflow-hidden py-1"
               ref={(e) => {
                 textAreaRef.current = e;
-                updateTextAreaHeight(e, 36);
+                updateTextAreaHeight(e, 32);
               }}
             />
             {reasonValue && (
               <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
-                <CopyButton
-                  tooltipText="Copy reason"
-                  text={reasonValue}
-                  variant="outline"
-                  size="icon-xs"
-                ></CopyButton>
+                <TooltipWrapper content="Copy reason">
+                  <Button
+                    size="icon-2xs"
+                    variant="outline"
+                    onClick={() => handleCopyReasonClick(reasonValue)}
+                  >
+                    <Copy />
+                  </Button>
+                </TooltipWrapper>
 
                 <TooltipWrapper content="Clear">
                   <Button
                     variant="outline"
-                    size="icon-xs"
+                    size="icon-2xs"
                     onClick={onReasonReset}
                   >
                     <Trash />
