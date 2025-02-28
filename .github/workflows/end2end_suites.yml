@@ -104,21 +104,21 @@ jobs:
 
                 # Run the appropriate test suite
                 if [ "$SUITE" == "projects" ]; then
-                    allurectl watch -- pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium
+                    allurectl watch -- pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "traces" ]; then
-                    allurectl watch -- pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium
+                    allurectl watch -- pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "datasets" ]; then
-                    allurectl watch -- pytest -s tests/Datasets/ --browser chromium
+                    allurectl watch -- pytest -s tests/Datasets/ --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "experiments" ]; then
-                    allurectl watch -- pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium
+                    allurectl watch -- pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "prompts" ]; then
-                    allurectl watch -- pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium
+                    allurectl watch -- pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "feedback_definitions" ]; then
-                    allurectl watch -- pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium
+                    allurectl watch -- pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "sanity" ]; then
-                    allurectl watch -- pytest -s -m sanity --browser chromium
+                    allurectl watch -- pytest -s -m sanity --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "all_features" ]; then
-                    allurectl watch -- pytest -s tests --browser chromium
+                    allurectl watch -- pytest -s tests --browser chromium --alluredir="${ALLURE_RESULTS}"
                 fi
 
             - name: Stop Opik server (Local)
