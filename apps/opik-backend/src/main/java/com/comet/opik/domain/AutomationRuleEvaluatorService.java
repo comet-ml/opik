@@ -48,7 +48,7 @@ public interface AutomationRuleEvaluatorService {
     <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, UUID projectId,
             @NonNull String workspaceId);
 
-    void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId);
+    void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId);
 
     AutomationRuleEvaluatorPage find(UUID projectId, @NonNull String workspaceId,
             String name, int page, int size);
@@ -199,7 +199,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-*'", keyUsesPatternMatching = true)
-    public void delete(@NonNull Set<UUID> ids, @NonNull UUID projectId, @NonNull String workspaceId) {
+    public void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");
             return;

@@ -109,14 +109,15 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
                 WHERE id IN (
                     SELECT id
                     FROM automation_rules
-                    WHERE workspace_id = :workspaceId AND project_id = :projectId
+                    WHERE workspace_id = :workspaceId
+                    <if(projectId)> AND project_id = :projectId <endif>
                     <if(ids)> AND id IN (<ids>) <endif>
                 )
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteEvaluatorsByIds(@Bind("workspaceId") String workspaceId,
-            @Bind("projectId") UUID projectId,
+            @Define("projectId") @Bind("projectId") UUID projectId,
             @Define("ids") @BindList("ids") Set<UUID> ids);
 
 }

@@ -34,10 +34,12 @@ import static java.util.stream.Collectors.toMap;
 
 class DatasetItemResultMapper {
 
+    private static final int COMMENT_INDEX = 11;
+
     private DatasetItemResultMapper() {
     }
 
-    static List<ExperimentItem> getExperimentItems(List[] experimentItemsArrays, boolean withComments) {
+    static List<ExperimentItem> getExperimentItems(List[] experimentItemsArrays) {
         if (ArrayUtils.isEmpty(experimentItemsArrays)) {
             return null;
         }
@@ -57,7 +59,7 @@ class DatasetItemResultMapper {
                         .lastUpdatedAt(Instant.parse(experimentItem.get(8).toString()))
                         .createdBy(experimentItem.get(9).toString())
                         .lastUpdatedBy(experimentItem.get(10).toString())
-                        .comments(withComments ? getComments(experimentItem.get(11)) : null)
+                        .comments(experimentItem.size() > COMMENT_INDEX ? getComments(experimentItem.get(11)) : null)
                         .build())
                 .toList();
 
@@ -103,10 +105,6 @@ class DatasetItemResultMapper {
     }
 
     static Publisher<DatasetItem> mapItem(Result results) {
-        return mapItem(results, false);
-    }
-
-    static Publisher<DatasetItem> mapItem(Result results, boolean withComments) {
         return results.map((row, rowMetadata) -> {
 
             Map<String, JsonNode> data = getData(row);
@@ -123,7 +121,7 @@ class DatasetItemResultMapper {
                             .filter(s -> !s.isBlank())
                             .map(UUID::fromString)
                             .orElse(null))
-                    .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class), withComments))
+                    .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class)))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdAt(row.get("created_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
