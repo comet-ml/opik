@@ -293,7 +293,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
                 )}
               />
             )}
-            <MessageSquareMore className="size-3.5" />
+            <MessageSquareMore />
           </Button>
         )}
       </div>
@@ -337,7 +337,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
                     size="icon-xs"
                     onClick={onReasonReset}
                   >
-                    <Trash className="size-3.5" />
+                    <Trash />
                   </Button>
                 </TooltipWrapper>
               </div>
