@@ -191,6 +191,46 @@ class OpikConfig(pydantic_settings.BaseSettings):
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
         return pathlib.Path(config_file_path).expanduser()
 
+    @property
+    def config_file_exists(self) -> bool:
+        """
+        Determines whether the configuration file exists at the specified path.
+        """
+        return self.config_file_fullpath.exists()
+
+    @property
+    def is_cloud_installation(self) -> bool:
+        """
+        Determine if the installation type is a cloud installation.
+        """
+        return url_helpers.get_base_url(self.url_override) == url_helpers.get_base_url(
+            OPIK_URL_CLOUD
+        )
+
+    @property
+    def is_localhost_installation(self) -> bool:
+        return "localhost" in self.url_override
+
+    @pydantic.model_validator(mode="after")
+    def _set_url_override_from_api_key(self) -> "OpikConfig":
+        url_was_not_provided = (
+            "url_override" not in self.model_fields_set or self.url_override is None
+        )
+        url_needs_configuration = self.api_key is not None and url_was_not_provided
+
+        if not url_needs_configuration:
+            return self
+
+        assert self.api_key is not None
+        opik_api_key_ = opik_api_key.parse_api_key(self.api_key)
+
+        if opik_api_key_ is not None and opik_api_key_.base_url is not None:
+            self.url_override = urllib.parse.urljoin(
+                opik_api_key_.base_url, "opik/api/"
+            )
+
+        return self
+
     def save_to_file(self) -> None:
         """
         Save configuration to a file
@@ -218,55 +258,22 @@ class OpikConfig(pydantic_settings.BaseSettings):
             LOGGER.error(f"Failed to save configuration: {e}")
             raise
 
-    @pydantic.model_validator(mode="after")
-    def _set_url_override_from_api_key(self) -> "OpikConfig":
-        url_was_not_provided = (
-            "url_override" not in self.model_fields_set or self.url_override is None
-        )
-        url_needs_configuration = self.api_key is not None and url_was_not_provided
-
-        if not url_needs_configuration:
-            return self
-
-        assert self.api_key is not None
-        opik_api_key_ = opik_api_key.parse_api_key(self.api_key)
-
-        if opik_api_key_ is not None and opik_api_key_.base_url is not None:
-            self.url_override = urllib.parse.urljoin(
-                opik_api_key_.base_url, "opik/api/"
-            )
-
-        return self
-
-    @property
-    def is_config_file_exists(self) -> bool:
-        """
-        Determines whether the configuration file exists at the specified path.
-        """
-        return self.config_file_fullpath.exists()
-
-    @property
-    def is_cloud_installation(self) -> bool:
-        """
-        Determine if the installation type is a cloud installation.
-        """
-        return url_helpers.get_base_url(self.url_override) == url_helpers.get_base_url(
-            OPIK_URL_CLOUD
-        )
-
-    def get_current_config_with_api_key_hidden(self) -> Dict[str, Any]:
+    def as_dict(self, mask_api_key: bool) -> Dict[str, Any]:
         """
         Retrieves the current configuration with the API key value masked.
         """
         current_values = self.model_dump()
-        if current_values.get("api_key") is not None:
+        if current_values.get("api_key") is not None and mask_api_key:
             current_values["api_key"] = "*** HIDDEN ***"
         return current_values
 
-    def is_misconfigured(self, show_misconfiguration_message: bool = False) -> bool:
+    def check_for_known_misconfigurations(
+        self, show_misconfiguration_message: bool = False
+    ) -> bool:
         """
-        Determines if Opik configuration is misconfigured and optionally displays
+        Attempts to detects if Opik is misconfigured and optionally displays
         a corresponding error message.
+        Works only for Opik cloud and OSS localhost installations.
 
         Parameters:
         show_misconfiguration_message : A flag indicating whether to display detailed error messages if the configuration
@@ -274,7 +281,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         """
 
         is_misconfigured_flag, error_message = (
-            self.get_misconfiguration_validation_results()
+            self.get_misconfiguration_detection_results()
         )
 
         if is_misconfigured_flag:
@@ -289,7 +296,33 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         return False
 
-    def is_misconfigured_for_cloud(self) -> Tuple[bool, Optional[str]]:
+    def get_misconfiguration_detection_results(self) -> Tuple[bool, Optional[str]]:
+        """
+        Tries detecting misconfigurations for either cloud or localhost environments.
+        The detection will not work for any other kind of installation.
+
+        Returns:
+            Tuple[bool, Optional[str]]: A tuple where the first element indicates
+            whether the configuration is misconfigured (True for misconfigured, False for valid).
+            The second element is an optional string that contains
+            an error message if there is a configuration issue, or None if the
+            configuration is valid.
+        """
+        is_misconfigured_for_cloud_flag, error_message = (
+            self._is_misconfigured_for_cloud()
+        )
+        if is_misconfigured_for_cloud_flag:
+            return True, error_message
+
+        is_misconfigured_for_localhost_flag, error_message = (
+            self._is_misconfigured_for_localhost()
+        )
+        if is_misconfigured_for_localhost_flag:
+            return True, error_message
+
+        return False, None
+
+    def _is_misconfigured_for_cloud(self) -> Tuple[bool, Optional[str]]:
         """
         Determines if the current Opik configuration is misconfigured for cloud logging.
 
@@ -316,7 +349,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         return False, None
 
-    def is_misconfigured_for_local(self) -> Tuple[bool, Optional[str]]:
+    def _is_misconfigured_for_localhost(self) -> Tuple[bool, Optional[str]]:
         """
         Determines if the current setup is misconfigured for a local open-source installation.
 
@@ -325,14 +358,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
             the configuration is misconfigured for local logging, and the second element is either
             an error message indicating the reason for misconfiguration or None.
         """
-        localhost_installation = (
-            "localhost" in self.url_override
-        )  # does not detect all OSS installations
+
         workspace_is_default = self.workspace == OPIK_WORKSPACE_DEFAULT_NAME
         tracking_disabled = self.track_disable
 
         if (
-            localhost_installation
+            self.is_localhost_installation
             and not workspace_is_default
             and not tracking_disabled
         ):
@@ -342,35 +373,6 @@ class OpikConfig(pydantic_settings.BaseSettings):
                 "If you need advanced workspace management - you may consider using our cloud offer (https://www.comet.com/site/pricing/)\n"
                 "or contact our team for purchasing and setting up a self-hosted installation.\n"
             )
-            return True, error_message
-
-        return False, None
-
-    def get_misconfiguration_validation_results(self) -> Tuple[bool, Optional[str]]:
-        """
-        Validates the current configuration and identifies any misconfigurations
-        for either cloud or local environments. This method checks both cloud
-        and local configurations and determines the validity of each, returning
-        a boolean indicator of success or failure and an optional error message
-        if there is an issue.
-
-        Returns:
-            Tuple[bool, Optional[str]]: A tuple where the first element indicates
-            whether the configuration is misconfigured (True for misconfigured, False for valid).
-            The second element is an optional string that contains
-            an error message if there is a configuration issue, or None if the
-            configuration is valid.
-        """
-        is_misconfigured_for_cloud_flag, error_message = (
-            self.is_misconfigured_for_cloud()
-        )
-        if is_misconfigured_for_cloud_flag:
-            return True, error_message
-
-        is_misconfigured_for_local_flag, error_message = (
-            self.is_misconfigured_for_local()
-        )
-        if is_misconfigured_for_local_flag:
             return True, error_message
 
         return False, None

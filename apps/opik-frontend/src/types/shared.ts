@@ -16,6 +16,7 @@ export const COLUMN_NAME_ID = "name";
 export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
+export const COLUMN_COMMENTS_ID = "comments";
 
 export enum COLUMN_TYPE {
   string = "string",
