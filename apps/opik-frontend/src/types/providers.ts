@@ -3,6 +3,7 @@ export enum PROVIDER_TYPE {
   ANTHROPIC = "anthropic",
   OPEN_ROUTER = "openrouter",
   OLLAMA = "ollama",
+  GEMINI = "gemini",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -351,6 +352,15 @@ export enum PROVIDER_MODEL_TYPE {
   ZERO_ONE_AI_YI_LARGE_FC = "01-ai/yi-large-fc",
   ZERO_ONE_AI_YI_LARGE_TURBO = "01-ai/yi-large-turbo",
   ZERO_ONE_AI_YI_VISION = "01-ai/yi-vision",
+
+  //   <----- gemini
+  GEMINI_2_0_FLASH = "gemini-2.0-flash-exp",
+  GEMINI_1_5_FLASH = "gemini-1.5-flash",
+  GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
+  GEMINI_1_5_PRO = "gemini-1.5-pro",
+  GEMINI_1_0_PRO = "gemini-1.0-pro",
+  TEXT_EMBEDDING = "text-embedding-004",
+  AQA = "aqa",
 }
 
 export type PROVIDER_MODELS_TYPE = {
@@ -409,8 +419,15 @@ export interface LLMOpenRouterConfigsType {
   topA: number;
 }
 
+export interface LLMGeminiConfigsType {
+  temperature: number;
+  maxCompletionTokens: number;
+  topP: number;
+}
+
 export type LLMPromptConfigsType =
   | Record<string, never>
   | LLMOpenAIConfigsType
   | LLMAnthropicConfigsType
-  | LLMOpenRouterConfigsType;
+  | LLMOpenRouterConfigsType
+  | LLMGeminiConfigsType;
