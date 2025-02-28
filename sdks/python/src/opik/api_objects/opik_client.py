@@ -50,6 +50,7 @@ class Opik:
         host: Optional[str] = None,
         api_key: Optional[str] = None,
         _use_batching: bool = False,
+        _show_misconfiguration_message: bool = True,
     ) -> None:
         """
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.
@@ -61,16 +62,22 @@ class Opik:
             api_key: The API key for Opik. This parameter is ignored for local installations.
             _use_batching: intended for internal usage in specific conditions only.
                 Enabling it is unsafe and can lead to data loss.
+            _show_misconfiguration_message: intended for internal usage in specific conditions only.
+                Print a warning message if the Opik server is not configured properly.
         Returns:
             None
         """
+
         config_ = config.get_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
             url_override=host,
             api_key=api_key,
         )
-        config.is_misconfigured(config_, show_misconfiguration_message=True)
+
+        config_.check_for_known_misconfigurations(
+            show_misconfiguration_message=_show_misconfiguration_message,
+        )
         self._config = config_
 
         self._workspace: str = config_.workspace
@@ -895,6 +902,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             prompt: The template content of the prompt.
+            metadata: Optional metadata to be included in the prompt.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
