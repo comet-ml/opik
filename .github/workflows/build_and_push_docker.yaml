@@ -54,10 +54,10 @@ jobs:
           run: |
             DOCKER_IMAGE_NAME=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
             echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
-            DOCKER_BUILDKIT=1 
-            docker build 
-            --build-arg OPIK_VERSION=${{inputs.version}} 
-            --build-arg SENTRY_ENABLED=true
+            DOCKER_BUILDKIT=1 \
+            docker build \
+            --build-arg OPIK_VERSION=${{inputs.version}} \
+            --build-arg SENTRY_ENABLED=true \
             -t ${DOCKER_IMAGE_NAME} .
 
         - name: Build Docker Image for Comet integration
@@ -66,9 +66,10 @@ jobs:
             DOCKER_IMAGE_NAME_COMET=${{env.DOCKER_REGISTRY}}/${{inputs.image}}-comet:${{inputs.version}}
             echo "DOCKER_IMAGE_NAME_COMET=${DOCKER_IMAGE_NAME_COMET}" | tee -a $GITHUB_ENV
             DOCKER_BUILDKIT=1 
-            docker build --build-arg ${{inputs.comet_build_args}} 
-            --build-arg OPIK_VERSION=${{inputs.version}} 
-            --build-arg SENTRY_ENABLED=true
+            docker build \
+            --build-arg ${{inputs.comet_build_args}}  \
+            --build-arg OPIK_VERSION=${{inputs.version}} \
+            --build-arg SENTRY_ENABLED=true \
             -t ${DOCKER_IMAGE_NAME_COMET} .
   
         - name: Login to GHCR
