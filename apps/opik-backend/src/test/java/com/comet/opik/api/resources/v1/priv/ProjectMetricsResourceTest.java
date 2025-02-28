@@ -24,6 +24,8 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -45,7 +47,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EmptySource;
@@ -98,6 +100,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Project Metrics Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class ProjectMetricsResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/projects/%s/metrics";
 
@@ -111,16 +114,15 @@ class ProjectMetricsResourceTest {
     private static final int TIME_BUCKET_3 = 3;
     private static final int TIME_BUCKET_1 = 1;
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -128,7 +130,7 @@ class ProjectMetricsResourceTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -160,7 +162,7 @@ class ProjectMetricsResourceTest {
         mockTargetWorkspace();
     }
 
-    private static void mockTargetWorkspace() {
+    private void mockTargetWorkspace() {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
     }
 

@@ -22,6 +22,8 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -49,7 +51,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -96,6 +98,7 @@ import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Automation Rule Evaluators Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class AutomationRuleEvaluatorsResourceTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/automations/evaluators/";
@@ -160,16 +163,15 @@ class AutomationRuleEvaluatorsResourceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();

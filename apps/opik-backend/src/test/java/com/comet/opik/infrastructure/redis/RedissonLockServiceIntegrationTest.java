@@ -3,12 +3,14 @@ package com.comet.opik.infrastructure.redis;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.redisson.api.RedissonReactiveClient;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -33,23 +35,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class RedissonLockServiceIntegrationTest {
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
 
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
-
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
-
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE,
                 ClickHouseContainerUtils.DATABASE_NAME);
 
-        app = newTestDropwizardAppExtension(
+        APP = newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
