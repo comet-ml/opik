@@ -14,7 +14,7 @@ Individual spans show the computed costs (in USD) for each LLM spans of your tra
 
 ### Trace-Level Costs
 
-Opik automatically aggregates costs from all spans within a trace to compute total trace costs:
+If you are using one of Opik's integrations, we automatically aggregates costs from all spans within a trace to compute total trace costs:
 
 <Frame>
   <img src="/img/tracing/cost_tracking_trace_view.png" />
@@ -64,6 +64,44 @@ print(trace.total_estimated_cost)
 ```
 
 ## Manually Setting Span Costs
+
+### Setting the model provider and model
+
+If you are not using one of Opik's integration, Opik can still compute the cost. For this you will need to pass:
+
+1. `provider`: The name of the provider, typically `openai`, `anthropci` or `gemini` for example
+2. `model`: The name of the model
+3. `usage`: The input, output and total tokens for this LLM call.
+
+Once you have this information you can use the low level SDK to log your trace:
+
+```python
+import opik
+
+client = opik.Opik()
+
+trace = client.trace(
+  name="custom_trace",
+  input={"text": "Hello world!"},
+)
+
+# Logging the LLM call
+span = trace.span(
+  name="llm_call",
+  type="llm",
+  input={"text": "Hello world!"},
+  output={"response": "Hello world!"},
+  provider="openai",
+  model="gpt-3.5-turbo",
+  usage={
+    "prompt_tokens": 4,
+    "completion_tokens": 6,
+    "total_tokens": 10
+  }
+)
+```
+
+### Specifying the cost manually
 
 For cases where you need to set a custom cost or when using an unsupported model, you can manually set the cost of a span using `update_current_span`. Note that manually setting a cost will override any automatically computed cost by Opik:
 
