@@ -209,6 +209,8 @@ def evaluation_task(dataset_item):
     # your LLM application is called here
 
     result = ${evaluation_task_output}
+
+    return result
 ${metricsString}
 eval_results = evaluate(
   experiment_name="my_evaluation",
