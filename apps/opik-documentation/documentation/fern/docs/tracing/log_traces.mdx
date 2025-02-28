@@ -1,6 +1,7 @@
 <Tip>
-  If you are just getting started with Opik, we recommend first checking out the [Quickstart](/quickstart) guide that
-  will walk you through the process of logging your first LLM call.
+  If you are just getting started with Opik, we recommend first checking out the
+  [Quickstart](/quickstart) guide that will walk you through the process of
+  logging your first LLM call.
 </Tip>
 
 LLM applications are complex systems that do more than just call an LLM API, they will often involve retrieval, pre-processing and post-processing steps.
@@ -50,8 +51,9 @@ opik.configure(use_local=False)
 </Tabs>
 
 <Tip>
-  Opik is open-source and can be hosted locally using Docker, please refer to the [self-hosting
-  guide](/self-host/overview) to get started. Alternatively, you can use our hosted platform by creating an account on
+  Opik is open-source and can be hosted locally using Docker, please refer to
+  the [self-hosting guide](/self-host/overview) to get started. Alternatively,
+  you can use our hosted platform by creating an account on
   [Comet](https://www.comet.com/signup?from=llm).
 </Tip>
 
@@ -156,8 +158,9 @@ query_engine.query("What is LlamaIndex used for?")
 </Tabs>
 
 <Tip>
-  If you are using a framework that Opik does not integrate with, you can raise a feature request on our
-  [Github](https://github.com/comet-ml/opik) repository.
+  If you are using a framework that Opik does not integrate with, you can raise
+  a feature request on our [Github](https://github.com/comet-ml/opik)
+  repository.
 </Tip>
 
 If you are using a framework that Opik does not integrate with, we recommed you use the `opik.track` function decorator.
@@ -388,8 +391,8 @@ trace.end()
 ```
 
 <Note>
-  It is recommended to call `trace.end()` and `span.end()` when you are finished with the trace and span to ensure that
-  the end time is logged correctly.
+  It is recommended to call `trace.end()` and `span.end()` when you are finished
+  with the trace and span to ensure that the end time is logged correctly.
 </Note>
 
 #### Logging feedback scores
@@ -421,8 +424,9 @@ client.log_spans_feedback_scores(
 ```
 
 <Tip>
-  If you want to log scores to traces or spans from within a decorated function, you can use the `update_current_trace`
-  and `update_current_span` methods instead.
+  If you want to log scores to traces or spans from within a decorated function,
+  you can use the `update_current_trace` and `update_current_span` methods
+  instead.
 </Tip>
 
 #### Ensuring all traces are logged
@@ -481,10 +485,10 @@ The easiest way to log your LLM calls is using the low-level Opik client. We do 
 The first step is to install the Opik library:
 
 ```bash
-npm install --save opik
+npm install opik
 ```
 
-Once the library is installed, you can use initialized the Opik client:
+Once the library is installed, you can initialize the Opik client with explicit configuration:
 
 ```typescript
 import { Opik } from "opik";
@@ -496,6 +500,21 @@ const client = new Opik({
   projectName: "<your-project-name>",
   workspaceName: "<your-workspace-name>",
 });
+```
+
+Or using environment variables instead:
+
+```bash filename=".env"
+OPIK_API_KEY="<your-api-key>"
+OPIK_URL_OVERRIDE=https://www.comet.com/opik/api # in case you are using the Cloud version
+OPIK_PROJECT_NAME="<your-project-name>"
+OPIK_WORKSPACE="<your-workspace-name>"
+```
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
 ```
 
 <Tip>
@@ -536,7 +555,31 @@ const span = trace.span({
 await client.flush();
 ```
 
-### Decorators (experimental)
+### Decorators
+
+```typescript
+import { track } from "opik";
+
+const generateText = track({ name: "generateText", type: "llm" }, async () => {
+  return "Generate text";
+});
+
+const translate = track({ name: "translate" }, async (text: string) => {
+  return `Translated: ${text}`;
+});
+
+const process = track(
+  { name: "process", projectName: "translation-service" },
+  async () => {
+    const text = await generateText();
+    return translate(text);
+  }
+);
+```
+
+On calling `process()` it'll create a trace and create all the spans for each tracked function called in this function
+
+#### Class method decorators (TypeScript)
 
 TypeScript started supporting decorators from version 5 but it's use is still not widespread.
 The Opik typescript SDK also supports decorators but it's currently considered experimental.
@@ -568,7 +611,8 @@ class TranslationService {
 ### Using the REST API
 
 <Warning>
-  The Opik REST API is currently in beta and subject to change, if you encounter any issues please report them to the
+  The Opik REST API is currently in beta and subject to change, if you encounter
+  any issues please report them to the
   [Github](https://github.com/comet-ml/opik).
 </Warning>
 
