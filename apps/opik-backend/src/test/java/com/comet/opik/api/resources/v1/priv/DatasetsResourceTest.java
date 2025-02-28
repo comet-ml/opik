@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Column;
+import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
@@ -41,6 +42,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -123,6 +125,7 @@ import java.util.stream.StreamSupport;
 import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.IGNORED_FIELDS_COMMENTS;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
@@ -205,6 +208,7 @@ class DatasetsResourceTest {
     private PromptResourceClient promptResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private TraceResourceClient traceResourceClient;
     private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
@@ -228,6 +232,7 @@ class DatasetsResourceTest {
         promptResourceClient = new PromptResourceClient(client, baseURI, factory);
         experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         datasetResourceClient = new DatasetResourceClient(client, baseURI);
+        this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
     }
 
     @AfterAll
@@ -3700,6 +3705,12 @@ class DatasetsResourceTest {
 
             createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
+            // Add comments to random trace
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(trace1.id(), apiKey, workspaceName,
+                            201))
+                    .toList();
+
             // Creating a trace without input, output and scores
             var traceMissingFields = factory.manufacturePojo(Trace.class).toBuilder()
                     .input(null)
@@ -3848,6 +3859,14 @@ class DatasetsResourceTest {
                                 .isEqualTo(USER);
                         assertThat(actualExperimentItem.lastUpdatedBy())
                                 .isEqualTo(USER);
+
+                        // Check comments
+                        if (actualExperimentItem.traceId().equals(trace1.id())) {
+                            assertThat(expectedComments)
+                                    .usingRecursiveComparison()
+                                    .ignoringFields(IGNORED_FIELDS_COMMENTS)
+                                    .isEqualTo(actualExperimentItem.comments());
+                        }
                     }
 
                     assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());

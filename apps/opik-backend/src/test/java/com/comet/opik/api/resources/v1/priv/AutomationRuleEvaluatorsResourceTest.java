@@ -55,6 +55,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -842,8 +843,9 @@ class AutomationRuleEvaluatorsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteEvaluator {
 
-        @Test
-        void delete() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void delete(boolean includeProjectId) {
             var projectId = generator.generate();
             var id1 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
             var id2 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
@@ -852,7 +854,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var batchDelete = BatchDelete.builder().ids(Set.of(id1, id2)).build();
             try (var actualResponse = evaluatorsResourceClient.delete(
-                    projectId, WORKSPACE_NAME, API_KEY, batchDelete, HttpStatus.SC_NO_CONTENT)) {
+                    includeProjectId ? projectId : null, WORKSPACE_NAME, API_KEY, batchDelete,
+                    HttpStatus.SC_NO_CONTENT)) {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 

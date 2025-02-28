@@ -14,6 +14,7 @@ import {
   Row,
   RowData,
   RowSelectionState,
+  TableMeta,
   useReactTable,
 } from "@tanstack/react-table";
 import isFunction from "lodash/isFunction";
@@ -49,6 +50,7 @@ declare module "@tanstack/react-table" {
     columnsStatistic?: ColumnsStatistic;
     rowHeight: ROW_HEIGHT;
     rowHeightStyle: React.CSSProperties;
+    onCommentsReply?: (row: TData, idx?: number) => void;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -112,6 +114,10 @@ interface DataTableProps<TData, TValue> {
   columnPinning?: ColumnPinningState;
   noData?: ReactNode;
   autoWidth?: boolean;
+  meta?: Omit<
+    TableMeta<TData>,
+    "columnsStatistic" | "rowHeight" | "rowHeightStyle"
+  >;
 }
 
 const DataTable = <TData, TValue>({
@@ -132,6 +138,7 @@ const DataTable = <TData, TValue>({
   columnPinning,
   noData,
   autoWidth = false,
+  meta,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
 
@@ -180,6 +187,7 @@ const DataTable = <TData, TValue>({
       columnsStatistic,
       rowHeight,
       rowHeightStyle: getRowHeightStyle(rowHeight),
+      ...meta,
     },
   });
 
