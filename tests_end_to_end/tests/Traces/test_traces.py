@@ -10,76 +10,12 @@ from sdk_helpers import (
     wait_for_traces_to_be_visible,
 )
 import logging
+import allure
 
 logger = logging.getLogger(__name__)
 
 
 class TestTracesCrud:
-    @pytest.mark.parametrize("traces_number", [1, 15])
-    @pytest.mark.parametrize(
-        "create_traces",
-        [
-            "log_x_traces_with_one_span_via_decorator",
-            "log_x_traces_with_one_span_via_client",
-        ],
-        indirect=True,
-    )
-    @pytest.mark.sanity
-    def test_trace_creation(
-        self, page: Page, traces_number, create_project, create_traces
-    ):
-        """Testing basic creation of traces via both decorator and low-level client.
-
-        Steps:
-        1. Create project via fixture
-        2. Create traces via specified method (runs 4 times):
-           - 1 trace via decorator
-           - 15 traces via decorator
-           - 1 trace via client
-           - 15 traces via client
-        3. Verify in UI:
-           - Correct number of traces shown
-           - Trace names follow convention
-        """
-        logger.info(f"Starting trace creation test for {traces_number} traces")
-        project_name = create_project
-
-        # Navigate to project traces
-        logger.info(f"Navigating to project '{project_name}'")
-        projects_page = ProjectsPage(page)
-        try:
-            projects_page.go_to_page()
-            projects_page.click_project(project_name)
-            logger.info("Successfully navigated to project traces")
-        except Exception as e:
-            raise AssertionError(
-                f"Failed to navigate to project traces.\n"
-                f"Project name: {project_name}\n"
-                f"Error: {str(e)}"
-            ) from e
-
-        # Create traces
-        _ = create_traces
-
-        # Verify trace count
-        logger.info("Verifying traces count")
-        traces_page = TracesPage(page)
-        try:
-            traces_created = traces_page.get_total_number_of_traces_in_project()
-            assert traces_created == traces_number, (
-                f"Traces count mismatch.\n"
-                f"Expected: {traces_number}\n"
-                f"Got: {traces_created}"
-            )
-            logger.info(f"Successfully verified {traces_created} traces")
-        except Exception as e:
-            raise AssertionError(
-                f"Failed to verify traces count.\n"
-                f"Project: {project_name}\n"
-                f"Expected count: {traces_number}\n"
-                f"Error: {str(e)}"
-            ) from e
-
     @pytest.mark.parametrize("traces_number", [25])
     @pytest.mark.parametrize(
         "create_traces",
@@ -89,10 +25,11 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @allure.title("Trace creation - {create_traces}")
     def test_traces_visibility(
-        self, page: Page, traces_number, create_project, create_traces
+        self, page: Page, traces_number, create_project_api, create_traces
     ):
-        """Test visibility of traces in both UI and SDK interfaces.
+        """Test basic trace creation via both decorator and low-level client, check visibility in both UI and SDK.
 
         Steps:
         1. Create project via fixture
@@ -109,7 +46,7 @@ class TestTracesCrud:
            - Count matches expected
         """
         logger.info("Starting traces visibility test")
-        project_name = create_project
+        project_name = create_project_api
         created_trace_names = Counter([PREFIX + str(i) for i in range(traces_number)])
 
         # Navigate to project traces
@@ -178,10 +115,11 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @allure.title("Trace deletion in SDK - {create_traces}")
     def test_delete_traces_sdk(
-        self, page: Page, traces_number, create_project, create_traces
+        self, page: Page, traces_number, create_project_api, create_traces
     ):
-        """Test trace deletion via SDK interface.
+        """Test trace deletion via SDK.
 
         Steps:
         1. Create project via fixture
@@ -195,7 +133,7 @@ class TestTracesCrud:
            - Traces no longer accessible via SDK
         """
         logger.info("Starting SDK trace deletion test")
-        project_name = create_project
+        project_name = create_project_api
 
         # Create traces
         _ = create_traces
@@ -283,8 +221,9 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @allure.title("Trace deletion in UI - {create_traces}")
     def test_delete_traces_ui(
-        self, page: Page, traces_number, create_project, create_traces
+        self, page: Page, traces_number, create_project_api, create_traces
     ):
         """Testing trace deletion via UI interface.
 
@@ -300,7 +239,7 @@ class TestTracesCrud:
            - Traces no longer accessible via SDK
         """
         logger.info("Starting trace deletion test")
-        project_name = create_project
+        project_name = create_project_api
 
         # Navigate to project traces
         logger.info(f"Navigating to project '{project_name}'")

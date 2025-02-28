@@ -2,16 +2,18 @@ from playwright.sync_api import Page, expect
 from page_objects.TracesPage import TracesPage
 from page_objects.ProjectsPage import ProjectsPage
 import logging
+import allure
 
 logger = logging.getLogger(__name__)
 
 
 class TestOnlineScoringRules:
+    @allure.title("Basic moderation rule creation")
     def test_create_moderation_rule(
         self,
         create_ai_provider_config,
         page: Page,
-        create_project,
+        create_project_api,
         create_10_test_traces,
     ):
         """Test creating a moderation scoring rule.
@@ -23,7 +25,7 @@ class TestOnlineScoringRules:
         4. Verify the rule appears in the list
         """
         logger.info("Starting moderation rule creation test")
-        project_name = create_project
+        project_name = create_project_api
 
         # Navigate to traces page
         logger.info(f"Navigating to traces page for project {project_name}")

@@ -1,6 +1,11 @@
 name: Application E2E tests
 env:
   OPIK_SENTRY_ENABLE: False
+  ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
+  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
+  ALLURE_ENDPOINT: https://comet.testops.cloud/
+  ALLURE_PROJECT_ID: 1
+  ALLURE_RESULTS: allure-results
 on:
     workflow_dispatch:
         inputs:
@@ -18,6 +23,10 @@ on:
                 - experiments
                 - prompts
                 - feedback_definitions
+            ALLURE_JOB_RUN_ID:
+                description: ALLURE_JOB_RUN_ID service parameter. Leave blank.
+            ALLURE_USERNAME:
+                description: ALLURE_USERNAME service parameter. Leave blank.
                 
     pull_request:
       paths:
@@ -48,7 +57,11 @@ jobs:
             - name: Install Test Dependencies
               run: |
                 pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+                pip install allure-pytest
                 playwright install
+          
+            - name: Install allurectl
+              uses: allure-framework/setup-allurectl@v1
 
             - name: Install Opik (Local)
               env:
@@ -91,21 +104,21 @@ jobs:
 
                 # Run the appropriate test suite
                 if [ "$SUITE" == "projects" ]; then
-                    pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium
+                    allurectl watch -- pytest -s tests/Projects/test_projects_crud_operations.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "traces" ]; then
-                    pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium
+                    allurectl watch -- pytest -s tests/Traces/test_traces_crud_operations.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "datasets" ]; then
-                    pytest -s tests/Datasets/ --browser chromium
+                    allurectl watch -- pytest -s tests/Datasets/ --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "experiments" ]; then
-                    pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium
+                    allurectl watch -- pytest -s tests/Experiments/test_experiments_crud_operations.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "prompts" ]; then
-                    pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium
+                    allurectl watch -- pytest -s tests/Prompts/test_prompts_crud_operations.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "feedback_definitions" ]; then
-                    pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium
+                    allurectl watch -- pytest -s tests/FeedbackDefinitions/test_feedback_definitions_crud.py --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "sanity" ]; then
-                    pytest -s -m sanity --browser chromium
+                    allurectl watch -- pytest -s -m sanity --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "all_features" ]; then
-                    pytest -s tests --browser chromium
+                    allurectl watch -- pytest -s tests --browser chromium --alluredir="${ALLURE_RESULTS}"
                 fi
 
             - name: Stop Opik server (Local)

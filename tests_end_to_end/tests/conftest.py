@@ -12,7 +12,7 @@ from page_objects.PromptLibraryPage import PromptLibraryPage
 from page_objects.AIProvidersConfigPage import AIProvidersConfigPage
 from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
 from tests.sdk_helpers import (
-    create_project_api,
+    create_project_via_api,
     delete_project_by_name_sdk,
     wait_for_number_of_traces_to_be_visible,
     client_get_prompt_retries,
@@ -22,8 +22,7 @@ from tests.sdk_helpers import (
 from utils import TEST_ITEMS
 import re
 import json
-
-
+import allure
 import logging
 
 
@@ -138,6 +137,20 @@ def env_config() -> EnvConfig:
     return env_config
 
 
+@pytest.fixture(autouse=True)
+def setup_logging(caplog):
+    caplog.set_level(logging.INFO)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def configure_logging(request):
+    """Additional logging setup that runs before any tests"""
+    opik_logger = logging.getLogger("opik")
+    if not request.config.getoption("--show-requests"):
+        opik_logger.setLevel(logging.ERROR)
+        logging.getLogger("urllib3").setLevel(logging.ERROR)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def client(env_config: EnvConfig, browser_context) -> opik.Opik:
     """Create an Opik client configured for the current environment"""
@@ -195,7 +208,8 @@ def experiments_page(page):
 
 
 @pytest.fixture(scope="function")
-def create_project(page: Page):
+@allure.title("Create project via API call, handle cleanup after test")
+def create_project_api(page: Page):
     """
     Create a project via SDK and handle cleanup.
     Checks if project exists before attempting deletion.
@@ -203,7 +217,7 @@ def create_project(page: Page):
     proj_name = os.environ["OPIK_PROJECT_NAME"]
     if find_project_by_name_sdk(proj_name):
         delete_project_by_name_sdk(proj_name)
-    create_project_api(name=proj_name)
+    create_project_via_api(name=proj_name)
     yield proj_name
 
     projects_page = ProjectsPage(page)
@@ -217,6 +231,7 @@ def create_project(page: Page):
 
 
 @pytest.fixture(scope="function")
+@allure.title("Create project via UI, handle cleanup after test")
 def create_project_ui(page: Page):
     """
     Create a project via UI and handle cleanup.
@@ -241,6 +256,7 @@ def create_project_ui(page: Page):
 
 
 @pytest.fixture(scope="function")
+@allure.title("Log 5 traces with spans and subspans using the low level Opik client")
 def log_traces_with_spans_low_level(client: opik.Opik):
     """
     Log 5 traces with spans and subspans using the low level Opik client
@@ -297,9 +313,10 @@ def log_traces_with_spans_low_level(client: opik.Opik):
 
 
 @pytest.fixture(scope="function")
+@allure.title("Log 5 traces with spans and subspans using the @track decorator")
 def log_traces_with_spans_decorator():
     """
-    Log 5 traces with spans and subspans using the low level Opik client
+    Log 5 traces with spans and subspans using the @track decorator
     Each should have their own names, tags, metadata and feedback scores to test integrity of data transmitted
     """
 
@@ -360,6 +377,7 @@ def log_traces_with_spans_decorator():
 
 
 @pytest.fixture(scope="function")
+@allure.title("Create dataset via SDK, handle cleanup after test")
 def create_dataset_sdk(client: opik.Opik):
     dataset_name = "automated_tests_dataset"
     client.create_dataset(name=dataset_name)
@@ -372,6 +390,7 @@ def create_dataset_sdk(client: opik.Opik):
 
 
 @pytest.fixture(scope="function")
+@allure.title("Create dataset via UI, handle cleanup after test")
 def create_dataset_ui(page: Page, client: opik.Opik):
     dataset_name = "automated_tests_dataset"
     datasets_page = DatasetsPage(page)
@@ -386,29 +405,15 @@ def create_dataset_ui(page: Page, client: opik.Opik):
         pass
 
 
-@pytest.fixture(scope="function")
-def create_dataset_sdk_no_cleanup(client: opik.Opik):
-    dataset_name = "automated_tests_dataset"
-    client.create_dataset(name=dataset_name)
-    yield dataset_name
-
-
-@pytest.fixture(scope="function")
-def create_dataset_ui_no_cleanup(page: Page):
-    dataset_name = "automated_tests_dataset"
-    datasets_page = DatasetsPage(page)
-    datasets_page.go_to_page()
-    datasets_page.create_dataset_by_name(dataset_name=dataset_name)
-    yield dataset_name
-
-
 @pytest.fixture
+@allure.title("Create a dataset and insert 10 test items via the SDK")
 def insert_dataset_items_sdk(client: opik.Opik, create_dataset_sdk):
     dataset = client.get_dataset(create_dataset_sdk)
     dataset.insert(TEST_ITEMS)
 
 
 @pytest.fixture
+@allure.title("Create a prompt via the SDK")
 def create_prompt_sdk(client: opik.Opik, page: Page):
     prompt = client.create_prompt(name="test_prompt", prompt="this is a test prompt")
     yield prompt
@@ -423,6 +428,7 @@ def create_prompt_sdk(client: opik.Opik, page: Page):
 
 
 @pytest.fixture
+@allure.title("Create a prompt via the UI")
 def create_prompt_ui(client: opik.Opik, page: Page):
     prompt_library_page = PromptLibraryPage(page)
     prompt_library_page.go_to_page()
@@ -444,8 +450,9 @@ def create_prompt_ui(client: opik.Opik, page: Page):
 
 
 @pytest.fixture
-def create_10_test_traces(page: Page, client, create_project):
-    proj_name = create_project
+@allure.title("Create a project and log 10 test traces via the low-level client")
+def create_10_test_traces(page: Page, client, create_project_api):
+    proj_name = create_project_api
     for i in range(10):
         _ = client.trace(
             name=f"trace{i}",
@@ -458,6 +465,7 @@ def create_10_test_traces(page: Page, client, create_project):
 
 
 @pytest.fixture
+@allure.title("Create a categorical feedback definition via the UI")
 def create_feedback_definition_categorical_ui(client: opik.Opik, page: Page):
     feedbacks_page = FeedbackDefinitionsPage(page)
     feedbacks_page.go_to_page()
@@ -475,6 +483,7 @@ def create_feedback_definition_categorical_ui(client: opik.Opik, page: Page):
 
 
 @pytest.fixture
+@allure.title("Create a numerical feedback definition via the UI")
 def create_feedback_definition_numerical_ui(client: opik.Opik, page: Page):
     feedbacks_page = FeedbackDefinitionsPage(page)
     feedbacks_page.go_to_page()
@@ -492,6 +501,7 @@ def create_feedback_definition_numerical_ui(client: opik.Opik, page: Page):
 
 
 @pytest.fixture
+@allure.title("Create an AI provider config via the UI")
 def create_ai_provider_config(page: Page):
     ai_providers_page = AIProvidersConfigPage(page)
     ai_providers_page.go_to_page()
@@ -501,17 +511,3 @@ def create_ai_provider_config(page: Page):
     yield
     ai_providers_page.go_to_page()
     ai_providers_page.delete_provider(provider_name="OPENAI_API_KEY")
-
-
-@pytest.fixture(autouse=True)
-def setup_logging(caplog):
-    caplog.set_level(logging.INFO)
-
-
-@pytest.fixture(scope="session", autouse=True)
-def configure_logging(request):
-    """Additional logging setup that runs before any tests"""
-    opik_logger = logging.getLogger("opik")
-    if not request.config.getoption("--show-requests"):
-        opik_logger.setLevel(logging.ERROR)
-        logging.getLogger("urllib3").setLevel(logging.ERROR)

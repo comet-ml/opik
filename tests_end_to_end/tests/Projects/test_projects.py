@@ -8,13 +8,18 @@ from sdk_helpers import (
 )
 from page_objects.ProjectsPage import ProjectsPage
 import logging
+import allure
 
 logger = logging.getLogger(__name__)
 
 
 class TestProjectsCrud:
-    @pytest.mark.parametrize("project_fixture", ["create_project", "create_project_ui"])
+    @pytest.mark.parametrize(
+        "project_fixture", ["create_project_api", "create_project_ui"]
+    )
     @pytest.mark.sanity
+    @allure.title("Basic project creation - {project_fixture}")
+    @allure.description("Test project visibility after creation in both UI and SDK")
     def test_project_visibility(self, request, page: Page, project_fixture):
         """Test project visibility in both UI and SDK interfaces.
 
@@ -72,8 +77,9 @@ class TestProjectsCrud:
 
     @pytest.mark.parametrize(
         "project_fixture",
-        ["create_project", "create_project_ui"],
+        ["create_project_api", "create_project_ui"],
     )
+    @allure.title("Project name update - {project_fixture}")
     def test_project_name_update(self, request, page: Page, project_fixture):
         """Test project name update via SDK with UI verification.
 
@@ -159,8 +165,9 @@ class TestProjectsCrud:
 
     @pytest.mark.parametrize(
         "project_fixture",
-        ["create_project", "create_project_ui"],
+        ["create_project_api", "create_project_ui"],
     )
+    @allure.title("Project deletion in SDK - {project_fixture}")
     def test_project_deletion_in_sdk(self, request, page: Page, project_fixture):
         """Test project deletion via SDK with UI verification.
 
@@ -220,8 +227,9 @@ class TestProjectsCrud:
 
     @pytest.mark.parametrize(
         "project_fixture",
-        ["create_project", "create_project_ui"],
+        ["create_project_api", "create_project_ui"],
     )
+    @allure.title("Project deletion in UI - {project_fixture}")
     def test_project_deletion_in_ui(self, request, page: Page, project_fixture):
         """Test project deletion via UI with SDK verification.
 

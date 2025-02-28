@@ -5,6 +5,7 @@ from playwright.sync_api import Page
 from page_objects.PromptLibraryPage import PromptLibraryPage
 from page_objects.PromptPage import PromptPage
 import logging
+import allure
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ class TestPromptsCrud:
     @pytest.mark.parametrize(
         "prompt_fixture", ["create_prompt_sdk", "create_prompt_ui"]
     )
+    @allure.title("Basic prompt creation - {prompt_fixture}")
     def test_prompt_visibility(
         self, request, page: Page, client: opik.Opik, prompt_fixture
     ):
@@ -82,6 +84,7 @@ class TestPromptsCrud:
     @pytest.mark.parametrize(
         "prompt_fixture", ["create_prompt_sdk", "create_prompt_ui"]
     )
+    @allure.title("Prompt deletion via UI - {prompt_fixture}")
     def test_prompt_deletion(
         self, request, page: Page, client: opik.Opik, prompt_fixture
     ):
@@ -148,6 +151,7 @@ class TestPromptsCrud:
         "prompt_fixture", ["create_prompt_sdk", "create_prompt_ui"]
     )
     @pytest.mark.parametrize("update_method", ["sdk", "ui"])
+    @allure.title("Prompt update - {prompt_fixture} and update via {update_method}")
     def test_prompt_update(
         self, request, page: Page, client: opik.Opik, prompt_fixture, update_method
     ):

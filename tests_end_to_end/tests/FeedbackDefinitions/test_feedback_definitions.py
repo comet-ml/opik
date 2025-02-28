@@ -3,11 +3,13 @@ from playwright.sync_api import Page
 from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
 from collections import Counter
 import logging
+import allure
 
 logger = logging.getLogger(__name__)
 
 
 class TestFeedbacksCrud:
+    @allure.title("Basic feedback definition creation")
     def test_feedback_definition_visibility(
         self,
         page: Page,
@@ -66,6 +68,7 @@ class TestFeedbacksCrud:
                 f"Note: This could be due to definition not found in table"
             ) from e
 
+    @allure.title("Feedback definition edit")
     def test_feedback_definition_edit(
         self,
         page: Page,
@@ -193,6 +196,7 @@ class TestFeedbacksCrud:
                 f"Error: {str(e)}"
             ) from e
 
+    @allure.title("Feedback definition deletion")
     def test_feedback_definition_deletion(
         self,
         page: Page,
