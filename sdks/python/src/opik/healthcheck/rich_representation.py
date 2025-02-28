@@ -55,7 +55,7 @@ def print_config_file_details(config: OpikConfig) -> None:
     file_path = make_value_text(str(config.config_file_fullpath))
 
     is_exists_label = make_key_text("Config file exists:")
-    is_exists = make_value_text("yes" if config.is_config_file_exists else "no")
+    is_exists = make_value_text("yes" if config.config_file_exists else "no")
 
     console.print(file_path_label, file_path)
     console.print(is_exists_label, is_exists)

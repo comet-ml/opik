@@ -192,7 +192,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         return pathlib.Path(config_file_path).expanduser()
 
     @property
-    def is_config_file_exists(self) -> bool:
+    def config_file_exists(self) -> bool:
         """
         Determines whether the configuration file exists at the specified path.
         """
