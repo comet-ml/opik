@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import isUndefined from "lodash/isUndefined";
 import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
-import { MessageSquareMore, X } from "lucide-react";
+import { MessageSquareMore, Trash, X } from "lucide-react";
 
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
@@ -23,6 +23,8 @@ import { cn, updateTextAreaHeight } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -83,7 +85,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     updateTextAreaHeight(textAreaRef.current);
   }, []);
 
-  const { value: reasonValue, onChange: onReasonChange } = useDebouncedValue({
+  const {
+    value: reasonValue,
+    onChange: onReasonChange,
+    onReset: onReasonReset,
+  } = useDebouncedValue({
     initialValue: feedbackScore?.reason,
     onDebouncedChange: handleChangeReason,
     delay: SET_VALUE_DEBOUNCE_DELAY,
@@ -305,17 +311,37 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
       {editReason && (
         <>
-          <div className="col-span-3 px-1 pb-1">
+          <div className="group/reason-field relative col-span-3 px-1 pb-1 ">
             <Textarea
               placeholder="Add a reason..."
               value={reasonValue}
               onChange={onReasonChange}
-              className="min-h-12 resize-none overflow-hidden"
+              className="min-h-9 resize-none overflow-hidden py-1.5 pr-16"
               ref={(e) => {
                 textAreaRef.current = e;
-                updateTextAreaHeight(e, 48);
+                updateTextAreaHeight(e, 36);
               }}
             />
+            {reasonValue && (
+              <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
+                <CopyButton
+                  tooltipText="Copy reason"
+                  text={reasonValue}
+                  variant="outline"
+                  size="icon-xs"
+                ></CopyButton>
+
+                <TooltipWrapper content="Clear">
+                  <Button
+                    variant="outline"
+                    size="icon-xs"
+                    onClick={onReasonReset}
+                  >
+                    <Trash className="size-3.5" />
+                  </Button>
+                </TooltipWrapper>
+              </div>
+            )}
           </div>
           <div></div>
         </>

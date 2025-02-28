@@ -78,6 +78,7 @@ const useTraceFeedbackScoreSetMutation = () => {
         category_name: params.categoryName,
         value: params.value,
         source: FEEDBACK_SCORE_TYPE.ui,
+        reason: params.reason,
       });
 
       if (params.spanId) {

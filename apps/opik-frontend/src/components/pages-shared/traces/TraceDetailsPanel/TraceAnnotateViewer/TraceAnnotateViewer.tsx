@@ -109,7 +109,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
             />
           ))}
         </div>
-        <div className="comet-body-xs pt-4 text-light-slate">
+        <div className="comet-body-xs pt-2 text-light-slate">
           Set up
           <Button
             size="sm"

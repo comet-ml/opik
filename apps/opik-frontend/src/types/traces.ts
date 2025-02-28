@@ -4,6 +4,7 @@ import { Comments } from "./comment";
 export enum FEEDBACK_SCORE_TYPE {
   sdk = "sdk",
   ui = "ui",
+  online_scoring = "online_scoring",
 }
 
 export interface TraceFeedbackScore {

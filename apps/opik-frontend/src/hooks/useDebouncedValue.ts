@@ -1,19 +1,21 @@
 import { debounce } from "lodash";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type UseDebouncedValueArgs<TData> = {
-  initialValue: TData;
-  onDebouncedChange: (value: TData) => void;
+type UseDebouncedValueArgs = {
+  initialValue?: string;
+  onDebouncedChange: (value: string) => void;
   delay?: number;
   onChangeTriggered?: () => void;
 };
-export const useDebouncedValue = <TData>({
+export const useDebouncedValue = ({
   initialValue,
   onDebouncedChange,
   delay = 300,
   onChangeTriggered,
-}: UseDebouncedValueArgs<TData>) => {
-  const [inputValue, setInputValue] = useState<TData>(initialValue);
+}: UseDebouncedValueArgs) => {
+  const [inputValue, setInputValue] = useState<string | undefined>(
+    initialValue,
+  );
 
   const debouncedCallback = useMemo(
     () => debounce(onDebouncedChange, delay),
@@ -27,7 +29,7 @@ export const useDebouncedValue = <TData>({
 
   const handleInputChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const newValue = event.target.value as TData;
+      const newValue = event.target.value;
       setInputValue(newValue);
       debouncedCallback(newValue);
       onChangeTriggered?.();
@@ -35,8 +37,15 @@ export const useDebouncedValue = <TData>({
     [debouncedCallback, onChangeTriggered],
   );
 
+  const onReset = useCallback(() => {
+    setInputValue("");
+    debouncedCallback("");
+    onChangeTriggered?.();
+  }, [debouncedCallback, onChangeTriggered]);
+
   return {
     value: inputValue,
     onChange: handleInputChange,
+    onReset,
   };
 };
