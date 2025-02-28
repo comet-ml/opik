@@ -25,7 +25,6 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
-    @allure.id("T1")
     @allure.title("Trace creation - {create_traces}")
     def test_traces_visibility(
         self, page: Page, traces_number, create_project_api, create_traces
@@ -116,7 +115,6 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
-    @allure.id("T2")
     @allure.title("Trace deletion in SDK - {create_traces}")
     def test_delete_traces_sdk(
         self, page: Page, traces_number, create_project_api, create_traces
@@ -223,7 +221,6 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
-    @allure.id("T3")
     @allure.title("Trace deletion in UI - {create_traces}")
     def test_delete_traces_ui(
         self, page: Page, traces_number, create_project_api, create_traces

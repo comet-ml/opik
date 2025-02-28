@@ -31,7 +31,6 @@ class TestDatasetItemsCrud:
     )
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
     @pytest.mark.sanity
-    @allure.id("D5")
     @allure.title(
         "Dataset item insertion - {dataset_creation_fixture} and {dataset_insert}"
     )
@@ -135,7 +134,6 @@ class TestDatasetItemsCrud:
         logger.info("Successfully verified items via UI")
 
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
-    @allure.id("D6")
     @allure.title("Dataset item update")
     def test_dataset_item_update(
         self,
@@ -208,7 +206,6 @@ class TestDatasetItemsCrud:
 
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
     @pytest.mark.parametrize("item_deletion", ["delete_via_ui", "delete_via_sdk"])
-    @allure.id("D7")
     @allure.title("Dataset item deletion - {item_deletion}")
     def test_dataset_item_deletion(
         self,
@@ -330,7 +327,6 @@ class TestDatasetItemsCrud:
         logger.info("Successfully verified deletion in UI view")
 
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
-    @allure.id("D8")
     @allure.title("Dataset clear")
     def test_dataset_clear(
         self,

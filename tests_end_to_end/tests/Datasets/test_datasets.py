@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class TestDatasetsCrud:
-    @allure.id("D2")
     @allure.title("Dataset creation via traces page (add traces to new dataset)")
     def test_create_dataset_ui_add_traces_to_new_dataset(
         self, page: Page, create_project_api, create_10_test_traces
@@ -76,7 +75,6 @@ class TestDatasetsCrud:
         "dataset_fixture", ["create_dataset_ui", "create_dataset_sdk"]
     )
     @pytest.mark.sanity
-    @allure.id("D1")
     @allure.title("Dataset visibility - {dataset_fixture}")
     def test_dataset_visibility(
         self, request, page: Page, client: opik.Opik, dataset_fixture
@@ -129,7 +127,6 @@ class TestDatasetsCrud:
         "dataset_fixture",
         ["create_dataset_sdk", "create_dataset_ui"],
     )
-    @allure.id("D3")
     @allure.title("Dataset name update - {dataset_fixture}")
     def test_dataset_name_update(
         self, request, page: Page, client: opik.Opik, dataset_fixture
@@ -226,7 +223,6 @@ class TestDatasetsCrud:
             ("create_dataset_ui", "ui"),
         ],
     )
-    @allure.id("D4")
     @allure.title(
         "Dataset deletion - {dataset_fixture} and delete via {deletion_method}"
     )

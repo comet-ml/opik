@@ -18,7 +18,6 @@ class TestProjectsCrud:
         "project_fixture", ["create_project_api", "create_project_ui"]
     )
     @pytest.mark.sanity
-    @allure.id("P1")
     @allure.title("Basic project creation - {project_fixture}")
     @allure.description("Test project visibility after creation in both UI and SDK")
     def test_project_visibility(self, request, page: Page, project_fixture):
@@ -80,7 +79,6 @@ class TestProjectsCrud:
         "project_fixture",
         ["create_project_api", "create_project_ui"],
     )
-    @allure.id("P2")
     @allure.title("Project name update - {project_fixture}")
     def test_project_name_update(self, request, page: Page, project_fixture):
         """Test project name update via SDK with UI verification.
@@ -169,7 +167,6 @@ class TestProjectsCrud:
         "project_fixture",
         ["create_project_api", "create_project_ui"],
     )
-    @allure.id("P3")
     @allure.title("Project deletion in SDK - {project_fixture}")
     def test_project_deletion_in_sdk(self, request, page: Page, project_fixture):
         """Test project deletion via SDK with UI verification.
@@ -232,7 +229,6 @@ class TestProjectsCrud:
         "project_fixture",
         ["create_project_api", "create_project_ui"],
     )
-    @allure.id("P4")
     @allure.title("Project deletion in UI - {project_fixture}")
     def test_project_deletion_in_ui(self, request, page: Page, project_fixture):
         """Test project deletion via UI with SDK verification.

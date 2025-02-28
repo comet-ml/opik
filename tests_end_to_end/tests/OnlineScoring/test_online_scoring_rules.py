@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class TestOnlineScoringRules:
-    @allure.id("OS1")
     @allure.title("Basic moderation rule creation")
     def test_create_moderation_rule(
         self,

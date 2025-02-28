@@ -14,7 +14,6 @@ class TestPromptsCrud:
     @pytest.mark.parametrize(
         "prompt_fixture", ["create_prompt_sdk", "create_prompt_ui"]
     )
-    @allure.id("P1")
     @allure.title("Basic prompt creation - {prompt_fixture}")
     def test_prompt_visibility(
         self, request, page: Page, client: opik.Opik, prompt_fixture
@@ -85,7 +84,6 @@ class TestPromptsCrud:
     @pytest.mark.parametrize(
         "prompt_fixture", ["create_prompt_sdk", "create_prompt_ui"]
     )
-    @allure.id("P2")
     @allure.title("Prompt deletion via UI - {prompt_fixture}")
     def test_prompt_deletion(
         self, request, page: Page, client: opik.Opik, prompt_fixture
@@ -153,7 +151,6 @@ class TestPromptsCrud:
         "prompt_fixture", ["create_prompt_sdk", "create_prompt_ui"]
     )
     @pytest.mark.parametrize("update_method", ["sdk", "ui"])
-    @allure.id("P3")
     @allure.title("Prompt update - {prompt_fixture} and update via {update_method}")
     def test_prompt_update(
         self, request, page: Page, client: opik.Opik, prompt_fixture, update_method

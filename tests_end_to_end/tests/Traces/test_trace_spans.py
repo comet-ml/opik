@@ -15,7 +15,6 @@ class TestTraceSpans:
         ["log_traces_with_spans_low_level", "log_traces_with_spans_decorator"],
     )
     @pytest.mark.sanity
-    @allure.id("T4")
     @allure.title("Span creation and verification - {traces_fixture}")
     def test_spans_of_traces(self, page, request, create_project_api, traces_fixture):
         """Test span presence in traces.
@@ -107,7 +106,6 @@ class TestTraceSpans:
         ["log_traces_with_spans_low_level", "log_traces_with_spans_decorator"],
     )
     @pytest.mark.sanity
-    @allure.id("T5")
     @allure.title("Span details and metadata - {traces_fixture}")
     def test_trace_and_span_details(
         self, page, request, create_project_api, traces_fixture
