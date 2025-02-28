@@ -51,6 +51,8 @@ def update_current_span(
     tags: Optional[List[str]] = None,
     usage: Optional[UsageDict] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+    model: Optional[str] = None,
+    provider: Optional[str] = None,
     total_cost: Optional[float] = None,
 ) -> None:
     """
@@ -64,6 +66,9 @@ def update_current_span(
         tags: The tags of the span.
         usage: The usage data of the span.
         feedback_scores: The feedback scores of the span.
+        model: The name of LLM (in this case type parameter should be == llm)
+        provider: The provider of LLM.
+    
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
     """
     new_params = {
@@ -74,6 +79,8 @@ def update_current_span(
         "tags": tags,
         "usage": usage,
         "feedback_scores": feedback_scores,
+        "model": model,
+        "provider": provider,
         "total_cost": total_cost,
     }
     current_span_data = context_storage.top_span_data()
