@@ -83,7 +83,7 @@ const TextareaField: React.FC<TextareaFieldProps> = (props) => {
       ref={callbackTextareaRef}
       maxLength={MAX_LENGTH_LIMIT}
       className={cn(
-        "min-h-[80px] w-full rounded-md border p-3 pr-10 pb-11 resize-none overflow-hidden",
+        "min-h-[64px] w-full rounded-md border p-3 pr-10 resize-none overflow-hidden",
         {
           "border-destructive": formState.errors.commentText,
         },

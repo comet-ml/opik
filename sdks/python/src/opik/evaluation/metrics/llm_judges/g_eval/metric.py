@@ -10,7 +10,7 @@ from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
 from opik.logging_messages import GEVAL_SCORE_CALC_FAILED
 from .template import G_EVAL_COT_TEMPLATE, G_EVAL_QUERY_TEMPLATE
-from ... import exceptions
+from opik import exceptions
 
 
 class GEvalScoreFormat(pydantic.BaseModel):
