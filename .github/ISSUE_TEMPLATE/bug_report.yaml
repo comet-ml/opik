@@ -47,5 +47,5 @@ body:
       description: Please provide the error messages, logs, or stack trace that appear when your bug is reproduced, if possible.
   - type: textarea
     attributes:
-      label: \'opik healthcheck\' command output
-      description: Run `opik healthcheck` in CLI to perform some basic checks which might be useful for troubleshooting your issue. Paste your results as a text or a screenshot.
+      label: Healthcheck results
+      placeholder: Run `opik healthcheck` in CLI to perform some basic checks which might be useful for troubleshooting your issue. Paste your results as a text or a screenshot.
