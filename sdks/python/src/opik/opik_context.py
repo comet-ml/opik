@@ -68,7 +68,7 @@ def update_current_span(
         feedback_scores: The feedback scores of the span.
         model: The name of LLM (in this case type parameter should be == llm)
         provider: The provider of LLM.
-    
+
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
     """
     new_params = {
