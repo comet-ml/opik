@@ -66,9 +66,36 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     setValue(isNumber(feedbackScore?.value) ? feedbackScore?.value : "");
   }, [feedbackScore?.value, spanId, traceId]);
 
+  const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
+
+  const deleteFeedbackScore = useCallback(() => {
+    feedbackScoreDeleteMutation.mutate({
+      traceId,
+      spanId,
+      name: feedbackScore?.name ?? "",
+    });
+    setEditReason(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedbackScore?.name, traceId, spanId]);
+
+  const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
+
+  const handleChangeValue = useCallback(
+    (value: number, categoryName?: string) => {
+      setTraceFeedbackScore({
+        categoryName,
+        name,
+        spanId,
+        traceId,
+        value,
+      });
+    },
+    [name, spanId, traceId, setTraceFeedbackScore],
+  );
+
   const handleChangeReason = useCallback(
     (reason?: string) => {
-      setTraceFeedbackScoreMutation.mutate({
+      setTraceFeedbackScore({
         categoryName,
         name,
         spanId,
@@ -77,8 +104,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         value: value as number,
       });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [name, value, spanId, traceId],
+    [name, value, spanId, traceId, categoryName, setTraceFeedbackScore],
   );
 
   const onChangeTextAreaTriggered = useCallback(() => {
@@ -93,37 +119,8 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     initialValue: feedbackScore?.reason,
     onDebouncedChange: handleChangeReason,
     delay: SET_VALUE_DEBOUNCE_DELAY,
-    onChangeTriggered: onChangeTextAreaTriggered,
+    onChange: onChangeTextAreaTriggered,
   });
-
-  const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
-
-  const deleteFeedbackScore = useCallback(() => {
-    feedbackScoreDeleteMutation.mutate({
-      traceId,
-      spanId,
-      name: feedbackScore?.name ?? "",
-    });
-    setEditReason(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedbackScore?.name, traceId, spanId]);
-
-  const setTraceFeedbackScoreMutation = useTraceFeedbackScoreSetMutation();
-
-  const handleChangeValue = useCallback(
-    (value: number, categoryName?: string) => {
-      setTraceFeedbackScoreMutation.mutate({
-        categoryName,
-        name,
-        spanId,
-        traceId,
-        value,
-      });
-    },
-    // setTraceFeedbackScoreMutation re triggers this memo when it should not
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [name, spanId, traceId],
-  );
 
   const renderOptions = (feedbackDefinition: FeedbackDefinition) => {
     if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
@@ -284,7 +281,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             )}
             onClick={() => setEditReason((v) => !v)}
           >
-            {!isUndefined(reasonValue) && (
+            {!!reasonValue && (
               <div
                 className={cn(
                   "absolute right-1 top-1 size-[8px] rounded-full border-2 border-white bg-primary group-hover/reason-btn:border-primary-foreground",
