@@ -1,6 +1,6 @@
 import { Button, ButtonProps } from "@/components/ui/button";
 import { Textarea, TextareaProps } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { cn, updateTextAreaHeight } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, Check, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
@@ -45,15 +45,6 @@ const SubmitButton = React.forwardRef<
   );
 });
 SubmitButton.displayName = "CommentFormSubmitButton";
-
-const updateTextAreaHeight = (textarea: HTMLTextAreaElement | null) => {
-  if (!textarea) return;
-
-  textarea.style.height = "64px";
-  const scrollHeight = textarea.scrollHeight;
-
-  textarea.style.height = scrollHeight + "px";
-};
 
 const MAX_LENGTH_LIMIT = 5000;
 

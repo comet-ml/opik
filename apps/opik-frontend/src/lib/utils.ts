@@ -119,3 +119,17 @@ export const extractIdFromLocation = (location: string) =>
 
 export const formatNumericData = (value: number, precision = 3) =>
   String(round(value, precision));
+
+export const updateTextAreaHeight = (
+  textarea: HTMLTextAreaElement | null,
+  minHeight: number = 80,
+) => {
+  if (!textarea) return;
+
+  const BORDER_WIDTH = 1;
+
+  textarea.style.height = `${minHeight}px`;
+  const scrollHeight = textarea.scrollHeight + BORDER_WIDTH * 2;
+
+  textarea.style.height = scrollHeight + "px";
+};

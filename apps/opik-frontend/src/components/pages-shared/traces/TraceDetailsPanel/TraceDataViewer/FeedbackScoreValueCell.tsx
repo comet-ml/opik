@@ -1,27 +1,27 @@
 import { CellContext } from "@tanstack/react-table";
-import React from "react";
 import { TraceFeedbackScore } from "@/types/traces";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { MessageSquareMore } from "lucide-react";
+import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const FeedbackScoreValueCell = (
   context: CellContext<TraceFeedbackScore, string>,
 ) => {
   const feedbackScore = context.row.original;
   const value = context.getValue();
-  const Reason = feedbackScore.reason ? (
-    <TooltipWrapper content={feedbackScore.reason} delayDuration={100}>
-      <MessageSquareMore className="size-4 text-light-slate" />
-    </TooltipWrapper>
-  ) : null;
+
+  const computedValue = feedbackScore.category_name
+    ? categoryOptionLabelRenderer(feedbackScore.category_name, value)
+    : value;
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className="gap-1.5"
     >
-      <span className="truncate">{value}</span> {Reason && Reason}
+      <TooltipWrapper content={computedValue}>
+        <span className="truncate direction-alternate">{computedValue}</span>
+      </TooltipWrapper>
     </CellWrapper>
   );
 };
