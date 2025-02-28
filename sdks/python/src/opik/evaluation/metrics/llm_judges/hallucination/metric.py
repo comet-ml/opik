@@ -8,7 +8,7 @@ from opik.evaluation.metrics import score_result, base_metric
 from opik import logging_messages
 
 from . import template
-from ... import exceptions
+from opik import exceptions
 
 LOGGER = logging.getLogger(__name__)
 

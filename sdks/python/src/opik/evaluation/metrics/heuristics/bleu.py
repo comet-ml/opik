@@ -1,6 +1,6 @@
 from typing import Any, List, Optional, Tuple, Union
 
-from opik.evaluation.metrics.exceptions import MetricComputationError
+from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
 try:
