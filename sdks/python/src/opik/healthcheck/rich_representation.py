@@ -74,9 +74,12 @@ def print_current_config(config: config.OpikConfig) -> None:
     console.print(table)
 
 
-def print_config_scan_results(misconfiguration_detected: bool, error_message: Optional[str]) -> None:
+def print_config_scan_results(
+    misconfiguration_detected: bool, error_message: Optional[str]
+) -> None:
     is_misconfigured_text = Text(
-        str(misconfiguration_detected), style=DEFAULT_ERROR_COLOR if misconfiguration_detected else DEFAULT_VALUE_COLOR
+        str(misconfiguration_detected),
+        style=DEFAULT_ERROR_COLOR if misconfiguration_detected else DEFAULT_VALUE_COLOR,
     )
     issues_found_label = make_key_text("Configuration issues found:")
 
