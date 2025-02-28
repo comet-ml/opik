@@ -24,6 +24,7 @@ const DataTab = ({ data, experimentItems, openTrace }: DataTabProps) => {
           <CompareExperimentsViewer
             experimentItem={experimentItem}
             openTrace={openTrace}
+            sectionIdx={idx}
           />
         </ResizablePanel>
 

@@ -2,7 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.TraceDetails;
-import com.comet.opik.infrastructure.DeploymentConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -50,7 +50,7 @@ class RedirectServiceImpl implements RedirectService {
     private final @NonNull Client client;
     private final @NonNull TraceService traceService;
     private final @NonNull DatasetService datasetService;
-    private final @NonNull @Config("deployment") DeploymentConfig config;
+    private final @NonNull @Config OpikConfiguration config;
 
     @Override
     public String projectRedirectUrl(@NotNull UUID traceId, String workspaceName) {
@@ -88,13 +88,13 @@ class RedirectServiceImpl implements RedirectService {
     }
 
     private String getWorkspaceName(String workspaceId) {
-        if (config.getBaseUrl().equals(DEFAULT_BASE_URL)) {
+        if (config.getDeployment().getBaseUrl().equals(DEFAULT_BASE_URL)) {
             return DEFAULT_WORKSPACE_NAME;
         }
 
         log.info("Request react service for workspace name by id: {}", workspaceId);
         InstrumentAsyncUtils.Segment segment = startSegment("redirect", "React", "getWorkspaceNameById");
-        try (var response = client.target(URI.create(config.getBaseUrl()))
+        try (var response = client.target(URI.create(config.getDeployment().getBaseUrl()))
                 .path("api")
                 .path("workspaces")
                 .path("workspace-name")
@@ -123,6 +123,8 @@ class RedirectServiceImpl implements RedirectService {
     }
 
     private String feBaseUrl() {
-        return config.getBaseUrl().equals(DEFAULT_BASE_URL) ? DEFAULT_BASE_URL : config.getBaseUrl() + "/opik";
+        return config.getDeployment().getBaseUrl().equals(DEFAULT_BASE_URL)
+                ? DEFAULT_BASE_URL
+                : config.getDeployment().getBaseUrl() + "/opik";
     }
 }
