@@ -12,7 +12,7 @@ from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
 from .llm_judges.usefulness.metric import Usefulness
 from .base_metric import BaseMetric
-from .exceptions import MetricComputationError
+from opik.exceptions import MetricComputationError
 
 # from .llm_judges.factuality.metric import Factuality
 
