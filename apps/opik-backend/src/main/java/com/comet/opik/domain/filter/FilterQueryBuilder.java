@@ -55,60 +55,67 @@ public class FilterQueryBuilder {
     private static final String CREATED_AT_ANALYTICS_DB = "created_at";
     private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
+    private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
 
-    private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(Map.of(
-            Operator.CONTAINS, new EnumMap<>(Map.of(
-                    FieldType.STRING, "ilike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
-                    FieldType.LIST,
-                    "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
-                    FieldType.DICTIONARY,
-                    "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")),
-            Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
-                    FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))")),
-            Operator.STARTS_WITH, new EnumMap<>(Map.of(
-                    FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))")),
-            Operator.ENDS_WITH, new EnumMap<>(Map.of(
-                    FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))")),
-            Operator.EQUAL, new EnumMap<>(Map.of(
-                    FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)",
-                    FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)",
-                    FieldType.NUMBER, "%1$s = :filter%2$d",
-                    FieldType.FEEDBACK_SCORES_NUMBER,
-                    "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
-                    FieldType.DICTIONARY,
-                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")),
-            Operator.NOT_EQUAL, new EnumMap<>(Map.of(
-                    FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)",
-                    FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)",
-                    FieldType.NUMBER, "%1$s != :filter%2$d",
-                    FieldType.FEEDBACK_SCORES_NUMBER,
-                    "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0",
-                    FieldType.DICTIONARY,
-                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)")),
-            Operator.GREATER_THAN, new EnumMap<>(Map.of(
-                    FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
-                    FieldType.NUMBER, "%1$s > :filter%2$d",
-                    FieldType.FEEDBACK_SCORES_NUMBER,
-                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 > toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
-                    FieldType.DICTIONARY,
-                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)")),
-            Operator.GREATER_THAN_EQUAL, new EnumMap<>(Map.of(
-                    FieldType.DATE_TIME, "%1$s >= parseDateTime64BestEffort(:filter%2$d, 9)",
-                    FieldType.NUMBER, "%1$s >= :filter%2$d",
-                    FieldType.FEEDBACK_SCORES_NUMBER,
-                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")),
-            Operator.LESS_THAN, new EnumMap<>(Map.of(
-                    FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)",
-                    FieldType.NUMBER, "%1$s < :filter%2$d",
-                    FieldType.FEEDBACK_SCORES_NUMBER,
-                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 < toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
-                    FieldType.DICTIONARY,
-                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)")),
-            Operator.LESS_THAN_EQUAL, new EnumMap<>(Map.of(
-                    FieldType.DATE_TIME, "%1$s <= parseDateTime64BestEffort(:filter%2$d, 9)",
-                    FieldType.NUMBER, "%1$s <= :filter%2$d",
-                    FieldType.FEEDBACK_SCORES_NUMBER,
-                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"))));
+    private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
+            ImmutableMap.<Operator, Map<FieldType, String>>builder()
+                    .put(Operator.CONTAINS, new EnumMap<>(Map.of(
+                            FieldType.STRING, "ilike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.LIST,
+                            "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
+                            FieldType.DICTIONARY,
+                            "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
+                    .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
+                            FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))")))
+                    .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
+                            FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))")))
+                    .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
+                            FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))")))
+                    .put(Operator.EQUAL, new EnumMap<>(Map.of(
+                            FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)",
+                            FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.NUMBER, "%1$s = :filter%2$d",
+                            FieldType.FEEDBACK_SCORES_NUMBER,
+                            "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
+                            FieldType.DICTIONARY,
+                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")))
+                    .put(Operator.NOT_EQUAL, new EnumMap<>(Map.of(
+                            FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)",
+                            FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.NUMBER, "%1$s != :filter%2$d",
+                            FieldType.FEEDBACK_SCORES_NUMBER,
+                            "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0",
+                            FieldType.DICTIONARY,
+                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)")))
+                    .put(Operator.GREATER_THAN, new EnumMap<>(Map.of(
+                            FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.NUMBER, "%1$s > :filter%2$d",
+                            FieldType.FEEDBACK_SCORES_NUMBER,
+                            "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 > toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
+                            FieldType.DICTIONARY,
+                            "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)")))
+                    .put(Operator.GREATER_THAN_EQUAL, new EnumMap<>(Map.of(
+                            FieldType.DATE_TIME, "%1$s >= parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.NUMBER, "%1$s >= :filter%2$d",
+                            FieldType.FEEDBACK_SCORES_NUMBER,
+                            "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
+                    .put(Operator.LESS_THAN, new EnumMap<>(Map.of(
+                            FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.NUMBER, "%1$s < :filter%2$d",
+                            FieldType.FEEDBACK_SCORES_NUMBER,
+                            "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 < toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
+                            FieldType.DICTIONARY,
+                            "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)")))
+                    .put(Operator.LESS_THAN_EQUAL, new EnumMap<>(Map.of(
+                            FieldType.DATE_TIME, "%1$s <= parseDateTime64BestEffort(:filter%2$d, 9)",
+                            FieldType.NUMBER, "%1$s <= :filter%2$d",
+                            FieldType.FEEDBACK_SCORES_NUMBER,
+                            "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
+                    .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
+                            FieldType.EMPTY, "%1$s = 0")))
+                    .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
+                            FieldType.EMPTY, "%1$s > 0")))
+                    .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<TraceField, String>builder()
@@ -127,6 +134,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
+                    .put(TraceField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -158,12 +166,14 @@ public class FilterQueryBuilder {
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(SpanField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
@@ -218,7 +228,12 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
-                    .build())));
+                    .build()),
+            FilterStrategy.FEEDBACK_SCORES_EMPTY, ImmutableSet.<Field>builder()
+                    .add(TraceField.FEEDBACK_SCORES_EMPTY)
+                    .add(SpanField.FEEDBACK_SCORES_EMPTY)
+                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY)
+                    .build()));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
@@ -300,7 +315,10 @@ public class FilterQueryBuilder {
                     statement = statement.bind("dynamicField%d".formatted(i), filter.field().getQueryParamField());
                 }
 
-                statement.bind("filter%d".formatted(i), filter.value());
+                if (StringUtils.isNotEmpty(filter.value())) {
+                    statement.bind("filter%d".formatted(i), filter.value());
+                }
+
                 if (StringUtils.isNotBlank(filter.key())
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
                     var key = getKey(filter);

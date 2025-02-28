@@ -1078,6 +1078,7 @@ class TracesResourceTest {
                                                 .key(getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
+                                case EMPTY -> Stream.of(); // no validation is applied to empty type
                                 default -> Stream.of(TraceFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
@@ -3411,6 +3412,60 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(Operator operator,
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .threadId(null)
+                            .feedbackScores(trace.feedbackScores().stream()
+                                    .map(feedbackScore -> feedbackScore.toBuilder()
+                                            .value(factory.manufacturePojo(BigDecimal.class))
+                                            .build())
+                                    .collect(Collectors.toList()))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(0, traces.getFirst().toBuilder().feedbackScores(null).build());
+            traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            traces.subList(1, traces.size()).forEach(trace -> trace.feedbackScores()
+                    .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES_EMPTY)
+                            .operator(operator)
+                            .value("")
+                            .build());
+            getAndAssertPage(workspaceName, projectName, null, filters, traces, expectedTraces.reversed(),
+                    unexpectedTraces,
+                    apiKey);
+        }
+
+        private Stream<Arguments> getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
+            return Stream.of(
+                    Arguments.of(Operator.IS_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size())),
+                    Arguments.of(Operator.IS_NOT_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst())));
+        }
+
+        @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresGreaterThan__thenReturnTracesFiltered(String endpoint,
                 TestAssertion testAssertion,
@@ -3892,6 +3947,7 @@ class TracesResourceTest {
             case STRING, LIST, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
             case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME -> Instant.now().toString();
+            case EMPTY -> "";
         };
     }
 
@@ -3899,6 +3955,7 @@ class TracesResourceTest {
         return switch (field.getType()) {
             case STRING, NUMBER, DATE_TIME, LIST -> null;
             case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case EMPTY -> "";
         };
     }
 
@@ -3906,6 +3963,7 @@ class TracesResourceTest {
         return switch (field.getType()) {
             case STRING, DICTIONARY, LIST -> " ";
             case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case EMPTY -> "";
         };
     }
 
