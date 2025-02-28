@@ -254,7 +254,7 @@ class TraceDAOImpl implements TraceDAO {
                     *
                 FROM traces
                 WHERE id = :id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
@@ -286,7 +286,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY id DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
             ;
             """;
@@ -667,7 +667,7 @@ class TraceDAOImpl implements TraceDAO {
                     *
                 FROM traces
                 WHERE id = :id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
