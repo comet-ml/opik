@@ -30,7 +30,7 @@ def run(show_installed_packages: bool = True) -> None:
     rich_representation.print_current_config(config_obj)
 
     if config_obj.is_cloud_installation or config_obj.is_localhost_installation:
-        # Config can be validated ONLY for localhost and cloud, not for other installations
+        # Misconfigurations can be detected ONLY for localhost and cloud, not for other installations
         rich_representation.print_header("Configuration scan")
         misconfiguration_detected, err_msg = (
             config_obj.get_misconfiguration_detection_results()
