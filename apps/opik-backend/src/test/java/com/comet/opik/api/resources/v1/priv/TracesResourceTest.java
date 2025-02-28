@@ -4025,7 +4025,7 @@ class TracesResourceTest {
                                     .field(TraceThreadField.NUMBER_OF_MESSAGES)
                                     .operator(Operator.EQUAL)
                                     .key(null)
-                                    .value(String.valueOf(traces.size()))
+                                    .value(String.valueOf(traces.size() * 2))
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
@@ -4066,7 +4066,7 @@ class TracesResourceTest {
                     .createdBy(USER)
                     .startTime(trace.startTime())
                     .endTime(trace.endTime())
-                    .numberOfMessages(1)
+                    .numberOfMessages(traces.size() * 2)
                     .id(threadId)
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
@@ -4210,7 +4210,7 @@ class TracesResourceTest {
                                 .findFirst().get().startTime())
                         .endTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
                                 .findFirst().get().endTime())
-                        .numberOfMessages(expectedTraces.size())
+                        .numberOfMessages(expectedTraces.size() * 2)
                         .id(threadId)
                         .createdAt(expectedTraces.stream().sorted(Comparator.comparing(Trace::createdAt))
                                 .findFirst().get().createdAt())
