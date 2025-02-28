@@ -2,6 +2,7 @@ import functools
 import atexit
 import datetime
 import logging
+import tqdm
 
 from typing import Optional, Any, Dict, List
 
@@ -232,6 +233,8 @@ class Opik:
         project_name: str,
         destination_project_name: str,
         delete_original_project: bool = False,
+        page_size: int = 100,
+        verbose: int = 1,
     ) -> None:
         """
         Copy traces from one project to another. This method will copy all traces in a source project
@@ -248,6 +251,8 @@ class Opik:
             project_name: The name of the project to copy traces from.
             destination_project_name: The name of the project to copy traces to.
             delete_original_project: Whether to delete the original project. Defaults to False.
+            page_size: The page size to use when searching for traces and spans, can be increased to optimize performance. Defaults to 100.
+            verbose: An integer value that controls the displaying of the progress bar. 0 - no outputs, 1 - outputs are enabled (default).
 
         Returns:
             None
@@ -258,8 +263,8 @@ class Opik:
                 "In order to use this method, you must enable batching using opik.Opik(_use_batching=True)."
             )
 
-        traces_public = self.search_traces(project_name=project_name)
-        spans_public = self.search_spans(project_name=project_name)
+        traces_public = self.search_traces(project_name=project_name, max_results=100000000, page_size=page_size, verbose=verbose)
+        spans_public = self.search_spans(project_name=project_name, max_results=100000000, page_size=page_size, verbose=verbose)
 
         trace_data = [
             trace.trace_public_to_trace_data(
@@ -760,6 +765,8 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        page_size: int = 100,
+        verbose: int = 1,
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project.
@@ -769,14 +776,18 @@ class Opik:
             filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
             truncate: Whether to truncate image data stored in input, output or metadata
+            page_size: The number of traces to return per page, can be increased to optimize performance. Defaults to 100.
+            verbose: An integer value that controls the displaying of the progress bar. 0 - no outputs, 1 - outputs are enabled (default).
         """
 
-        page_size = 100
         traces: List[trace_public.TracePublic] = []
 
         filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
 
         page = 1
+        if verbose > 0:
+            pbar = tqdm.tqdm(desc="Downloading traces", unit=" traces")
+
         while len(traces) < max_results:
             page_traces = self._rest_client.traces.get_traces_by_project(
                 project_name=project_name or self._project_name,
@@ -790,8 +801,13 @@ class Opik:
                 break
 
             traces.extend(page_traces.content)
+            if verbose > 0:
+                pbar.update(len(page_traces.content))
+
             page += 1
 
+        if verbose > 0:
+            pbar.close()
         return traces[:max_results]
 
     def search_spans(
@@ -801,6 +817,8 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        page_size: int = 100,
+        verbose: int = 1,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
@@ -812,13 +830,16 @@ class Opik:
             filter_string: A filter string to narrow down the search.
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output or metadata
+            page_size: The number of spans to return per page, can be increased to optimize performance. Defaults to 100.
+            verbose: An integer value that controls the displaying of the progress bar. 0 - no outputs, 1 - outputs are enabled (default).
         """
-        page_size = 100
         spans: List[span_public.SpanPublic] = []
 
         filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
 
         page = 1
+        if verbose > 0:
+            pbar = tqdm.tqdm(desc="Downloading spans", unit=" spans")
         while len(spans) < max_results:
             page_spans = self._rest_client.spans.get_spans_by_project(
                 project_name=project_name or self._project_name,
@@ -833,8 +854,13 @@ class Opik:
                 break
 
             spans.extend(page_spans.content)
+            if verbose > 0:
+                pbar.update(len(page_spans.content))
+
             page += 1
 
+        if verbose > 0:
+            pbar.close()
         return spans[:max_results]
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
