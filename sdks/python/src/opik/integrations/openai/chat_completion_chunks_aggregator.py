@@ -17,12 +17,6 @@ class ChatCompletionChunksAggregated(pydantic.BaseModel):
     object: str
     system_fingerprint: str
     usage: types.UsageDict
-    # "choices": [{"index": 0, "message": {"role": "", "content": ""}}],
-    # "id": first_chunk.id,
-    # "created": first_chunk.created,
-    # "model": first_chunk.model,
-    # "object": "chat.completion",
-    # "system_fingerprint": first_chunk.system_fingerprint,
 
 
 def aggregate(

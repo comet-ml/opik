@@ -1,6 +1,10 @@
+from typing import get_type_hints
+
 import pytest
-from opik.validation import usage
+from typing_extensions import NotRequired
+
 from opik.types import UsageDict
+from opik.validation import usage
 
 
 @pytest.mark.parametrize(
@@ -19,6 +23,16 @@ from opik.types import UsageDict
                 "completion_tokens": "12",
                 "total_tokens": 20,
                 "prompt_tokens": 32,
+            },
+            True,
+        ),
+        (
+            {
+                "completion_tokens": 12,
+                "completion_tokens_details": {},
+                "total_tokens": 20,
+                "prompt_tokens": 32,
+                "prompt_tokens_details": {},
             },
             True,
         ),
@@ -59,6 +73,18 @@ def test_usage_validator(usage_dict, is_valid):
 
     if tested.validate().ok():
         assert tested.parsed_usage.full_usage == usage_dict
-        assert set(tested.parsed_usage.supported_usage.keys()) == set(
-            UsageDict.__annotations__.keys()
-        )
+
+        usage_dict_type_hints = get_type_hints(UsageDict)
+        supported_usage_keys = set(tested.parsed_usage.supported_usage.keys())
+
+        usage_dict_all_keys = set(usage_dict_type_hints.keys())
+        usage_dict_keys_without_no_required = {
+            key
+            for key, value in usage_dict_type_hints.items()
+            if getattr(value, "__origin__", None) is not NotRequired
+        }
+
+        assert supported_usage_keys in [
+            usage_dict_all_keys,
+            usage_dict_keys_without_no_required,
+        ]
