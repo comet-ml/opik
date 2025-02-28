@@ -48,4 +48,5 @@ body:
   - type: textarea
     attributes:
       label: Healthcheck results
-      placeholder: Run `opik healthcheck` in CLI to perform some basic checks which might be useful for troubleshooting your issue. Paste your results as a text or a screenshot.
+      description: Run `opik healthcheck` to perform some basic checks which might be useful for troubleshooting your issue. Paste your results as a text or a screenshot.
+      placeholder: `opik healthcheck` CLI output...
