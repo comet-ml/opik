@@ -267,7 +267,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
             current_values["api_key"] = "*** HIDDEN ***"
         return current_values
 
-    def is_misconfiguration_detected(
+    def check_for_known_misconfigurations(
         self, show_misconfiguration_message: bool = False
     ) -> bool:
         """
