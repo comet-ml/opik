@@ -59,7 +59,7 @@ const CommitHistory = ({
               {hoveredVersionId == version.id && (
                 <TooltipWrapper content="Copy code">
                   <Button
-                    size="icon-xxs"
+                    size="icon-3xs"
                     variant="minimal"
                     onClick={() => handleCopyClick(version.commit)}
                   >

@@ -66,6 +66,7 @@ module.exports = {
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
+          gray: "hsl(var(--popover-gray))",
           foreground: "hsl(var(--popover-foreground))",
         },
         tooltip: {

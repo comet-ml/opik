@@ -45,7 +45,10 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
       <HoverCardTrigger asChild>
         <div className={className}>{children}</div>
       </HoverCardTrigger>
-      <HoverCardContent className="w-[320px] p-0" collisionPadding={24}>
+      <HoverCardContent
+        className="w-[320px] bg-popover-gray p-0"
+        collisionPadding={24}
+      >
         <div
           className="relative size-full max-h-[40vh] max-w-[320px] overflow-auto p-1 pb-0"
           ref={onRefCreated}
