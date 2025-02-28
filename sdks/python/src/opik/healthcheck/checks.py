@@ -20,7 +20,7 @@ def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
     try:
         opik_obj.auth_check()
         is_available = True
-    except httpx.ConnectError as e:
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
         err_msg = (
             f"Error while checking backend workspace availability: {e}\n\n"
             "Can't connect to the backend service. "
