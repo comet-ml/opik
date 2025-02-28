@@ -18,6 +18,7 @@ import useTracesOrSpansList, {
 } from "@/hooks/useTracesOrSpansList";
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
+  COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
@@ -53,6 +54,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import TraceDetailsPanel, {
+  LastSection,
   LastSectionParam,
   LastSectionValue,
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
@@ -176,6 +178,12 @@ const TRACES_PAGE_COLUMNS = [
     id: "created_by",
     label: "Created by",
     type: COLUMN_TYPE.string,
+  },
+  {
+    id: COLUMN_COMMENTS_ID,
+    label: "Comments",
+    type: COLUMN_TYPE.list,
+    cell: CommentsCell as never,
   },
 ];
 
@@ -426,6 +434,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [setTraceId, setSpanId, type, setLastSection],
   );
 
+  const meta = useMemo(
+    () => ({
+      onCommentsReply: (row?: Trace | Span) => {
+        handleRowClick(row, LastSection.Comments);
+      },
+    }),
+    [handleRowClick],
+  );
+
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Trace | Span>(),
@@ -448,24 +465,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
         scoresColumnsData,
-        {
-          columnsOrder: scoresColumnsOrder,
-          selectedColumns,
-        },
-      ),
-      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
-        [
-          {
-            id: "comments",
-            label: "Comments",
-            type: COLUMN_TYPE.list,
-            cell: CommentsCell as never,
-            customMeta: {
-              callback: handleRowClick,
-              asId: true,
-            },
-          },
-        ],
         {
           columnsOrder: scoresColumnsOrder,
           selectedColumns,
@@ -527,11 +526,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  const columnsMenuList = useMemo(
-    () => [...TRACES_PAGE_COLUMNS, { id: "comments", label: "Comments" }],
-    [],
-  );
-
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
@@ -589,7 +583,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={columnsMenuList}
+            columns={TRACES_PAGE_COLUMNS}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
@@ -612,6 +606,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        meta={meta}
       />
       <div className="py-4">
         <DataTablePagination

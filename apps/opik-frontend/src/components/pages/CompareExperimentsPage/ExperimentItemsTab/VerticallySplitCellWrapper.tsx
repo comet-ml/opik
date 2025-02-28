@@ -21,24 +21,26 @@ export type CustomMeta = {
   outputKey?: string;
 };
 
-type VerticallySplitCellWrapperProps = {
-  metadata?: ColumnMeta<unknown, unknown>;
-  tableMetadata?: TableMeta<unknown>;
-  renderContent: (
-    item: ExperimentItem | undefined,
-    experimentId: string,
-  ) => React.ReactNode;
+export type SplitCellRenderContent = (
+  item: ExperimentItem | undefined,
+  experimentId: string,
+  idx: number,
+) => React.ReactNode;
+type VerticallySplitCellWrapperProps<TData> = {
+  metadata?: ColumnMeta<TData, unknown>;
+  tableMetadata?: TableMeta<TData>;
+  renderContent: SplitCellRenderContent;
   experimentCompare: ExperimentsCompare;
   rowId: string;
 };
 
-const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
+const VerticallySplitCellWrapper = <TData,>({
   metadata,
   tableMetadata,
   renderContent,
   experimentCompare,
   rowId,
-}) => {
+}: VerticallySplitCellWrapperProps<TData>) => {
   const { custom, type } = metadata ?? {};
   const { experimentsIds } = (custom ?? {}) as CustomMeta;
   const rowHeight = tableMetadata?.rowHeight ?? ROW_HEIGHT.small;
@@ -71,7 +73,7 @@ const VerticallySplitCellWrapper: React.FC<VerticallySplitCellWrapperProps> = ({
   };
 
   const renderItem = (item: ExperimentItem | undefined, index: number) => {
-    const content = renderContent(item, experimentsIds[index]);
+    const content = renderContent(item, experimentsIds[index], index);
     const horizontalAlignClass =
       CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
 

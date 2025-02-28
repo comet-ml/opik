@@ -7,21 +7,21 @@ import {
 import { CELL_VERTICAL_ALIGNMENT, ROW_HEIGHT } from "@/types/shared";
 import { cn } from "@/lib/utils";
 
-type CellWrapperProps = {
+type CellWrapperProps<TData> = {
   children?: React.ReactNode;
-  metadata?: ColumnMeta<unknown, unknown>;
-  tableMetadata?: TableMeta<unknown>;
+  metadata?: ColumnMeta<TData, unknown>;
+  tableMetadata?: TableMeta<TData>;
   className?: string;
   dataCellWrapper?: boolean;
 };
 
-const CellWrapper: React.FunctionComponent<CellWrapperProps> = ({
+const CellWrapper = <TData,>({
   children,
   metadata,
   tableMetadata,
   className,
   dataCellWrapper = true,
-}) => {
+}: CellWrapperProps<TData>) => {
   const { type } = metadata || {};
   const { rowHeight, rowHeightStyle } = tableMetadata || {};
 

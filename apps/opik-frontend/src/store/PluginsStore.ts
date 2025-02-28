@@ -5,6 +5,7 @@ import WorkspacePreloader from "@/components/shared/WorkspacePreloader/Workspace
 import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCardCore";
 import { FrameworkIntegrationsProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import { CommentsViewerCoreProps } from "@/components/pages-shared/traces/TraceDetailsPanel/CommentsViewer/CommentsViewerCore";
+import { ExperimentCommentsViewerCoreProps } from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/ExperimentCommentsViewerCore";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -17,6 +18,7 @@ type PluginStore = {
   ConfigureEnvCode: React.ComponentType | null;
   EvaluationExamples: React.ComponentType | null;
   CommentsViewer: React.ComponentType<CommentsViewerCoreProps> | null;
+  ExperimentCommentsViewer: React.ComponentType<ExperimentCommentsViewerCoreProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -33,6 +35,7 @@ const PLUGIN_NAMES = [
   "CommentsViewer",
   "WorkspacePreloader",
   "EvaluationExamples",
+  "ExperimentCommentsViewer",
   "init",
 ];
 
@@ -47,6 +50,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   ConfigureEnvCode: null,
   CommentsViewer: null,
   EvaluationExamples: null,
+  ExperimentCommentsViewer: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

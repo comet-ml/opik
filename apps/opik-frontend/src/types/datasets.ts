@@ -1,5 +1,6 @@
 import { TraceFeedbackScore } from "@/types/traces";
 import { AverageFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { CommentItems } from "./comment";
 
 export interface Dataset {
   id: string;
@@ -59,7 +60,7 @@ export interface Experiment {
   trace_count: number;
   created_at: string;
   last_updated_at: string;
-  comments?: Comment[];
+  comments?: CommentItems;
 }
 
 export interface ExperimentItem {
@@ -70,6 +71,7 @@ export interface ExperimentItem {
   input: object;
   output: object;
   feedback_scores?: TraceFeedbackScore[];
+  comments?: CommentItems;
   created_at: string;
   last_updated_at: string;
 }

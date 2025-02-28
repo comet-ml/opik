@@ -5,23 +5,23 @@ import HeaderStatistic from "@/components/shared/DataTableHeaders/HeaderStatisti
 import { cn } from "@/lib/utils";
 import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
 
-type HeaderWrapperProps = {
+type HeaderWrapperProps<TData> = {
   children?: React.ReactNode;
-  metadata?: ColumnMeta<unknown, unknown>;
-  tableMetadata?: TableMeta<unknown>;
+  metadata?: ColumnMeta<TData, unknown>;
+  tableMetadata?: TableMeta<TData>;
   className?: string;
   onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
   supportStatistic?: boolean;
 };
 
-const HeaderWrapper: React.FunctionComponent<HeaderWrapperProps> = ({
+const HeaderWrapper = <TData,>({
   children,
   metadata,
   tableMetadata,
   className,
   onClick,
   supportStatistic = true,
-}) => {
+}: HeaderWrapperProps<TData>) => {
   const { type, statisticKey, statisticDataFormater } = metadata || {};
   const { columnsStatistic } = tableMetadata || {};
 

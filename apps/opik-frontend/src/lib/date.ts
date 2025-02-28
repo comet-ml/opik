@@ -1,11 +1,13 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
+import relativeTime from "dayjs/plugin/relativeTime";
 import isString from "lodash/isString";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNull from "lodash/isNull";
 
 dayjs.extend(utc);
+dayjs.extend(relativeTime);
 
 export const formatDate = (value: string, utc: boolean = false) => {
   const dateTimeFormat = "MM/DD/YY hh:mm A";
@@ -15,6 +17,13 @@ export const formatDate = (value: string, utc: boolean = false) => {
     }
 
     return dayjs(value).format(dateTimeFormat);
+  }
+  return "";
+};
+
+export const getTimeFromNow = (date: string) => {
+  if (isString(date) && dayjs(date).isValid()) {
+    return dayjs().to(dayjs(date));
   }
   return "";
 };

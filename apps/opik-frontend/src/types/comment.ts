@@ -1,4 +1,4 @@
-export type Comment = {
+export type CommentItem = {
   id: string;
   text: string;
   created_at: string;
@@ -7,4 +7,4 @@ export type Comment = {
   last_updated_by: string;
 };
 
-export type Comments = Comment[];
+export type CommentItems = CommentItem[];
