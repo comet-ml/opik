@@ -55,7 +55,7 @@ def print_config_file_details(config: OpikConfig) -> None:
     file_path = make_value_text(str(config.config_file_fullpath))
 
     is_exists_label = make_key_text("Config file exists:")
-    is_exists = make_value_text(str(config.is_config_file_exists))
+    is_exists = make_value_text("yes" if config.is_config_file_exists else "no")
 
     console.print(file_path_label, file_path)
     console.print(is_exists_label, is_exists)
@@ -78,10 +78,10 @@ def print_config_scan_results(
     misconfiguration_detected: bool, error_message: Optional[str]
 ) -> None:
     is_misconfigured_text = Text(
-        str(misconfiguration_detected),
+        "found" if misconfiguration_detected else "not found",
         style=DEFAULT_ERROR_COLOR if misconfiguration_detected else DEFAULT_VALUE_COLOR,
     )
-    issues_found_label = make_key_text("Configuration issues found:")
+    issues_found_label = make_key_text("Configuration issues:")
 
     console.print(issues_found_label, is_misconfigured_text)
 
@@ -97,7 +97,7 @@ def print_backend_workspace_availability(
     err_msg: Optional[str],
 ) -> None:
     is_available_text = Text(
-        str(is_available),
+        "yes" if is_available else "no",
         style=DEFAULT_VALUE_COLOR if is_available else DEFAULT_ERROR_COLOR,
     )
     is_available_label = make_key_text("Backend workspace available:")
