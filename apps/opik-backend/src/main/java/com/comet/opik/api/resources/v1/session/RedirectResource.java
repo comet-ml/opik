@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.Base64;
 import java.util.UUID;
 
 @Path("/v1/session/redirect")
@@ -37,8 +38,13 @@ public class RedirectResource {
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     public Response projectsRedirect(@QueryParam("trace_id") @NotNull UUID traceId,
-            @QueryParam("workspace_name") String workspaceName) {
-        return Response.seeOther(URI.create(redirectService.projectRedirectUrl(traceId, workspaceName))).build();
+            @QueryParam("workspace_name") String workspaceName,
+            @QueryParam("path") @NotNull String path) {
+        return Response
+                .seeOther(URI.create(
+                        redirectService.projectRedirectUrl(traceId, workspaceName,
+                                new String(Base64.getUrlDecoder().decode(path)))))
+                .build();
     }
 
     @GET
@@ -49,8 +55,13 @@ public class RedirectResource {
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     public Response datasetsRedirect(@QueryParam("dataset_id") @NotNull UUID datasetId,
-            @QueryParam("workspace_name") String workspaceName) {
-        return Response.seeOther(URI.create(redirectService.datasetRedirectUrl(datasetId, workspaceName))).build();
+            @QueryParam("workspace_name") String workspaceName,
+            @QueryParam("path") @NotNull String path) {
+        return Response
+                .seeOther(URI.create(
+                        redirectService.datasetRedirectUrl(datasetId, workspaceName,
+                                new String(Base64.getUrlDecoder().decode(path)))))
+                .build();
     }
 
     @GET
@@ -62,9 +73,11 @@ public class RedirectResource {
     })
     public Response experimentsRedirect(@QueryParam("dataset_id") @NotNull UUID datasetId,
             @QueryParam("experiment_id") @NotNull UUID experimentId,
-            @QueryParam("workspace_name") String workspaceName) {
+            @QueryParam("workspace_name") String workspaceName,
+            @QueryParam("path") @NotNull String path) {
         return Response
-                .seeOther(URI.create(redirectService.experimentsRedirectUrl(datasetId, experimentId, workspaceName)))
+                .seeOther(URI.create(redirectService.experimentsRedirectUrl(datasetId, experimentId, workspaceName,
+                        new String(Base64.getUrlDecoder().decode(path)))))
                 .build();
     }
 }
