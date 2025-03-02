@@ -1078,7 +1078,6 @@ class TracesResourceTest {
                                                 .key(getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
-                                case EMPTY -> Stream.of(); // no validation is applied to empty type
                                 default -> Stream.of(TraceFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
@@ -3977,7 +3976,6 @@ class TracesResourceTest {
             case STRING, LIST, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
             case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME -> Instant.now().toString();
-            case EMPTY -> "";
         };
     }
 
@@ -3985,7 +3983,6 @@ class TracesResourceTest {
         return switch (field.getType()) {
             case STRING, NUMBER, DATE_TIME, LIST -> null;
             case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
-            case EMPTY -> "";
         };
     }
 
@@ -3993,7 +3990,6 @@ class TracesResourceTest {
         return switch (field.getType()) {
             case STRING, DICTIONARY, LIST -> " ";
             case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
-            case EMPTY -> "";
         };
     }
 
