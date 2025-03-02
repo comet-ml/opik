@@ -13,7 +13,7 @@ public enum FilterStrategy {
     FEEDBACK_SCORES,
     TRACE_THREAD,
     DURATION,
-    FEEDBACK_SCORES_EMPTY,
+    FEEDBACK_SCORES_COUNT,
     ;
 
     public static final String DYNAMIC_FIELD = ":dynamicField%1$d";

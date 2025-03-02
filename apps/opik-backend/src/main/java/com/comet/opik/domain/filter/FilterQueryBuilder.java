@@ -225,7 +225,7 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
                     .build()),
-            FilterStrategy.FEEDBACK_SCORES_EMPTY, ImmutableSet.<Field>builder()
+            FilterStrategy.FEEDBACK_SCORES_COUNT, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES_COUNT)
                     .add(SpanField.FEEDBACK_SCORES_COUNT)
                     .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT)

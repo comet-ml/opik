@@ -1339,7 +1339,7 @@ class TraceDAOImpl implements TraceDAO {
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
                             .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_EMPTY)
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_COUNT)
                             .ifPresent(scoresEmptyFilter -> template.add("feedback_scores_empty_filters",
                                     scoresEmptyFilter));
                 });
@@ -1353,7 +1353,7 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_EMPTY);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_COUNT);
                 });
     }
 

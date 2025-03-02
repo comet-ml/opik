@@ -816,7 +816,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
 
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_EMPTY)
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_COUNT)
                             .ifPresent(scoresEmptyFilter -> template.add("feedback_scores_empty_filters",
                                     scoresEmptyFilter));
                 });
@@ -830,7 +830,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_ITEM);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_EMPTY);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_COUNT);
                 });
     }
 
