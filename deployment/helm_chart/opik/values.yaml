@@ -268,6 +268,8 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  zookeeper:
+      host: opik-zookeeper
   backup: 
     enabled: false
     successfulJobsHistoryLimit: 1
@@ -287,7 +289,7 @@ clickhouse:
     #     memory: 1Gi
     
 zookeeper:
-    enabled: false
+    enabled: true
     fullnameOverride: opik-zookeeper
     replicaCount: 1
     # podAntiAffinityPreset: hard
@@ -309,6 +311,6 @@ zookeeper:
     # resources:
     #   requests:
     #     cpu: 300m
-    #     memory: 1Gi
+    #     memory: 1500Mi
     #   limits:
-    #     memory: 1Gi
+    #     memory: 2Gi
