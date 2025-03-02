@@ -3413,7 +3413,7 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(Operator operator,
+        void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(TraceFilter filter,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -3444,12 +3444,7 @@ class TracesResourceTest {
             var expectedTraces = getExpectedTraces.apply(traces);
             var unexpectedTraces = getUnexpectedTraces.apply(traces);
 
-            var filters = List.of(
-                    TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES_EMPTY)
-                            .operator(operator)
-                            .value("")
-                            .build());
+            var filters = List.of(filter);
             getAndAssertPage(workspaceName, projectName, null, filters, traces, expectedTraces.reversed(),
                     unexpectedTraces,
                     apiKey);
@@ -3457,10 +3452,18 @@ class TracesResourceTest {
 
         private Stream<Arguments> getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
             return Stream.of(
-                    Arguments.of(Operator.IS_EMPTY,
+                    Arguments.of(TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES_COUNT)
+                            .operator(Operator.EQUAL)
+                            .value("0")
+                            .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size())),
-                    Arguments.of(Operator.IS_NOT_EMPTY,
+                    Arguments.of(TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES_COUNT)
+                            .operator(Operator.GREATER_THAN)
+                            .value("0")
+                            .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst())));
         }

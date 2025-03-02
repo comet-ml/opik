@@ -4337,9 +4337,9 @@ class DatasetsResourceTest {
 
             var isEmptyFilter = List.of(
                     ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY.getQueryParamField())
-                            .operator(Operator.IS_EMPTY)
-                            .value("")
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT.getQueryParamField())
+                            .operator(Operator.EQUAL)
+                            .value("0")
                             .build());
 
             var actualPageIsEmpty = assertDatasetExperimentPage(datasetId, experimentId, isEmptyFilter, apiKey,
@@ -4351,9 +4351,9 @@ class DatasetsResourceTest {
 
             var isNotEmptyFilter = List.of(
                     ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY.getQueryParamField())
-                            .operator(Operator.IS_NOT_EMPTY)
-                            .value("")
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT.getQueryParamField())
+                            .operator(Operator.GREATER_THAN)
+                            .value("0")
                             .build());
 
             var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,

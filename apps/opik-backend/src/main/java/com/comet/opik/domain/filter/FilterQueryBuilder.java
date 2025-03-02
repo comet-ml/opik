@@ -111,10 +111,6 @@ public class FilterQueryBuilder {
                             FieldType.NUMBER, "%1$s <= :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
-                    .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
-                            FieldType.EMPTY, "%1$s = 0")))
-                    .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
-                            FieldType.EMPTY, "%1$s > 0")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -134,7 +130,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
-                    .put(TraceField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
+                    .put(TraceField.FEEDBACK_SCORES_COUNT, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -166,14 +162,14 @@ public class FilterQueryBuilder {
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
-                    .put(SpanField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
+                    .put(SpanField.FEEDBACK_SCORES_COUNT, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
-                    .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY, FEEDBACK_SCORE_COUNT_DB)
+                    .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
@@ -230,9 +226,9 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.LAST_UPDATED_AT)
                     .build()),
             FilterStrategy.FEEDBACK_SCORES_EMPTY, ImmutableSet.<Field>builder()
-                    .add(TraceField.FEEDBACK_SCORES_EMPTY)
-                    .add(SpanField.FEEDBACK_SCORES_EMPTY)
-                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_EMPTY)
+                    .add(TraceField.FEEDBACK_SCORES_COUNT)
+                    .add(SpanField.FEEDBACK_SCORES_COUNT)
+                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT)
                     .build()));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(

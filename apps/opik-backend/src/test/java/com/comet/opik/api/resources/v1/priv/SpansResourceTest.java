@@ -3201,7 +3201,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource
         void getSpansByProject__whenFilterByIsEmpty__thenReturnSpansFiltered(
-                boolean useStreamSearch, Operator operator,
+                boolean useStreamSearch, SpanFilter filter,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
@@ -3237,12 +3237,7 @@ class SpansResourceTest {
             var expectedSpans = getExpectedSpans.apply(spans);
             var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
-            var filters = List.of(
-                    SpanFilter.builder()
-                            .field(SpanField.FEEDBACK_SCORES_EMPTY)
-                            .operator(operator)
-                            .value("")
-                            .build());
+            var filters = List.of(filter);
 
             getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
                     expectedSpans.reversed(), spans, unexpectedSpans);
@@ -3252,22 +3247,38 @@ class SpansResourceTest {
             return Stream.of(
                     arguments(
                             Boolean.TRUE,
-                            Operator.IS_EMPTY,
+                            SpanFilter.builder()
+                                    .field(SpanField.FEEDBACK_SCORES_COUNT)
+                                    .operator(Operator.EQUAL)
+                                    .value("0")
+                                    .build(),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
                     arguments(
                             Boolean.TRUE,
-                            Operator.IS_NOT_EMPTY,
+                            SpanFilter.builder()
+                                    .field(SpanField.FEEDBACK_SCORES_COUNT)
+                                    .operator(Operator.GREATER_THAN)
+                                    .value("0")
+                                    .build(),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())),
                     arguments(
                             Boolean.FALSE,
-                            Operator.IS_EMPTY,
+                            SpanFilter.builder()
+                                    .field(SpanField.FEEDBACK_SCORES_COUNT)
+                                    .operator(Operator.EQUAL)
+                                    .value("0")
+                                    .build(),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
                     arguments(
                             Boolean.FALSE,
-                            Operator.IS_NOT_EMPTY,
+                            SpanFilter.builder()
+                                    .field(SpanField.FEEDBACK_SCORES_COUNT)
+                                    .operator(Operator.GREATER_THAN)
+                                    .value("0")
+                                    .build(),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())));
         }
