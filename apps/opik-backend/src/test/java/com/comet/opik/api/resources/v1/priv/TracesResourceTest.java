@@ -3413,9 +3413,12 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(TraceFilter filter,
+        void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(
+                TraceFilter filter,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
-                Function<List<Trace>, List<Trace>> getUnexpectedTraces) {
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                TestAssertion testAssertion,
+                TestAssertionArgs<Trace> testAssertionArgs) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3435,6 +3438,7 @@ class TracesResourceTest {
                                             .value(factory.manufacturePojo(BigDecimal.class))
                                             .build())
                                     .collect(Collectors.toList()))
+                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder().feedbackScores(null).build());
@@ -3445,9 +3449,10 @@ class TracesResourceTest {
             var unexpectedTraces = getUnexpectedTraces.apply(traces);
 
             var filters = List.of(filter);
-            getAndAssertPage(workspaceName, projectName, null, filters, traces, expectedTraces.reversed(),
-                    unexpectedTraces,
-                    apiKey);
+            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
+                    values.getT1(), filters, Map.of());
         }
 
         private Stream<Arguments> getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
@@ -3458,14 +3463,36 @@ class TracesResourceTest {
                             .value("0")
                             .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
-                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size())),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            getTracesAssertionMethod(),
+                            getTracesAssertionMethodArgs()),
                     Arguments.of(TraceFilter.builder()
                             .field(TraceField.FEEDBACK_SCORES_COUNT)
                             .operator(Operator.GREATER_THAN)
                             .value("0")
                             .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst())));
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            getTracesAssertionMethod(),
+                            getTracesAssertionMethodArgs()),
+                    Arguments.of(TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES_COUNT)
+                            .operator(Operator.EQUAL)
+                            .value("0")
+                            .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            getStatsAssertionMethod(),
+                            getStatsAssertionMethodArgs()),
+                    Arguments.of(TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES_COUNT)
+                            .operator(Operator.GREATER_THAN)
+                            .value("0")
+                            .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            getStatsAssertionMethod(),
+                            getStatsAssertionMethodArgs()));
         }
 
         @ParameterizedTest

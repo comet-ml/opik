@@ -780,6 +780,20 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_id
             )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+            )
+            <endif>
             SELECT
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
@@ -801,6 +815,9 @@ class TraceDAOImpl implements TraceDAO {
                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
                         NULL) as duration_millis
                 FROM traces
+                <if(feedback_scores_empty_filters)>
+                    LEFT JOIN fsc ON fsc.entity_id = traces.id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(filters)> AND <filters> <endif>
@@ -828,6 +845,9 @@ class TraceDAOImpl implements TraceDAO {
                     FROM spans_agg
                     WHERE <trace_aggregation_filters>
                 )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                AND <feedback_scores_empty_filters>
                 <endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
