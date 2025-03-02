@@ -4879,12 +4879,14 @@ class DatasetsResourceTest {
                     .ignoringFields(IGNORED_FIELDS_LIST)
                     .isEqualTo(experimentItems.get(i));
 
+            var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                    actualExperimentItems.getFirst(), USER).feedbackScores();
+
             if (ListUtils.emptyIfNull(experimentItems.get(i).feedbackScores()).isEmpty()) {
+                assertThat(actualFeedbackScores).isNull();
                 continue;
             }
 
-            var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
-                    actualExperimentItems.getFirst(), USER).feedbackScores();
             assertThat(actualFeedbackScores).hasSize(1);
 
             assertThat(actualFeedbackScores.getFirst())
