@@ -8044,6 +8044,57 @@ class SpansResourceTest {
             getStatsAndAssert(projectName, null, filters, null, null, apiKey, workspaceName, projectStatItems);
         }
 
+        @Test
+        void getSpanStats__whenFilterByIsEmpty__thenReturnSpansFiltered() {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> {
+                        Instant now = Instant.now();
+                        return span.toBuilder()
+                                .projectId(null)
+                                .projectName(projectName)
+                                .feedbackScores(span.feedbackScores().stream()
+                                        .map(feedbackScore -> feedbackScore.toBuilder()
+                                                .value(podamFactory.manufacturePojo(BigDecimal.class))
+                                                .build())
+                                        .collect(Collectors.toList()))
+                                .startTime(now)
+                                .totalEstimatedCost(null)
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            spans.set(0, spans.getFirst().toBuilder().feedbackScores(null).build());
+            spans.forEach(expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
+            spans.subList(1, spans.size()).forEach(
+                    span -> span.feedbackScores().forEach(
+                            feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
+
+            // assert stats for empty feedback score spans
+            List<ProjectStatItem<?>> emptyScoreProjectStatItems = getProjectSpanStatItems(List.of(spans.getFirst()));
+            getStatsAndAssert(projectName, null, List.of(SpanFilter.builder()
+                    .field(SpanField.FEEDBACK_SCORES_COUNT)
+                    .operator(Operator.EQUAL)
+                    .value("0")
+                    .build()), null, null, apiKey, workspaceName, emptyScoreProjectStatItems);
+
+            // assert stats for non-empty feedback score spans
+            List<ProjectStatItem<?>> nonEmptyScoreProjectStatItems = getProjectSpanStatItems(
+                    spans.subList(1, spans.size()));
+            getStatsAndAssert(projectName, null, List.of(SpanFilter.builder()
+                    .field(SpanField.FEEDBACK_SCORES_COUNT)
+                    .operator(Operator.GREATER_THAN)
+                    .value("0")
+                    .build()), null, null, apiKey, workspaceName, nonEmptyScoreProjectStatItems);
+        }
+
         Stream<Arguments> getSpanStats__whenFilterByDuration__thenReturnSpansFiltered() {
             return Stream.of(
                     arguments(Operator.EQUAL,
