@@ -182,7 +182,7 @@ const TRACES_PAGE_COLUMNS = [
   {
     id: COLUMN_COMMENTS_ID,
     label: "Comments",
-    type: COLUMN_TYPE.list,
+    type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
   },
 ];
@@ -212,6 +212,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "input",
   "output",
   "duration",
+  COLUMN_COMMENTS_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
