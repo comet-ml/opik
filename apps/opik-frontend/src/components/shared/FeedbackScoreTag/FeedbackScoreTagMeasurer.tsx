@@ -25,7 +25,8 @@ const FeedbackScoreTagMeasurer: React.FC<FeedbackScoreTagMeasurer> = ({
     return () => {
       tagRefs.current = [];
     };
-  }, [tagList, onMeasure]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onTagRef = (tag: HTMLDivElement) => {
     tagRefs.current.push(tag);
