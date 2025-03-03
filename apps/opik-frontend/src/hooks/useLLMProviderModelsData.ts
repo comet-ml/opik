@@ -1484,14 +1484,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_0_PRO,
       label: "Gemini 1.0 Pro",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.TEXT_EMBEDDING,
-      label: "Text Embedding",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.AQA,
-      label: "AQA",
-    },
   ],
 
   [PROVIDER_TYPE.OLLAMA]: [
