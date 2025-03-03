@@ -5,15 +5,17 @@ import { CircleX, MessageSquareMore } from "lucide-react";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { generateTagVariant } from "@/lib/traces";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
+import FeedbackScoreReasonTooltip from "./FeedbackScoreReasonTooltip";
 
 type FeedbackScoreTagProps = {
   label: string;
   value: number;
-  reason?: string;
   onDelete?: (name: string) => void;
   className?: string;
+  lastUpdatedAt?: string;
+  lastUpdatedBy?: string;
+  reason?: string;
 };
 
 const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
@@ -22,6 +24,8 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   reason,
   onDelete,
   className,
+  lastUpdatedAt,
+  lastUpdatedBy,
 }) => {
   const variant = useMemo(() => generateTagVariant(label), [label]);
   const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(variant!)!];
@@ -33,14 +37,13 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     : "";
 
   const Reason = reason ? (
-    <TooltipWrapper
-      content={reason}
-      delayDuration={100}
-      className="comet-body-xs max-w-[400px] border border-slate-200 bg-soft-background p-2 text-foreground-secondary"
-      showArrow={false}
+    <FeedbackScoreReasonTooltip
+      reason={reason}
+      lastUpdatedAt={lastUpdatedAt}
+      lastUpdatedBy={lastUpdatedBy}
     >
       <MessageSquareMore className="size-3.5 text-light-slate" />
-    </TooltipWrapper>
+    </FeedbackScoreReasonTooltip>
   ) : null;
 
   return (

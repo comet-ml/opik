@@ -91,7 +91,7 @@ class OpikGuiceyLifecycleEventListenerTest {
             }
 
             try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-                MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+                MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                         ClickHouseContainerUtils.migrationParameters());
             } catch (SQLException e) {
                 throw new RuntimeException(e);
@@ -153,7 +153,7 @@ class OpikGuiceyLifecycleEventListenerTest {
             }
 
             try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-                MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+                MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                         ClickHouseContainerUtils.migrationParameters());
             } catch (SQLException e) {
                 throw new RuntimeException(e);
