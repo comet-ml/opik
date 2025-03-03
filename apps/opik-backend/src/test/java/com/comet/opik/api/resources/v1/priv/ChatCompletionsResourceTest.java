@@ -25,6 +25,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -243,6 +244,29 @@ class ChatCompletionsResourceTest {
                     arguments(OpenRouterModelName.GOOGLE_GEMINI_2_0_FLASH_LITE_PREVIEW_02_05_FREE.toString(),
                             LlmProvider.OPEN_ROUTER, System.getenv("OPENROUTER_API_KEY"),
                             expectedContainsActualEval));
+        }
+
+        @Test
+        void createAndStreamResponseGeminiInvalidApiKey() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+            createLlmProviderApiKey(workspaceName, LlmProvider.GEMINI, "invalid-key");
+
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
+                    .stream(true)
+                    .model(GeminiModelName.GEMINI_1_0_PRO.toString())
+                    .maxCompletionTokens(100)
+                    .addUserMessage("Say 'Hello World'")
+                    .build();
+
+            var response = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, request);
+
+            assertThat(response).hasSize(1);
+            assertThat(response.getFirst().getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.getFirst().getMessage()).isEqualTo("API key not valid. Please pass a valid" +
+                    " API key.");
+            assertThat(response.getFirst().getDetails()).isEqualTo("INVALID_ARGUMENT");
         }
 
         @ParameterizedTest
