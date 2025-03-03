@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackDefinitionCriteria;
 import com.comet.opik.api.Page;
+import com.comet.opik.api.error.CannotDeleteException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -28,6 +29,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(FeedbackDefinitionServiceImpl.class)
 public interface FeedbackDefinitionService {
+    String MESSAGE = "Cannot delete feedback definition 'User feedback'";
 
     <E, T extends FeedbackDefinition<E>> T create(T feedback);
 
@@ -193,6 +195,13 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(FeedbackDefinitionDAO.class);
+
+            Set<UUID> ids = Set.of(id);
+
+            if (dao.containsUserFeedback(ids, workspaceId)) {
+                throw new CannotDeleteException(MESSAGE);
+            }
+
             dao.delete(id, workspaceId);
             return null;
         });
@@ -208,7 +217,13 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         template.inTransaction(WRITE, handle -> {
-            handle.attach(FeedbackDefinitionDAO.class).delete(ids, workspaceId);
+            FeedbackDefinitionDAO dao = handle.attach(FeedbackDefinitionDAO.class);
+
+            if (dao.containsUserFeedback(ids, workspaceId)) {
+                throw new CannotDeleteException(MESSAGE);
+            }
+
+            dao.delete(ids, workspaceId);
             return null;
         });
     }

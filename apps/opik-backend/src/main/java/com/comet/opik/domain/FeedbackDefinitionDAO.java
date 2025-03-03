@@ -70,4 +70,7 @@ public interface FeedbackDefinitionDAO {
             @Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
             @Define("type") @Bind("type") FeedbackType type);
+
+    @SqlQuery("SELECT COUNT(*) > 0 FROM feedback_definitions WHERE id IN (<ids>) AND workspace_id = :workspaceId AND name = 'User feedback'")
+    boolean containsUserFeedback(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 }
