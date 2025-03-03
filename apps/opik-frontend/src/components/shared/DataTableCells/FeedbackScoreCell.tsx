@@ -25,7 +25,9 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
           lastUpdatedAt={feedbackScore.last_updated_at}
           lastUpdatedBy={feedbackScore.last_updated_by}
         >
-          <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
+          <div className="flex h-[20px] items-center">
+            <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
+          </div>
         </FeedbackScoreReasonTooltip>
       )}
     </CellWrapper>

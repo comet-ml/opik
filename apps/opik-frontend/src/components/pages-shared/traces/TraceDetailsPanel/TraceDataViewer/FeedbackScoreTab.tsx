@@ -20,7 +20,7 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
   {
     id: "source",
     label: "Source",
-    type: COLUMN_TYPE.list,
+    type: COLUMN_TYPE.string,
     size: 100,
     accessorFn: (row) => feedbackScoreSourceMap[row.source],
   },
@@ -53,7 +53,7 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
   },
 ];
 
-const DEFAULT_SELECTED_COLUMNS = DEFAULT_COLUMNS.map((col) => col.id);
+const DEFAULT_SELECTED_COLUMNS = ["name", "value", "reason"];
 
 type FeedbackScoreTabProps = {
   data: Trace | Span;
