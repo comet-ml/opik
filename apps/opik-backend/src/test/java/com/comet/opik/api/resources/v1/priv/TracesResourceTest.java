@@ -3413,7 +3413,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource
         void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(
-                TraceFilter filter,
+                Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces,
                 TestAssertion testAssertion,
@@ -3440,14 +3440,18 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
-            traces.set(0, traces.getFirst().toBuilder().feedbackScores(null).build());
             traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
-            traces.subList(1, traces.size()).forEach(trace -> trace.feedbackScores()
+            traces.forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = getExpectedTraces.apply(traces);
             var unexpectedTraces = getUnexpectedTraces.apply(traces);
 
-            var filters = List.of(filter);
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.FEEDBACK_SCORES)
+                    .operator(operator)
+                    .key(traces.getFirst().feedbackScores().getFirst().name())
+                    .value("0")
+                    .build());
             var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
 
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
@@ -3456,38 +3460,22 @@ class TracesResourceTest {
 
         private Stream<Arguments> getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
             return Stream.of(
-                    Arguments.of(TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES_COUNT)
-                            .operator(Operator.EQUAL)
-                            .value("0")
-                            .build(),
+                    Arguments.of(Operator.IS_NOT_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             getTracesAssertionMethod(),
                             getTracesAssertionMethodArgs()),
-                    Arguments.of(TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES_COUNT)
-                            .operator(Operator.GREATER_THAN)
-                            .value("0")
-                            .build(),
+                    Arguments.of(Operator.IS_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             getTracesAssertionMethod(),
                             getTracesAssertionMethodArgs()),
-                    Arguments.of(TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES_COUNT)
-                            .operator(Operator.EQUAL)
-                            .value("0")
-                            .build(),
+                    Arguments.of(Operator.IS_NOT_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             getStatsAssertionMethod(),
                             getStatsAssertionMethodArgs()),
-                    Arguments.of(TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES_COUNT)
-                            .operator(Operator.GREATER_THAN)
-                            .value("0")
-                            .build(),
+                    Arguments.of(Operator.IS_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             getStatsAssertionMethod(),

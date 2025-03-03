@@ -4318,13 +4318,11 @@ class DatasetsResourceTest {
             UUID experimentId = GENERATOR.generate();
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
-            createScores(traces.subList(1, traces.size()), projectName, scores);
+            createScores(traces, projectName, scores);
             createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
-            createExperimentItems(datasetItems, traces, Stream
-                    .concat(Stream.of((FeedbackScoreBatchItem) null), scores.stream()).collect(Collectors.toList()),
-                    experimentId, experimentItems);
+            createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
 
             createAndAssert(
                     ExperimentItemsBatch.builder()
@@ -4335,33 +4333,31 @@ class DatasetsResourceTest {
 
             Set<Column> columns = getColumns(datasetItems.stream().map(DatasetItem::data).toList());
 
-            var isEmptyFilter = List.of(
-                    ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT.getQueryParamField())
-                            .operator(Operator.EQUAL)
-                            .value("0")
-                            .build());
-
-            var actualPageIsEmpty = assertDatasetExperimentPage(datasetId, experimentId, isEmptyFilter, apiKey,
-                    workspaceName,
-                    columns, List.of(datasetItems.getFirst()));
-
-            assertDatasetItemExperiments(actualPageIsEmpty, List.of(datasetItems.getFirst()),
-                    List.of(experimentItems.getFirst()));
-
             var isNotEmptyFilter = List.of(
                     ExperimentsComparisonFilter.builder()
-                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT.getQueryParamField())
-                            .operator(Operator.GREATER_THAN)
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES.getQueryParamField())
+                            .operator(Operator.IS_NOT_EMPTY)
+                            .key(scores.getFirst().name())
                             .value("0")
                             .build());
 
-            var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,
-                    workspaceName,
-                    columns, datasetItems.subList(1, datasetItems.size()).reversed());
+            var actualPageIsEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,
+                    workspaceName, columns, datasetItems.reversed());
 
-            assertDatasetItemExperiments(actualPageIsNotEmpty, datasetItems.subList(1, datasetItems.size()).reversed(),
-                    experimentItems.subList(1, experimentItems.size()).reversed());
+            assertDatasetItemExperiments(actualPageIsEmpty, datasetItems.reversed(), experimentItems.reversed());
+
+            var isEmptyFilter = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES.getQueryParamField())
+                            .operator(Operator.IS_EMPTY)
+                            .key(scores.getFirst().name())
+                            .value("0")
+                            .build());
+
+            var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isEmptyFilter, apiKey,
+                    workspaceName, columns, List.of());
+
+            assertDatasetItemExperiments(actualPageIsNotEmpty, List.of(), List.of());
         }
 
         @ParameterizedTest

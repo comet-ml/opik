@@ -20,6 +20,8 @@ public enum Operator {
     GREATER_THAN_EQUAL(">="),
     LESS_THAN("<"),
     LESS_THAN_EQUAL("<="),
+    IS_EMPTY("is_empty"),
+    IS_NOT_EMPTY("is_not_empty"),
     ;
 
     @JsonValue

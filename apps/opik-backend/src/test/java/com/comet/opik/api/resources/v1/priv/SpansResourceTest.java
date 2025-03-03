@@ -3201,7 +3201,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource
         void getSpansByProject__whenFilterByIsEmpty__thenReturnSpansFiltered(
-                boolean useStreamSearch, SpanFilter filter,
+                boolean useStreamSearch, Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans) {
             String workspaceName = UUID.randomUUID().toString();
@@ -3228,16 +3228,19 @@ class SpansResourceTest {
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
 
-            spans.set(0, spans.getFirst().toBuilder().feedbackScores(null).build());
             spans.forEach(expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
-            spans.subList(1, spans.size()).forEach(
-                    span -> span.feedbackScores().forEach(
-                            feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
+            spans.forEach(span -> span.feedbackScores()
+                    .forEach(feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
 
             var expectedSpans = getExpectedSpans.apply(spans);
             var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
-            var filters = List.of(filter);
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.FEEDBACK_SCORES)
+                    .operator(operator)
+                    .key(spans.getFirst().feedbackScores().getFirst().name())
+                    .value("0")
+                    .build());
 
             getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
                     expectedSpans.reversed(), spans, unexpectedSpans);
@@ -3247,38 +3250,22 @@ class SpansResourceTest {
             return Stream.of(
                     arguments(
                             Boolean.TRUE,
-                            SpanFilter.builder()
-                                    .field(SpanField.FEEDBACK_SCORES_COUNT)
-                                    .operator(Operator.EQUAL)
-                                    .value("0")
-                                    .build(),
+                            Operator.IS_NOT_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
                     arguments(
                             Boolean.TRUE,
-                            SpanFilter.builder()
-                                    .field(SpanField.FEEDBACK_SCORES_COUNT)
-                                    .operator(Operator.GREATER_THAN)
-                                    .value("0")
-                                    .build(),
+                            Operator.IS_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())),
                     arguments(
                             Boolean.FALSE,
-                            SpanFilter.builder()
-                                    .field(SpanField.FEEDBACK_SCORES_COUNT)
-                                    .operator(Operator.EQUAL)
-                                    .value("0")
-                                    .build(),
+                            Operator.IS_NOT_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size())),
                     arguments(
                             Boolean.FALSE,
-                            SpanFilter.builder()
-                                    .field(SpanField.FEEDBACK_SCORES_COUNT)
-                                    .operator(Operator.GREATER_THAN)
-                                    .value("0")
-                                    .build(),
+                            Operator.IS_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst())));
         }
@@ -8071,26 +8058,27 @@ class SpansResourceTest {
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
 
-            spans.set(0, spans.getFirst().toBuilder().feedbackScores(null).build());
             spans.forEach(expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
-            spans.subList(1, spans.size()).forEach(
+            spans.forEach(
                     span -> span.feedbackScores().forEach(
                             feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
 
             // assert stats for empty feedback score spans
-            List<ProjectStatItem<?>> emptyScoreProjectStatItems = getProjectSpanStatItems(List.of(spans.getFirst()));
+            List<ProjectStatItem<?>> emptyScoreProjectStatItems = getProjectSpanStatItems(
+                    spans.subList(1, spans.size()));
             getStatsAndAssert(projectName, null, List.of(SpanFilter.builder()
-                    .field(SpanField.FEEDBACK_SCORES_COUNT)
-                    .operator(Operator.EQUAL)
+                    .field(SpanField.FEEDBACK_SCORES)
+                    .operator(Operator.IS_EMPTY)
+                    .key(spans.getFirst().feedbackScores().getFirst().name())
                     .value("0")
                     .build()), null, null, apiKey, workspaceName, emptyScoreProjectStatItems);
 
             // assert stats for non-empty feedback score spans
-            List<ProjectStatItem<?>> nonEmptyScoreProjectStatItems = getProjectSpanStatItems(
-                    spans.subList(1, spans.size()));
+            List<ProjectStatItem<?>> nonEmptyScoreProjectStatItems = getProjectSpanStatItems(List.of(spans.getFirst()));
             getStatsAndAssert(projectName, null, List.of(SpanFilter.builder()
-                    .field(SpanField.FEEDBACK_SCORES_COUNT)
-                    .operator(Operator.GREATER_THAN)
+                    .field(SpanField.FEEDBACK_SCORES)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .key(spans.getFirst().feedbackScores().getFirst().name())
                     .value("0")
                     .build()), null, null, apiKey, workspaceName, nonEmptyScoreProjectStatItems);
         }
