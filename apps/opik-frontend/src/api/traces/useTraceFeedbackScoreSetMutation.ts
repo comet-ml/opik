@@ -25,6 +25,7 @@ type UseTraceFeedbackScoreSetMutationParams = {
   spanId?: string;
   traceId: string;
   value: number;
+  reason?: string;
 };
 
 const useTraceFeedbackScoreSetMutation = () => {
@@ -38,6 +39,7 @@ const useTraceFeedbackScoreSetMutation = () => {
       spanId,
       traceId,
       value,
+      reason,
     }: UseTraceFeedbackScoreSetMutationParams) => {
       const endpoint = spanId
         ? `${SPANS_REST_ENDPOINT}${spanId}/feedback-scores`
@@ -48,6 +50,7 @@ const useTraceFeedbackScoreSetMutation = () => {
         name,
         source: FEEDBACK_SCORE_TYPE.ui,
         value,
+        reason,
       });
 
       return data;
@@ -75,6 +78,7 @@ const useTraceFeedbackScoreSetMutation = () => {
         category_name: params.categoryName,
         value: params.value,
         source: FEEDBACK_SCORE_TYPE.ui,
+        reason: params.reason,
       });
 
       if (params.spanId) {

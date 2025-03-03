@@ -64,7 +64,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
       />
 
-      <TooltipWrapper content="Feedback scores">
+      <TooltipWrapper content="Add to dataset">
         <Button
           variant="outline"
           size="sm"
@@ -78,7 +78,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         </Button>
       </TooltipWrapper>
 
-      <TooltipWrapper content="Feedback scores">
+      <TooltipWrapper content="Comments">
         <Button
           variant="outline"
           size="sm"

@@ -289,7 +289,10 @@ const DataTable = <TData, TValue>({
             return (
               <TableRow
                 key={headerGroup.id}
-                className={cn(!isLastRow && "border-b-transparent")}
+                className={cn(
+                  "bg-soft-background",
+                  !isLastRow && "border-b-transparent",
+                )}
               >
                 {headerGroup.headers.map((header) => {
                   return (
