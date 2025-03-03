@@ -128,7 +128,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     await copy(reasonValue);
 
     toast({
-      description: "Commit successfully copied to clipboard",
+      description: "Reason successfully copied to clipboard",
     });
   };
 
@@ -331,7 +331,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             />
             {reasonValue && (
               <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
-                <TooltipWrapper content="Copy reason">
+                <TooltipWrapper content="Copy">
                   <Button
                     size="icon-2xs"
                     variant="outline"
