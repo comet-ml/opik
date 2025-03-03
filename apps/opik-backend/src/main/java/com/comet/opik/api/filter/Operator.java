@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
+import java.util.List;
 
 @RequiredArgsConstructor
 @Getter
@@ -23,6 +24,8 @@ public enum Operator {
     IS_EMPTY("is_empty"),
     IS_NOT_EMPTY("is_not_empty"),
     ;
+
+    public static final List<Operator> NO_VALUE_OPERATORS = List.of(Operator.IS_EMPTY, Operator.IS_NOT_EMPTY);
 
     @JsonValue
     private final String queryParamOperator;

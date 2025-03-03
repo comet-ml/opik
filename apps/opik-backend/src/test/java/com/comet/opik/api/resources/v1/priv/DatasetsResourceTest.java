@@ -4338,7 +4338,7 @@ class DatasetsResourceTest {
                             .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES.getQueryParamField())
                             .operator(Operator.IS_NOT_EMPTY)
                             .key(scores.getFirst().name())
-                            .value("0")
+                            .value("")
                             .build());
 
             var actualPageIsEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,
@@ -4351,7 +4351,7 @@ class DatasetsResourceTest {
                             .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES.getQueryParamField())
                             .operator(Operator.IS_EMPTY)
                             .key(scores.getFirst().name())
-                            .value("0")
+                            .value("")
                             .build());
 
             var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isEmptyFilter, apiKey,

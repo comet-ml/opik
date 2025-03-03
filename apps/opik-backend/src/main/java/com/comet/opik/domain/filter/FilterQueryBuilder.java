@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 
+import static com.comet.opik.api.filter.Operator.NO_VALUE_OPERATORS;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
@@ -55,8 +56,6 @@ public class FilterQueryBuilder {
     private static final String CREATED_AT_ANALYTICS_DB = "created_at";
     private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
-
-    private static final List<Operator> NO_VALUE_OPERATORS = List.of(Operator.IS_EMPTY, Operator.IS_NOT_EMPTY);
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()

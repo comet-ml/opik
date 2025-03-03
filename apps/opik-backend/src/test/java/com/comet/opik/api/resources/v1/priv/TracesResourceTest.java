@@ -3450,7 +3450,7 @@ class TracesResourceTest {
                     .field(TraceField.FEEDBACK_SCORES)
                     .operator(operator)
                     .key(traces.getFirst().feedbackScores().getFirst().name())
-                    .value("0")
+                    .value("")
                     .build());
             var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
 

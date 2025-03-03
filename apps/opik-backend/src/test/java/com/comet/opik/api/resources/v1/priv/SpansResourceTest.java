@@ -3239,7 +3239,7 @@ class SpansResourceTest {
                     .field(SpanField.FEEDBACK_SCORES)
                     .operator(operator)
                     .key(spans.getFirst().feedbackScores().getFirst().name())
-                    .value("0")
+                    .value("")
                     .build());
 
             getSpansAndAssert(useStreamSearch, projectName, List.copyOf(filters), apiKey, workspaceName,
@@ -8070,7 +8070,7 @@ class SpansResourceTest {
                     .field(SpanField.FEEDBACK_SCORES)
                     .operator(Operator.IS_EMPTY)
                     .key(spans.getFirst().feedbackScores().getFirst().name())
-                    .value("0")
+                    .value("")
                     .build()), null, null, apiKey, workspaceName, emptyScoreProjectStatItems);
 
             // assert stats for non-empty feedback score spans
@@ -8079,7 +8079,7 @@ class SpansResourceTest {
                     .field(SpanField.FEEDBACK_SCORES)
                     .operator(Operator.IS_NOT_EMPTY)
                     .key(spans.getFirst().feedbackScores().getFirst().name())
-                    .value("0")
+                    .value("")
                     .build()), null, null, apiKey, workspaceName, nonEmptyScoreProjectStatItems);
         }
 
