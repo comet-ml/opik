@@ -816,7 +816,7 @@ class TraceDAOImpl implements TraceDAO {
                            NULL) AS duration_millis,
                     <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
                     <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
-                    count(DISTINCT t.id) as number_of_messages,
+                    count(DISTINCT t.id) * 2 as number_of_messages,
                     max(t.last_updated_at) as last_updated_at,
                     argMin(t.created_by, t.created_at) as created_by,
                     min(t.created_at) as created_at
@@ -852,7 +852,7 @@ class TraceDAOImpl implements TraceDAO {
                        NULL) AS duration_millis,
                 <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
                 <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
-                count(DISTINCT t.id) as number_of_messages,
+                count(DISTINCT t.id) * 2 as number_of_messages,
                 max(t.last_updated_at) as last_updated_at,
                 argMin(t.created_by, t.created_at) as created_by,
                 min(t.created_at) as created_at
@@ -896,7 +896,7 @@ class TraceDAOImpl implements TraceDAO {
                        NULL) AS duration_millis,
                 argMin(t.input, t.start_time) as first_message,
                 argMax(t.output, t.end_time) as last_message,
-                count(DISTINCT t.id) as number_of_messages,
+                count(DISTINCT t.id) * 2 as number_of_messages,
                 max(t.last_updated_at) as last_updated_at,
                 argMin(t.created_by, t.created_at) as created_by,
                 min(t.created_at) as created_at
