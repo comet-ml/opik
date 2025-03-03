@@ -7,6 +7,8 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
@@ -17,7 +19,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestClassOrder;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -36,6 +38,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestClassOrder(ClassOrderer.OrderAnnotation.class)
 class OpikGuiceyLifecycleEventListenerTest {
 
@@ -50,9 +53,9 @@ class OpikGuiceyLifecycleEventListenerTest {
     the reason this is needed is to make sure that only the first test will notify the event.
     */
 
-    private static final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+    private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer();
 
     private static final Random RANDOM = new Random();
@@ -64,14 +67,15 @@ class OpikGuiceyLifecycleEventListenerTest {
     @Nested
     @Order(1)
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
     class FirstStartupTest {
 
-        @RegisterExtension
-        private static final TestDropwizardAppExtension app;
+        @RegisterApp
+        private final TestDropwizardAppExtension APP;
 
-        private static final WireMockUtils.WireMockRuntime wireMock;
+        private final WireMockUtils.WireMockRuntime wireMock;
 
-        static {
+        {
             Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS).join();
 
             wireMock = WireMockUtils.startWireMock();
@@ -102,7 +106,7 @@ class OpikGuiceyLifecycleEventListenerTest {
                             .withRequestBody(matchingJsonPath("$.event_properties.opik_app_version", matching(VERSION)))
                             .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
 
-            app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+            APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                     AppContextConfig.builder()
                             .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
                             .databaseAnalyticsFactory(databaseAnalyticsFactory)
@@ -125,14 +129,15 @@ class OpikGuiceyLifecycleEventListenerTest {
     @Nested
     @Order(2)
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
     class SecondStartupTest {
 
-        @RegisterExtension
-        private static final TestDropwizardAppExtension app;
+        @RegisterApp
+        private final TestDropwizardAppExtension APP;
 
-        private static final WireMockUtils.WireMockRuntime wireMock;
+        private final WireMockUtils.WireMockRuntime wireMock;
 
-        static {
+        {
             Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS).join();
 
             wireMock = WireMockUtils.startWireMock();
@@ -158,7 +163,7 @@ class OpikGuiceyLifecycleEventListenerTest {
                     post(urlPathEqualTo("/v1/notify/event"))
                             .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
 
-            app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+            APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                     AppContextConfig.builder()
                             .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
                             .databaseAnalyticsFactory(databaseAnalyticsFactory)
@@ -181,7 +186,7 @@ class OpikGuiceyLifecycleEventListenerTest {
     }
 
     @AfterAll
-    static void tearDown() {
+    void tearDown() {
         MYSQL_CONTAINER.stop();
     }
 }

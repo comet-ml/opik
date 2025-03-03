@@ -16,13 +16,15 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -49,25 +51,25 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 //TODO: Remove this test class after finishing the implementation of the OnlineScoringEventListener class
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class AutomationRuleEvaluatorServiceImplTest {
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.randomAlphanumeric(20);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.randomAlphanumeric(20);
-
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
-
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
-
-    private static final WireMockUtils.WireMockRuntime WIRE_MOCK;
     public static final String[] IGNORED_FIELDS = {
             "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "projectId"};
 
-    static {
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime WIRE_MOCK;
+
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
+
+    {
         Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
 
         WIRE_MOCK = WireMockUtils.startWireMock();

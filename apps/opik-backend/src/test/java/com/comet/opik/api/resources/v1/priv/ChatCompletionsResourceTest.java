@@ -12,6 +12,8 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
@@ -27,7 +29,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -62,6 +64,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /// - **OpenRouter**: set `OPENROUTER_API_KEY` to your OpenRouter api key
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 // Disabled because the tests require an API key to run and this seems to be failing in the CI pipeline
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class ChatCompletionsResourceTest {
 
     private static final String API_KEY = RandomStringUtils.randomAlphanumeric(25);
@@ -69,16 +72,16 @@ class ChatCompletionsResourceTest {
     private static final String WORKSPACE_NAME = RandomStringUtils.randomAlphanumeric(20);
     private static final String USER = RandomStringUtils.randomAlphanumeric(20);
 
-    private static final RedisContainer REDIS_CONTAINER = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final RedisContainer REDIS_CONTAINER = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
 
-    private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
+    private final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    static {
+    {
         Startables.deepStart(REDIS_CONTAINER, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
@@ -115,7 +118,7 @@ class ChatCompletionsResourceTest {
         this.llmProviderApiKeyResourceClient = new LlmProviderApiKeyResourceClient(clientSupport);
     }
 
-    private static void mockTargetWorkspace(String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(WIRE_MOCK.server(), API_KEY, workspaceName, workspaceId, USER);
     }
 

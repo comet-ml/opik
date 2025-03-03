@@ -14,6 +14,8 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -38,7 +40,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -73,29 +75,27 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@RunWith(Enclosed.class)
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Slf4j
+@RunWith(Enclosed.class)
+@ExtendWith(DropwizardAppExtensionProvider.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OpenTelemetryResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/otel/v1/traces";
     public static final String API_KEY = UUID.randomUUID().toString();
     public static final String USER = UUID.randomUUID().toString();
     public static final String WORKSPACE_ID = UUID.randomUUID().toString();
-
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
-    private static final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
-
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
-
-    private static final WireMockUtils.WireMockRuntime wireMock;
     public static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    static {
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
+
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
+
+    {
         Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -103,7 +103,7 @@ class OpenTelemetryResourceTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MY_SQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -134,7 +134,7 @@ class OpenTelemetryResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -147,6 +147,7 @@ class OpenTelemetryResourceTest {
     @DisplayName("Api Key Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ApiKey {
+
         private final String fakeApikey = UUID.randomUUID().toString();
         private final String okApikey = UUID.randomUUID().toString();
 
@@ -173,7 +174,7 @@ class OpenTelemetryResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("ingest otel traces via protobuf")
-        public void testOtelProtobufRequests(String apiKey, String projectName, boolean expected,
+        void testOtelProtobufRequests(String apiKey, String projectName, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -255,7 +256,7 @@ class OpenTelemetryResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("ingest otel traces via json")
-        public void testOtelJsonRequests(String apiKey, String projectName, boolean expected,
+        void testOtelJsonRequests(String apiKey, String projectName, boolean expected,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             // using example payload from integration; it will be protobuffed when ingested,
