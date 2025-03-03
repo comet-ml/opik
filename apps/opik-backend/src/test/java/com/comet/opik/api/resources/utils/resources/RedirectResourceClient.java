@@ -19,12 +19,14 @@ public class RedirectResourceClient {
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
     }
 
-    public String projectsRedirect(UUID traceId, String sessionToken, String workspaceName, int expectedStatus) {
+    public String projectsRedirect(UUID traceId, String sessionToken, String workspaceName, String path,
+            int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .property(ClientProperties.FOLLOW_REDIRECTS, false)
                 .path("projects")
                 .queryParam("trace_id", traceId)
                 .queryParam("workspace_name", workspaceName)
+                .queryParam("path", path)
                 .request()
                 .cookie(SESSION_COOKIE, sessionToken)
                 .get()) {
@@ -38,12 +40,14 @@ public class RedirectResourceClient {
         }
     }
 
-    public String datasetsRedirect(UUID datasetId, String sessionToken, String workspaceName, int expectedStatus) {
+    public String datasetsRedirect(UUID datasetId, String sessionToken, String workspaceName, String path,
+            int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .property(ClientProperties.FOLLOW_REDIRECTS, false)
                 .path("datasets")
                 .queryParam("dataset_id", datasetId)
                 .queryParam("workspace_name", workspaceName)
+                .queryParam("path", path)
                 .request()
                 .cookie(SESSION_COOKIE, sessionToken)
                 .get()) {
@@ -58,6 +62,7 @@ public class RedirectResourceClient {
     }
 
     public String experimentsRedirect(UUID datasetId, UUID experimentId, String sessionToken, String workspaceName,
+            String path,
             int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .property(ClientProperties.FOLLOW_REDIRECTS, false)
@@ -65,6 +70,7 @@ public class RedirectResourceClient {
                 .queryParam("dataset_id", datasetId)
                 .queryParam("experiment_id", experimentId)
                 .queryParam("workspace_name", workspaceName)
+                .queryParam("path", path)
                 .request()
                 .cookie(SESSION_COOKIE, sessionToken)
                 .get()) {
