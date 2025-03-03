@@ -43,4 +43,3 @@ jobs:
               with:
                 action_fail: true
                 files: '**/target/surefire-reports/TEST-*.xml'
-  

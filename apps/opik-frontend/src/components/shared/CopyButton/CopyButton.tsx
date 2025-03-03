@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonProps } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Check, Copy } from "lucide-react";
 import copy from "clipboard-copy";
@@ -12,7 +12,7 @@ type CopyButtonProps = {
   successIconTimeout?: number;
   variant?: "default" | "outline" | "ghost";
   className?: string;
-};
+} & Pick<ButtonProps, "size">;
 
 const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
   text,
@@ -21,6 +21,7 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
   successIconTimeout = 3000,
   variant = "ghost",
   className,
+  size = "icon-sm",
 }) => {
   const { toast } = useToast();
   const [showSuccessIcon, setShowSuccessIcon] = useState(false);
@@ -55,12 +56,12 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
     return (
       <TooltipWrapper content={tooltipText}>
         <Button
-          size="icon-sm"
+          size={size}
           variant={variant}
           className={className}
           onClick={copyClickHandler}
         >
-          <Copy className="size-4" />
+          <Copy />
         </Button>
       </TooltipWrapper>
     );

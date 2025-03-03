@@ -1,12 +1,18 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import capitalize from "lodash/capitalize";
-import { Trash } from "lucide-react";
+import { MoreHorizontal, Trash } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { FEEDBACK_SCORE_TYPE, TraceFeedbackScore } from "@/types/traces";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type CustomMeta = {
   traceId: string;
@@ -52,16 +58,25 @@ const FeedbackScoreRowDeleteCell: React.FunctionComponent<
         }?`}
         confirmText={`${capitalize(actionName)} feedback score`}
       />
-      <Button
-        variant="minimal"
-        size="icon"
-        onClick={() => {
-          setOpen(1);
-          resetKeyRef.current = resetKeyRef.current + 1;
-        }}
-      >
-        <Trash className="mr-2 size-4" />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="minimal" size="icon">
+            <span className="sr-only">Actions menu</span>
+            <MoreHorizontal className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(1);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+          >
+            <Trash className="mr-2 size-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 };

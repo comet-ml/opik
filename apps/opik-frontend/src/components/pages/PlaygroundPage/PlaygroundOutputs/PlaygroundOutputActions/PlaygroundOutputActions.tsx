@@ -246,7 +246,7 @@ const PlaygroundOutputActions = ({
             className="rounded-l-none border-l-0 "
             onClick={() => handleChangeDatasetId(null)}
           >
-            <X className="size-4 text-light-slate" />
+            <X className="text-light-slate" />
           </Button>
         )}
       </div>

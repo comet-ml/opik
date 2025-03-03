@@ -5,8 +5,12 @@ import sys
 from importlib import metadata
 
 import click
-from opik.configurator import configure as opik_configure
-from opik.configurator import interactive_helpers
+from rich.console import Console
+
+from opik import healthcheck as opik_healthcheck
+from opik.configurator import configure as opik_configure, interactive_helpers
+
+console = Console()
 
 LOGGER = logging.getLogger(__name__)
 
@@ -167,6 +171,22 @@ def proxy(
     uvicorn.run(
         app, host=host, port=port, log_level="error"
     )  # Reduce uvicorn logging to keep output clean
+
+
+@cli.command(context_settings={"ignore_unknown_options": True})
+@click.option(
+    "--show-installed-packages",
+    is_flag=True,
+    default=False,
+    help="Print the list of installed packages to the console.",
+)
+def healthcheck(show_installed_packages: bool = True) -> None:
+    """
+    Performs a health check of the application, including validation of configuration,
+    verification of library installations, and checking the availability of the backend workspace.
+    Prints all relevant information to assist in debugging and diagnostics.
+    """
+    opik_healthcheck.run(show_installed_packages)
 
 
 if __name__ == "__main__":

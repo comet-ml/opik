@@ -26,12 +26,15 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Column.ColumnType;
+import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.domain.FeedbackScoreMapper.getFeedbackScores;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
 
 class DatasetItemResultMapper {
+
+    private static final int COMMENT_INDEX = 11;
 
     private DatasetItemResultMapper() {
     }
@@ -56,6 +59,7 @@ class DatasetItemResultMapper {
                         .lastUpdatedAt(Instant.parse(experimentItem.get(8).toString()))
                         .createdBy(experimentItem.get(9).toString())
                         .lastUpdatedBy(experimentItem.get(10).toString())
+                        .comments(experimentItem.size() > COMMENT_INDEX ? getComments(experimentItem.get(11)) : null)
                         .build())
                 .toList();
 

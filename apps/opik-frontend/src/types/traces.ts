@@ -1,9 +1,10 @@
 import { UsageData } from "@/types/shared";
-import { Comments } from "./comment";
+import { CommentItems } from "./comment";
 
 export enum FEEDBACK_SCORE_TYPE {
   sdk = "sdk",
   ui = "ui",
+  online_scoring = "online_scoring",
 }
 
 export interface TraceFeedbackScore {
@@ -12,6 +13,8 @@ export interface TraceFeedbackScore {
   name: string;
   source: FEEDBACK_SCORE_TYPE;
   value: number;
+  last_updated_by?: string;
+  last_updated_at?: string;
 }
 
 export interface BaseTraceDataErrorInfo {
@@ -32,7 +35,7 @@ export interface BaseTraceData {
   last_updated_at: string;
   metadata: object;
   feedback_scores?: TraceFeedbackScore[];
-  comments: Comments;
+  comments: CommentItems;
   tags: string[];
   usage?: UsageData;
   total_estimated_cost?: number;

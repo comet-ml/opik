@@ -94,7 +94,7 @@ const SliderInputControl = ({
         <div className="flex items-center">
           {numLocalValue !== defaultValue && (
             <Button variant="minimal" size="icon-sm" onClick={handleResetValue}>
-              <RotateCcw className="size-3.5" />
+              <RotateCcw />
             </Button>
           )}
           <Input

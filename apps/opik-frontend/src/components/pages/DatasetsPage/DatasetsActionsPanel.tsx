@@ -40,14 +40,14 @@ const DatasetsActionsPanel: React.FunctionComponent<
       <TooltipWrapper content="Delete">
         <Button
           variant="outline"
-          size="icon"
+          size="icon-sm"
           onClick={() => {
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
         >
-          <Trash className="size-4" />
+          <Trash />
         </Button>
       </TooltipWrapper>
     </div>

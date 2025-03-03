@@ -186,10 +186,11 @@ const PromptsPage: React.FunctionComponent = () => {
           setSearchText={setSearch}
           placeholder="Search by name"
           className="w-[320px]"
+          dimension="sm"
         ></SearchInput>
         <div className="flex items-center gap-2">
           <PromptsActionsPanel prompts={selectedRows} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -197,7 +198,7 @@ const PromptsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button variant="default" onClick={handleNewPromptClick}>
+          <Button variant="default" size="sm" onClick={handleNewPromptClick}>
             Create new prompt
           </Button>
         </div>

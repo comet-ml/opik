@@ -42,14 +42,15 @@ interface AutomationRuleDAO {
 
     @SqlUpdate("""
             DELETE FROM automation_rules
-            WHERE project_id = :projectId AND workspace_id = :workspaceId
+            WHERE workspace_id = :workspaceId
+            <if(projectId)> AND project_id = :projectId <endif>
             <if(ids)> AND id IN (<ids>) <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteBaseRules(
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-            @Bind("projectId") UUID projectId,
+            @Define("projectId") @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("""
