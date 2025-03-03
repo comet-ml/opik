@@ -8,6 +8,7 @@ import logging
 import os
 import pickle
 import time
+from collections import deque
 from typing import List
 
 import tqdm
@@ -28,7 +29,7 @@ DESTINATION_PROJECT_NAME = "TEST_PROJECT_MIGRATION"
 API_KEY = ""
 WORKSPACE = ""
 MAX_RESULTS_BATCH_SIZE = 1_000
-MAX_RETRIES = 3
+MAX_RETRIES = 10
 
 DATA_DIR = "./span_data/"
 CONVERTED_DATA_DIR = "./span_data_converted/"
@@ -36,6 +37,10 @@ CONVERTED_DATA_DIR = "./span_data_converted/"
 VERBOSE = 1
 MAX_RESULTS = 25_000
 SPAN_SAVE_BATCH_SIZE = 5_000
+
+# rate limit settings
+RATE_LIMIT = 8_000
+TIME_WINDOW = 60.0
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(CONVERTED_DATA_DIR, exist_ok=True)
@@ -208,18 +213,45 @@ def prepare_data_for_copy(trace_data, span_data) -> tuple[List[trace.TraceData],
 
 
 def upload_traces(client: Opik, trace_data: List[trace.TraceData]):
+    last_call_times = deque(maxlen=RATE_LIMIT)
+
     pbar = tqdm.tqdm(desc="Uploading traces", unit=" traces", total=len(trace_data))
+
     for trace_data_ in trace_data:
+        current_time = time.time()
+
+        if len(last_call_times) >= RATE_LIMIT:
+            earliest_call_time = last_call_times[0]
+            while current_time - earliest_call_time < TIME_WINDOW:
+                time.sleep(0.01)
+                current_time = time.time()
+
         client.trace(**trace_data_.__dict__)
+        last_call_times.append(current_time)
+
         pbar.update(1)
 
     pbar.close()
 
 
 def upload_spans(client: Opik, span_data: List[span.SpanData]):
+    last_call_times = deque(maxlen=RATE_LIMIT)
+
     pbar = tqdm.tqdm(desc="Uploading spans", unit=" spans", total=len(span_data))
+
     for span_data_ in span_data:
+
+        current_time = time.time()
+
+        if len(last_call_times) >= RATE_LIMIT:
+            earliest_call_time = last_call_times[0]
+            while current_time - earliest_call_time < TIME_WINDOW:
+                time.sleep(0.01)
+                current_time = time.time()
+
         client.span(**span_data_.__dict__)
+        last_call_times.append(current_time)
+
         pbar.update(1)
 
     pbar.close()
@@ -239,6 +271,6 @@ if __name__ == "__main__":
     del all_spans
 
     upload_traces(my_client, new_trace_data)
-    # upload_spans(my_client, new_span_data)
+    upload_spans(my_client, new_span_data)
 
     print()
