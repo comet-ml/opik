@@ -128,11 +128,11 @@ class Opik:
             use_batching=use_batching,
         )
 
-    def _display_trace_url(self, workspace: str, project_name: str) -> None:
-        project_url = url_helpers.get_project_url(
-            workspace=workspace, project_name=project_name
+    def _display_trace_url(self, trace_id: str, project_name: str) -> None:
+        project_url = url_helpers.get_project_url_by_trace_id(
+            trace_id=trace_id,
+            url_override=self._config.url_override,
         )
-
         if (
             self._project_name_most_recent_trace is None
             or self._project_name_most_recent_trace != project_name
@@ -213,7 +213,7 @@ class Opik:
             error_info=error_info,
         )
         self._streamer.put(create_trace_message)
-        self._display_trace_url(workspace=self._workspace, project_name=project_name)
+        self._display_trace_url(trace_id=id, project_name=project_name)
 
         if feedback_scores is not None:
             for feedback_score in feedback_scores:
@@ -885,7 +885,7 @@ class Opik:
         """
 
         project_name = project_name or self._project_name
-        return url_helpers.get_project_url(
+        return url_helpers.get_project_url_by_workspace(
             workspace=self._workspace, project_name=project_name
         )
 

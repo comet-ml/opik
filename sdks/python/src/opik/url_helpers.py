@@ -2,6 +2,7 @@ from typing import Final
 
 import opik.config
 import urllib.parse
+import base64
 
 URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "api/rest/v2/account-details"
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "api/rest/v2/workspaces"
@@ -36,15 +37,7 @@ def get_experiment_url(dataset_name: str, experiment_id: str) -> str:
     return urllib.parse.urljoin(ui_url, experiment_path)
 
 
-def get_projects_url(workspace: str) -> str:
-    ui_url = get_ui_url()
-
-    projects_path = "{workspace}/projects"
-
-    return urllib.parse.urljoin(ui_url, projects_path)
-
-
-def get_project_url(workspace: str, project_name: str) -> str:
+def get_project_url_by_workspace(workspace: str, project_name: str) -> str:
     ui_url = get_ui_url()
 
     project_path = urllib.parse.quote(
@@ -52,6 +45,15 @@ def get_project_url(workspace: str, project_name: str) -> str:
         safe=ALLOWED_URL_CHARACTERS,
     )
     return urllib.parse.urljoin(ui_url, project_path)
+
+
+def get_project_url_by_trace_id(trace_id: str, url_override: str) -> str:
+    encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
+    project_path = urllib.parse.quote(
+        f"v1/session/redirect/projects/?trace_id={trace_id}&path={encoded_opik_url}",
+        safe=ALLOWED_URL_CHARACTERS,
+    )
+    return urllib.parse.urljoin(url_override, project_path)
 
 
 def get_dataset_url(workspace: str, dataset_name: str) -> str:
