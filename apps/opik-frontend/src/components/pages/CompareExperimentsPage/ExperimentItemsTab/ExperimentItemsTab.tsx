@@ -108,7 +108,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", COLUMN_COMMENTS_ID];
 
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
@@ -348,7 +348,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       {
         id: COLUMN_COMMENTS_ID,
         label: "Comments",
-        type: COLUMN_TYPE.list,
+        type: COLUMN_TYPE.string,
         cell: CommentsCell.Compare as never,
         customMeta: {
           experimentsIds,
@@ -549,7 +549,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     [rowIndex, rows, setActiveRowId],
   );
 
-  const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
+  const handleClose = useCallback(() => {
+    setExpandedCommentSections(null);
+    setActiveRowId("");
+  }, [setActiveRowId, setExpandedCommentSections]);
 
   const activeRow = useMemo(
     () => find(rows, (row) => activeRowId === row.id),
