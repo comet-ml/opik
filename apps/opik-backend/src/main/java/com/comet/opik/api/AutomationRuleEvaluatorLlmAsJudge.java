@@ -71,7 +71,7 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
     public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, Float samplingRate,
             @NotNull LlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
             String lastUpdatedBy) {
-        super(id, projectId, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+        super(id, projectId, null, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 
     @Override

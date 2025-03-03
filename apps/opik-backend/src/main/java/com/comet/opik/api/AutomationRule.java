@@ -34,6 +34,8 @@ public sealed interface AutomationRule permits AutomationRuleEvaluator {
     Instant getLastUpdatedAt();
     String getLastUpdatedBy();
 
+    void setProjectName(String projectName);
+
     @Getter
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
     enum AutomationRuleAction {

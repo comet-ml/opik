@@ -9,6 +9,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.LogCriteria;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.cache.CacheEvict;
@@ -21,6 +22,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -28,8 +30,10 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
 import static com.comet.opik.api.LogItem.LogPage;
@@ -248,6 +252,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                     AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                             })
                             .toList());
+            enchanceWithProjectName(automationRuleEvaluators, workspaceId, handle);
 
             log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(),
                     projectId);
@@ -286,4 +291,14 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return logsDAO.findLogs(criteria);
     }
 
+    private void enchanceWithProjectName(List<AutomationRuleEvaluator<?>> automationRuleEvaluators, String workspaceId,
+            Handle handle) {
+        Set<UUID> projectIds = automationRuleEvaluators.stream().map(AutomationRuleEvaluator::getProjectId)
+                .collect(Collectors.toSet());
+        var dao = handle.attach(ProjectDAO.class);
+        Map<UUID, String> projectIdToName = dao.findByIds(projectIds, workspaceId).stream()
+                .collect(Collectors.toMap(Project::id, Project::name));
+        automationRuleEvaluators
+                .forEach(evaluator -> evaluator.setProjectName(projectIdToName.get(evaluator.getProjectId())));
+    }
 }

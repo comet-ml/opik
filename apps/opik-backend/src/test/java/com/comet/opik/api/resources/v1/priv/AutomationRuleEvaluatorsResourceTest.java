@@ -103,7 +103,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/automations/evaluators/";
 
-    private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {"createdAt", "lastUpdatedAt"};
+    private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {"createdAt", "lastUpdatedAt",
+            "projectName"};
 
     private static final String messageToTest = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
     private static final String testEvaluator = """
@@ -373,7 +374,8 @@ class AutomationRuleEvaluatorsResourceTest {
                 boolean isAuthorized,
                 String workspaceName) {
 
-            var projectId = generator.generate();
+            var projectId = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+                    WORKSPACE_NAME);
 
             int samplesToCreate = 15;
             var newWorkspaceName = "workspace-" + UUID.randomUUID();
@@ -524,7 +526,8 @@ class AutomationRuleEvaluatorsResourceTest {
                 boolean isAuthorized,
                 String workspaceName) {
 
-            var projectId = generator.generate();
+            var projectId = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+                    WORKSPACE_NAME);
 
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectId(projectId).build();
@@ -697,7 +700,8 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @MethodSource
         void find(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass) {
-            var projectId = generator.generate();
+            String projectName = factory.manufacturePojo(String.class);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var unexpectedProjectId = generator.generate();
 
             var evaluators = PodamFactoryUtils.manufacturePojoList(factory, evaluatorClass)
@@ -711,6 +715,7 @@ class AutomationRuleEvaluatorsResourceTest {
                                 .id(id)
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
+                                .projectName(projectName)
                                 .build();
                     }).toList();
 
@@ -759,7 +764,8 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @MethodSource
         void findByName(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, boolean withProjectId) {
-            var projectId = generator.generate();
+            String projectName = factory.manufacturePojo(String.class);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var evaluators = PodamFactoryUtils.manufacturePojoList(factory, evaluatorClass)
                     .stream()
@@ -772,6 +778,7 @@ class AutomationRuleEvaluatorsResourceTest {
                                 .id(id)
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
+                                .projectName(projectName)
                                 .build();
                     }).toList();
 
@@ -846,7 +853,8 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
         void delete(boolean includeProjectId) {
-            var projectId = generator.generate();
+            var projectId = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+                    WORKSPACE_NAME);
             var id1 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
             var id2 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
             var id3 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
@@ -979,6 +987,8 @@ class AutomationRuleEvaluatorsResourceTest {
                 var actualAutomationRuleEvaluator = actualAutomationRuleEvaluators.get(i);
                 var expectedAutomationRuleEvaluator = expectedAutomationRuleEvaluators.get(i);
                 assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
+                assertThat(actualAutomationRuleEvaluator.getProjectName())
+                        .isEqualTo(expectedAutomationRuleEvaluator.getProjectName());
             }
 
             assertThat(actualAutomationRuleEvaluators)
