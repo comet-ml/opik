@@ -220,7 +220,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
               );
 
               if (!selectedOption) {
-                return <span className="text-nowrap">Select a category</span>;
+                return <div className="truncate">Select a category</div>;
               }
 
               return (
@@ -323,7 +323,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
               placeholder="Add a reason..."
               value={reasonValue}
               onChange={onReasonChange}
-              className="min-h-6 resize-none overflow-hidden py-1"
+              className="min-h-6 resize-none overflow-hidden py-1 pt-[4px]"
               ref={(e) => {
                 textAreaRef.current = e;
                 updateTextAreaHeight(e, 32);
