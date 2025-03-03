@@ -14,6 +14,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,16 +26,17 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Disabled
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SpanDAOTest {
 
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
 
     private static SpanDAO spanDAO;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @BeforeAll
-    static void beforeAll() throws SQLException {
+    void beforeAll() throws SQLException {
         CLICK_HOUSE_CONTAINER.start();
         try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
             MigrationUtils.runClickhouseDbMigration(connection, MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
@@ -52,7 +54,7 @@ class SpanDAOTest {
     }
 
     @AfterAll
-    static void afterAll() {
+    void afterAll() {
         CLICK_HOUSE_CONTAINER.stop();
     }
 
