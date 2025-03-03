@@ -17,6 +17,8 @@ def callback(event: Event, hint: Hint) -> Optional[Event]:
     if not is_valid:
         return None
 
+    _try_add_fingerprint(event)
+
     try:
         _add_extra_details(event)
     except Exception:
@@ -44,3 +46,16 @@ def _add_extra_details(event: Event) -> None:
 
     # Put into event all the information that depends on
     # configuration which might be set AFTER opik is imported.
+
+
+def _try_add_fingerprint(event: Event) -> None:
+    try:
+        if "extra" not in event:
+            return
+
+        if "error_fingerprint" not in event["extra"]:
+            return
+
+        event["fingerprint"] = event["extra"]["error_fingerprint"]
+    except Exception:
+        pass
