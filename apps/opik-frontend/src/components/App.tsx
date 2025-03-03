@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
-import SentryErrorBoundary from "@/components/sentry/SentryErrorBoundary";
+import SentryErrorBoundary from "@/components/layout/SentryErrorBoundary/SentryErrorBoundary";
 
 const queryClient = new QueryClient({
   defaultOptions: {

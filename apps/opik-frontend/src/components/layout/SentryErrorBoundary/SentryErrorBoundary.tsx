@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/react";
 import React from "react";
-import SentryErrorFallback from "@/components/sentry/SentryErrorFallback";
-import { SENTRY_ENABLED } from "@/constants/sentry";
+import SentryErrorFallback from "@/components/layout/SentryErrorBoundary/SentryErrorFallback";
+import { SENTRY_ENABLED } from "@/config";
 
 const SentryErrorBoundary = ({ children }: { children: React.ReactNode }) => {
   if (!SENTRY_ENABLED) {
