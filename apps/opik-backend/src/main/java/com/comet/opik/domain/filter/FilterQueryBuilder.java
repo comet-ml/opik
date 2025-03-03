@@ -57,6 +57,8 @@ public class FilterQueryBuilder {
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
 
+    private static final List<Operator> NO_VALUE_OPERATORS = List.of(Operator.IS_EMPTY, Operator.IS_NOT_EMPTY);
+
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
                     .put(Operator.CONTAINS, new EnumMap<>(Map.of(
@@ -111,6 +113,12 @@ public class FilterQueryBuilder {
                             FieldType.NUMBER, "%1$s <= :filter%2$d",
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
+                    .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
+                            FieldType.FEEDBACK_SCORES_NUMBER,
+                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 1")))
+                    .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
+                            FieldType.FEEDBACK_SCORES_NUMBER,
+                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 0")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -311,7 +319,7 @@ public class FilterQueryBuilder {
                     statement = statement.bind("dynamicField%d".formatted(i), filter.field().getQueryParamField());
                 }
 
-                if (StringUtils.isNotEmpty(filter.value())) {
+                if (!NO_VALUE_OPERATORS.contains(filter.operator())) {
                     statement.bind("filter%d".formatted(i), filter.value());
                 }
 
