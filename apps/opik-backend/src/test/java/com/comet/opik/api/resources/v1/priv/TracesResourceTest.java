@@ -1075,7 +1075,10 @@ class TracesResourceTest {
                                         TraceFilter.builder()
                                                 .field(filter.getKey())
                                                 .operator(operator)
-                                                .key(getKey(filter.getKey()))
+                                                // if no value is expected, create an invalid filter by an empty key
+                                                .key(Operator.NO_VALUE_OPERATORS.contains(operator)
+                                                        ? ""
+                                                        : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
                                 default -> Stream.of(TraceFilter.builder()
