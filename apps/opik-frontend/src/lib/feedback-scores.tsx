@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { Trace, TraceFeedbackScore } from "@/types/traces";
+import { FEEDBACK_SCORE_TYPE, Trace, TraceFeedbackScore } from "@/types/traces";
 import {
   COMPARE_EXPERIMENTS_KEY,
   SPANS_KEY,
@@ -9,6 +9,12 @@ import {
 import { UseCompareExperimentsListResponse } from "@/api/datasets/useCompareExperimentsList";
 import { UseTracesListResponse } from "@/api/traces/useTracesList";
 import { UseSpansListResponse } from "@/api/traces/useSpansList";
+
+export const feedbackScoreSourceMap = {
+  [FEEDBACK_SCORE_TYPE.online_scoring]: "Online scoring",
+  [FEEDBACK_SCORE_TYPE.sdk]: "SDK",
+  [FEEDBACK_SCORE_TYPE.ui]: "Human Review",
+};
 
 export const setExperimentsCompareCache = async (
   queryClient: QueryClient,
@@ -156,7 +162,7 @@ export const generateUpdateMutation =
     retVal = retVal.map((feedbackScore) => {
       if (feedbackScore.name === score.name) {
         isUpdated = true;
-        return score;
+        return { ...feedbackScore, ...score };
       }
 
       return feedbackScore;
@@ -174,3 +180,12 @@ export const generateDeleteMutation =
     (feedbackScores || []).filter(
       (feedbackScore) => feedbackScore.name !== name,
     );
+
+export const categoryOptionLabelRenderer = (
+  name: string,
+  value?: number | string,
+) => {
+  if (!value) return name;
+
+  return `${name} (${value})`;
+};
