@@ -116,7 +116,7 @@ class ProjectMetricsResourceTest {
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    private static final TestDropwizardAppExtension APP;
 
     private static final WireMockUtils.WireMockRuntime wireMock;
 
@@ -128,7 +128,7 @@ class ProjectMetricsResourceTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -145,7 +145,7 @@ class ProjectMetricsResourceTest {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         }
 

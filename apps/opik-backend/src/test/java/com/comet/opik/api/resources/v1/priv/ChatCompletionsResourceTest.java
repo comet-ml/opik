@@ -100,7 +100,7 @@ class ChatCompletionsResourceTest {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(
+            MigrationUtils.runClickhouseDbMigration(
                     connection,
                     MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
