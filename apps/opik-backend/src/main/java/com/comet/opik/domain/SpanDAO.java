@@ -531,20 +531,6 @@ class SpanDAO {
               ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
               LIMIT 1 BY id
             )
-            <if(feedback_scores_empty_filters)>
-             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
-                 GROUP BY entity_id
-            )
-            <endif>
             SELECT
                 s.id as id,
                 s.workspace_id as workspace_id,
@@ -578,9 +564,6 @@ class SpanDAO {
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
                            NULL) AS duration_millis
                 FROM spans
-                <if(feedback_scores_empty_filters)>
-                     LEFT JOIN fsc ON fsc.entity_id = spans.id
-                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id > :last_received_span_id <endif>
@@ -603,9 +586,6 @@ class SpanDAO {
                   HAVING <feedback_scores_filters>
                 )
                 <endif>
-                <if(feedback_scores_empty_filters)>
-                AND <feedback_scores_empty_filters>
-                <endif>
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
@@ -619,20 +599,6 @@ class SpanDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
-            <if(feedback_scores_empty_filters)>
-             WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
-                 GROUP BY entity_id
-            )
-            <endif>
             SELECT
                 count(id) as count
             FROM
@@ -644,9 +610,6 @@ class SpanDAO {
                                      (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                      NULL) AS duration_millis
                 FROM spans
-                <if(feedback_scores_empty_filters)>
-                    LEFT JOIN fsc ON fsc.entity_id = spans.id
-                <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(trace_id)> AND trace_id = :trace_id <endif>
@@ -667,9 +630,6 @@ class SpanDAO {
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
                 )
-                <endif>
-                <if(feedback_scores_empty_filters)>
-                AND <feedback_scores_empty_filters>
                 <endif>
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -722,20 +682,6 @@ class SpanDAO {
                     LIMIT 1 BY entity_id, name
                 ) GROUP BY workspace_id, project_id, entity_id
             )
-            <if(feedback_scores_empty_filters)>
-             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                    AND workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
-                 GROUP BY entity_id
-            )
-            <endif>
             SELECT
                 project_id as project_id,
                 count(DISTINCT span_id) as span_count,
@@ -777,9 +723,6 @@ class SpanDAO {
                          usage,
                          total_estimated_cost
                     FROM spans
-                    <if(feedback_scores_empty_filters)>
-                        LEFT JOIN fsc ON fsc.entity_id = spans.id
-                    <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(trace_id)> AND trace_id = :trace_id <endif>
@@ -801,9 +744,6 @@ class SpanDAO {
                         GROUP BY entity_id
                         HAVING <feedback_scores_filters>
                     )
-                    <endif>
-                    <if(feedback_scores_empty_filters)>
-                    AND <feedback_scores_empty_filters>
                     <endif>
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -1355,9 +1295,6 @@ class SpanDAO {
                             .ifPresent(spanFilters -> template.add("filters", spanFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_COUNT)
-                            .ifPresent(scoresEmptyFilter -> template.add("feedback_scores_empty_filters",
-                                    scoresEmptyFilter));
                 });
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> template.add("last_received_span_id", lastReceivedSpanId));
@@ -1373,7 +1310,6 @@ class SpanDAO {
                 .ifPresent(filters -> {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_COUNT);
                 });
         Optional.ofNullable(spanSearchCriteria.lastReceivedSpanId())
                 .ifPresent(lastReceivedSpanId -> statement.bind("last_received_span_id", lastReceivedSpanId));

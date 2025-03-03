@@ -55,7 +55,6 @@ public class FilterQueryBuilder {
     private static final String CREATED_AT_ANALYTICS_DB = "created_at";
     private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
-    private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
 
     private static final List<Operator> NO_VALUE_OPERATORS = List.of(Operator.IS_EMPTY, Operator.IS_NOT_EMPTY);
 
@@ -138,7 +137,6 @@ public class FilterQueryBuilder {
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
-                    .put(TraceField.FEEDBACK_SCORES_COUNT, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -170,14 +168,12 @@ public class FilterQueryBuilder {
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
-                    .put(SpanField.FEEDBACK_SCORES_COUNT, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
-                    .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT, FEEDBACK_SCORE_COUNT_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
@@ -232,12 +228,7 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
-                    .build()),
-            FilterStrategy.FEEDBACK_SCORES_COUNT, ImmutableSet.<Field>builder()
-                    .add(TraceField.FEEDBACK_SCORES_COUNT)
-                    .add(SpanField.FEEDBACK_SCORES_COUNT)
-                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES_COUNT)
-                    .build()));
+                    .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
