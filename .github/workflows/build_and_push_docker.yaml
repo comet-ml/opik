@@ -57,7 +57,6 @@ jobs:
             DOCKER_BUILDKIT=1 \
             docker build \
             --build-arg OPIK_VERSION=${{inputs.version}} \
-            --build-arg SENTRY_ENABLED=true \
             -t ${DOCKER_IMAGE_NAME} .
 
         - name: Build Docker Image for Comet integration
