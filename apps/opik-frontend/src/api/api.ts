@@ -25,6 +25,7 @@ export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
 export const TRACES_KEY = "traces";
 export const TRACE_KEY = "trace";
+export const THREADS_KEY = "threads";
 export const PROVIDERS_KEYS_KEY = "provider-keys";
 export const AUTOMATIONS_KEY = "automations";
 export const PROJECTS_KEY = "projects";

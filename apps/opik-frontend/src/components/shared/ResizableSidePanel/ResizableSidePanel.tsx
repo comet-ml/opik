@@ -17,6 +17,7 @@ type ResizableSidePanelProps = {
   children: React.ReactNode;
   entity?: string;
   headerContent?: React.ReactNode;
+  navigationContent?: React.ReactNode;
   open?: boolean;
   hasPreviousRow?: boolean;
   hasNextRow?: boolean;
@@ -31,11 +32,16 @@ const UP_HOTKEYS = ["↑"];
 const DOWN_HOTKEYS = ["↓"];
 const ESC_HOTKEYS = ["Esc"];
 
+const calculateLeftPosition = (percentage: number) => {
+  return window.innerWidth * percentage;
+};
+
 const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   panelId,
   children,
   entity = "",
   headerContent,
+  navigationContent,
   open = false,
   hasPreviousRow,
   hasNextRow,
@@ -52,7 +58,9 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   );
   const resizeHandleRef = useRef<null | HTMLDivElement>(null);
   const leftRef = useRef<number>(width);
-  const [left, setLeft] = useState<number>(leftRef.current * window.innerWidth);
+  const [left, setLeft] = useState<number>(
+    calculateLeftPosition(leftRef.current),
+  );
 
   const startResizing = useCallback((event: MouseEvent) => {
     resizeHandleRef.current = event.target as HTMLDivElement;
@@ -88,7 +96,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
           MIN_LEFT_POSITION,
           Math.min(MAX_LEFT_POSITION, leftRef.current),
         );
-        setLeft(window.innerWidth * left);
+        setLeft(calculateLeftPosition(left));
       }
     };
 
@@ -105,7 +113,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         MIN_LEFT_POSITION,
         Math.min(MAX_LEFT_POSITION, leftRef.current),
       );
-      setLeft(window.innerWidth * left);
+      setLeft(calculateLeftPosition(left));
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -123,7 +131,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
 
     return (
       <>
-        <Separator orientation="vertical" className="mx-4 h-8" />
+        <Separator orientation="vertical" className="mx-2 h-8" />
         <TooltipWrapper content={`Previous ${entity}`} hotkeys={UP_HOTKEYS}>
           <Button
             variant="outline"
@@ -182,6 +190,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                   </Button>
                 </TooltipWrapper>
                 {renderNavigation()}
+                {navigationContent}
               </div>
               {headerContent && <div>{headerContent}</div>}
             </div>

@@ -261,7 +261,7 @@ class SpanDAO {
                     *
                 FROM spans
                 WHERE id = :id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
@@ -322,7 +322,7 @@ class SpanDAO {
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
+            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1
             ;
             """;
@@ -471,7 +471,7 @@ class SpanDAO {
                     *
                 FROM spans
                 WHERE id = :id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
