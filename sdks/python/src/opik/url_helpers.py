@@ -61,7 +61,7 @@ def get_project_url_by_trace_id(trace_id: str, url_override: str) -> str:
     return urllib.parse.urljoin(url_override, project_path)
 
 
-def get_dataset_url(dataset_id: str, url_override: str) -> str:
+def get_dataset_url_by_id(dataset_id: str, url_override: str) -> str:
     encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
 
     project_path = urllib.parse.quote(
