@@ -3,9 +3,10 @@ Downloading traces: 25000 traces [00:30, 818.92 traces/s]
 Downloading spans: 25000 spans [00:59, 418.66 spans/s]
 
 """
-
+import datetime
 import logging
 import os
+import pathlib
 import pickle
 import time
 from collections import deque
@@ -13,7 +14,7 @@ from typing import List
 
 import tqdm
 
-from opik import Opik
+from opik import Opik, id_helpers
 from opik.api_objects import span, trace
 from opik.api_objects.trace import migration
 
@@ -29,13 +30,13 @@ DESTINATION_PROJECT_NAME = "TEST_PROJECT_MIGRATION"
 API_KEY = ""
 WORKSPACE = ""
 MAX_RESULTS_BATCH_SIZE = 1_000
-MAX_RETRIES = 10
+MAX_RETRIES = 1_000
 
 DATA_DIR = "./span_data/"
 CONVERTED_DATA_DIR = "./span_data_converted/"
 
 VERBOSE = 1
-MAX_RESULTS = 25_000
+MAX_RESULTS = 25_000_000
 SPAN_SAVE_BATCH_SIZE = 5_000
 
 # rate limit settings
@@ -79,7 +80,7 @@ def download_traces(client: Opik):
                 )
                 break
             except Exception as e:
-                print(f"Got an error - page {page} - {e}")
+                LOGGER.info(f"Got an error - page {page} - retry#{retries} - {e}")
                 retries += 1
                 time.sleep(5)
 
@@ -126,7 +127,7 @@ def download_spans(client: Opik):
                 )
                 break
             except Exception as e:
-                LOGGER.debug(f"Got an error - page {page} - {e}")
+                LOGGER.info(f"Got an error - page {page} - retry#{retries} - {e}")
                 retries += 1
                 time.sleep(5)
 
@@ -154,82 +155,177 @@ def download_spans(client: Opik):
     LOGGER.debug(f"Downloaded {span_count} spans.")
 
 
-def convert_traces() -> List[trace.TraceData]:
+def convert_traces():
+    LOGGER.info("Converting traces...")
     trace_files = [f for f in os.listdir(DATA_DIR) if f.startswith("traces_") and f.endswith(".pkl")]
     trace_files = sorted(trace_files)
 
-    all_trace_data = []
+    trace_id_mapping = {}
+    trace_count = 0
 
     for trace_file in trace_files:
         file_path = os.path.join(DATA_DIR, trace_file)
         with open(file_path, "rb") as f:
             traces_public = pickle.load(f)
 
-        trace_data = [
-            trace.trace_public_to_trace_data(project_name=PROJECT_NAME, trace_public=trace_public_)
-            for trace_public_ in traces_public
-        ]
+        all_trace_data = []
+        for trace_public_ in traces_public:
+            # covert from `public` to `data` representation
+            trace_ = trace.trace_public_to_trace_data(project_name=PROJECT_NAME, trace_public=trace_public_)
 
-        all_trace_data.extend(trace_data)
+            # replace ID with a new one
+            id = id_helpers.generate_id(trace_.start_time)
+            trace_id_mapping[trace_.id] = id
+            trace_.id = id
+            trace_.project_name = DESTINATION_PROJECT_NAME
 
-        # converted_file_path = pathlib.Path(CONVERTED_DATA_DIR) / pathlib.Path(file_path).name
-        # with open(converted_file_path, "wb") as f:
-        #     pickle.dump(trace_data, f)
+            all_trace_data.append(trace_)
+            trace_count += 1
 
-    return all_trace_data
+        converted_file_path = pathlib.Path(CONVERTED_DATA_DIR) / pathlib.Path(file_path).name
+        with open(converted_file_path, "wb") as f:
+            pickle.dump(all_trace_data, f)
+
+    LOGGER.info(f"Converted {trace_count} traces.")
+
+    # save mappings
+    converted_file_path = pathlib.Path(CONVERTED_DATA_DIR) / "trace_mapping.pkl"
+    with open(converted_file_path, "wb") as f:
+        pickle.dump(trace_id_mapping, f)
 
 
 def convert_spans():
+    LOGGER.info("Converting spans... stage #1")
     span_files = [f for f in os.listdir(DATA_DIR) if f.startswith("spans_") and f.endswith(".pkl")]
     span_files = sorted(span_files)
 
-    all_span_data = []
+    span_count = 0
 
+    span_id_mapping = {}
+
+    # FIRST RUN - MAP NEW ID FOR ALL SPANS
     for span_file in span_files:
         file_path = os.path.join(DATA_DIR, span_file)
         with open(file_path, "rb") as f:
             spans_public = pickle.load(f)
 
-        span_data = [
-            span.span_public_to_span_data(project_name=PROJECT_NAME, span_public_=span_public_)
-            for span_public_ in spans_public
-        ]
+        all_span_data = []
+        for span_public_ in spans_public:
+            # covert from `public` to `data` representation
+            span_ = span.span_public_to_span_data(project_name=PROJECT_NAME, span_public_=span_public_)
 
-        all_span_data.extend(span_data)
+            id = id_helpers.generate_id(span_.start_time)
+            span_id_mapping[span_.id] = id
 
-        # converted_file_path = pathlib.Path(CONVERTED_DATA_DIR) / pathlib.Path(file_path).name
-        # with open(converted_file_path, "wb") as f:
-        #     pickle.dump(span_data, f)
+            all_span_data.append(span_)
+            span_count += 1
 
-    return all_span_data
+        converted_file_path = pathlib.Path(CONVERTED_DATA_DIR) / pathlib.Path(file_path).name
+        with open(converted_file_path, "wb") as f:
+            pickle.dump(all_span_data, f)
+
+    LOGGER.info(f"Stage 1: Converted {span_count} spans.")
+
+    # save mappings
+    converted_file_path = pathlib.Path(CONVERTED_DATA_DIR) / "span_mapping.pkl"
+    with open(converted_file_path, "wb") as f:
+        pickle.dump(span_id_mapping, f)
+
+    # SECOND RUN - REPLACE ID
+    LOGGER.info("Converting spans... stage #2")
+    span_files = [f for f in os.listdir(CONVERTED_DATA_DIR) if f.startswith("spans_") and f.endswith(".pkl")]
+    span_files = sorted(span_files)
+
+    span_count = 0
+
+    orphan_trace_ids = set()
+    orphan_span_trace_ids = set()
+
+    orphan_parent_span_ids = set()
+    orphan_span_parent_span_ids = set()
+
+    trace_mappings_file_path = pathlib.Path(CONVERTED_DATA_DIR) / "trace_mapping.pkl"
+    with open(trace_mappings_file_path, "rb") as f:
+        trace_id_mapping = pickle.load(f)
+
+    for span_file in span_files:
+        file_path = os.path.join(CONVERTED_DATA_DIR, span_file)
+        with open(file_path, "rb") as f:
+            spans_data = pickle.load(f)
+
+        all_span_data = []
+        for spans_data_ in spans_data:
+            if spans_data_.trace_id not in trace_id_mapping:
+                # LOGGER.warning(
+                #     "While copying a span to a new project, found orphan span that will not be copied with id: %s and trace id: %s",
+                #     spans_data_.id,
+                #     spans_data_.trace_id,
+                # )
+                orphan_trace_ids.add(spans_data_.trace_id)
+                orphan_span_trace_ids.add(spans_data_.id)
+                continue
+
+            spans_data_.project_name = DESTINATION_PROJECT_NAME
+            spans_data_.trace_id = trace_id_mapping[spans_data_.trace_id]
+
+            if spans_data_.parent_span_id is not None:
+                if spans_data_.parent_span_id not in span_id_mapping:
+                    # LOGGER.warning(
+                    #     "While copying a span to a new project, found orphan span with parent span id that will not be copied with id: %s and parent_span id: %s",
+                    #     spans_data_.id,
+                    #     spans_data_.parent_span_id,
+                    # )
+                    orphan_parent_span_ids.add(spans_data_.parent_span_id)
+                    orphan_span_parent_span_ids.add(spans_data_.id)
+                    continue
+
+                spans_data_.parent_span_id = span_id_mapping.get(spans_data_.parent_span_id)
+
+            spans_data_.id = span_id_mapping[spans_data_.id]
+
+            all_span_data.append(spans_data_)
+            span_count += 1
+
+        # rewrite converted file with updated data
+        with open(file_path, "wb") as f:
+            pickle.dump(all_span_data, f)
+
+    LOGGER.info(f"Stage 2: Converted {span_count} spans.")
+    LOGGER.info(f"Orhan trace ids: {len(orphan_trace_ids)}")
+    LOGGER.info(f"Orhan parent_span ids: {len(orphan_parent_span_ids)}")
+    LOGGER.info(f"Orhan span with trace ids: {len(orphan_span_trace_ids)}")
+    LOGGER.info(f"Orhan span with parent_span ids: {len(orphan_span_parent_span_ids)}")
 
 
-def prepare_data_for_copy(trace_data, span_data) -> tuple[List[trace.TraceData], List[span.SpanData]]:
-    new_trace_data, new_span_data = (
-        migration.prepare_traces_and_spans_for_copy(DESTINATION_PROJECT_NAME, trace_data, span_data)
-    )
+# def upload_traces(client: Opik, trace_data: List[trace.TraceData]):
+def upload_traces(client: Opik):
+    trace_files = [f for f in os.listdir(CONVERTED_DATA_DIR) if f.startswith("traces_") and f.endswith(".pkl")]
+    trace_files = sorted(trace_files)
 
-    return new_trace_data, new_span_data
-
-
-def upload_traces(client: Opik, trace_data: List[trace.TraceData]):
     last_call_times = deque(maxlen=RATE_LIMIT)
 
-    pbar = tqdm.tqdm(desc="Uploading traces", unit=" traces", total=len(trace_data))
+    # pbar = tqdm.tqdm(desc="Uploading traces", unit=" traces", total=len(trace_data))
+    pbar = tqdm.tqdm(desc="Uploading traces", unit=" traces")
 
-    for trace_data_ in trace_data:
-        current_time = time.time()
+    for trace_file in trace_files:
+        file_path = os.path.join(DATA_DIR, trace_file)
+        with open(file_path, "rb") as f:
+            trace_data = pickle.load(f)
 
-        if len(last_call_times) >= RATE_LIMIT:
-            earliest_call_time = last_call_times[0]
-            while current_time - earliest_call_time < TIME_WINDOW:
-                time.sleep(0.01)
-                current_time = time.time()
+        for trace_data_ in trace_data:
+            current_time = time.time()
 
-        client.trace(**trace_data_.__dict__)
-        last_call_times.append(current_time)
+            if len(last_call_times) >= RATE_LIMIT:
+                earliest_call_time = last_call_times[0]
+                while current_time - earliest_call_time < TIME_WINDOW:
+                    time.sleep(0.01)
+                    current_time = time.time()
 
-        pbar.update(1)
+            client.trace(**trace_data_.__dict__)
+            last_call_times.append(current_time)
+
+            pbar.update(1)
+        client.flush()
 
     pbar.close()
 
@@ -258,19 +354,14 @@ def upload_spans(client: Opik, span_data: List[span.SpanData]):
 
 
 if __name__ == "__main__":
-    all_traces = []
-    all_spans = []
+    start_time = datetime.datetime.now()
 
     # download_traces(client)
     # download_spans(client)
-    all_traces = convert_traces()
-    all_spans = convert_spans()
-    new_trace_data, new_span_data = prepare_data_for_copy(all_traces, all_spans)
+    convert_traces()
+    convert_spans()
 
-    del all_traces
-    del all_spans
+    # upload_traces(my_client, new_trace_data)
+    # upload_spans(my_client, new_span_data)
 
-    upload_traces(my_client, new_trace_data)
-    upload_spans(my_client, new_span_data)
-
-    print()
+    LOGGER.info(datetime.datetime.now() - start_time)
