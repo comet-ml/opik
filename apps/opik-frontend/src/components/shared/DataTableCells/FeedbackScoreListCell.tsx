@@ -29,29 +29,43 @@ const FeedbackScoreListCell = <TData,>(
   const remainingCount = feedbackScoreList.length - visibleCount;
 
   const calcVisibleCount = (cellWidth: number) => {
-    const tagListWidth = widthList.current.reduce(
-      (acc, w) => acc + w + TAG_GAP,
-      0,
-    );
+    const tagWidths = widthList.current;
+    const tagListWidth = tagWidths.reduce((acc, w) => acc + w + TAG_GAP, 0);
 
-    if (cellWidth > tagListWidth) {
+    const containerWidth = cellWidth - 8;
+
+    if (containerWidth > tagListWidth) {
       setVisibleCount(sortedList.length);
       return;
     }
 
-    const lastIdx = widthList.current.length - 1;
-    const remainingWidth = 40;
+    const lastIdx = tagWidths.length - 1;
+    const remainingWidth = 30;
+    const counterWidth = remainingWidth + TAG_GAP;
+    const minFirstTagWidth = Math.max(tagWidths[0] / 2, 70) + counterWidth;
 
-    let availableWidth =
-      cellWidth - remainingWidth - (remainingWidth ? TAG_GAP : 0);
+    if (
+      (tagWidths.length >= 2 &&
+        containerWidth < tagWidths[0] + tagWidths[1] + TAG_GAP * 2) ||
+      tagWidths.length === 1
+    ) {
+      if (containerWidth >= minFirstTagWidth) {
+        setVisibleCount(1);
+        return;
+      }
+    }
+
+    let availableWidth = containerWidth - counterWidth;
 
     for (let idx = 0; idx <= lastIdx; idx++) {
-      availableWidth -=
+      const nextItemWidth =
         widthList.current[idx] + (idx > 0 && idx < lastIdx ? TAG_GAP * 2 : 0);
+
+      availableWidth -= nextItemWidth;
 
       if (availableWidth < 0) {
         setVisibleCount(idx);
-        return;
+        break;
       }
     }
   };
@@ -74,17 +88,17 @@ const FeedbackScoreListCell = <TData,>(
       tableMetadata={context.table.options.meta}
       className="p-0 py-1"
     >
-      <div ref={cellRef} className="w-full min-w-0 flex-1 overflow-hidden">
-        {isEmpty ? (
-          "-"
-        ) : (
+      {isEmpty ? (
+        "-"
+      ) : (
+        <div ref={cellRef} className="w-full min-w-0 flex-1 overflow-hidden">
           <FeedbackScoreHoverCard
             name={hoverCardName}
             isAverageScores={isAverageScores}
             tagList={sortedList}
             hidden={!remainingCount}
           >
-            <div className="flex size-full items-center justify-start gap-1.5 overflow-hidden p-0 py-1">
+            <div className="flex size-full items-center justify-start gap-1.5 overflow-hidden p-0 py-1 pr-2">
               <FeedbackScoreTagMeasurer
                 onMeasure={onMeasure}
                 tagList={sortedList}
@@ -97,6 +111,7 @@ const FeedbackScoreListCell = <TData,>(
                     label={item.name}
                     value={item.value}
                     reason={item.reason}
+                    className="min-w-0"
                   />
                 ))}
               {Boolean(remainingCount) && (
@@ -106,8 +121,8 @@ const FeedbackScoreListCell = <TData,>(
               )}
             </div>
           </FeedbackScoreHoverCard>
-        )}
-      </div>
+        </div>
+      )}
     </CellWrapper>
   );
 };
