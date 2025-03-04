@@ -24,14 +24,14 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
   if (hidden) return <>{children}</>;
 
   return (
-    <HoverCard>
+    <HoverCard openDelay={500}>
       <HoverCardTrigger asChild>
         <div className="flex min-w-0 flex-1">{children}</div>
       </HoverCardTrigger>
       <HoverCardContent
         side="top"
         align="start"
-        className="w-[320px] border border-border px-1 py-1.5 shadow-none"
+        className="w-[320px] border border-border px-1 py-1.5"
         collisionPadding={24}
       >
         <div className="relative size-full max-h-[40vh] max-w-[320px] overflow-auto p-1 pb-0">
