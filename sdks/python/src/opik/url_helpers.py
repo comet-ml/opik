@@ -23,7 +23,9 @@ def get_ui_url() -> str:
     return opik_url_override.rstrip("/api") + "/"
 
 
-def get_experiment_url(client: "opik.Opik", dataset_name: str, experiment_id: str) -> str:
+def get_experiment_url(
+    client: "opik.Opik", dataset_name: str, experiment_id: str
+) -> str:
     dataset = client._rest_client.datasets.get_dataset_by_identifier(
         dataset_name=dataset_name
     )
