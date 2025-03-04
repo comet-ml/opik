@@ -1,7 +1,6 @@
 import abc
 import logging
 from typing import Callable, Dict, Type, List
-
 from opik import logging_messages
 from . import messages
 from ..jsonable_encoder import jsonable_encoder
@@ -54,17 +53,21 @@ class MessageSender(BaseMessageProcessor):
                 # second request is rejected by the backend, we don't want users to an error.
                 return
 
+            error_fingerprint = _generate_error_fingerprint(exception, message)
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
                 str(exception),
+                extra={"error_fingerprint": error_fingerprint},
             )
         except Exception as exception:
+            error_fingerprint = _generate_error_fingerprint(exception, message)
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
                 str(exception),
                 exc_info=True,
+                extra={"error_fingerprint": error_fingerprint},
             )
 
     def _process_create_span_message(self, message: messages.CreateSpanMessage) -> None:
@@ -185,3 +188,16 @@ class MessageSender(BaseMessageProcessor):
             LOGGER.debug("Create trace batch request of size %d", len(batch))
             self._rest_client.traces.create_traces(traces=batch)
             LOGGER.debug("Sent trace batch of size %d", len(batch))
+
+
+def _generate_error_fingerprint(
+    exception: Exception, message: messages.BaseMessage
+) -> List[str]:
+    fingerprint = [type(message).__name__, type(exception).__name__]
+
+    if isinstance(exception, rest_api_core.ApiError):
+        fingerprint.append(str(exception.status_code))
+
+        return fingerprint
+
+    return fingerprint

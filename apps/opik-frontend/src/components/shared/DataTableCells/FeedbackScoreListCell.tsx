@@ -27,6 +27,8 @@ const FeedbackScoreListCell = (context: CellContext<unknown, unknown>) => {
               label={item.name}
               value={item.value}
               reason={item.reason}
+              lastUpdatedAt={item.last_updated_at}
+              lastUpdatedBy={item.last_updated_by}
             />
           ))}
     </CellWrapper>

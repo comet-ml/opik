@@ -89,7 +89,6 @@ const COLUMNS_ORDER_KEY = "compare-experiments-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 const COLUMNS_SCORES_ORDER_KEY = "compare-experiments-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
-const COLUMNS_CUSTOM_ORDER_KEY = "compare-experiments-custom-columns-order";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -109,7 +108,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", COLUMN_COMMENTS_ID];
 
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
@@ -207,12 +206,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const [outputColumnsOrder, setOutputColumnsOrder] = useLocalStorageState<
     string[]
   >(COLUMNS_OUTPUT_ORDER_KEY, {
-    defaultValue: [],
-  });
-
-  const [customColumnsOrder, setCustomColumnsOrder] = useLocalStorageState<
-    string[]
-  >(COLUMNS_CUSTOM_ORDER_KEY, {
     defaultValue: [],
   });
 
@@ -335,22 +328,33 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   }, [dynamicDatasetColumns, experimentsCount]);
 
   const outputColumnsData = useMemo(() => {
-    return dynamicOutputColumns.map(
-      ({ label, id, columnType }) =>
-        ({
-          id,
-          label,
-          type: columnType,
-          cell: CompareExperimentsOutputCell as never,
-          customMeta: {
-            experiments,
-            experimentsIds,
-            outputKey: label,
-            openTrace: setTraceId,
-          },
-          ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
-        }) as ColumnData<ExperimentsCompare>,
-    );
+    return [
+      ...dynamicOutputColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            cell: CompareExperimentsOutputCell as never,
+            customMeta: {
+              experiments,
+              experimentsIds,
+              outputKey: label,
+              openTrace: setTraceId,
+            },
+            ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
+          }) as ColumnData<ExperimentsCompare>,
+      ),
+      {
+        id: COLUMN_COMMENTS_ID,
+        label: "Comments",
+        type: COLUMN_TYPE.string,
+        cell: CommentsCell.Compare as never,
+        customMeta: {
+          experimentsIds,
+        },
+      } as ColumnData<ExperimentsCompare>,
+    ];
   }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
 
   const scoresColumnsData = useMemo(() => {
@@ -369,21 +373,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         }) as ColumnData<ExperimentsCompare>,
     );
   }, [dynamicScoresColumns, experimentsIds]);
-
-  const customColumnsData = useMemo(
-    () => [
-      {
-        id: COLUMN_COMMENTS_ID,
-        label: "Comments",
-        type: COLUMN_TYPE.list,
-        cell: CommentsCell.Compare as never,
-        customMeta: {
-          experimentsIds,
-        },
-      } as ColumnData<ExperimentsCompare>,
-    ],
-    [experimentsIds],
-  );
 
   const selectedRows: Array<ExperimentsCompare> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -503,18 +492,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       );
     }
 
-    if (hasAnyVisibleColumns(customColumnsData, selectedColumns)) {
-      retVal.push(
-        ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
-          customColumnsData,
-          {
-            selectedColumns,
-            columnsOrder: customColumnsOrder,
-          },
-        ),
-      );
-    }
-
     return retVal;
   }, [
     experimentsCount,
@@ -528,8 +505,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     experimentsIds,
     outputColumnsOrder,
     scoresColumnsOrder,
-    customColumnsData,
-    customColumnsOrder,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -574,7 +549,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     [rowIndex, rows, setActiveRowId],
   );
 
-  const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
+  const handleClose = useCallback(() => {
+    setExpandedCommentSections(null);
+    setActiveRowId("");
+  }, [setActiveRowId, setExpandedCommentSections]);
 
   const activeRow = useMemo(
     () => find(rows, (row) => activeRowId === row.id),
@@ -617,12 +595,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
       },
-      {
-        title: "Others",
-        columns: customColumnsData,
-        order: customColumnsOrder,
-        onOrderChange: setCustomColumnsOrder,
-      },
     ];
   }, [
     outputColumnsData,
@@ -631,9 +603,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     scoresColumnsData,
     scoresColumnsOrder,
     setScoresColumnsOrder,
-    customColumnsData,
-    customColumnsOrder,
-    setCustomColumnsOrder,
   ]);
 
   const meta = useMemo(
