@@ -59,7 +59,7 @@ class AutomationRuleEvaluatorServiceImplTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.randomAlphanumeric(20);
     public static final String[] IGNORED_FIELDS = {
-            "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "projectId"};
+            "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "projectId", "projectName"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
