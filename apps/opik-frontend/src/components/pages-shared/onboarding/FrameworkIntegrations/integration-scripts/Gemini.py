@@ -1,11 +1,11 @@
-import os, litellm
-from litellm.integrations.opik.opik import OpikLogger # HIGHLIGHTED_LINE
+import os, google.genai
+from opik.integrations.genai import track_genai # HIGHLIGHTED_LINE
 
 # INJECT_OPIK_CONFIGURATION
 
-litellm.callbacks = [OpikLogger()] # HIGHLIGHTED_LINE
-response = litellm.completion(
-    model="gemini/gemini-pro",
-    messages=[{"role": "user", "content": "Write a haiku about AI engineering."}],
+client = google.genai.Client()
+gemini_client = track_genai(client) # HIGHLIGHTED_LINE
+response = gemini_client.models.generate_content(
+    model="gemini-2.0-flash-001", contents="Write a haiku about AI engineering."
 )
-print(response.choices[0].message.content)
+print(response.text)
