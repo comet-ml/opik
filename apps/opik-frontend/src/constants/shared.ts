@@ -6,6 +6,7 @@ import {
 import React from "react";
 
 export const DEMO_PROJECT_NAME = "Demo Project";
+export const USER_FEEDBACK_NAME = "User feedback";
 
 export const TABLE_HEADER_Z_INDEX = 2;
 export const TABLE_ROW_Z_INDEX = 0;

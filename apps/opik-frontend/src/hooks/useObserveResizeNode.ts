@@ -31,5 +31,5 @@ export function useObserveResizeNode<NodeType = HTMLElement>(
     }
   }, [node, observeBody, onChange]);
 
-  return { ref };
+  return { ref, node };
 }

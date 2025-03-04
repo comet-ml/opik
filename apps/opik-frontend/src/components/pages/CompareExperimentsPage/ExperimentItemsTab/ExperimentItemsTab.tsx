@@ -691,9 +691,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         isTraceDetailsOpened={Boolean(traceId)}
       />
       <TraceDetailsPanel
-        traceId={traceId as string}
-        spanId={spanId as string}
+        traceId={traceId!}
+        spanId={spanId!}
         setSpanId={setSpanId}
+        open={Boolean(traceId)}
         onClose={() => {
           setTraceId("");
         }}

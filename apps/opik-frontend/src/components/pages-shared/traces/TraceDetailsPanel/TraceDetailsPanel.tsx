@@ -4,11 +4,14 @@ import find from "lodash/find";
 import { createEnumParam, useQueryParam } from "use-query-params";
 
 import { Trash } from "lucide-react";
+
+import { OnChangeFn } from "@/types/shared";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { Separator } from "@/components/ui/separator";
 import useTraceById from "@/api/traces/useTraceById";
 import Loader from "@/components/shared/Loader/Loader";
 import TraceDataViewer from "./TraceDataViewer/TraceDataViewer";
@@ -27,9 +30,11 @@ type TraceDetailsPanelProps = {
   projectId?: string;
   traceId: string;
   spanId: string;
-  setSpanId: (id: string) => void;
+  setSpanId: OnChangeFn<string | null | undefined>;
+  setThreadId?: OnChangeFn<string | null | undefined>;
   hasPreviousRow?: boolean;
   hasNextRow?: boolean;
+  open: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
 };
@@ -50,12 +55,14 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   traceId,
   spanId,
   setSpanId,
+  setThreadId,
   hasPreviousRow,
   hasNextRow,
   onClose,
+  open,
   onRowChange,
 }) => {
-  const [open, setOpen] = useState<boolean>(false);
+  const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [lastSection, setLastSection] = useQueryParam(
     "lastSection",
     LastSectionParam,
@@ -178,18 +185,37 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     );
   };
 
+  const renderNavigationContent = () => {
+    if (setThreadId && trace?.thread_id) {
+      return (
+        <>
+          <Separator orientation="vertical" className="mx-2 h-8" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setThreadId(trace.thread_id)}
+          >
+            Go to thread
+          </Button>
+        </>
+      );
+    }
+
+    return null;
+  };
+
   const renderHeaderContent = () => {
     return (
       <div className="flex gap-2">
         <ConfirmDialog
-          open={open}
-          setOpen={setOpen}
+          open={popupOpen}
+          setOpen={setPopupOpen}
           onConfirm={handleTraceDelete}
           title="Delete trace"
           description="Are you sure you want to delete this trace?"
           confirmText="Delete trace"
         />
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Button variant="outline" size="sm" onClick={() => setPopupOpen(true)}>
           <Trash className="mr-2 size-4" />
           Delete
         </Button>
@@ -201,7 +227,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     <ResizableSidePanel
       panelId="traces"
       entity="trace"
-      open={Boolean(traceId)}
+      open={open}
+      navigationContent={renderNavigationContent()}
       headerContent={renderHeaderContent()}
       hasPreviousRow={hasPreviousRow}
       hasNextRow={hasNextRow}

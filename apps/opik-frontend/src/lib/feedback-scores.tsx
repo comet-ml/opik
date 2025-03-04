@@ -67,30 +67,35 @@ export const setTracesCache = async (
     feedbackScores?: TraceFeedbackScore[],
   ) => TraceFeedbackScore[] | undefined,
 ) => {
-  const { queryKey } =
-    queryClient.getQueryCache().find({
+  // we can have few active request that we need to update
+  // one on TracesSpansTab and another on ThreadDetailsPanel
+  const query =
+    queryClient.getQueryCache().findAll({
       exact: false,
       type: "active",
       queryKey: [TRACES_KEY],
     }) ?? {};
 
-  if (!queryKey) return;
+  query.map(async ({ queryKey }) => {
+    await queryClient.cancelQueries({ queryKey });
 
-  await queryClient.cancelQueries({ queryKey });
-
-  queryClient.setQueryData(queryKey, (originalData: UseTracesListResponse) => {
-    return {
-      ...originalData,
-      content: originalData.content.map((trace) => {
-        if (trace.id === params.traceId) {
-          return {
-            ...trace,
-            feedback_scores: mutate(trace.feedback_scores),
-          };
-        }
-        return trace;
-      }),
-    };
+    queryClient.setQueryData(
+      queryKey,
+      (originalData: UseTracesListResponse) => {
+        return {
+          ...originalData,
+          content: originalData.content.map((trace) => {
+            if (trace.id === params.traceId) {
+              return {
+                ...trace,
+                feedback_scores: mutate(trace.feedback_scores),
+              };
+            }
+            return trace;
+          }),
+        };
+      },
+    );
   });
 };
 
