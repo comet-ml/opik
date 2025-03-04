@@ -41,7 +41,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   onRowChange,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
-  const [height, setHeight] = React.useState<number>(0);
+  const [height, setHeight] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     const contentHeight = node.clientHeight;
     const headerHeight =
@@ -121,7 +121,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
             <Calendar className="size-4 shrink-0" />
             <span className="comet-body-s-accented truncate">
-              {formatDate(thread?.start_time || "NA")}
+              {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
             </span>
           </div>
         </TooltipWrapper>

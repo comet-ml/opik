@@ -1,6 +1,11 @@
 import { UsageData } from "@/types/shared";
 import { CommentItems } from "./comment";
 
+export enum USER_FEEDBACK_SCORE {
+  dislike,
+  like,
+}
+
 export enum FEEDBACK_SCORE_TYPE {
   sdk = "sdk",
   ui = "ui",

@@ -3,13 +3,14 @@ import { ThumbsDown, ThumbsUp } from "lucide-react";
 
 import ThumbDownFilled from "@/icons/thumbs-down-filled.svg?react";
 import ThumbUpFilled from "@/icons/thumbs-up-filled.svg?react";
+import { USER_FEEDBACK_SCORE } from "@/types/traces";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import { Button } from "@/components/ui/button";
 
 type LikeFeedbackProps = {
-  state?: 1 | 0;
+  state?: USER_FEEDBACK_SCORE;
   traceId: string;
 };
 
@@ -41,10 +42,12 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
         variant="ghost"
         size="icon-2xs"
         onClick={() => {
-          state === 1 ? deleteFeedbackScore() : updateFeedbackScore(1);
+          state === USER_FEEDBACK_SCORE.like
+            ? deleteFeedbackScore()
+            : updateFeedbackScore(USER_FEEDBACK_SCORE.like);
         }}
       >
-        {state === 1 ? (
+        {state === USER_FEEDBACK_SCORE.like ? (
           <ThumbUpFilled className="text-muted-slate" />
         ) : (
           <ThumbsUp />
@@ -54,10 +57,12 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
         variant="ghost"
         size="icon-2xs"
         onClick={() => {
-          state === 0 ? deleteFeedbackScore() : updateFeedbackScore(0);
+          state === USER_FEEDBACK_SCORE.dislike
+            ? deleteFeedbackScore()
+            : updateFeedbackScore(USER_FEEDBACK_SCORE.dislike);
         }}
       >
-        {state === 0 ? (
+        {state === USER_FEEDBACK_SCORE.dislike ? (
           <ThumbDownFilled className="text-muted-slate" />
         ) : (
           <ThumbsDown />

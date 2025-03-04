@@ -67,6 +67,8 @@ export const setTracesCache = async (
     feedbackScores?: TraceFeedbackScore[],
   ) => TraceFeedbackScore[] | undefined,
 ) => {
+  // we can have few active request that we need to update
+  // one on TracesSpansTab and another on ThreadDetailsPanel
   const query =
     queryClient.getQueryCache().findAll({
       exact: false,

@@ -38,15 +38,28 @@ export const prettifyMessage = (
   },
 ) => {
   const PREDEFINED_KEYS_MAP = {
-    input: ["question, messages, user_input, query, input_prompt"],
+    input: ["question", "messages", "user_input", "query", "input_prompt"],
     output: ["answer", "output", "response"],
   };
 
-  if (isObject(message)) {
-    if (Object.keys(message).length === 1) {
-      const value = get(message, Object.keys(message)[0]);
+  let unwrappedMessage = message;
 
-      if (isObject(value) || isString(value)) {
+  if (isObject(message) && Object.keys(message).length === 1) {
+    unwrappedMessage = get(message, Object.keys(message)[0]);
+  }
+
+  if (isString(unwrappedMessage)) {
+    return {
+      message: unwrappedMessage,
+      prettified: message !== unwrappedMessage,
+    } as PrettifyMessageResponse;
+  }
+
+  if (isObject(unwrappedMessage)) {
+    if (Object.keys(unwrappedMessage).length === 1) {
+      const value = get(message, Object.keys(unwrappedMessage)[0]);
+
+      if (isString(value)) {
         return {
           message: value,
           prettified: true,
@@ -54,7 +67,7 @@ export const prettifyMessage = (
       }
     } else {
       for (const key of PREDEFINED_KEYS_MAP[config.type]) {
-        const value = get(message, key);
+        const value = get(unwrappedMessage, key);
         if (isString(value)) {
           return {
             message: value,

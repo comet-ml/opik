@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import JsonView from "react18-json-view";
 import isObject from "lodash/isObject";
 
-import { Trace } from "@/types/traces";
+import { Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import LikeFeedback from "@/components/pages-shared/traces/ThreadDetailsPanel/LikeFeedback";
 import { Separator } from "@/components/ui/separator";
@@ -22,7 +22,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   const userFeedback = useMemo(() => {
     return (trace.feedback_scores ?? []).find(
       (f) => f.name === USER_FEEDBACK_NAME,
-    )?.value as 0 | 1;
+    )?.value as USER_FEEDBACK_SCORE;
   }, [trace.feedback_scores]);
 
   const input = useMemo(() => {
