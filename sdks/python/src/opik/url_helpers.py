@@ -1,8 +1,14 @@
+import base64
+import urllib.parse
 from typing import Final
 
 import opik.config
-import urllib.parse
-import base64
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import opik
+
 
 URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "api/rest/v2/account-details"
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "api/rest/v2/workspaces"
@@ -17,7 +23,7 @@ def get_ui_url() -> str:
     return opik_url_override.rstrip("/api") + "/"
 
 
-def get_experiment_url(client: opik.Opik, dataset_name: str, experiment_id: str) -> str:
+def get_experiment_url(client: "opik.Opik", dataset_name: str, experiment_id: str) -> str:
     dataset = client._rest_client.datasets.get_dataset_by_identifier(
         dataset_name=dataset_name
     )
