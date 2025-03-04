@@ -111,7 +111,11 @@ def evaluate(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    report.display_experiment_link(dataset.name, experiment.id)
+    report.display_experiment_link(
+        client=client,
+        dataset_name=dataset.name,
+        experiment_id=experiment.id,
+    )
 
     client.flush()
 
@@ -191,7 +195,11 @@ def evaluate_experiment(
             experiment.dataset_name, total_time, test_results
         )
 
-    report.display_experiment_link(experiment.dataset_name, experiment.id)
+    report.display_experiment_link(
+        client=client,
+        dataset_name=experiment.dataset_name,
+        experiment_id=experiment.id,
+    )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         experiment_id=experiment.id,
@@ -318,7 +326,11 @@ def evaluate_prompt(
     if verbose == 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
-    report.display_experiment_link(dataset.name, experiment.id)
+    report.display_experiment_link(
+        client=client,
+        dataset_name=dataset.name,
+        experiment_id=experiment.id,
+    )
 
     client.flush()
 

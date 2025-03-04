@@ -142,10 +142,8 @@ class Opik:
             )
             self._project_name_most_recent_trace = project_name
 
-    def _display_created_dataset_url(self, workspace: str, dataset_name: str) -> None:
-        dataset_url = url_helpers.get_dataset_url(
-            workspace=workspace, dataset_name=dataset_name
-        )
+    def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
+        dataset_url = url_helpers.get_dataset_url(dataset_id, self._config.url_override)
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
 
@@ -594,15 +592,18 @@ class Opik:
         Returns:
             dataset.Dataset: The created dataset object.
         """
-        self._rest_client.datasets.create_dataset(name=name, description=description)
+        id = id_helpers.generate_id()
+        self._rest_client.datasets.create_dataset(
+            id=id, name=name, description=description
+        )
 
-        result = dataset.Dataset(
+        result = dataset.Dataset(  # TODO: add id field to Dataset class here and in other places where it is created
             name=name,
             description=description,
             rest_client=self._rest_client,
         )
 
-        self._display_created_dataset_url(workspace=self._workspace, dataset_name=name)
+        self._display_created_dataset_url(dataset_name=name, dataset_id=id)
 
         return result
 

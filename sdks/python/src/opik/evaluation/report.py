@@ -1,8 +1,12 @@
-from rich import console, panel, table, text, align
-from typing import List, Dict, Tuple
 from collections import defaultdict
-from . import test_result
+from typing import Dict, List, Tuple
+
+from rich import align, console, panel, table, text
+
+import opik
+
 from .. import url_helpers
+from . import test_result
 
 
 def _format_time(seconds: float) -> str:
@@ -84,10 +88,14 @@ def display_experiment_results(
     console_container.print("Uploading results to Opik ... ")
 
 
-def display_experiment_link(dataset_name: str, experiment_id: str) -> None:
+def display_experiment_link(
+    client: opik.Opik, dataset_name: str, experiment_id: str
+) -> None:
     console_container = console.Console()
     experiment_url = url_helpers.get_experiment_url(
-        dataset_name=dataset_name, experiment_id=experiment_id
+        client=client,
+        dataset_name=dataset_name,
+        experiment_id=experiment_id,
     )
     console_container.print(
         f"View the results [link={experiment_url}]in your Opik dashboard[/link]."
