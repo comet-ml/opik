@@ -89,9 +89,11 @@ class OpikApi:
         follow_redirects: typing.Optional[bool] = True,
         httpx_client: typing.Optional[httpx.Client] = None,
     ):
-        _defaulted_timeout = (
-            timeout if timeout is not None else 60 if httpx_client is None else None
-        )
+        # _defaulted_timeout = (
+        #     timeout if timeout is not None else 180 if httpx_client is None else None
+        # )
+        _defaulted_timeout = 180
+
         self._client_wrapper = SyncClientWrapper(
             base_url=_get_base_url(base_url=base_url, environment=environment),
             api_key=api_key,

@@ -39,7 +39,7 @@ from .. import (
 )
 
 LOGGER = logging.getLogger(__name__)
-OPIK_API_REQUESTS_TIMEOUT_SECONDS = 5.0
+OPIK_API_REQUESTS_TIMEOUT_SECONDS = 60.0
 
 
 class Opik:
@@ -242,7 +242,7 @@ class Opik:
 
         Note: This method is not optimized for large projects, if you run into any issues please raise
         an issue on GitHub. In addition, be aware that deleting traces that are linked to experiments
-        will lead to inconsistancies in the UI.
+        will lead to inconsistencies in the UI.
 
         Args:
             project_name: The name of the project to copy traces from.
