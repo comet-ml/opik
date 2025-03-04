@@ -297,58 +297,74 @@ def convert_spans():
     LOGGER.info(f"Orhan span with parent_span ids: {len(orphan_span_parent_span_ids)}")
 
 
-# def upload_traces(client: Opik, trace_data: List[trace.TraceData]):
 def upload_traces(client: Opik):
     trace_files = [f for f in os.listdir(CONVERTED_DATA_DIR) if f.startswith("traces_") and f.endswith(".pkl")]
     trace_files = sorted(trace_files)
 
     last_call_times = deque(maxlen=RATE_LIMIT)
 
-    # pbar = tqdm.tqdm(desc="Uploading traces", unit=" traces", total=len(trace_data))
     pbar = tqdm.tqdm(desc="Uploading traces", unit=" traces")
 
     for trace_file in trace_files:
-        file_path = os.path.join(DATA_DIR, trace_file)
-        with open(file_path, "rb") as f:
-            trace_data = pickle.load(f)
+        try:
+            file_path = os.path.join(DATA_DIR, trace_file)
+            LOGGER.info(f"Uploading traces from file: {file_path} to project: {DESTINATION_PROJECT_NAME}...")
+            with open(file_path, "rb") as f:
+                trace_data = pickle.load(f)
 
-        for trace_data_ in trace_data:
-            current_time = time.time()
+            for trace_data_ in trace_data:
+                current_time = time.time()
 
-            if len(last_call_times) >= RATE_LIMIT:
-                earliest_call_time = last_call_times[0]
-                while current_time - earliest_call_time < TIME_WINDOW:
-                    time.sleep(0.01)
-                    current_time = time.time()
+                if len(last_call_times) >= RATE_LIMIT:
+                    earliest_call_time = last_call_times[0]
+                    while current_time - earliest_call_time < TIME_WINDOW:
+                        time.sleep(0.01)
+                        current_time = time.time()
 
-            client.trace(**trace_data_.__dict__)
-            last_call_times.append(current_time)
+                client.trace(**trace_data_.__dict__)
+                last_call_times.append(current_time)
 
-            pbar.update(1)
-        client.flush()
+                pbar.update(1)
+            client.flush()
+        except Exception as e:
+            LOGGER.error(f"Error uploading trace: {e}")
+            exit(101)
 
     pbar.close()
 
 
-def upload_spans(client: Opik, span_data: List[span.SpanData]):
+def upload_spans(client: Opik):
+    span_files = [f for f in os.listdir(CONVERTED_DATA_DIR) if f.startswith("traces_") and f.endswith(".pkl")]
+    span_files = sorted(span_files)
+
     last_call_times = deque(maxlen=RATE_LIMIT)
 
-    pbar = tqdm.tqdm(desc="Uploading spans", unit=" spans", total=len(span_data))
+    pbar = tqdm.tqdm(desc="Uploading spans", unit=" spans")
 
-    for span_data_ in span_data:
+    for span_file in span_files:
+        try:
+            file_path = os.path.join(DATA_DIR, span_file)
+            LOGGER.info(f"Uploading spans from file: {file_path} to project: {DESTINATION_PROJECT_NAME}...")
+            with open(file_path, "rb") as f:
+                span_data = pickle.load(f)
 
-        current_time = time.time()
-
-        if len(last_call_times) >= RATE_LIMIT:
-            earliest_call_time = last_call_times[0]
-            while current_time - earliest_call_time < TIME_WINDOW:
-                time.sleep(0.01)
+            for span_data_ in span_data:
                 current_time = time.time()
 
-        client.span(**span_data_.__dict__)
-        last_call_times.append(current_time)
+                if len(last_call_times) >= RATE_LIMIT:
+                    earliest_call_time = last_call_times[0]
+                    while current_time - earliest_call_time < TIME_WINDOW:
+                        time.sleep(0.01)
+                        current_time = time.time()
 
-        pbar.update(1)
+                client.span(**span_data_.__dict__)
+                last_call_times.append(current_time)
+
+                pbar.update(1)
+            client.flush()
+        except Exception as e:
+            LOGGER.error(f"Error uploading span: {e}")
+            exit(101)
 
     pbar.close()
 
@@ -358,10 +374,11 @@ if __name__ == "__main__":
 
     # download_traces(client)
     # download_spans(client)
-    convert_traces()
-    convert_spans()
 
-    # upload_traces(my_client, new_trace_data)
-    # upload_spans(my_client, new_span_data)
+    # convert_traces()
+    # convert_spans()
+
+    upload_traces(my_client)
+    # upload_spans(my_client)
 
     LOGGER.info(datetime.datetime.now() - start_time)
