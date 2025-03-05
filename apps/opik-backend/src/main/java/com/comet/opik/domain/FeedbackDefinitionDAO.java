@@ -71,6 +71,7 @@ public interface FeedbackDefinitionDAO {
             @Define("name") @Bind("name") String name,
             @Define("type") @Bind("type") FeedbackType type);
 
-    @SqlQuery("SELECT COUNT(*) > 0 FROM feedback_definitions WHERE id IN (<ids>) AND workspace_id = :workspaceId AND name = 'User feedback'")
-    boolean containsUserFeedback(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+    @SqlQuery("SELECT COUNT(*) FROM feedback_definitions WHERE id IN (<ids>) AND workspace_id = :workspaceId AND name = :name")
+    long containsNameByIds(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId,
+            @Bind("name") String name);
 }

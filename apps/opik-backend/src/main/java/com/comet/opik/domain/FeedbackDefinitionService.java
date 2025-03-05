@@ -50,6 +50,7 @@ public interface FeedbackDefinitionService {
 class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
     private static final String FEEDBACK_ALREADY_EXISTS = "Feedback already exists";
+    public static final String USER_FEEDBACK = "User feedback";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator generator;
@@ -198,9 +199,7 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
             Set<UUID> ids = Set.of(id);
 
-            if (dao.containsUserFeedback(ids, workspaceId)) {
-                throw new CannotDeleteException(MESSAGE);
-            }
+            validateDefinitionName(ids, dao, workspaceId);
 
             dao.delete(id, workspaceId);
             return null;
@@ -219,13 +218,17 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
         template.inTransaction(WRITE, handle -> {
             FeedbackDefinitionDAO dao = handle.attach(FeedbackDefinitionDAO.class);
 
-            if (dao.containsUserFeedback(ids, workspaceId)) {
-                throw new CannotDeleteException(MESSAGE);
-            }
+            validateDefinitionName(ids, dao, workspaceId);
 
             dao.delete(ids, workspaceId);
             return null;
         });
+    }
+
+    private void validateDefinitionName(Set<UUID> ids, FeedbackDefinitionDAO dao, String workspaceId) {
+        if (dao.containsNameByIds(ids, workspaceId, USER_FEEDBACK) > 0) {
+            throw new CannotDeleteException(MESSAGE);
+        }
     }
 
     private NotFoundException createNotFoundError() {
