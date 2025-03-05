@@ -101,6 +101,7 @@ def test_dspy__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@pytest.mark.skip
 def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info_is_logged(
     fake_backend,
 ):

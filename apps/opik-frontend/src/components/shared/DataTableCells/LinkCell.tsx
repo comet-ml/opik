@@ -53,7 +53,7 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
             className={cn("hidden", asId && "group-hover:inline-flex")}
             onClick={copyClickHandler}
           >
-            <Copy className="size-3.5" />
+            <Copy />
           </Button>
         </div>
       </TooltipWrapper>

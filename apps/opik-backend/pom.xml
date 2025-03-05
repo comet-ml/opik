@@ -24,7 +24,8 @@
         <stringtemplate.version>3.48.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
-        <clickhouse-java.version>0.8.1</clickhouse-java.version>
+        <clickhouse-java.version>0.8.2</clickhouse-java.version>
+        <google-protobuf.version>4.29.3</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
@@ -255,13 +256,19 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>4.29.3</version>
+            <version>${google-protobuf.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
+            <version>${google-protobuf.version}</version>
         </dependency>
         <dependency>
             <groupId>io.opentelemetry.proto</groupId>
             <artifactId>opentelemetry-proto</artifactId>
             <version>1.5.0-alpha</version>
         </dependency>
+
 
         <!-- Test -->
 
@@ -327,7 +334,7 @@
         <dependency>
             <groupId>com.clickhouse</groupId>
             <artifactId>clickhouse-jdbc</artifactId>
-            <version>0.7.2</version>
+            <version>0.8.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -395,7 +402,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-project-info-reports-plugin</artifactId>
-                    <version>3.8.0</version>
+                    <version>3.9.0</version>
                 </plugin>
             </plugins>
         </pluginManagement>

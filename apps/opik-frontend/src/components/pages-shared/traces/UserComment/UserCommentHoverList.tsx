@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import UserComment from "./UserComment";
-import { Comment } from "@/types/comment";
+import { CommentItems } from "@/types/comment";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import {
@@ -10,14 +10,18 @@ import {
 } from "@/components/ui/hover-card";
 
 type UserCommentHoverListProps = {
-  commentsList: Comment[];
+  commentsList: CommentItems;
   onReply: () => void;
+  className?: string;
   children: React.ReactNode;
+  showReply: boolean;
 };
 const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
   commentsList,
   onReply,
+  className,
   children,
+  showReply,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -39,9 +43,12 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
   return (
     <HoverCard open={isOpen} onOpenChange={setIsOpen}>
       <HoverCardTrigger asChild>
-        <div className="flex size-full min-w-0 flex-1">{children}</div>
+        <div className={className}>{children}</div>
       </HoverCardTrigger>
-      <HoverCardContent className="w-[320px] p-0" collisionPadding={24}>
+      <HoverCardContent
+        className="w-[320px] bg-popover-gray p-0"
+        collisionPadding={24}
+      >
         <div
           className="relative size-full max-h-[40vh] max-w-[320px] overflow-auto p-1 pb-0"
           ref={onRefCreated}
@@ -66,16 +73,18 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
             ))}
           </div>
 
-          <div className="sticky bottom-0 flex justify-end border-t border-slate-200 bg-popover py-1">
-            <Button
-              variant="ghost"
-              className="comet-body-xs h-6 w-full justify-end gap-1 text-foreground"
-              size="sm"
-              onClick={handleOnReply}
-            >
-              Reply <ArrowRight className="size-3.5" />
-            </Button>
-          </div>
+          {showReply && (
+            <div className="sticky bottom-0 flex justify-end border-t border-slate-200 bg-popover-gray py-1">
+              <Button
+                variant="ghost"
+                className="comet-body-xs h-6 w-full justify-end gap-1 text-foreground"
+                size="sm"
+                onClick={handleOnReply}
+              >
+                Reply <ArrowRight className="size-3.5" />
+              </Button>
+            </div>
+          )}
         </div>
       </HoverCardContent>
     </HoverCard>

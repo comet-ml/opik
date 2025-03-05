@@ -4,6 +4,7 @@ import { Settings2 } from "lucide-react";
 import {
   LLMAnthropicConfigsType,
   LLMOpenAIConfigsType,
+  LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -13,15 +14,16 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonProps } from "@/components/ui/button";
 
 import OpenAIModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 import AnthropicModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
 import isEmpty from "lodash/isEmpty";
+import OpenRouterModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenRouterModelConfigs";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
-  size?: "icon" | "icon-sm" | "icon-lg" | "icon-xs" | "icon-xxs";
+  size?: ButtonProps["size"];
   configs: Partial<LLMPromptConfigsType>;
   onChange: (configs: Partial<LLMPromptConfigsType>) => void;
 }
@@ -51,6 +53,15 @@ const PromptModelConfigs = ({
       );
     }
 
+    if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+      return (
+        <OpenRouterModelConfigs
+          configs={configs as LLMOpenRouterConfigsType}
+          onChange={onChange}
+        />
+      );
+    }
+
     return;
   };
 
@@ -60,11 +71,15 @@ const PromptModelConfigs = ({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size={size} disabled={disabled}>
-          <Settings2 className="size-3.5" />
+          <Settings2 />
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent className="p-6" side="bottom" align="end">
+      <DropdownMenuContent
+        className="max-h-[70vh] overflow-y-auto p-6"
+        side="bottom"
+        align="end"
+      >
         {getProviderForm()}
       </DropdownMenuContent>
     </DropdownMenu>

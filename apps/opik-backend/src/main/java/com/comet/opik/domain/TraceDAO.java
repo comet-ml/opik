@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
@@ -72,6 +73,8 @@ interface TraceDAO {
     Mono<Void> delete(Set<UUID> ids, Connection connection);
 
     Mono<Trace> findById(UUID id, Connection connection);
+
+    Mono<TraceDetails> getTraceDetailsById(UUID id, Connection connection);
 
     Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
 
@@ -251,7 +254,7 @@ class TraceDAOImpl implements TraceDAO {
                     *
                 FROM traces
                 WHERE id = :id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
@@ -283,7 +286,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY id DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
             ;
             """;
@@ -341,6 +344,15 @@ class TraceDAOImpl implements TraceDAO {
             ) AS c ON t.id = c.entity_id
             GROUP BY
                 t.*
+            ;
+            """;
+
+    private static final String SELECT_DETAILS_BY_ID = """
+            SELECT DISTINCT
+                workspace_id,
+                project_id
+            FROM traces
+            WHERE id = :id
             ;
             """;
 
@@ -655,7 +667,7 @@ class TraceDAOImpl implements TraceDAO {
                     *
                 FROM traces
                 WHERE id = :id
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
@@ -787,6 +799,11 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /***
+     * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
+     *
+     * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
+     ***/
     private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
             SELECT
                 countDistinct(id) as count
@@ -804,7 +821,7 @@ class TraceDAOImpl implements TraceDAO {
                            NULL) AS duration_millis,
                     <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
                     <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
-                    count(DISTINCT t.id) as number_of_messages,
+                    count(DISTINCT t.id) * 2 as number_of_messages,
                     max(t.last_updated_at) as last_updated_at,
                     argMin(t.created_by, t.created_at) as created_by,
                     min(t.created_at) as created_at
@@ -827,6 +844,11 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /***
+     * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
+     *
+     * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
+     ***/
     private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             SELECT
                 t.thread_id as id,
@@ -840,7 +862,7 @@ class TraceDAOImpl implements TraceDAO {
                        NULL) AS duration_millis,
                 <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
                 <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
-                count(DISTINCT t.id) as number_of_messages,
+                count(DISTINCT t.id) * 2 as number_of_messages,
                 max(t.last_updated_at) as last_updated_at,
                 argMin(t.created_by, t.created_at) as created_by,
                 min(t.created_at) as created_at
@@ -871,6 +893,18 @@ class TraceDAOImpl implements TraceDAO {
             AND thread_id IN :thread_ids
             """;
 
+    /***
+     * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
+     *
+     * Among the aggregation performed are:
+     *  - The duration of the thread, which is calculated as the difference between the start_time and end_time of the first and last trace in the list.
+     *  - The first message in the thread, which is the input of the first trace in the list.
+     *  - The last message in the thread, which is the output of the last trace in the list.
+     *  - The number of messages in the thread, which is the count of the traces in the list multiplied by 2.
+     *  - The last updated time of the thread, which is the last_updated_at of the last trace in the list.
+     *  - The creator of the thread, which is the created_by of the first trace in the list.
+     *  - The creation time of the thread, which is the created_at of the first trace in the list.
+     ***/
     private static final String SELECT_TRACES_THREAD_BY_ID = """
             SELECT
                 t.thread_id as id,
@@ -884,7 +918,7 @@ class TraceDAOImpl implements TraceDAO {
                        NULL) AS duration_millis,
                 argMin(t.input, t.start_time) as first_message,
                 argMax(t.output, t.end_time) as last_message,
-                count(DISTINCT t.id) as number_of_messages,
+                count(DISTINCT t.id) * 2 as number_of_messages,
                 max(t.last_updated_at) as last_updated_at,
                 argMin(t.created_by, t.created_at) as created_by,
                 min(t.created_at) as created_at
@@ -1073,6 +1107,16 @@ class TraceDAOImpl implements TraceDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
+    private Flux<? extends Result> getDetailsById(UUID id, Connection connection) {
+        var statement = connection.createStatement(SELECT_DETAILS_BY_ID)
+                .bind("id", id);
+
+        Segment segment = startSegment("traces", "Clickhouse", "getDetailsById");
+
+        return Flux.from(statement.execute())
+                .doFinally(signalType -> endSegment(segment));
+    }
+
     @Override
     @WithSpan
     public Mono<Void> delete(@NonNull UUID id, @NonNull Connection connection) {
@@ -1099,6 +1143,13 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMap(this::mapToDto)
                 .flatMap(trace -> enhanceWithFeedbackLogs(List.of(trace)))
                 .flatMap(traces -> Mono.justOrEmpty(traces.stream().findFirst()))
+                .singleOrEmpty();
+    }
+
+    @Override
+    public Mono<TraceDetails> getTraceDetailsById(@NonNull UUID id, @NonNull Connection connection) {
+        return getDetailsById(id, connection)
+                .flatMap(this::mapToTraceDetails)
                 .singleOrEmpty();
     }
 
@@ -1142,6 +1193,13 @@ class TraceDAOImpl implements TraceDAO {
                 .threadId(Optional.ofNullable(row.get("thread_id", String.class))
                         .filter(StringUtils::isNotEmpty)
                         .orElse(null))
+                .build());
+    }
+
+    private Publisher<TraceDetails> mapToTraceDetails(Result result) {
+        return result.map((row, rowMetadata) -> TraceDetails.builder()
+                .projectId(row.get("project_id", String.class))
+                .workspaceId(row.get("workspace_id", String.class))
                 .build());
     }
 

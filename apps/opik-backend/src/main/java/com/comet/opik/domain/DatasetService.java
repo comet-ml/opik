@@ -60,6 +60,8 @@ public interface DatasetService {
 
     Dataset findById(UUID id);
 
+    String findWorkspaceIdByDatasetId(UUID id);
+
     Dataset findById(UUID id, String workspaceId);
 
     List<Dataset> findByIds(Set<UUID> ids, String workspaceId);
@@ -207,6 +209,17 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return enrichDatasetWithAdditionalInformation(List.of(findById(id, workspaceId))).get(0);
+    }
+
+    @Override
+    public String findWorkspaceIdByDatasetId(@NonNull UUID id) {
+        log.info("Finding workspaceId by dataset id '{}'", id);
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            var workspaceId = dao.findWorkspaceIdByDatasetId(id).orElseThrow(this::newNotFoundException);
+            log.info("Found workspaceId by dataset id '{}'", id);
+            return workspaceId;
+        });
     }
 
     @Override

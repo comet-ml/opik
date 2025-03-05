@@ -5,8 +5,8 @@ import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   CustomMeta,
 } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/VerticallySplitCellWrapper";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { MessageSquareMore } from "lucide-react";
+import FeedbackScoreReasonTooltip from "@/components/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";
 
 const CompareExperimentsFeedbackScoreCell: React.FunctionComponent<
   CellContext<ExperimentsCompare, unknown>
@@ -28,9 +28,13 @@ const CompareExperimentsFeedbackScoreCell: React.FunctionComponent<
       <div className="flex h-4 w-full items-center justify-end gap-1">
         <div className="truncate">{feedbackScore.value}</div>
         {feedbackScore.reason && (
-          <TooltipWrapper content={feedbackScore.reason} delayDuration={100}>
+          <FeedbackScoreReasonTooltip
+            reason={feedbackScore.reason}
+            lastUpdatedAt={feedbackScore.last_updated_at}
+            lastUpdatedBy={feedbackScore.last_updated_by}
+          >
             <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
-          </TooltipWrapper>
+          </FeedbackScoreReasonTooltip>
         )}
       </div>
     );

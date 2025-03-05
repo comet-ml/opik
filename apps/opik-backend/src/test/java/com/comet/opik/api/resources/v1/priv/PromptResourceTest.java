@@ -1,12 +1,12 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionRetrieve;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -17,6 +17,8 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -42,7 +44,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -84,9 +86,12 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Prompt Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class PromptResourceTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
+    private final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription",
+            "type"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -97,14 +102,12 @@ class PromptResourceTest {
     private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
     private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-    private static final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription",
-            "type"};
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    static {
+    {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -112,7 +115,7 @@ class PromptResourceTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -127,7 +130,7 @@ class PromptResourceTest {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         }
 
@@ -139,7 +142,7 @@ class PromptResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -172,7 +175,7 @@ class PromptResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 
@@ -529,7 +532,7 @@ class PromptResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 

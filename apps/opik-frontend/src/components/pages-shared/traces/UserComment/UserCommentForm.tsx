@@ -1,6 +1,6 @@
 import { Button, ButtonProps } from "@/components/ui/button";
 import { Textarea, TextareaProps } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { cn, updateTextAreaHeight } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, Check, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
@@ -12,7 +12,7 @@ const CancelButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <Button {...buttonProps} variant="outline" size="icon-xs" ref={ref}>
         <span className="sr-only">Cancel edit comment</span>
-        <X className="size-3.5" />
+        <X />
       </Button>
     );
   },
@@ -40,20 +40,11 @@ const SubmitButton = React.forwardRef<
       disabled={!isValid || !isDirty || buttonProps.disabled}
     >
       <span className="sr-only">Approve edit comment</span>
-      <SubmitIcon className="size-3.5" />
+      <SubmitIcon />
     </Button>
   );
 });
 SubmitButton.displayName = "CommentFormSubmitButton";
-
-const updateTextAreaHeight = (textarea: HTMLTextAreaElement | null) => {
-  if (!textarea) return;
-
-  textarea.style.height = "80px";
-  const scrollHeight = textarea.scrollHeight;
-
-  textarea.style.height = scrollHeight + "px";
-};
 
 const MAX_LENGTH_LIMIT = 5000;
 
@@ -92,7 +83,7 @@ const TextareaField: React.FC<TextareaFieldProps> = (props) => {
       ref={callbackTextareaRef}
       maxLength={MAX_LENGTH_LIMIT}
       className={cn(
-        "min-h-[80px] w-full rounded-md border p-3 pr-10 pb-11 resize-none overflow-hidden",
+        "min-h-[64px] w-full rounded-md border p-3 pr-10 resize-none overflow-hidden",
         {
           "border-destructive": formState.errors.commentText,
         },

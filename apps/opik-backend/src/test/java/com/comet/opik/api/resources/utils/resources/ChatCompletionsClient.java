@@ -108,6 +108,21 @@ public class ChatCompletionsClient {
         }
     }
 
+    public List<ErrorMessage> createAndGetStreamedError(
+            String apiKey, String workspaceName, ChatCompletionRequest request) {
+        assertThat(request.stream()).isTrue();
+
+        try (var response = clientSupport.target(getCreateUrl())
+                .request()
+                .accept(MediaType.SERVER_SENT_EVENTS)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            return getStreamedError(response);
+        }
+    }
+
     private String getCreateUrl() {
         return RESOURCE_PATH.formatted(baseURI);
     }

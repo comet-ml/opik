@@ -17,6 +17,7 @@ type ResizableSidePanelProps = {
   children: React.ReactNode;
   entity?: string;
   headerContent?: React.ReactNode;
+  navigationContent?: React.ReactNode;
   open?: boolean;
   hasPreviousRow?: boolean;
   hasNextRow?: boolean;
@@ -31,11 +32,16 @@ const UP_HOTKEYS = ["↑"];
 const DOWN_HOTKEYS = ["↓"];
 const ESC_HOTKEYS = ["Esc"];
 
+const calculateLeftPosition = (percentage: number) => {
+  return window.innerWidth * percentage;
+};
+
 const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   panelId,
   children,
   entity = "",
   headerContent,
+  navigationContent,
   open = false,
   hasPreviousRow,
   hasNextRow,
@@ -52,11 +58,17 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   );
   const resizeHandleRef = useRef<null | HTMLDivElement>(null);
   const leftRef = useRef<number>(width);
-  const [left, setLeft] = useState<number>(leftRef.current * window.innerWidth);
+  const [left, setLeft] = useState<number>(
+    calculateLeftPosition(leftRef.current),
+  );
 
   const startResizing = useCallback((event: MouseEvent) => {
     resizeHandleRef.current = event.target as HTMLDivElement;
     resizeHandleRef.current.setAttribute("data-resize-handle-active", "true");
+    resizeHandleRef.current.parentElement!.style.setProperty(
+      "transition",
+      `unset`,
+    );
   }, []);
 
   useHotkeys(
@@ -88,13 +100,16 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
           MIN_LEFT_POSITION,
           Math.min(MAX_LEFT_POSITION, leftRef.current),
         );
-        setLeft(window.innerWidth * left);
+        setLeft(calculateLeftPosition(left));
       }
     };
 
     const handleMouseUp = () => {
       if (resizeHandleRef.current) {
         resizeHandleRef.current.removeAttribute("data-resize-handle-active");
+        resizeHandleRef.current.parentElement!.style.removeProperty(
+          "transition",
+        );
         resizeHandleRef.current = null;
         localStorage.setItem(localStorageKey, leftRef.current.toString());
       }
@@ -105,7 +120,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         MIN_LEFT_POSITION,
         Math.min(MAX_LEFT_POSITION, leftRef.current),
       );
-      setLeft(window.innerWidth * left);
+      setLeft(calculateLeftPosition(left));
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -123,7 +138,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
 
     return (
       <>
-        <Separator orientation="vertical" className="mx-4 h-8" />
+        <Separator orientation="vertical" className="mx-2 h-8" />
         <TooltipWrapper content={`Previous ${entity}`} hotkeys={UP_HOTKEYS}>
           <Button
             variant="outline"
@@ -132,7 +147,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             onClick={() => onRowChange(-1)}
             data-testid="side-panel-previous"
           >
-            <ArrowUp className="size-3.5" />
+            <ArrowUp />
           </Button>
         </TooltipWrapper>
         <TooltipWrapper content={`Next ${entity}`} hotkeys={DOWN_HOTKEYS}>
@@ -143,7 +158,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             onClick={() => onRowChange(1)}
             data-testid="side-panel-next"
           >
-            <ArrowDown className="size-3.5" />
+            <ArrowDown />
           </Button>
         </TooltipWrapper>
       </>
@@ -155,42 +170,45 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
       {open && closeOnClickOutside && (
         <div className="fixed inset-0 bg-black/10" onClick={onClose} />
       )}
-      {open && (
-        <div
-          className="fixed inset-0 translate-x-0 bg-background shadow-xl"
-          style={{ left: left + "px" }}
-          data-testid={panelId}
-        >
-          <div
-            className="absolute inset-y-0 left-0 z-20 flex w-4 cursor-col-resize flex-col justify-center border-l transition-all hover:border-l-2 data-[resize-handle-active]:border-l-blue-600"
-            onMouseDown={startResizing as never}
-          ></div>
-          <div className="relative flex size-full">
-            <div className="absolute inset-x-0 top-0 flex h-[60px] items-center justify-between gap-6 pl-6 pr-5">
-              <div className="flex gap-2">
-                <TooltipWrapper
-                  content={`Close ${entity}`}
-                  hotkeys={ESC_HOTKEYS}
-                >
-                  <Button
-                    data-testid="side-panel-close"
-                    variant="outline"
-                    size="icon-sm"
-                    onClick={onClose}
+      <div
+        className="fixed inset-0 translate-x-0 bg-background shadow-xl transition-[left] duration-150"
+        style={{ left: open ? left + "px" : window.innerWidth + "px" }}
+        data-testid={panelId}
+      >
+        {open && (
+          <>
+            <div
+              className="absolute inset-y-0 left-0 z-20 flex w-4 cursor-col-resize flex-col justify-center border-l hover:border-l-2 data-[resize-handle-active]:border-l-blue-600"
+              onMouseDown={startResizing as never}
+            ></div>
+            <div className="relative flex size-full">
+              <div className="absolute inset-x-0 top-0 flex h-[60px] items-center justify-between gap-6 pl-6 pr-5">
+                <div className="flex gap-2">
+                  <TooltipWrapper
+                    content={`Close ${entity}`}
+                    hotkeys={ESC_HOTKEYS}
                   >
-                    <X className="size-3.5" />
-                  </Button>
-                </TooltipWrapper>
-                {renderNavigation()}
+                    <Button
+                      data-testid="side-panel-close"
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={onClose}
+                    >
+                      <X />
+                    </Button>
+                  </TooltipWrapper>
+                  {renderNavigation()}
+                  {navigationContent}
+                </div>
+                {headerContent && <div>{headerContent}</div>}
               </div>
-              {headerContent && <div>{headerContent}</div>}
+              <div className="absolute inset-x-0 bottom-0 top-[60px] border-t">
+                {children}
+              </div>
             </div>
-            <div className="absolute inset-x-0 bottom-0 top-[60px] border-t">
-              {children}
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>,
     document.body,
     "resizable-side-panel",

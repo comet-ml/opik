@@ -14,6 +14,8 @@ import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JobManagerUtils;
@@ -23,7 +25,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.quartz.JobKey;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
@@ -55,6 +57,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class DailyUsageReportJobTest {
 
     private static final String SUCCESS_RESPONSE = "{\"message\":\"Event added successfully\",\"success\":\"true\"}";
@@ -63,16 +66,15 @@ class DailyUsageReportJobTest {
     private static final String VERSION = "%s.%s.%s".formatted(PodamUtils.getIntegerInRange(1, 99),
             PodamUtils.getIntegerInRange(1, 99), PodamUtils.getIntegerInRange(1, 99));
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer(false);
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(false);
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(false);
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -106,13 +108,13 @@ class DailyUsageReportJobTest {
         }
 
         try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
 
-        app = newTestDropwizardAppExtension(
+        APP = newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
@@ -155,9 +157,11 @@ class DailyUsageReportJobTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+        MYSQL.stop();
+        CLICKHOUSE.stop();
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 

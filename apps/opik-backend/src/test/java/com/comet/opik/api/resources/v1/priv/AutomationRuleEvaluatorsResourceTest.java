@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
@@ -8,6 +7,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -22,6 +22,8 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -49,10 +51,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -95,6 +98,7 @@ import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Automation Rule Evaluators Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class AutomationRuleEvaluatorsResourceTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/automations/evaluators/";
@@ -159,16 +163,15 @@ class AutomationRuleEvaluatorsResourceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -244,7 +247,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     HttpStatus.SC_UNAUTHORIZED)))));
         }
 
@@ -329,7 +332,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     HttpStatus.SC_UNAUTHORIZED)))));
         }
 
@@ -840,8 +843,9 @@ class AutomationRuleEvaluatorsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteEvaluator {
 
-        @Test
-        void delete() {
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void delete(boolean includeProjectId) {
             var projectId = generator.generate();
             var id1 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
             var id2 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
@@ -850,7 +854,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var batchDelete = BatchDelete.builder().ids(Set.of(id1, id2)).build();
             try (var actualResponse = evaluatorsResourceClient.delete(
-                    projectId, WORKSPACE_NAME, API_KEY, batchDelete, HttpStatus.SC_NO_CONTENT)) {
+                    includeProjectId ? projectId : null, WORKSPACE_NAME, API_KEY, batchDelete,
+                    HttpStatus.SC_NO_CONTENT)) {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 

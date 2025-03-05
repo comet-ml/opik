@@ -46,7 +46,7 @@ import os
 from opik.integrations.anthropic import track_anthropic
 
 anthropic_client = anthropic.Anthropic()
-anthropic_client = track_anthropic(anthropic, project_name="anthropic-integration-demo")
+anthropic_client = track_anthropic(anthropic_client, project_name="anthropic-integration-demo")
 ```
 
 
@@ -63,7 +63,7 @@ print("Response", response.content[0].text)
 
 The prompt and response messages are automatically logged to Opik and can be viewed in the UI.
 
-![Anthropic Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/anthropic_trace_cookbook.png)
+![Anthropic Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/fern/img/cookbook/anthropic_trace_cookbook.png)
 
 ## Using it with the `track` decorator
 
@@ -79,7 +79,7 @@ from opik.integrations.anthropic import track_anthropic
 os.environ["OPIK_PROJECT_NAME"] = "anthropic-integration-demo"
 
 anthropic_client = anthropic.Anthropic()
-anthropic_client = track_anthropic(anthropic)
+anthropic_client = track_anthropic(anthropic_client)
 
 
 @track
@@ -115,4 +115,6 @@ generate_opik_story()
 
 The trace can now be viewed in the UI:
 
-![Anthropic Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/static/img/cookbook/anthropic_trace_decorator_cookbook.png)
+![Anthropic Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/fern/img/cookbook/anthropic_trace_decorator_cookbook.png)
+
+

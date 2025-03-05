@@ -178,17 +178,6 @@ def create_app(llm_server_host: str) -> FastAPI:
                     )
                     response = await client.chat.completions.create(**body)
                     return JSONResponse(response.model_dump())
-            except APIConnectionError as e:
-                forward_logger.error(
-                    f"[dim]{request.state.request_id}[/] Failed to connect to LLM server: {str(e)}"
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "error": f"Failed to connect to LLM server. Is it running at {llm_server_host}?",
-                        "request_id": request.state.request_id,
-                    },
-                )
             except APITimeoutError as e:
                 forward_logger.error(
                     f"[dim]{request.state.request_id}[/] LLM server timeout: {str(e)}"
@@ -197,6 +186,17 @@ def create_app(llm_server_host: str) -> FastAPI:
                     status_code=504,
                     detail={
                         "error": "LLM server took too long to respond",
+                        "request_id": request.state.request_id,
+                    },
+                )
+            except APIConnectionError as e:
+                forward_logger.error(
+                    f"[dim]{request.state.request_id}[/] Failed to connect to LLM server: {str(e)}"
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": f"Failed to connect to LLM server. Is it running at {llm_server_host}?",
                         "request_id": request.state.request_id,
                     },
                 )

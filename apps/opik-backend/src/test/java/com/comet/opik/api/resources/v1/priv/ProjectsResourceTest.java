@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.TestComparators;
-import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
@@ -11,6 +10,7 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
@@ -35,6 +35,8 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -55,7 +57,7 @@ import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -111,6 +113,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Project Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class ProjectsResourceTest {
 
     public static final String URL_PATTERN = "http://.*/v1/private/projects/.{8}-.{4}-.{4}-.{4}-.{12}";
@@ -126,16 +129,15 @@ class ProjectsResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -162,7 +164,7 @@ class ProjectsResourceTest {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         }
 
@@ -179,11 +181,11 @@ class ProjectsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
-    private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
+    private void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
             String workspaceId) {
         AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
                 USER);
@@ -236,7 +238,7 @@ class ProjectsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 
@@ -428,7 +430,7 @@ class ProjectsResourceTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 

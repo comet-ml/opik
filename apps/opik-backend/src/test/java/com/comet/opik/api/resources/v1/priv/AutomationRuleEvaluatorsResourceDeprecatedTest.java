@@ -1,10 +1,10 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AuthenticationErrorResponse;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -19,6 +19,8 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -43,7 +45,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -87,6 +89,7 @@ import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Automation Rule Evaluators Resource Test Deprecated")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class AutomationRuleEvaluatorsResourceDeprecatedTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/automations/projects/%s/evaluators/";
@@ -143,18 +146,15 @@ class AutomationRuleEvaluatorsResourceDeprecatedTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = "workspace-" + UUID.randomUUID();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
-
-    @RegisterExtension
-    private static TestDropwizardAppExtension APP;
-
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -205,7 +205,7 @@ class AutomationRuleEvaluatorsResourceDeprecatedTest {
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -238,7 +238,7 @@ class AutomationRuleEvaluatorsResourceDeprecatedTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 
@@ -658,7 +658,7 @@ class AutomationRuleEvaluatorsResourceDeprecatedTest {
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
-                                            new AuthenticationErrorResponse(FAKE_API_KEY_MESSAGE,
+                                            new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
         }
 

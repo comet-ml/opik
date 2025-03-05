@@ -8,6 +8,7 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceCountResponse;
+import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
@@ -64,6 +65,8 @@ public interface TraceService {
     Mono<Void> update(TraceUpdate trace, UUID id);
 
     Mono<Trace> get(UUID id);
+
+    Mono<TraceDetails> getTraceDetailsById(UUID id);
 
     Mono<Void> delete(UUID id);
 
@@ -313,6 +316,12 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<Trace> get(@NonNull UUID id) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
+                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))));
+    }
+
+    @Override
+    public Mono<TraceDetails> getTraceDetailsById(UUID id) {
+        return template.nonTransaction(connection -> dao.getTraceDetailsById(id, connection))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id.toString()))));
     }
 
