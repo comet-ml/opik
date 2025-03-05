@@ -24,6 +24,7 @@ class CreateTraceMessage(BaseMessage):
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
     error_info: Optional[ErrorInfoDict]
+    thread_id: Optional[str]
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
@@ -45,6 +46,7 @@ class UpdateTraceMessage(BaseMessage):
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
     error_info: Optional[ErrorInfoDict]
+    thread_id: Optional[str]
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()

@@ -40,6 +40,7 @@ def create_trace_message():
         metadata=NOT_USED,
         tags=NOT_USED,
         error_info=NOT_USED,
+        thread_id=NOT_USED,
     )
 
 
