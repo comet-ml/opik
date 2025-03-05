@@ -66,12 +66,13 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
             @JsonView({View.Public.class, View.Write.class}) @NotNull Double temperature){
     }
 
-    @ConstructorProperties({"id", "projectId", "name", "samplingRate", "code", "createdAt", "createdBy",
+    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "code", "createdAt", "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, @NotBlank String name, Float samplingRate,
+    public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, String projectName, @NotBlank String name,
+            Float samplingRate,
             @NotNull LlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
             String lastUpdatedBy) {
-        super(id, projectId, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+        super(id, projectId, projectName, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 
     @Override
