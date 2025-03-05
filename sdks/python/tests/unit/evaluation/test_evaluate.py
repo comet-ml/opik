@@ -17,7 +17,9 @@ def test_evaluate__happyflow(
     fake_backend,
     configure_opik_local_env_vars,
 ):
-    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__", "id"])
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+    )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
@@ -225,7 +227,9 @@ def test_evaluate_with_scoring_key_mapping(
     fake_backend,
     configure_opik_local_env_vars,
 ):
-    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__", "id"])
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+    )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
@@ -451,7 +455,9 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
     # Dataset is the only thing which is mocked for this test because
     # evaluate should raise an exception right after the first attempt
     # to compute Equals metric score.
-    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__", "id"])
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+    )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
@@ -497,7 +503,9 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
     fake_backend,
     configure_opik_local_env_vars,
 ):
-    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__", "id"])
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+    )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
@@ -593,7 +601,9 @@ def test_evaluate_prompt_happyflow(
 ):
     MODEL_NAME = "gpt-3.5-turbo"
 
-    mock_dataset = mock.MagicMock(spec=["__internal_api__get_items_as_dataclasses__", "id"])
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+    )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
