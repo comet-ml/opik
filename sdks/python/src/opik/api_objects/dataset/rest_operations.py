@@ -24,7 +24,6 @@ def get_datasets(
 
         for dataset_fern in page_datasets.content[: (max_results - len(datasets))]:
             dataset_ = dataset.Dataset(
-                id=dataset_fern.id,
                 name=dataset_fern.name,
                 description=dataset_fern.description,
                 rest_client=rest_client,

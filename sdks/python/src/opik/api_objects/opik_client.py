@@ -517,7 +517,6 @@ class Opik:
         )
 
         dataset_ = dataset.Dataset(
-            id=dataset_fern.id,
             name=name,
             description=dataset_fern.description,
             rest_client=self._rest_client,
@@ -595,19 +594,15 @@ class Opik:
         Returns:
             dataset.Dataset: The created dataset object.
         """
-        id = id_helpers.generate_id()
-        self._rest_client.datasets.create_dataset(
-            id=id, name=name, description=description
-        )
+        self._rest_client.datasets.create_dataset(name=name, description=description)
 
         result = dataset.Dataset(
-            id=id,
             name=name,
             description=description,
             rest_client=self._rest_client,
         )
 
-        self._display_created_dataset_url(dataset_name=name, dataset_id=id)
+        self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
 
         return result
 

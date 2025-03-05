@@ -1,5 +1,6 @@
 import logging
 import json
+import functools
 from typing import Optional, Any, List, Dict, Sequence, Set, TYPE_CHECKING
 
 from opik.rest_api import client as rest_api_client
@@ -19,7 +20,6 @@ LOGGER = logging.getLogger(__name__)
 class Dataset:
     def __init__(
         self,
-        id: str,
         name: str,
         description: Optional[str],
         rest_client: rest_api_client.OpikApi,
@@ -27,7 +27,6 @@ class Dataset:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
         """
-        self._id = id
         self._name = name
         self._description = description
         self._rest_client = rest_client
@@ -35,10 +34,12 @@ class Dataset:
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
 
-    @property
+    @functools.cached_property
     def id(self) -> str:
         """The id of the dataset"""
-        return self._id
+        return self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=self._name
+        ).id
 
     @property
     def name(self) -> str:
