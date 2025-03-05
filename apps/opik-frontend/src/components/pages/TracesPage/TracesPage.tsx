@@ -5,6 +5,7 @@ import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
 import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesSpansTab";
+import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 
@@ -52,6 +53,9 @@ const TracesPage = () => {
           <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.llm}>
             LLM calls
           </TabsTrigger>
+          <TabsTrigger variant="underline" value="threads">
+            Threads
+          </TabsTrigger>
           <TabsTrigger variant="underline" value="metrics">
             Metrics
           </TabsTrigger>
@@ -72,6 +76,9 @@ const TracesPage = () => {
             projectId={projectId}
             projectName={projectName}
           />
+        </TabsContent>
+        <TabsContent value="threads">
+          <ThreadsTab projectId={projectId} projectName={projectName} />
         </TabsContent>
         <TabsContent value="metrics">
           <MetricsTab projectId={projectId} />
