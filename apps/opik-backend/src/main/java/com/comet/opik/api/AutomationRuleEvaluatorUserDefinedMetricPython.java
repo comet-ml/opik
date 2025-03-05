@@ -40,6 +40,7 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
     @ConstructorProperties({
             "id",
             "projectId",
+            "projectName",
             "name",
             "samplingRate",
             "code",
@@ -51,6 +52,7 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
     public AutomationRuleEvaluatorUserDefinedMetricPython(
             UUID id,
             UUID projectId,
+            String projectName,
             @NotBlank String name,
             Float samplingRate,
             @NotNull UserDefinedMetricPythonCode code,
@@ -58,7 +60,7 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
             String createdBy,
             Instant lastUpdatedAt,
             String lastUpdatedBy) {
-        super(id, projectId, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
+        super(id, projectId, projectName, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 
     @Override

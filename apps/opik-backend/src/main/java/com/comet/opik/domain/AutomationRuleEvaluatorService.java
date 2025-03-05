@@ -285,5 +285,4 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     public Mono<LogPage> getLogs(@NonNull LogCriteria criteria) {
         return logsDAO.findLogs(criteria);
     }
-
 }
