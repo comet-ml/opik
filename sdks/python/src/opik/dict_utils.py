@@ -7,6 +7,27 @@ from . import logging_messages
 LOGGER = logging.getLogger(__name__)
 
 
+def flatten_dict(d: Dict[str, Any], delim: str = ".", parent_key: Optional[str] = None ) -> Dict[str, Any]:
+    """
+    Convert {'prefix': {'key': value}} to {'prefix.key': value}.
+
+    Current implementation does not have max depth restrictions or cyclic references handling!
+    """
+    if parent_key is not None:
+        d = {parent_key: d}
+
+    flattened = {}
+
+    for key, value in d.items():
+        if isinstance(value, dict):
+            for subkey, subkey_value in value.items():
+                flattened[f"{key}{delim}{subkey}"] = subkey_value
+        else:
+            flattened[key] = value
+
+    return flattened
+
+
 def deepmerge(
     dict1: Dict[str, Any], dict2: Dict[str, Any], max_depth: int = 10
 ) -> Dict[str, Any]:
