@@ -15,8 +15,8 @@ class ChatCompletionChunksAggregated(pydantic.BaseModel):
     id: str
     model: str
     object: str
-    system_fingerprint: str
-    usage: types.UsageDict
+    system_fingerprint: Optional[str]
+    usage: Optional[types.UsageDict]
 
 
 def aggregate(
@@ -28,23 +28,19 @@ def aggregate(
 
         aggregated_response = {
             "choices": [{"index": 0, "message": {"role": "", "content": ""}}],
-            "id": first_chunk.id,
             "created": first_chunk.created,
+            "id": first_chunk.id,
             "model": first_chunk.model,
             "object": "chat.completion",
             "system_fingerprint": first_chunk.system_fingerprint,
+            "usage": None,
         }
 
         text_chunks: List[str] = []
 
-        for i, chunk in enumerate(items):
+        for chunk in items:
             if chunk.choices and chunk.choices[0].delta:
                 delta = chunk.choices[0].delta
-
-                if delta.role is None:
-                    print()
-                elif len(delta.role) <= 3:
-                    print()
 
                 if (
                     delta.role

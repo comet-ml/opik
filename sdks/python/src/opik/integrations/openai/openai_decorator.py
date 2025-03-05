@@ -13,7 +13,7 @@ from typing import (
 
 import openai
 from openai import _types as _openai_types
-from openai.types.chat import chat_completion_chunk
+from openai.types.chat import chat_completion, chat_completion_chunk
 
 from opik import dict_utils
 from opik.decorator import arguments_helpers, base_track_decorator
@@ -91,7 +91,10 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,
-            chat_completion_chunks_aggregator.ChatCompletionChunksAggregated,
+            (
+                chat_completion.ChatCompletion,
+                chat_completion_chunks_aggregator.ChatCompletionChunksAggregated,
+            ),
         )
 
         result_dict = output.model_dump(mode="json")
