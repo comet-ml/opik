@@ -5,6 +5,7 @@ import GitHubIcon from "@/icons/github.svg?react";
 import useGitHubStarts from "@/api/external/useGitHubStarts";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 export interface GitHubStarListItemProps {
   expanded: boolean;
@@ -24,12 +25,12 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
       : "5k";
   }, [data?.stargazers_count]);
 
-  return (
+  const itemElement = (
     <li className="mb-2">
       <Button
         variant="outline"
         size="sm"
-        className={cn(expanded ? "ml-1 gap-2" : "size-9")}
+        className={cn(expanded ? "ml-1 gap-2.5 px-[7px]" : "size-9 p-0")}
         asChild
       >
         <a
@@ -37,11 +38,11 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
           target="_blank"
           rel="noreferrer"
         >
-          <GitHubIcon />
+          <GitHubIcon className="size-3.5" />
           {expanded && (
             <>
-              <span className="comet-body-s">Star</span>
-              <span className="rounded-lg bg-gray-100 px-1.5 py-0.5 text-xs">
+              <span className="comet-body-s ml-px">Star</span>
+              <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs">
                 {starCount}
               </span>
             </>
@@ -49,6 +50,16 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
         </a>
       </Button>
     </li>
+  );
+
+  if (expanded) {
+    return itemElement;
+  }
+
+  return (
+    <TooltipWrapper content={`GitHub star ${starCount}`} side="right">
+      {itemElement}
+    </TooltipWrapper>
   );
 };
 

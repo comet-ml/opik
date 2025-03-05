@@ -14,6 +14,7 @@ import static com.comet.opik.domain.UserDefinedMetricPythonAutomationRuleEvaluat
 public record UserDefinedMetricPythonAutomationRuleEvaluatorModel(
         UUID id,
         UUID projectId,
+        String projectName,
         String name,
         Float samplingRate,
         @Json UserDefinedMetricPythonCode code,

@@ -4,6 +4,7 @@ from page_objects.TracesPageSpansMenu import TracesPageSpansMenu
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
 import logging
+import allure
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +15,9 @@ class TestTraceSpans:
         ["log_traces_with_spans_low_level", "log_traces_with_spans_decorator"],
     )
     @pytest.mark.sanity
-    def test_spans_of_traces(self, page, request, create_project, traces_fixture):
-        """Test span presence and details in traces.
+    @allure.title("Span creation and verification - {traces_fixture}")
+    def test_spans_of_traces(self, page, request, create_project_api, traces_fixture):
+        """Test span presence in traces.
 
         Steps:
         1. Create project via fixture
@@ -29,7 +31,7 @@ class TestTraceSpans:
            - Verify span names match configuration
         """
         logger.info("Starting spans of traces test")
-        project_name = create_project
+        project_name = create_project_api
         _, span_config = request.getfixturevalue(traces_fixture)
 
         # Navigate to project traces
@@ -104,8 +106,9 @@ class TestTraceSpans:
         ["log_traces_with_spans_low_level", "log_traces_with_spans_decorator"],
     )
     @pytest.mark.sanity
+    @allure.title("Span details and metadata - {traces_fixture}")
     def test_trace_and_span_details(
-        self, page, request, create_project, traces_fixture
+        self, page, request, create_project_api, traces_fixture
     ):
         """Test span details and metadata in traces.
 
@@ -122,7 +125,7 @@ class TestTraceSpans:
              * Verify metadata matches configuration
         """
         logger.info("Starting trace and span details test")
-        project_name = create_project
+        project_name = create_project_api
         _, span_config = request.getfixturevalue(traces_fixture)
 
         # Navigate to project traces

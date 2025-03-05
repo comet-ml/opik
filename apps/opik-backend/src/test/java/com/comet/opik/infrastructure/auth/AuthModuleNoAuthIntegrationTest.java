@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -11,8 +12,10 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AuthModuleNoAuthIntegrationTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
+    public static final String FEEDBACK_DEFINITION_TEMPLATE = "%s/v1/private/feedback-definitions";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -127,6 +131,27 @@ class AuthModuleNoAuthIntegrationTest {
 
         assertThat(projectPage.content()).isNotEmpty();
         assertThat(projectPage.content()).allMatch(project -> DEFAULT_PROJECT.equals(project.name()));
+    }
+
+    @Test
+    @DisplayName("when getting default feedback definition, then return default feedback")
+    void getById__whenGettingDefaultFeedbackDefinition__thenReturnDefaultFeedback() {
+
+        var id = UUID.fromString("0190babc-62a0-71d2-832a-0feffa4676eb");
+
+        var actualResponse = client.target(FEEDBACK_DEFINITION_TEMPLATE.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .get();
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        var actualEntity = actualResponse.readEntity(FeedbackDefinition.CategoricalFeedbackDefinition.class);
+
+        assertThat(actualEntity.getName()).isEqualTo("User feedback");
+        assertThat(actualEntity.getDetails().getCategories())
+                .hasEntrySatisfying("\uD83D\uDC4D", value -> assertThat(value).isEqualTo(1.0));
+        assertThat(actualEntity.getDetails().getCategories())
+                .hasEntrySatisfying("\uD83D\uDC4E", value -> assertThat(value).isEqualTo(0.0));
     }
 
 }
