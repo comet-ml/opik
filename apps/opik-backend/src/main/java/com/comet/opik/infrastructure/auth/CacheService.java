@@ -7,10 +7,10 @@ import java.util.Optional;
 interface CacheService {
 
     @Builder(toBuilder = true)
-    record AuthCredentials(String userName, String workspaceId) {
+    record AuthCredentials(String userName, String workspaceId, String workspaceName) {
     }
 
-    void cache(String apiKey, String workspaceName, String userName, String workspaceId);
+    void cache(String apiKey, String requestWorkspaceName, String userName, String workspaceId, String resolvedWorkspaceName);
 
     Optional<AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(String apiKey, String workspaceName);
 }
@@ -18,7 +18,7 @@ interface CacheService {
 class NoopCacheService implements CacheService {
 
     @Override
-    public void cache(String apiKey, String workspaceName, String userName, String workspaceId) {
+    public void cache(String apiKey, String requestWorkspaceName, String userName, String workspaceId, String resolvedWorkspaceName) {
         // no-op
     }
 

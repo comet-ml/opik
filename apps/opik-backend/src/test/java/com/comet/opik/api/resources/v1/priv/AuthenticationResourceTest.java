@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -188,6 +189,23 @@ class AuthenticationResourceTest {
                     arguments(UNAUTHORISED_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE));
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void getWorkspaceName(String apiKey, int expectedStatus,
+                              String errorMessage) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            getAndAsserWorkspaceName(apiKey, workspaceName, expectedStatus, errorMessage);
+        }
+
+        private Stream<Arguments> getWorkspaceName() {
+            return Stream.of(
+                    arguments(okApikey, 200, ""),
+                    arguments(fakeApikey, 401, FAKE_API_KEY_MESSAGE),
+                    arguments("", 401, MISSING_API_KEY));
+        }
+
         private void checkProjectAccess(String apiKey,
                 String workspaceName,
                 int expectedStatus,
@@ -204,6 +222,30 @@ class AuthenticationResourceTest {
                 if (expectedStatus == 204) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                     assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError.getMessage()).isEqualTo(expectedErrorMessage);
+                }
+            }
+        }
+
+        private void getAndAsserWorkspaceName(String apiKey,
+                                        String workspaceName,
+                                        int expectedStatus,
+                                        String expectedErrorMessage) {
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("workspace")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (expectedStatus == 200) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+                    assertThat(actualResponse.readEntity(String.class)).isEqualTo(workspaceName);
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
