@@ -10,7 +10,8 @@ interface CacheService {
     record AuthCredentials(String userName, String workspaceId, String workspaceName) {
     }
 
-    void cache(String apiKey, String requestWorkspaceName, String userName, String workspaceId, String resolvedWorkspaceName);
+    void cache(String apiKey, String requestWorkspaceName, String userName, String workspaceId,
+            String resolvedWorkspaceName);
 
     Optional<AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(String apiKey, String workspaceName);
 }
@@ -18,7 +19,8 @@ interface CacheService {
 class NoopCacheService implements CacheService {
 
     @Override
-    public void cache(String apiKey, String requestWorkspaceName, String userName, String workspaceId, String resolvedWorkspaceName) {
+    public void cache(String apiKey, String requestWorkspaceName, String userName, String workspaceId,
+            String resolvedWorkspaceName) {
         // no-op
     }
 

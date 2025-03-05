@@ -25,7 +25,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -192,7 +191,7 @@ class AuthenticationResourceTest {
         @ParameterizedTest
         @MethodSource
         void getWorkspaceName(String apiKey, int expectedStatus,
-                              String errorMessage) {
+                String errorMessage) {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
@@ -231,9 +230,9 @@ class AuthenticationResourceTest {
         }
 
         private void getAndAsserWorkspaceName(String apiKey,
-                                        String workspaceName,
-                                        int expectedStatus,
-                                        String expectedErrorMessage) {
+                String workspaceName,
+                int expectedStatus,
+                String expectedErrorMessage) {
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("workspace")

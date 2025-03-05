@@ -98,7 +98,8 @@ class RemoteAuthService implements AuthService {
         var credentials = validateApiKeyAndGetCredentials(workspaceName, apiKey, path);
         if (credentials.shouldCache()) {
             log.debug("Caching user and workspace id for API key");
-            cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId(), credentials.workspaceName());
+            cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId(),
+                    credentials.workspaceName());
         }
         setCredentialIntoContext(credentials.userName(), credentials.workspaceId(), credentials.workspaceName());
         requestContext.get().setApiKey(apiKey);

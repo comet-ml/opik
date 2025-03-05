@@ -42,7 +42,8 @@ class AuthCredentialsCacheService implements CacheService {
             @NonNull String workspaceId,
             String resolvedWorkspaceName) {
         var key = getKey(apiKey, requestWorkspaceName);
-        redissonClient.getMap(key).putAll(Map.of(USER_NAME_KEY, userName, WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, Optional.ofNullable(resolvedWorkspaceName).orElse(requestWorkspaceName))).block();
+        redissonClient.getMap(key).putAll(Map.of(USER_NAME_KEY, userName, WORKSPACE_ID_KEY, workspaceId,
+                WORKSPACE_NAME_KEY, Optional.ofNullable(resolvedWorkspaceName).orElse(requestWorkspaceName))).block();
         redissonClient.getMap(key).expire(Duration.ofSeconds(ttlInSeconds)).block();
     }
 
