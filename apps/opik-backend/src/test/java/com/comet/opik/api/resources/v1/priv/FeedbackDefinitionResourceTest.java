@@ -1268,9 +1268,10 @@ class FeedbackDefinitionResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .delete()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
         }
+
     }
 }
