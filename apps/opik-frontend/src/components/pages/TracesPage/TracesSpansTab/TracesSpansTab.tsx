@@ -65,7 +65,6 @@ import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { DEFAULT_COLUMN_PINNING } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -529,7 +528,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         c === COLUMN_SELECT_ID
           ? false
           : selectedColumns.includes(c) ||
-            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+            (DEFAULT_TRACES_COLUMN_PINNING.left || []).includes(c),
       );
   }, [columns, selectedColumns]);
 

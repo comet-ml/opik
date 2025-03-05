@@ -9,6 +9,7 @@ import times from "lodash/times";
 import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
 import snakeCase from "lodash/snakeCase";
+import isString from "lodash/isString";
 import { twMerge } from "tailwind-merge";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { JsonNode } from "@/types/shared";
@@ -22,6 +23,23 @@ export const buildDocsUrl = (path: string = "", hash: string = "") => {
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+export const isStringMarkdown = (string: unknown) => {
+  if (isString(string)) {
+    const markdownPatterns = [
+      /#\s\w+/, // headers
+      /\*{2}\w+\*{2}/, // bold
+      /\*\w+\*/, // italics
+      /\[.+\]\(.+\)/, // links
+      /!\[.*\]\(.*\)/, // images
+      /\d\.\s\w+/, // numbered lists
+      /\*\s\w+/, // bullet lists
+    ];
+
+    return markdownPatterns.some((pattern) => pattern.test(string));
+  }
+  return false;
+};
 
 export const isValidJsonObject = (string: string) => {
   let json = null;
