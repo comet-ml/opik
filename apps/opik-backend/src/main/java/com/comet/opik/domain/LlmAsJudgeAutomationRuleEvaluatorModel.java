@@ -16,6 +16,7 @@ import static com.comet.opik.domain.LlmAsJudgeAutomationRuleEvaluatorModel.LlmAs
 public record LlmAsJudgeAutomationRuleEvaluatorModel(
         UUID id,
         UUID projectId,
+        String projectName,
         String name,
         Float samplingRate,
         @Json LlmAsJudgeCode code,

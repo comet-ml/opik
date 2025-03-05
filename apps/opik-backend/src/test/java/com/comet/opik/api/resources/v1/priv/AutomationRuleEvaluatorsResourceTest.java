@@ -374,7 +374,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 boolean isAuthorized,
                 String workspaceName) {
 
-            var projectId = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
                     WORKSPACE_NAME);
 
             int samplesToCreate = 15;
@@ -526,7 +526,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 boolean isAuthorized,
                 String workspaceName) {
 
-            var projectId = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
                     WORKSPACE_NAME);
 
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
@@ -853,7 +853,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
         void delete(boolean includeProjectId) {
-            var projectId = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
                     WORKSPACE_NAME);
             var id1 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
             var id2 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
