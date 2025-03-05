@@ -57,6 +57,7 @@ services:
     hostname: backend
     command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
     environment:
+      # WARNING: Do not set OPIK_VERSION as env var here. It's a multi-stage build, so build and runtime values can differ.
       DOCKER_BUILDKIT: 1
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
