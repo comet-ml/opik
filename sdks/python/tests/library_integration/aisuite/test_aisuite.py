@@ -77,7 +77,9 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 start_time=ANY_BUT_NONE,
@@ -284,7 +286,9 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                         metadata=ANY_DICT,
                         usage={
                             "prompt_tokens": ANY_BUT_NONE,
+                            "prompt_tokens_details": ANY_BUT_NONE,
                             "completion_tokens": ANY_BUT_NONE,
+                            "completion_tokens_details": ANY_BUT_NONE,
                             "total_tokens": ANY_BUT_NONE,
                         },
                         start_time=ANY_BUT_NONE,

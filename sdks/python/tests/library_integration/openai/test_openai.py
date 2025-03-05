@@ -19,7 +19,6 @@ from ...testlib import (
     assert_equal,
 )
 
-
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 
@@ -86,7 +85,9 @@ def test_openai_client_chat_completions_create__happyflow(
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 start_time=ANY_BUT_NONE,
@@ -235,7 +236,9 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                         metadata=ANY_DICT,
                         usage={
                             "prompt_tokens": ANY_BUT_NONE,
+                            "prompt_tokens_details": ANY_BUT_NONE,
                             "completion_tokens": ANY_BUT_NONE,
+                            "completion_tokens_details": ANY_BUT_NONE,
                             "total_tokens": ANY_BUT_NONE,
                         },
                         start_time=ANY_BUT_NONE,
@@ -312,7 +315,9 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         metadata=ANY_DICT,
                         usage={
                             "prompt_tokens": ANY_BUT_NONE,
+                            "prompt_tokens_details": ANY_BUT_NONE,
                             "completion_tokens": ANY_BUT_NONE,
+                            "completion_tokens_details": ANY_BUT_NONE,
                             "total_tokens": ANY_BUT_NONE,
                         },
                         start_time=ANY_BUT_NONE,
@@ -380,7 +385,9 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 start_time=ANY_BUT_NONE,
@@ -458,7 +465,9 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         metadata=ANY_DICT,
                         usage={
                             "prompt_tokens": ANY_BUT_NONE,
+                            "prompt_tokens_details": ANY_BUT_NONE,
                             "completion_tokens": ANY_BUT_NONE,
+                            "completion_tokens_details": ANY_BUT_NONE,
                             "total_tokens": ANY_BUT_NONE,
                         },
                         start_time=ANY_BUT_NONE,
@@ -538,7 +547,9 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 start_time=ANY_BUT_NONE,
@@ -608,7 +619,9 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 start_time=ANY_BUT_NONE,
@@ -677,7 +690,9 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 start_time=ANY_BUT_NONE,
@@ -814,7 +829,9 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 start_time=ANY_BUT_NONE,
@@ -845,7 +862,9 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 metadata=ANY_DICT,
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 start_time=ANY_BUT_NONE,
@@ -918,7 +937,9 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
                 type="llm",
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
@@ -986,7 +1007,9 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
                 type="llm",
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
@@ -1056,7 +1079,9 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
                 type="llm",
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
@@ -1126,7 +1151,9 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
                 type="llm",
                 usage={
                     "prompt_tokens": ANY_BUT_NONE,
+                    "prompt_tokens_details": ANY_BUT_NONE,
                     "completion_tokens": ANY_BUT_NONE,
+                    "completion_tokens_details": ANY_BUT_NONE,
                     "total_tokens": ANY_BUT_NONE,
                 },
                 spans=[],
