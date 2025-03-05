@@ -40,7 +40,14 @@ def prepare_traces_and_spans_for_copy(
         span_.project_name = destination_project_name
         span_.trace_id = trace_id_mapping[span_.trace_id]
         if span_.parent_span_id:
-            span_.parent_span_id = trace_id_mapping.get(span_.parent_span_id)
+            if span_.parent_span_id not in span_id_mapping:
+                LOGGER.debug(
+                    "While copying a span to a new project, found orphan span with parent span id that will not be copied with id: %s and parent_span id: %s",
+                    span_.id,
+                    span_.parent_span_id,
+                )
+                continue
+            span_.parent_span_id = span_id_mapping.get(span_.parent_span_id)
 
         span_.id = span_id_mapping[span_.id]
         spans_copy.append(span_)
