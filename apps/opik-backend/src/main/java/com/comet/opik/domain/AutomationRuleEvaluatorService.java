@@ -257,7 +257,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     projectId);
             return new AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(),
                     total,
-                    enchanceWithProjectName(automationRuleEvaluators, workspaceId, handle));
+                    automationRuleEvaluators);
         });
     }
 
@@ -288,20 +288,5 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     @Override
     public Mono<LogPage> getLogs(@NonNull LogCriteria criteria) {
         return logsDAO.findLogs(criteria);
-    }
-
-    private List<AutomationRuleEvaluator<?>> enchanceWithProjectName(
-            List<AutomationRuleEvaluator<?>> automationRuleEvaluators, String workspaceId,
-            Handle handle) {
-        Set<UUID> projectIds = automationRuleEvaluators.stream().map(AutomationRuleEvaluator::getProjectId)
-                .collect(Collectors.toSet());
-        var dao = handle.attach(ProjectDAO.class);
-        Map<UUID, String> projectIdToName = dao.findByIds(projectIds, workspaceId).stream()
-                .collect(Collectors.toMap(Project::id, Project::name));
-
-        return automationRuleEvaluators.stream()
-                .map(evaluator -> evaluator.toBuilder().projectName(projectIdToName.get(evaluator.getProjectId()))
-                        .build())
-                .collect(Collectors.toList());
     }
 }
