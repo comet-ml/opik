@@ -1,7 +1,13 @@
-from typing import get_type_hints
+import inspect
+import sys
+from typing import get_origin
+
+if sys.version_info < (3, 11):
+    from typing_extensions import NotRequired
+else:
+    from typing import NotRequired
 
 import pytest
-from typing_extensions import NotRequired
 
 from opik.types import UsageDict
 from opik.validation import usage
@@ -74,14 +80,14 @@ def test_usage_validator(usage_dict, is_valid):
     if tested.validate().ok():
         assert tested.parsed_usage.full_usage == usage_dict
 
-        usage_dict_type_hints = get_type_hints(UsageDict)
+        usage_dict_type_hints = inspect.get_annotations(UsageDict)
         supported_usage_keys = set(tested.parsed_usage.supported_usage.keys())
 
         usage_dict_all_keys = set(usage_dict_type_hints.keys())
         usage_dict_keys_without_no_required = {
             key
             for key, value in usage_dict_type_hints.items()
-            if getattr(value, "__origin__", None) is not NotRequired
+            if get_origin(value) is not NotRequired
         }
 
         assert supported_usage_keys in [
