@@ -47,6 +47,8 @@ import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -73,7 +75,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -138,6 +140,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("Traces Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class TracesResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
@@ -153,18 +156,18 @@ class TracesResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
-    private static final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
 
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -208,7 +211,7 @@ class TracesResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -1075,7 +1078,10 @@ class TracesResourceTest {
                                         TraceFilter.builder()
                                                 .field(filter.getKey())
                                                 .operator(operator)
-                                                .key(getKey(filter.getKey()))
+                                                // if no value is expected, create an invalid filter by an empty key
+                                                .key(Operator.NO_VALUE_OPERATORS.contains(operator)
+                                                        ? ""
+                                                        : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
                                 default -> Stream.of(TraceFilter.builder()
@@ -3408,6 +3414,78 @@ class TracesResourceTest {
 
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
                     values.getT1(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered(
+                Operator operator,
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                TestAssertion testAssertion,
+                TestAssertionArgs<Trace> testAssertionArgs) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .threadId(null)
+                            .feedbackScores(trace.feedbackScores().stream()
+                                    .map(feedbackScore -> feedbackScore.toBuilder()
+                                            .value(factory.manufacturePojo(BigDecimal.class))
+                                            .build())
+                                    .collect(Collectors.toList()))
+                            .totalEstimatedCost(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
+            traces.forEach(trace -> trace.feedbackScores()
+                    .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.FEEDBACK_SCORES)
+                    .operator(operator)
+                    .key(traces.getFirst().feedbackScores().getFirst().name())
+                    .value("")
+                    .build());
+            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
+                    values.getT1(), filters, Map.of());
+        }
+
+        private Stream<Arguments> getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
+            return Stream.of(
+                    Arguments.of(Operator.IS_NOT_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            getTracesAssertionMethod(),
+                            getTracesAssertionMethodArgs()),
+                    Arguments.of(Operator.IS_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            getTracesAssertionMethod(),
+                            getTracesAssertionMethodArgs()),
+                    Arguments.of(Operator.IS_NOT_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            getStatsAssertionMethod(),
+                            getStatsAssertionMethodArgs()),
+                    Arguments.of(Operator.IS_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            getStatsAssertionMethod(),
+                            getStatsAssertionMethodArgs()));
         }
 
         @ParameterizedTest

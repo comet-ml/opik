@@ -118,7 +118,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
     id: COLUMN_COMMENTS_ID,
     label: "Comments",
-    type: COLUMN_TYPE.list,
+    type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
   },
 ];
@@ -131,6 +131,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "feedback_scores",
+  COLUMN_COMMENTS_ID,
 ];
 
 const ExperimentsPage: React.FunctionComponent = () => {

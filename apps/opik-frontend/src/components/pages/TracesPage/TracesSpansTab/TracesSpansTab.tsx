@@ -51,8 +51,10 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel, {
   LastSection,
   LastSectionParam,
@@ -64,7 +66,6 @@ import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { DEFAULT_COLUMN_PINNING } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
-import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -166,42 +167,6 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   },
 ];
 
-const TRACES_PAGE_COLUMNS = [
-  ...SHARED_COLUMNS,
-  {
-    id: "error_info",
-    label: "Error",
-    type: COLUMN_TYPE.string,
-    cell: ErrorCell as never,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: COLUMN_COMMENTS_ID,
-    label: "Comments",
-    type: COLUMN_TYPE.list,
-    cell: CommentsCell as never,
-  },
-];
-
-export const TRACES_PAGE_FILTERS_COLUMNS = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
-
-  ...SHARED_COLUMNS,
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
-  },
-];
-
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
   right: [],
@@ -212,6 +177,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "input",
   "output",
   "duration",
+  COLUMN_COMMENTS_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
@@ -243,6 +209,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     updateType: "replaceIn",
   });
 
+  const [threadId = "", setThreadId] = useQueryParam("thread", StringParam, {
+    updateType: "replaceIn",
+  });
+
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
@@ -263,9 +233,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
-  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
-    updateType: "replaceIn",
-  });
+  const [filters = [], setFilters] = useQueryParam(
+    `${type}_filters`,
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const filtersConfig = useMemo(
     () => ({
@@ -443,6 +417,77 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [handleRowClick],
   );
 
+  const handleThreadIdClick = useCallback(
+    (row?: Trace) => {
+      if (!row) return;
+      setThreadId(row.thread_id);
+      setTraceId(row.id);
+    },
+    [setThreadId, setTraceId],
+  );
+
+  const columnData = useMemo(() => {
+    return [
+      ...SHARED_COLUMNS,
+      ...(type === TRACE_DATA_TYPE.traces
+        ? [
+            {
+              id: "thread_id",
+              label: "Thread ID",
+              type: COLUMN_TYPE.string,
+              cell: LinkCell as never,
+              customMeta: {
+                callback: handleThreadIdClick,
+                asId: true,
+              },
+            },
+          ]
+        : []),
+      {
+        id: "error_info",
+        label: "Error",
+        type: COLUMN_TYPE.string,
+        cell: ErrorCell as never,
+      },
+      {
+        id: "created_by",
+        label: "Created by",
+        type: COLUMN_TYPE.string,
+      },
+      {
+        id: COLUMN_COMMENTS_ID,
+        label: "Comments",
+        type: COLUMN_TYPE.string,
+        cell: CommentsCell as never,
+      },
+    ];
+  }, [type, handleThreadIdClick]);
+
+  const filtersColumnData = useMemo(() => {
+    return [
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+      },
+      ...SHARED_COLUMNS,
+      ...(type === TRACE_DATA_TYPE.traces
+        ? [
+            {
+              id: "thread_id",
+              label: "Thread ID",
+              type: COLUMN_TYPE.string,
+            },
+          ]
+        : []),
+      {
+        id: COLUMN_FEEDBACK_SCORES_ID,
+        label: "Feedback scores",
+        type: COLUMN_TYPE.numberDictionary,
+      },
+    ];
+  }, [type]);
+
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Trace | Span>(),
@@ -456,13 +501,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           asId: true,
         },
       }),
-      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
-        TRACES_PAGE_COLUMNS,
-        {
-          columnsOrder,
-          selectedColumns,
-        },
-      ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(columnData, {
+        columnsOrder,
+        selectedColumns,
+      }),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
         scoresColumnsData,
         {
@@ -473,6 +515,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     ];
   }, [
     handleRowClick,
+    columnData,
     columnsOrder,
     selectedColumns,
     scoresColumnsData,
@@ -502,9 +545,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const handleClose = useCallback(() => {
+    setThreadId("");
     setTraceId("");
     setSpanId("");
-  }, [setSpanId, setTraceId]);
+  }, [setSpanId, setTraceId, setThreadId]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -546,7 +590,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             dimension="sm"
           ></SearchInput>
           <FiltersButton
-            columns={TRACES_PAGE_FILTERS_COLUMNS}
+            columns={filtersColumnData}
             config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
@@ -583,7 +627,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={TRACES_PAGE_COLUMNS}
+            columns={columnData}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
@@ -619,13 +663,23 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       </div>
       <TraceDetailsPanel
         projectId={projectId}
-        traceId={traceId as string}
-        spanId={spanId as string}
+        traceId={traceId!}
+        spanId={spanId!}
         setSpanId={setSpanId}
+        setThreadId={setThreadId}
         hasPreviousRow={hasPrevious}
         hasNextRow={hasNext}
+        open={Boolean(traceId) && !threadId}
         onClose={handleClose}
         onRowChange={handleRowChange}
+      />
+      <ThreadDetailsPanel
+        projectId={projectId}
+        traceId={traceId!}
+        setTraceId={setTraceId}
+        threadId={threadId!}
+        open={Boolean(threadId)}
+        onClose={handleClose}
       />
     </div>
   );

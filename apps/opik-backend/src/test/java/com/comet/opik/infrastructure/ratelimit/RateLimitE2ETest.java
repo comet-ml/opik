@@ -18,6 +18,8 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -42,7 +44,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -78,17 +80,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Rate limit Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class RateLimitE2ETest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/traces";
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
-    private static final WireMockUtils.WireMockRuntime wireMock;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
     private static final long LIMIT = 4L;
     private static final long LIMIT_DURATION_IN_SECONDS = 1L;
@@ -111,7 +114,7 @@ class RateLimitE2ETest {
         }
     }
 
-    static {
+    {
         Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -119,7 +122,7 @@ class RateLimitE2ETest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
@@ -156,11 +159,11 @@ class RateLimitE2ETest {
         wireMock.server().stop();
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String user) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String user) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, user);
     }
 
-    private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName, String workspaceId,
+    private void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName, String workspaceId,
             String user) {
         AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
                 user);

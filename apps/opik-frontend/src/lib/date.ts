@@ -45,8 +45,52 @@ export const secondsToMilliseconds = (seconds: number) => {
   return seconds * 1000;
 };
 
-export const formatDuration = (value?: number | null) => {
-  return isUndefined(value) || isNull(value) || isNaN(value)
-    ? "NA"
-    : `${millisecondsToSeconds(value)}s`;
+export const formatDuration = (value?: number | null, onlySeconds = true) => {
+  if (isUndefined(value) || isNull(value) || isNaN(value)) {
+    return "NA";
+  }
+
+  const totalSeconds = millisecondsToSeconds(value);
+
+  if (onlySeconds) {
+    return `${totalSeconds}s`;
+  } else {
+    let years = 0,
+      months = 0,
+      weeks = 0,
+      days = 0,
+      hours = 0,
+      minutes = 0,
+      seconds = totalSeconds;
+    if (seconds >= 60 * 60 * 24 * 365) {
+      years = Math.floor(seconds / (60 * 60 * 24 * 365));
+      seconds %= 60 * 60 * 24 * 365;
+    }
+    if (seconds >= 60 * 60 * 24 * 30) {
+      months = Math.floor(seconds / (60 * 60 * 24 * 30));
+      seconds %= 60 * 60 * 24 * 30;
+    }
+    if (seconds >= 60 * 60 * 24 * 7) {
+      weeks = Math.floor(seconds / (60 * 60 * 24 * 7));
+      seconds %= 60 * 60 * 24 * 7;
+    }
+    if (seconds >= 60 * 60 * 24) {
+      days = Math.floor(seconds / (60 * 60 * 24));
+      seconds %= 60 * 60 * 24;
+    }
+    if (seconds >= 60 * 60) {
+      hours = Math.floor(seconds / (60 * 60));
+      seconds %= 60 * 60;
+    }
+    if (seconds >= 60) {
+      minutes = Math.floor(seconds / 60);
+      seconds = round(seconds % 60, 1);
+    }
+
+    return `${years ? years + "y " : ""}${months ? months + "mth " : ""}${
+      weeks ? weeks + "w " : ""
+    }${days ? days + "d " : ""}${hours ? hours + "h " : ""}${
+      minutes ? minutes + "m " : ""
+    }${seconds}s`.trim();
+  }
 };
