@@ -10,13 +10,15 @@ from sdk_helpers import (
 )
 import opik
 import logging
+import allure
 
 logger = logging.getLogger(__name__)
 
 
 class TestDatasetsCrud:
+    @allure.title("Dataset creation via traces page (add traces to new dataset)")
     def test_create_dataset_ui_add_traces_to_new_dataset(
-        self, page: Page, create_project, create_10_test_traces
+        self, page: Page, create_project_api, create_10_test_traces
     ):
         """Test dataset creation via 'add to new dataset' in traces page.
 
@@ -29,7 +31,7 @@ class TestDatasetsCrud:
         """
         logger.info("Starting dataset creation via traces page test")
         dataset_name = "automated_tests_dataset"
-        proj_name = create_project
+        proj_name = create_project_api
 
         # Navigate to project and traces
         logger.info(f"Navigating to project {proj_name}")
@@ -73,6 +75,7 @@ class TestDatasetsCrud:
         "dataset_fixture", ["create_dataset_ui", "create_dataset_sdk"]
     )
     @pytest.mark.sanity
+    @allure.title("Dataset visibility - {dataset_fixture}")
     def test_dataset_visibility(
         self, request, page: Page, client: opik.Opik, dataset_fixture
     ):
@@ -124,6 +127,7 @@ class TestDatasetsCrud:
         "dataset_fixture",
         ["create_dataset_sdk", "create_dataset_ui"],
     )
+    @allure.title("Dataset name update - {dataset_fixture}")
     def test_dataset_name_update(
         self, request, page: Page, client: opik.Opik, dataset_fixture
     ):
@@ -218,6 +222,9 @@ class TestDatasetsCrud:
             ("create_dataset_ui", "sdk"),
             ("create_dataset_ui", "ui"),
         ],
+    )
+    @allure.title(
+        "Dataset deletion - {dataset_fixture} and delete via {deletion_method}"
     )
     def test_dataset_deletion(
         self, request, page: Page, client: opik.Opik, dataset_fixture, deletion_method

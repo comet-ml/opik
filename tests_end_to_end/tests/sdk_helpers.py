@@ -15,7 +15,7 @@ def get_opik_api_client():
     )
 
 
-def create_project_api(name: str):
+def create_project_via_api(name: str):
     client = get_opik_api_client()
     client.projects.create_project(name=name)
 
