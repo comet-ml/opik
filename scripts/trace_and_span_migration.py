@@ -1,8 +1,3 @@
-"""
-Downloading traces: 25000 traces [00:30, 818.92 traces/s]
-Downloading spans: 25000 spans [00:59, 418.66 spans/s]
-
-"""
 import datetime
 import logging
 import os
@@ -10,13 +5,11 @@ import pathlib
 import pickle
 import time
 from collections import deque
-from typing import List
 
 import tqdm
 
 from opik import Opik, id_helpers
 from opik.api_objects import span, trace
-from opik.api_objects.trace import migration
 
 logging.basicConfig(
     # level=logging.DEBUG,
@@ -307,7 +300,7 @@ def upload_traces(client: Opik):
 
     for trace_file in trace_files:
         try:
-            file_path = os.path.join(DATA_DIR, trace_file)
+            file_path = os.path.join(CONVERTED_DATA_DIR, trace_file)
             LOGGER.info(f"Uploading traces from file: {file_path} to project: {DESTINATION_PROJECT_NAME}...")
             with open(file_path, "rb") as f:
                 trace_data = pickle.load(f)
@@ -334,7 +327,7 @@ def upload_traces(client: Opik):
 
 
 def upload_spans(client: Opik):
-    span_files = [f for f in os.listdir(CONVERTED_DATA_DIR) if f.startswith("traces_") and f.endswith(".pkl")]
+    span_files = [f for f in os.listdir(CONVERTED_DATA_DIR) if f.startswith("spans_") and f.endswith(".pkl")]
     span_files = sorted(span_files)
 
     last_call_times = deque(maxlen=RATE_LIMIT)
@@ -343,7 +336,7 @@ def upload_spans(client: Opik):
 
     for span_file in span_files:
         try:
-            file_path = os.path.join(DATA_DIR, span_file)
+            file_path = os.path.join(CONVERTED_DATA_DIR, span_file)
             LOGGER.info(f"Uploading spans from file: {file_path} to project: {DESTINATION_PROJECT_NAME}...")
             with open(file_path, "rb") as f:
                 span_data = pickle.load(f)
@@ -372,13 +365,14 @@ def upload_spans(client: Opik):
 if __name__ == "__main__":
     start_time = datetime.datetime.now()
 
-    # download_traces(client)
-    # download_spans(client)
+    download_traces(client)
+    download_spans(client)
 
-    # convert_traces()
-    # convert_spans()
+    convert_traces()
+    convert_spans()
 
     upload_traces(my_client)
-    # upload_spans(my_client)
+    time.sleep(90)
+    upload_spans(my_client)
 
     LOGGER.info(datetime.datetime.now() - start_time)
