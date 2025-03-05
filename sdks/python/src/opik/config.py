@@ -22,7 +22,7 @@ PathType = Union[
 
 _SESSION_CACHE_DICT: Dict[str, Any] = {}
 
-MAX_BATCH_SIZE_MB = 50
+MAX_BATCH_SIZE_MB = 5
 
 OPIK_URL_CLOUD: Final[str] = "https://www.comet.com/opik/api"
 OPIK_URL_LOCAL: Final[str] = "http://localhost:5173/api"
@@ -124,7 +124,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If it's not set - there is no timeout.
     """
 
-    background_workers: int = 8
+    background_workers: int = 4
     """
     The amount of background threads that submit data to the backend.
     """
