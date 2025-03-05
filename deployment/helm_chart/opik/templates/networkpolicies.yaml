@@ -1,4 +1,4 @@
-{{- if and ".Values.component.python-backend.enabled" ".Values.component.python-backend.networkPolicy.enabled" }}
+{{- if and (index .Values.component "python-backend" "enabled") (index .Values.component "python-backend" "networkPolicy" "enabled") }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
