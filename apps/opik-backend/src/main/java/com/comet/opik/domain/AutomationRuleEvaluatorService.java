@@ -252,13 +252,12 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                     AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                             })
                             .toList());
-            enchanceWithProjectName(automationRuleEvaluators, workspaceId, handle);
 
             log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(),
                     projectId);
             return new AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(),
                     total,
-                    automationRuleEvaluators);
+                    enchanceWithProjectName(automationRuleEvaluators, workspaceId, handle));
         });
     }
 
@@ -291,14 +290,18 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return logsDAO.findLogs(criteria);
     }
 
-    private void enchanceWithProjectName(List<AutomationRuleEvaluator<?>> automationRuleEvaluators, String workspaceId,
+    private List<AutomationRuleEvaluator<?>> enchanceWithProjectName(
+            List<AutomationRuleEvaluator<?>> automationRuleEvaluators, String workspaceId,
             Handle handle) {
         Set<UUID> projectIds = automationRuleEvaluators.stream().map(AutomationRuleEvaluator::getProjectId)
                 .collect(Collectors.toSet());
         var dao = handle.attach(ProjectDAO.class);
         Map<UUID, String> projectIdToName = dao.findByIds(projectIds, workspaceId).stream()
                 .collect(Collectors.toMap(Project::id, Project::name));
-        automationRuleEvaluators
-                .forEach(evaluator -> evaluator.setProjectName(projectIdToName.get(evaluator.getProjectId())));
+
+        return automationRuleEvaluators.stream()
+                .map(evaluator -> evaluator.toBuilder().projectName(projectIdToName.get(evaluator.getProjectId()))
+                        .build())
+                .collect(Collectors.toList());
     }
 }
