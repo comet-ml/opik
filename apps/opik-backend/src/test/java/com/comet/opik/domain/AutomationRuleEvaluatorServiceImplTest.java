@@ -129,7 +129,7 @@ class AutomationRuleEvaluatorServiceImplTest {
 
         var projectName = "project-" + RandomStringUtils.randomAlphanumeric(20);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        var evaluator = createEvaluator(evaluatorClass, projectId);
+        var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
         var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
@@ -159,13 +159,14 @@ class AutomationRuleEvaluatorServiceImplTest {
     }
 
     private AutomationRuleEvaluator<?> createEvaluator(
-            Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, UUID projectId) {
+            Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, UUID projectId, String projectName) {
         return Optional.of(
                 factory.manufacturePojo(evaluatorClass).toBuilder()
                         .projectId(projectId)
                         .build())
                 .map(e -> e.toBuilder()
                         .id(evaluatorResourceClient.createEvaluator(e, WORKSPACE_NAME, API_KEY))
+                        .projectName(projectName)
                         .build())
                 .orElseThrow();
     }
@@ -195,14 +196,14 @@ class AutomationRuleEvaluatorServiceImplTest {
 
         var projectName = "project-" + RandomStringUtils.randomAlphanumeric(20);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        var evaluator = createEvaluator(evaluatorClass, projectId);
+        var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
         var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
 
-        var evaluator2 = createEvaluator(evaluatorClass, projectId);
+        var evaluator2 = createEvaluator(evaluatorClass, projectId, projectName);
 
         judges = service.findAll(projectId, WORKSPACE_ID, evaluator2.getType());
 
@@ -229,7 +230,7 @@ class AutomationRuleEvaluatorServiceImplTest {
 
         var projectName = "project-" + RandomStringUtils.randomAlphanumeric(20);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        var evaluator = createEvaluator(evaluatorClass, projectId);
+        var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
         var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
@@ -253,7 +254,7 @@ class AutomationRuleEvaluatorServiceImplTest {
 
         var projectName = "project-" + RandomStringUtils.randomAlphanumeric(20);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        var evaluator = createEvaluator(evaluatorClass, projectId);
+        var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
         var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
 
