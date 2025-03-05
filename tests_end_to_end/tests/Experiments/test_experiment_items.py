@@ -9,12 +9,14 @@ from sdk_helpers import (
 )
 from collections import Counter
 import logging
+import allure
 
 logger = logging.getLogger(__name__)
 
 
 class TestExperimentItemsCrud:
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
+    @allure.title("Experiment items creation and visibility")
     def test_all_experiment_items_created(self, page: Page, mock_experiment):
         """Test experiment items creation and visibility in both UI and backend.
 
@@ -107,6 +109,7 @@ class TestExperimentItemsCrud:
             ) from e
 
     @pytest.mark.browser_context_args(permissions=["clipboard-read"])
+    @allure.title("Experiment item deletion")
     def test_delete_experiment_items(self, page: Page, mock_experiment):
         """Test experiment item deletion and verification in both UI and backend.
 

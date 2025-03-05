@@ -37,6 +37,8 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -66,7 +68,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -130,6 +132,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class ExperimentsResourceTest {
     private static final String URL_TEMPLATE = "%s/v1/private/experiments";
     private static final String ITEMS_PATH = "/items";
@@ -155,18 +158,16 @@ class ExperimentsResourceTest {
 
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
+    private final AppContextConfig contextConfig;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    private static final AppContextConfig contextConfig;
-
-    static {
+    {
         Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -183,7 +184,7 @@ class ExperimentsResourceTest {
                 .mockEventBus(Mockito.mock(EventBus.class))
                 .build();
 
-        app = newTestDropwizardAppExtension(contextConfig);
+        APP = newTestDropwizardAppExtension(contextConfig);
     }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -202,7 +203,7 @@ class ExperimentsResourceTest {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         }
 
@@ -221,11 +222,11 @@ class ExperimentsResourceTest {
         this.datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
-    private static void mockSessionCookieTargetWorkspace(
+    private void mockSessionCookieTargetWorkspace(
             String sessionToken, String workspaceName, String workspaceId) {
         AuthTestUtils.mockSessionCookieTargetWorkspace(
                 wireMock.server(), sessionToken, workspaceName, workspaceId, USER);
@@ -260,7 +261,7 @@ class ExperimentsResourceTest {
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
-                                                    401)))));
+                                                    HttpStatus.SC_UNAUTHORIZED)))));
         }
 
         @ParameterizedTest
@@ -283,11 +284,11 @@ class ExperimentsResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     var actualEntity = actualResponse.readEntity(Experiment.class);
                     assertThat(actualEntity.id()).isEqualTo(expectedExperiment.id());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
@@ -310,9 +311,9 @@ class ExperimentsResourceTest {
                     .post(Entity.json(expectedExperiment))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
@@ -344,11 +345,11 @@ class ExperimentsResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     var actualEntity = actualResponse.readEntity(ExperimentPage.class);
                     assertThat(actualEntity.content()).hasSize(1);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
@@ -378,10 +379,10 @@ class ExperimentsResourceTest {
                     .post(Entity.json(deleteRequest))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
@@ -412,10 +413,10 @@ class ExperimentsResourceTest {
                     .post(Entity.json(deleteRequest))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
@@ -439,10 +440,10 @@ class ExperimentsResourceTest {
                     .post(Entity.json(request))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
@@ -470,12 +471,12 @@ class ExperimentsResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
                     var actualEntity = actualResponse.readEntity(ExperimentItem.class);
                     assertThat(actualEntity.id()).isEqualTo(id);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
@@ -511,7 +512,7 @@ class ExperimentsResourceTest {
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
-                                                    401)))));
+                                                    HttpStatus.SC_UNAUTHORIZED)))));
         }
 
         @ParameterizedTest
@@ -531,9 +532,9 @@ class ExperimentsResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
@@ -554,9 +555,9 @@ class ExperimentsResourceTest {
                     .post(Entity.json(expectedExperiment))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
@@ -591,11 +592,11 @@ class ExperimentsResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     var actualEntity = actualResponse.readEntity(ExperimentPage.class);
                     assertThat(actualEntity.content()).hasSize(1);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
@@ -624,10 +625,10 @@ class ExperimentsResourceTest {
                     .post(Entity.json(deleteRequest))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
@@ -655,10 +656,10 @@ class ExperimentsResourceTest {
                     .post(Entity.json(deleteRequest))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
@@ -678,10 +679,10 @@ class ExperimentsResourceTest {
                     .post(Entity.json(request))) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
@@ -710,11 +711,11 @@ class ExperimentsResourceTest {
                     .get()) {
 
                 if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     var actualEntity = actualResponse.readEntity(ExperimentItem.class);
                     assertThat(actualEntity.id()).isEqualTo(expectedExperiment.id());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
@@ -746,7 +747,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var datasetName = RandomStringUtils.randomAlphanumeric(10);
+            var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
             var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class)
                     .stream()
                     .map(experiment -> experimentResourceClient.createPartialExperiment()
@@ -775,10 +776,10 @@ class ExperimentsResourceTest {
         }
 
         Stream<Arguments> findByName() {
-            var exactName = RandomStringUtils.randomAlphanumeric(10);
-            var exactNameIgnoreCase = RandomStringUtils.randomAlphanumeric(10);
-            var partialName = RandomStringUtils.randomAlphanumeric(10);
-            var partialNameIgnoreCase = RandomStringUtils.randomAlphanumeric(10);
+            var exactName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var exactNameIgnoreCase = RandomStringUtils.secure().nextAlphanumeric(10);
+            var partialName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var partialNameIgnoreCase = RandomStringUtils.secure().nextAlphanumeric(10);
             return Stream.of(
                     arguments(exactName, exactName),
                     arguments(exactNameIgnoreCase, exactNameIgnoreCase.toLowerCase()),
@@ -830,8 +831,8 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var datasetName = RandomStringUtils.randomAlphanumeric(10);
-            var name = RandomStringUtils.randomAlphanumeric(10);
+            var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var name = RandomStringUtils.secure().nextAlphanumeric(10);
 
             var experiments = PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class)
                     .stream()
@@ -888,7 +889,7 @@ class ExperimentsResourceTest {
                 var actualPage = actualResponse.readEntity(ExperimentPage.class);
                 var actualExperiments = actualPage.content();
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
                 assertThat(actualPage.page()).isEqualTo(page);
                 assertThat(actualPage.size()).isEqualTo(pageSize);
@@ -965,7 +966,7 @@ class ExperimentsResourceTest {
 
             createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
-            int totalNumberOfScores = traceIdToScoresMap.values().size();
+            int totalNumberOfScores = traceIdToScoresMap.size();
             int totalNumberOfScoresPerTrace = totalNumberOfScores / traces.size(); // This will be 3 if traces.size() == 5
 
             var experimentItems = IntStream.range(0, totalNumberOfScores)
@@ -996,8 +997,8 @@ class ExperimentsResourceTest {
 
             // Add comments to trace
             List<Comment> comments = IntStream.range(0, 5)
-                    .mapToObj(
-                            i -> traceResourceClient.generateAndCreateComment(trace1.id(), apiKey, workspaceName, 201))
+                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(
+                            trace1.id(), apiKey, workspaceName, HttpStatus.SC_CREATED))
                     .toList();
 
             Set<UUID> expectedExperimentIdsWithComments = getExpectedExperimentIdsWithComments(experiments,
@@ -1014,7 +1015,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 var actualPage = actualResponse.readEntity(ExperimentPage.class);
                 var actualExperiments = actualPage.content();
 
@@ -1105,7 +1106,7 @@ class ExperimentsResourceTest {
 
             createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
-            int totalNumberOfScores = traceIdToScoresMap.values().size();
+            int totalNumberOfScores = traceIdToScoresMap.size();
 
             var experimentItems = IntStream.range(0, totalNumberOfScores)
                     .mapToObj(i -> podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -1143,7 +1144,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 var actualPage = actualResponse.readEntity(ExperimentPage.class);
                 var actualExperiments = actualPage.content();
 
@@ -1361,14 +1362,14 @@ class ExperimentsResourceTest {
 
             createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
-            int totalNumberOfScores = traceIdToScoresMap.values().size();
+            int totalNumberOfScores = traceIdToScoresMap.size();
 
             var experimentItems = IntStream.range(0, totalNumberOfScores)
                     .mapToObj(i -> podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(expectedExperiment.id())
-                            .traceId(traces.get(0).id())
+                            .traceId(traces.getFirst().id())
                             .feedbackScores(
-                                    traceIdToScoresMap.get(traces.get(0).id()).stream()
+                                    traceIdToScoresMap.get(traces.getFirst().id()).stream()
                                             .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                                             .toList())
                             .build())
@@ -1515,7 +1516,7 @@ class ExperimentsResourceTest {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .delete()) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
@@ -1588,7 +1589,7 @@ class ExperimentsResourceTest {
             var actualPage = actualResponse.readEntity(ExperimentPage.class);
             var actualExperiments = actualPage.content();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
             assertThat(actualPage.page()).isEqualTo(page);
             assertThat(actualPage.size()).isEqualTo(expectedExperiments.size());
@@ -1635,7 +1636,7 @@ class ExperimentsResourceTest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .put(Entity.json(feedbackScoreBatch))) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
@@ -1757,7 +1758,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(new Identifier(expectedExperiment.name())))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 var actualExperiment = actualResponse.readEntity(Experiment.class);
                 assertThat(actualExperiment.id()).isEqualTo(expectedExperiment.id());
 
@@ -1771,7 +1772,8 @@ class ExperimentsResourceTest {
         @Test
         void getByNameNotFound() {
             String name = UUID.randomUUID().toString();
-            var expectedError = new ErrorMessage(404, "Not found experiment with name '%s'".formatted(name));
+            var expectedError = new ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                    "Not found experiment with name '%s'".formatted(name));
             try (var actualResponse = client.target(getExperimentsPath())
                     .path("retrieve")
                     .request()
@@ -1779,7 +1781,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(new Identifier(name)))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
 
                 var actualError = actualResponse.readEntity(ErrorMessage.class);
 
@@ -1830,7 +1832,7 @@ class ExperimentsResourceTest {
             // Add comments to trace
             List<Comment> expectedComments = IntStream.range(0, 5)
                     .mapToObj(i -> traceResourceClient.generateAndCreateComment(trace1.id(), API_KEY, TEST_WORKSPACE,
-                            201))
+                            HttpStatus.SC_CREATED))
                     .toList();
 
             int totalNumberOfScores = 15;
@@ -1868,7 +1870,7 @@ class ExperimentsResourceTest {
         @Test
         void createExperimentWithPromptVersionLink() {
 
-            String promptName = RandomStringUtils.randomAlphanumeric(10);
+            String promptName = RandomStringUtils.secure().nextAlphanumeric(10);
             Prompt prompt = Prompt.builder()
                     .name(promptName)
                     .build();
@@ -1903,25 +1905,21 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        void createConflict() {
-            var experiment = generateExperiment();
+        void createWithSameIdIsIdempotent() {
+            var expectedExperiment = generateExperiment();
+            createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 
-            var expectedError = new ErrorMessage(
-                    409, "Already exists experiment with id '%s'".formatted(experiment.id()));
-            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+            var unexpectedExperiment = generateExperiment().toBuilder().id(expectedExperiment.id()).build();
+            var actualId = experimentResourceClient.create(unexpectedExperiment, API_KEY, TEST_WORKSPACE);
 
-            try (var actualResponse = client.target(getExperimentsPath())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(experiment))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-
-                var actualError = actualResponse.readEntity(ErrorMessage.class);
-
-                assertThat(actualError).isEqualTo(expectedError);
-            }
+            // The event isn't posted when the experiment already exists.
+            Mockito.verifyNoMoreInteractions(defaultEventBus);
+            assertThat(actualId).isEqualTo(expectedExperiment.id());
+            var actualExperiment = getAndAssert(expectedExperiment.id(), expectedExperiment, TEST_WORKSPACE, API_KEY);
+            assertThat(actualExperiment)
+                    .usingRecursiveComparison()
+                    .ignoringFields(EXPERIMENT_IGNORED_FIELDS)
+                    .isNotEqualTo(unexpectedExperiment);
         }
 
         @Test
@@ -1959,7 +1957,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(experiment))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
                 var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
 
@@ -1970,7 +1968,8 @@ class ExperimentsResourceTest {
         @Test
         void getNotFound() {
             UUID id = GENERATOR.generate();
-            var expectedError = new ErrorMessage(404, "Not found experiment with id '%s'".formatted(id));
+            var expectedError = new ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                    "Not found experiment with id '%s'".formatted(id));
             try (var actualResponse = client.target(getExperimentsPath())
                     .path(id.toString())
                     .request()
@@ -1978,7 +1977,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
 
                 var actualError = actualResponse.readEntity(ErrorMessage.class);
 
@@ -2045,7 +2044,7 @@ class ExperimentsResourceTest {
 
             createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
-            int totalNumberOfScores = traceIdToScoresMap.values().size();
+            int totalNumberOfScores = traceIdToScoresMap.size();
 
             var experimentItems = IntStream.range(0, totalNumberOfScores)
                     .mapToObj(i -> podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -2205,7 +2204,7 @@ class ExperimentsResourceTest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(trace))) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
             assertThat(actualResponse.hasEntity()).isFalse();
 
             var actualHeaderString = actualResponse.getHeaderString("Location");
@@ -2215,14 +2214,13 @@ class ExperimentsResourceTest {
 
     private synchronized UUID createAndAssert(Experiment expectedExperiment, String apiKey, String workspaceName) {
         Mockito.reset(defaultEventBus);
-
         try (var actualResponse = client.target(getExperimentsPath())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(expectedExperiment))) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
 
             var actualId = TestUtils.getIdFromLocation(actualResponse.getLocation());
 
@@ -2255,7 +2253,7 @@ class ExperimentsResourceTest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            if (actualResponse.getStatusInfo().getStatusCode() == 404) {
+            if (actualResponse.getStatusInfo().getStatusCode() == HttpStatus.SC_NOT_FOUND) {
                 return null;
             }
 
@@ -2273,7 +2271,7 @@ class ExperimentsResourceTest {
 
             var actualExperiment = actualResponse.readEntity(Experiment.class);
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
             assertThat(actualExperiment)
                     .usingRecursiveComparison()
@@ -2360,7 +2358,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(deleteRequest))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
@@ -2390,7 +2388,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(new ExperimentsDelete(ids)))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
 
                 if (datasetIds.isEmpty()) {
 
@@ -2413,7 +2411,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
 
@@ -2470,7 +2468,7 @@ class ExperimentsResourceTest {
         @Test
         void streamByExperimentName() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -2494,7 +2492,7 @@ class ExperimentsResourceTest {
             // Add comments to trace
             List<Comment> expectedComments = IntStream.range(0, 5)
                     .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceWithScores2.getKey().id(), apiKey,
-                            workspaceName, 201))
+                            workspaceName, HttpStatus.SC_CREATED))
                     .toList();
 
             var experiment1 = generateExperiment();
@@ -2579,7 +2577,7 @@ class ExperimentsResourceTest {
         @Test
         void streamByExperimentNameWithNoItems() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -2596,12 +2594,12 @@ class ExperimentsResourceTest {
         @Test
         void streamByExperimentNameWithoutExperiments() {
             var apiKey = UUID.randomUUID().toString();
-            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var streamRequest = ExperimentItemStreamRequest.builder()
-                    .experimentName(RandomStringUtils.randomAlphanumeric(10))
+                    .experimentName(RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
             var expectedExperimentItems = List.<ExperimentItem>of();
             var unexpectedExperimentItems1 = List.<ExperimentItem>of();
@@ -2662,7 +2660,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(request))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
                         .isEqualTo("Upserting experiment item with 'dataset_item_id' not belonging to the workspace");
@@ -2695,7 +2693,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(request))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
                         .isEqualTo("Upserting experiment item with 'experiment_id' not belonging to the workspace");
@@ -2717,7 +2715,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(batch))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
 
             return item.id();
@@ -2761,7 +2759,7 @@ class ExperimentsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(request))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
                 var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
 
@@ -2898,7 +2896,7 @@ class ExperimentsResourceTest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
             var actualExperimentItem = actualResponse.readEntity(ExperimentItem.class);
 
@@ -2957,7 +2955,8 @@ class ExperimentsResourceTest {
     }
 
     private void getAndAssertNotFound(UUID id, String apiKey, String workspaceName) {
-        var expectedError = new ErrorMessage(404, "Not found experiment item with id '%s'".formatted(id));
+        var expectedError = new ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                "Not found experiment item with id '%s'".formatted(id));
         try (var actualResponse = client.target(getExperimentItemsPath())
                 .path(id.toString())
                 .request()
@@ -2965,7 +2964,7 @@ class ExperimentsResourceTest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
 
             var actualError = actualResponse.readEntity(ErrorMessage.class);
 
@@ -2987,7 +2986,7 @@ class ExperimentsResourceTest {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
 
-            assertThat(actualResponse.getStatus()).isEqualTo(200);
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var actualExperimentItems = getStreamedItems(actualResponse);
 

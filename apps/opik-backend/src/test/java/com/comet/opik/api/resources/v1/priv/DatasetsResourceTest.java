@@ -27,6 +27,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
@@ -48,6 +49,8 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -69,6 +72,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
@@ -81,7 +85,7 @@ import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -151,6 +155,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Dataset Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class DatasetsResourceTest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
@@ -175,18 +180,15 @@ class DatasetsResourceTest {
 
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockRuntime wireMock;
 
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
 
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
-
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
-
-    private static final WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -217,7 +219,7 @@ class DatasetsResourceTest {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         }
 
@@ -240,11 +242,11 @@ class DatasetsResourceTest {
         wireMock.server().stop();
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
-    private static void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
+    private void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
             String workspaceId) {
         AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
                 USER);
@@ -4182,9 +4184,11 @@ class DatasetsResourceTest {
                         .experimentId(experimentId)
                         .input(trace.input())
                         .output(trace.output())
-                        .feedbackScores(Stream.of(score)
-                                .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
-                                .toList())
+                        .feedbackScores(score == null
+                                ? null
+                                : Stream.of(score)
+                                        .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                        .toList())
                         .build();
 
                 experimentItems.add(experimentItem);
@@ -4286,6 +4290,74 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
+        }
+
+        @Test
+        void find__whenFilteringFeedbackScoresEmpty__thenReturnMatchingRows() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> datasetItems = new ArrayList<>();
+            createDatasetItems(datasetItems);
+            var batch = DatasetItemBatch.builder()
+                    .items(datasetItems)
+                    .datasetId(datasetId)
+                    .build();
+            putAndAssert(batch, workspaceName, apiKey);
+
+            String projectName = RandomStringUtils.randomAlphanumeric(20);
+            List<Trace> traces = new ArrayList<>();
+            createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
+
+            UUID experimentId = GENERATOR.generate();
+
+            List<FeedbackScoreBatchItem> scores = new ArrayList<>();
+            createScores(traces, projectName, scores);
+            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+
+            List<ExperimentItem> experimentItems = new ArrayList<>();
+            createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
+
+            createAndAssert(
+                    ExperimentItemsBatch.builder()
+                            .experimentItems(Set.copyOf(experimentItems))
+                            .build(),
+                    apiKey,
+                    workspaceName);
+
+            Set<Column> columns = getColumns(datasetItems.stream().map(DatasetItem::data).toList());
+
+            var isNotEmptyFilter = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES.getQueryParamField())
+                            .operator(Operator.IS_NOT_EMPTY)
+                            .key(scores.getFirst().name())
+                            .value("")
+                            .build());
+
+            var actualPageIsEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,
+                    workspaceName, columns, datasetItems.reversed());
+
+            assertDatasetItemExperiments(actualPageIsEmpty, datasetItems.reversed(), experimentItems.reversed());
+
+            var isEmptyFilter = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES.getQueryParamField())
+                            .operator(Operator.IS_EMPTY)
+                            .key(scores.getFirst().name())
+                            .value("")
+                            .build());
+
+            var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isEmptyFilter, apiKey,
+                    workspaceName, columns, List.of());
+
+            assertDatasetItemExperiments(actualPageIsNotEmpty, List.of(), List.of());
         }
 
         @ParameterizedTest
@@ -4490,7 +4562,8 @@ class DatasetsResourceTest {
                 : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
     }
 
-    private DatasetItemPage assertDatasetExperimentPage(UUID datasetId, UUID experimentId, List<Filter> filters,
+    private DatasetItemPage assertDatasetExperimentPage(UUID datasetId, UUID experimentId,
+            List<? extends Filter> filters,
             String apiKey, String workspaceName, Set<Column> columns, List<DatasetItem> datasetItems) {
         try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                 .path(datasetId.toString())
@@ -4804,6 +4877,12 @@ class DatasetsResourceTest {
 
             var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
                     actualExperimentItems.getFirst(), USER).feedbackScores();
+
+            if (ListUtils.emptyIfNull(experimentItems.get(i).feedbackScores()).isEmpty()) {
+                assertThat(actualFeedbackScores).isNull();
+                continue;
+            }
+
             assertThat(actualFeedbackScores).hasSize(1);
 
             assertThat(actualFeedbackScores.getFirst())

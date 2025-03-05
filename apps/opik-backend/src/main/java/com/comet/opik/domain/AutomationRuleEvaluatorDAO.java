@@ -41,13 +41,15 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
     @SqlQuery("""
-            SELECT rule.id, rule.project_id, rule.action, rule.name, rule.sampling_rate, evaluator.type, evaluator.code,
+            SELECT rule.id, rule.project_id, p.name AS project_name, rule.action, rule.name AS name, rule.sampling_rate, evaluator.type, evaluator.code,
                    evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
-            WHERE workspace_id = :workspaceId AND rule.action = :action
-            <if(projectId)> AND project_id = :projectId <endif>
+            LEFT JOIN projects p
+              ON rule.project_id = p.id
+            WHERE rule.workspace_id = :workspaceId AND rule.action = :action
+            <if(projectId)> AND rule.project_id = :projectId <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(name)> AND rule.name like concat('%', :name, '%') <endif>
@@ -109,14 +111,15 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
                 WHERE id IN (
                     SELECT id
                     FROM automation_rules
-                    WHERE workspace_id = :workspaceId AND project_id = :projectId
+                    WHERE workspace_id = :workspaceId
+                    <if(projectId)> AND project_id = :projectId <endif>
                     <if(ids)> AND id IN (<ids>) <endif>
                 )
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteEvaluatorsByIds(@Bind("workspaceId") String workspaceId,
-            @Bind("projectId") UUID projectId,
+            @Define("projectId") @Bind("projectId") UUID projectId,
             @Define("ids") @BindList("ids") Set<UUID> ids);
 
 }

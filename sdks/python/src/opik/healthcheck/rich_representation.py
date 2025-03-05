@@ -55,7 +55,7 @@ def print_config_file_details(config: OpikConfig) -> None:
     file_path = make_value_text(str(config.config_file_fullpath))
 
     is_exists_label = make_key_text("Config file exists:")
-    is_exists = make_value_text(str(config.is_config_file_exists))
+    is_exists = make_value_text("yes" if config.config_file_exists else "no")
 
     console.print(file_path_label, file_path)
     console.print(is_exists_label, is_exists)
@@ -66,7 +66,7 @@ def print_current_config(config: config.OpikConfig) -> None:
     table.add_column("Setting", style=DEFAULT_KEY_COLOR)
     table.add_column("Value", style=DEFAULT_VALUE_COLOR)
 
-    current_config_values = config.get_current_config_with_api_key_hidden()
+    current_config_values = config.as_dict(mask_api_key=True)
     for key, value in sorted(current_config_values.items()):
         if key != "sentry_dsn":
             table.add_row(key, str(value))
@@ -74,15 +74,18 @@ def print_current_config(config: config.OpikConfig) -> None:
     console.print(table)
 
 
-def print_config_validation(is_valid: bool, error_message: Optional[str]) -> None:
-    is_valid_text = Text(
-        str(is_valid), style=DEFAULT_VALUE_COLOR if is_valid else DEFAULT_ERROR_COLOR
+def print_config_scan_results(
+    misconfiguration_detected: bool, error_message: Optional[str]
+) -> None:
+    is_misconfigured_text = Text(
+        "found" if misconfiguration_detected else "not found",
+        style=DEFAULT_ERROR_COLOR if misconfiguration_detected else DEFAULT_VALUE_COLOR,
     )
-    is_valid_label = make_key_text("Current configuration is valid:")
+    issues_found_label = make_key_text("Configuration issues:")
 
-    console.print(is_valid_label, is_valid_text)
+    console.print(issues_found_label, is_misconfigured_text)
 
-    if is_valid:
+    if not misconfiguration_detected:
         return
 
     err_msg = Text(error_message, style=DEFAULT_ERROR_COLOR)
@@ -94,7 +97,7 @@ def print_backend_workspace_availability(
     err_msg: Optional[str],
 ) -> None:
     is_available_text = Text(
-        str(is_available),
+        "yes" if is_available else "no",
         style=DEFAULT_VALUE_COLOR if is_available else DEFAULT_ERROR_COLOR,
     )
     is_available_label = make_key_text("Backend workspace available:")
