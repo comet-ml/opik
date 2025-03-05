@@ -65,6 +65,10 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   const startResizing = useCallback((event: MouseEvent) => {
     resizeHandleRef.current = event.target as HTMLDivElement;
     resizeHandleRef.current.setAttribute("data-resize-handle-active", "true");
+    resizeHandleRef.current.parentElement!.style.setProperty(
+      "transition",
+      `unset`,
+    );
   }, []);
 
   useHotkeys(
@@ -103,6 +107,9 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     const handleMouseUp = () => {
       if (resizeHandleRef.current) {
         resizeHandleRef.current.removeAttribute("data-resize-handle-active");
+        resizeHandleRef.current.parentElement!.style.removeProperty(
+          "transition",
+        );
         resizeHandleRef.current = null;
         localStorage.setItem(localStorageKey, leftRef.current.toString());
       }
@@ -163,43 +170,45 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
       {open && closeOnClickOutside && (
         <div className="fixed inset-0 bg-black/10" onClick={onClose} />
       )}
-      {open && (
-        <div
-          className="fixed inset-0 translate-x-0 bg-background shadow-xl"
-          style={{ left: left + "px" }}
-          data-testid={panelId}
-        >
-          <div
-            className="absolute inset-y-0 left-0 z-20 flex w-4 cursor-col-resize flex-col justify-center border-l transition-all hover:border-l-2 data-[resize-handle-active]:border-l-blue-600"
-            onMouseDown={startResizing as never}
-          ></div>
-          <div className="relative flex size-full">
-            <div className="absolute inset-x-0 top-0 flex h-[60px] items-center justify-between gap-6 pl-6 pr-5">
-              <div className="flex gap-2">
-                <TooltipWrapper
-                  content={`Close ${entity}`}
-                  hotkeys={ESC_HOTKEYS}
-                >
-                  <Button
-                    data-testid="side-panel-close"
-                    variant="outline"
-                    size="icon-sm"
-                    onClick={onClose}
+      <div
+        className="fixed inset-0 translate-x-0 bg-background shadow-xl transition-[left] duration-150"
+        style={{ left: open ? left + "px" : window.innerWidth + "px" }}
+        data-testid={panelId}
+      >
+        {open && (
+          <>
+            <div
+              className="absolute inset-y-0 left-0 z-20 flex w-4 cursor-col-resize flex-col justify-center border-l hover:border-l-2 data-[resize-handle-active]:border-l-blue-600"
+              onMouseDown={startResizing as never}
+            ></div>
+            <div className="relative flex size-full">
+              <div className="absolute inset-x-0 top-0 flex h-[60px] items-center justify-between gap-6 pl-6 pr-5">
+                <div className="flex gap-2">
+                  <TooltipWrapper
+                    content={`Close ${entity}`}
+                    hotkeys={ESC_HOTKEYS}
                   >
-                    <X />
-                  </Button>
-                </TooltipWrapper>
-                {renderNavigation()}
-                {navigationContent}
+                    <Button
+                      data-testid="side-panel-close"
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={onClose}
+                    >
+                      <X />
+                    </Button>
+                  </TooltipWrapper>
+                  {renderNavigation()}
+                  {navigationContent}
+                </div>
+                {headerContent && <div>{headerContent}</div>}
               </div>
-              {headerContent && <div>{headerContent}</div>}
+              <div className="absolute inset-x-0 bottom-0 top-[60px] border-t">
+                {children}
+              </div>
             </div>
-            <div className="absolute inset-x-0 bottom-0 top-[60px] border-t">
-              {children}
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>,
     document.body,
     "resizable-side-panel",
