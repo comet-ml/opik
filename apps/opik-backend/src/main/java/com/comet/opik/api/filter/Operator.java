@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
+import java.util.Set;
 
 @RequiredArgsConstructor
 @Getter
@@ -19,7 +20,12 @@ public enum Operator {
     GREATER_THAN(">"),
     GREATER_THAN_EQUAL(">="),
     LESS_THAN("<"),
-    LESS_THAN_EQUAL("<=");
+    LESS_THAN_EQUAL("<="),
+    IS_EMPTY("is_empty"),
+    IS_NOT_EMPTY("is_not_empty"),
+    ;
+
+    public static final Set<Operator> NO_VALUE_OPERATORS = Set.of(Operator.IS_EMPTY, Operator.IS_NOT_EMPTY);
 
     @JsonValue
     private final String queryParamOperator;
