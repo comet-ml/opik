@@ -3,6 +3,7 @@ package com.comet.opik.api.filter;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.google.common.collect.ImmutableMap;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -21,39 +22,45 @@ import java.time.format.DateTimeParseException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BiFunction;
+import java.util.function.Function;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class FiltersFactory {
 
-    private static final Map<FieldType, BiFunction<String, String, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
-            Map.of(
-                    FieldType.STRING, (value, key) -> StringUtils.isNotBlank(value),
-                    FieldType.DATE_TIME, (value, key) -> {
+    private static final Map<FieldType, Function<Filter, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
+            ImmutableMap.<FieldType, Function<Filter, Boolean>>builder()
+                    .put(FieldType.STRING, filter -> StringUtils.isNotBlank(filter.value()))
+                    .put(FieldType.DATE_TIME, filter -> {
                         try {
-                            Instant.parse(value);
+                            Instant.parse(filter.value());
                             return true;
                         } catch (DateTimeParseException exception) {
-                            log.error("Invalid Instant format '{}'", value, exception);
+                            log.error("Invalid Instant format '{}'", filter.value(), exception);
                             return false;
                         }
-                    },
-                    FieldType.NUMBER, (value, key) -> NumberUtils.isParsable(value),
-                    FieldType.FEEDBACK_SCORES_NUMBER, (value, key) -> {
-                        if (StringUtils.isBlank(key)) {
+                    })
+                    .put(FieldType.NUMBER, filter -> NumberUtils.isParsable(filter.value()))
+                    .put(FieldType.FEEDBACK_SCORES_NUMBER, filter -> {
+                        if (StringUtils.isBlank(filter.key())) {
                             return false;
+                        }
+                        if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
+                            // don't validate value in case it's not needed
+                            return true;
                         }
                         try {
-                            new BigDecimal(value);
+                            new BigDecimal(filter.value());
                             return true;
                         } catch (NumberFormatException exception) {
-                            log.error("Invalid BigDecimal format '{}'", value, exception);
+                            log.error("Invalid BigDecimal format '{}'", filter.value(), exception);
                             return false;
                         }
-                    },
-                    FieldType.DICTIONARY, (value, key) -> StringUtils.isNotBlank(value) && StringUtils.isNotBlank(key),
-                    FieldType.LIST, (value, key) -> StringUtils.isNotBlank(value)));
+                    })
+                    .put(FieldType.DICTIONARY, filter -> StringUtils.isNotBlank(filter.value()) &&
+                            StringUtils.isNotBlank(filter.key()))
+                    .put(FieldType.LIST, filter -> StringUtils.isNotBlank(filter.value()))
+                    .build());
 
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
@@ -102,6 +109,6 @@ public class FiltersFactory {
     }
 
     private boolean validateFieldType(Filter filter) {
-        return FIELD_TYPE_VALIDATION_MAP.get(filter.field().getType()).apply(filter.value(), filter.key());
+        return FIELD_TYPE_VALIDATION_MAP.get(filter.field().getType()).apply(filter);
     }
 }
