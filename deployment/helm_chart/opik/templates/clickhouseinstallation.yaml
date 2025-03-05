@@ -112,6 +112,13 @@ spec:
 
     volumeClaimTemplates:
       - name: storage-vc-template
+        {{- if .Values.clickhouse.volumeAnnotations }}
+        metadata:
+          annotations:
+        {{- with .Values.clickhouse.volumeAnnotations }}
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- end }}
         spec:
           {{- if .Values.clickhouse.storageClassName }}
           storageClassName:  {{ .Values.clickhouse.storageClassName }}
