@@ -3,7 +3,6 @@ from typing import Dict, List, Tuple
 
 from rich import align, console, panel, table, text
 
-import opik
 
 from .. import url_helpers
 from . import test_result
@@ -89,13 +88,14 @@ def display_experiment_results(
 
 
 def display_experiment_link(
-    client: opik.Opik, dataset_name: str, experiment_id: str
+    experiment_id: str, dataset_id: str, url_override: str
 ) -> None:
     console_container = console.Console()
-    experiment_url = url_helpers.get_experiment_url(
-        client=client,
-        dataset_name=dataset_name,
+
+    experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment_id,
+        dataset_id=dataset_id,
+        url_override=url_override,
     )
     console_container.print(
         f"View the results [link={experiment_url}]in your Opik dashboard[/link]."

@@ -112,9 +112,9 @@ def evaluate(
         report.display_experiment_results(dataset.name, total_time, test_results)
 
     report.display_experiment_link(
-        client=client,
-        dataset_name=dataset.name,
         experiment_id=experiment.id,
+        dataset_id=dataset.id,
+        url_override=client.config.url_override,
     )
 
     client.flush()
@@ -159,14 +159,14 @@ def evaluate_experiment(
 
     client = opik_client.get_client_cached()
 
-    experiment = rest_operations.get_experiment_by_name(
+    experiment_public = rest_operations.get_experiment_by_name(
         client=client, experiment_name=experiment_name
     )
 
     test_cases = rest_operations.get_experiment_test_cases(
         client=client,
-        experiment_id=experiment.id,
-        dataset_id=experiment.dataset_id,
+        experiment_id=experiment_public.id,
+        dataset_id=experiment_public.dataset_id,
         scoring_key_mapping=scoring_key_mapping,
     )
     first_trace_id = test_cases[0].trace_id
@@ -178,7 +178,7 @@ def evaluate_experiment(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            experiment_=experiment,
+            experiment_=experiment_public,
             scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
@@ -192,18 +192,18 @@ def evaluate_experiment(
 
     if verbose == 1:
         report.display_experiment_results(
-            experiment.dataset_name, total_time, test_results
+            experiment_public.dataset_name, total_time, test_results
         )
 
     report.display_experiment_link(
-        client=client,
-        dataset_name=experiment.dataset_name,
-        experiment_id=experiment.id,
+        dataset_id=experiment_public.dataset_id,
+        experiment_id=experiment_public.id,
+        url_override=client.config.url_override,
     )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
-        experiment_id=experiment.id,
-        experiment_name=experiment.name,
+        experiment_id=experiment_public.id,
+        experiment_name=experiment_public.name,
         test_results=test_results,
     )
 
@@ -327,9 +327,9 @@ def evaluate_prompt(
         report.display_experiment_results(dataset.name, total_time, test_results)
 
     report.display_experiment_link(
-        client=client,
-        dataset_name=dataset.name,
         experiment_id=experiment.id,
+        dataset_id=dataset.id,
+        url_override=client.config.url_override,
     )
 
     client.flush()

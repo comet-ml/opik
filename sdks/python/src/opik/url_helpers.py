@@ -23,14 +23,9 @@ def get_ui_url() -> str:
     return opik_url_override.rstrip("/api") + "/"
 
 
-def get_experiment_url(
-    client: "opik.Opik", dataset_name: str, experiment_id: str
+def get_experiment_url_by_id(
+    dataset_id: str, experiment_id: str, url_override: str
 ) -> str:
-    dataset = client._rest_client.datasets.get_dataset_by_identifier(
-        dataset_name=dataset_name
-    )
-    dataset_id = dataset.id
-    url_override = client.config.url_override
     encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
 
     project_path = urllib.parse.quote(
