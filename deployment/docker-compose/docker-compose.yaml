@@ -82,7 +82,6 @@ services:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
-      OPIK_VERSION: ${OPIK_VERSION:-latest}
     ports:
       - "3003" # OpenAPI specification port
     depends_on:
