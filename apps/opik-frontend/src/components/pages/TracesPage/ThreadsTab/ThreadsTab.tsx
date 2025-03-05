@@ -398,11 +398,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         spanId={spanId!}
         setSpanId={setSpanId}
         setThreadId={setThreadId}
-        hasPreviousRow={hasPrevious}
-        hasNextRow={hasNext}
         open={Boolean(traceId) && !threadId}
         onClose={handleClose}
-        onRowChange={handleRowChange}
       />
       <ThreadDetailsPanel
         projectId={projectId}
@@ -411,6 +408,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         threadId={threadId!}
         open={Boolean(threadId)}
         onClose={handleClose}
+        hasPreviousRow={hasPrevious}
+        hasNextRow={hasNext}
+        onRowChange={handleRowChange}
       />
     </div>
   );
