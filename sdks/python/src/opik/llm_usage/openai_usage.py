@@ -45,7 +45,7 @@ class OpenAICompletionsUsage(base_original_provider_usage.BaseOriginalProviderUs
             **usage_dict.pop("completion_tokens_details", None)
         )
         prompt_tokens_details = PromptTokensDetails(
-            **usage_dict.pop("completion_tokens_details", None)
+            **usage_dict.pop("prompt_tokens_details", None)
         )
 
         return cls(
