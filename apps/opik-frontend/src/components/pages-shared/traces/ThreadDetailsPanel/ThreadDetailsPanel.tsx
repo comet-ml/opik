@@ -85,7 +85,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
 
   const { mutate } = useThreadBatchDeleteMutation();
   const traces: Trace[] = useMemo(
-    () => tracesData?.content ?? [],
+    () =>
+      (tracesData?.content ?? []).sort((t1, t2) => t1.id.localeCompare(t2.id)),
     [tracesData],
   );
 

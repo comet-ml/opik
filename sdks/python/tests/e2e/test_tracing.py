@@ -3,7 +3,7 @@ import pytest
 import uuid
 
 import opik
-from opik import opik_context
+from opik import opik_context, id_helpers
 from opik.api_objects import helpers
 from . import verifiers
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
@@ -602,15 +602,29 @@ def test_copy_traces__happyflow(opik_client):
             )
 
 
-def test_tracked_function__update_current_span_used_to_update_cost__happyflow(
+def test_tracked_function__update_current_span_and_trace_called__happyflow(
     opik_client,
 ):
     # Setup
     ID_STORAGE = {}
+    THREAD_ID = id_helpers.generate_id()
 
     @opik.track
     def f():
-        opik_context.update_current_span(total_cost=0.42)
+        opik_context.update_current_span(
+            name="span-name",
+            input={"span-input": "span-input-value"},
+            output={"span-output": "span-output-value"},
+            metadata={"span-metadata-key": "span-metadata-value"},
+            total_cost=0.42,
+        )
+        opik_context.update_current_trace(
+            name="trace-name",
+            input={"trace-input": "trace-input-value"},
+            output={"trace-output": "trace-output-value"},
+            metadata={"trace-metadata-key": "trace-metadata-value"},
+            thread_id=THREAD_ID,
+        )
         ID_STORAGE["f_span-id"] = opik_context.get_current_span_data().id
         ID_STORAGE["f_trace-id"] = opik_context.get_current_trace_data().id
 
@@ -624,7 +638,20 @@ def test_tracked_function__update_current_span_used_to_update_cost__happyflow(
         span_id=ID_STORAGE["f_span-id"],
         parent_span_id=None,
         trace_id=ID_STORAGE["f_trace-id"],
-        name="f",
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        name="span-name",
+        input={"span-input": "span-input-value"},
+        output={"span-output": "span-output-value"},
+        metadata={"span-metadata-key": "span-metadata-value"},
         total_cost=0.42,
+    )
+
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=ID_STORAGE["f_trace-id"],
+        name="trace-name",
+        input={"trace-input": "trace-input-value"},
+        output={"trace-output": "trace-output-value"},
+        metadata={"trace-metadata-key": "trace-metadata-value"},
+        thread_id=THREAD_ID,
     )
