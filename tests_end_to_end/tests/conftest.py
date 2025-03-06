@@ -511,3 +511,52 @@ def create_ai_provider_config(page: Page):
     yield
     ai_providers_page.go_to_page()
     ai_providers_page.delete_provider(provider_name="OPENAI_API_KEY")
+
+@pytest.fixture
+def create_moderation_rule_fixture(
+    create_ai_provider_config,
+    create_10_test_traces,
+    page: Page,
+    create_project_api
+):
+    project_name = create_project_api
+
+    # Navigate to traces page
+    traces_page = TracesPage(page)
+    projects_page = ProjectsPage(page)
+    try:
+        projects_page.go_to_page()
+        projects_page.click_project(project_name)
+    except Exception as e:
+        raise AssertionError(
+            f"Failed to navigate to project traces.\n"
+            f"Project name: {project_name}\n"
+            f"Error: {str(e)}"
+        ) from e
+
+    traces_page.page.get_by_role("tab", name="Rules").click()
+    rule_name = "Test Moderation Rule"
+    traces_page.page.get_by_role("button", name="Create your first rule").click()
+    traces_page.page.get_by_placeholder("Rule name").fill(rule_name)
+    sampling_value = traces_page.page.locator("#sampling_rate-input")
+    sampling_value.fill("1")
+
+    traces_page.page.get_by_role("combobox").filter(
+        has_text="Select a LLM model"
+    ).click()
+    traces_page.page.get_by_text("OpenAI").hover()
+    traces_page.page.get_by_label("GPT 4o Mini", exact=True).click()
+
+    traces_page.page.get_by_role("combobox").filter(
+        has_text="Custom LLM-as-judge"
+    ).click()
+    traces_page.page.get_by_label("Moderation", exact=True).click()
+
+    variable_map = traces_page.page.get_by_placeholder(
+        "Select a key from recent trace"
+    )
+    variable_map.click()
+    variable_map.fill("output.output")
+    traces_page.page.get_by_role("option", name="output.output").click()
+
+    traces_page.page.get_by_role("button", name="Create rule").click()
