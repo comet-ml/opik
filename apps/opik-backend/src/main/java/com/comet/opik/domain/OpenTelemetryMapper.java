@@ -9,6 +9,7 @@ import io.opentelemetry.proto.trace.v1.Span;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -17,10 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-
-import static com.comet.opik.domain.OpenTelemetryMappingRule.Outcome.*;
 
 @UtilityClass
 @Slf4j
@@ -29,16 +27,17 @@ public class OpenTelemetryMapper {
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
      * of concepts, especially around ids.
-     *
+     * <p>
      * We will be linking this span to a given Opik traceId precalculated with the closest timestamp we could get for
      * it. We can extract the timestamp from this traceId and use into spanId otel -> opik conversion, so all span ids
      * for the trace can be predictable, but using the same reference timestamp.
      *
-     * @param otelSpan an OpenTelemetry Span
-     * @param opikTraceId the Opik UUID to be used for this span
+     * @param otelSpan        an OpenTelemetry Span
+     * @param opikTraceId     the Opik UUID to be used for this span
+     * @param integrationName
      * @return a converted Opik Span
      */
-    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId) {
+    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId, String integrationName) {
         var traceTimestamp = extractTimestampFromUUIDv7(opikTraceId);
 
         var startTimeMs = Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis();
@@ -61,69 +60,98 @@ public class OpenTelemetryMapper {
                 .startTime(Instant.ofEpochMilli(startTimeMs))
                 .endTime(Instant.ofEpochMilli(endTimeMs));
 
-        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList());
-
-        log.info("builder: {}", spanBuilder);
+        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName);
 
         return spanBuilder.build();
     }
 
-    private static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes) {
+    /**
+     * Extracts whats relevant from the messy KeyValues list adding the values into input/output/metadata/model/usage.
+     *
+     * @param spanBuilder the span builder where we will be injecting the extracted values
+     * @param attributes the list of span attributes extracted from the otel payload
+     * @param integrationName the name of the integration sending the spans (can be empty)
+     */
+    public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
+            String integrationName) {
+        Map<String, Integer> usage = new HashMap<>();
         ObjectNode input = JsonUtils.MAPPER.createObjectNode();
         ObjectNode output = JsonUtils.MAPPER.createObjectNode();
         ObjectNode metadata = JsonUtils.MAPPER.createObjectNode();
-        Map<String, Integer> usage = new HashMap<>();
 
-        Set<OpenTelemetryMappingRule.Outcome> jsonOutcomes = Set.of(INPUT, OUTPUT, METADATA);
+        if (StringUtils.isNotEmpty(integrationName)) {
+            metadata.put("integration", integrationName);
+        }
 
         // Iterate over each attribute key-value pair
         attributes.forEach(attribute -> {
             var key = attribute.getKey();
             var value = attribute.getValue();
 
-            Optional<OpenTelemetryMappingRule> hasRule = OpenTelemetryMappingRule.findRule(key);
-            hasRule.ifPresentOrElse(rule -> {
-                if (rule.getOutcome().equals(USAGE)) {
-                    JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
-                    if (usageNode.isTextual()) {
-                        usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
-                    }
-                    usageNode.fields().forEachRemaining(entry -> {
-                        if (entry.getValue().isNumber()) {
-                            usage.put(entry.getKey(), entry.getValue().intValue());
-                        } else
-                            log.warn("Unrecognized attribute {}: {}", entry.getKey(), entry.getValue());
-                    });
-                }
+            OpenTelemetryMappingRule.findRule(key).ifPresentOrElse(rule -> {
+                Optional.ofNullable(rule.getSpanType()).ifPresent(spanBuilder::type);
 
-                if (jsonOutcomes.contains(rule.getOutcome())) {
-                    ObjectNode node;
-                    node = switch (rule.getOutcome()) {
-                        case INPUT -> input;
-                        case OUTPUT -> output;
-                        default -> metadata;
-                    };
+                switch (rule.getOutcome()) {
+                    case MODEL :
+                        spanBuilder.model(value.getStringValue());
+                        break;
 
-                    switch (value.getValueCase()) {
-                        case STRING_VALUE -> {
-                            var stringValue = value.getStringValue();
-                            if (stringValue.startsWith("\"") || stringValue.startsWith("[")
-                                    || stringValue.startsWith("{")) {
-                                var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
-                                if (jsonNode.isTextual()) {
-                                    jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
+                    case USAGE :
+                        // usage might appear as int values or an json object
+                        if (value.hasIntValue()) {
+                            var actualKey = key.substring(rule.getRule().length());
+                            usage.put(actualKey, (int) value.getIntValue());
+                        } else {
+                            JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
+                            if (usageNode.isTextual()) {
+                                usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
+                            }
+                            usageNode.fields().forEachRemaining(entry -> {
+                                if (entry.getValue().isNumber()) {
+                                    usage.put(entry.getKey(), entry.getValue().intValue());
+                                } else {
+                                    log.warn("Unrecognized usage attribute {}: {}", entry.getKey(), entry.getValue());
                                 }
-                                node.set(key, jsonNode);
-                            } else
-                                node.put(key, stringValue);
+                            });
                         }
-                        case INT_VALUE -> node.put(key, value.getIntValue());
-                        case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
-                        case BOOL_VALUE -> node.put(key, value.getBoolValue());
-                        default -> log.warn("Unsupported attribute: {}", attribute);
-                    }
+                        break;
+
+                    case INPUT :
+                    case OUTPUT :
+                    case METADATA :
+                        ObjectNode node;
+                        node = switch (rule.getOutcome()) {
+                            case INPUT -> input;
+                            case OUTPUT -> output;
+                            default -> metadata;
+                        };
+
+                        switch (value.getValueCase()) {
+                            case STRING_VALUE -> {
+                                var stringValue = value.getStringValue();
+                                // check if string value is actually a string or a stringfied json
+                                if (stringValue.startsWith("\"") || stringValue.startsWith("[")
+                                        || stringValue.startsWith("{")) {
+                                    var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
+                                    if (jsonNode.isTextual()) {
+                                        jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
+                                    }
+                                    node.set(key, jsonNode);
+                                } else
+                                    node.put(key, stringValue);
+                            }
+                            case INT_VALUE -> node.put(key, value.getIntValue());
+                            case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
+                            case BOOL_VALUE -> node.put(key, value.getBoolValue());
+                            case ARRAY_VALUE -> {
+                                var array = JsonUtils.MAPPER.createArrayNode();
+                                value.getArrayValue().getValuesList().forEach(val -> array.add(val.getStringValue()));
+                                node.set(key, array);
+                            }
+                            default -> log.warn("Unsupported attribute: {}", attribute);
+                        }
                 }
-            }, () -> log.info("No rule found for key: {} (value: {})", key, attribute.getValue()));
+            }, () -> log.debug("No rule found for key: {} (value: {}). Ignoring it.", key, attribute.getValue()));
         });
 
         if (!metadata.isEmpty()) {

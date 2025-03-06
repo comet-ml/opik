@@ -5,6 +5,7 @@ import lombok.Getter;
 
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Set;
 
 @AllArgsConstructor
 @Getter
@@ -15,17 +16,30 @@ public enum OpenTelemetryMappingRule {
 
     CODE("code.", true, "Pydantic", Outcome.METADATA),
 
-    GEN_AI_USAGE("gen_ai.usage.", true, "GenAI", Outcome.USAGE),
+    GEN_AI_USAGE("gen_ai.usage.", true, "GenAI", Outcome.USAGE, SpanType.llm),
+    GEN_AI_REQUEST("gen_ai.request.", true, "GenAI", Outcome.INPUT),
+    GEN_AI_PROMPT("gen_ai.prompt", false, "GenAI", Outcome.INPUT, SpanType.llm),
+    GEN_AI_COMPLETION("gen_ai.completion", false, "GenAI", Outcome.OUTPUT),
+    GEN_AI_RESPONSE("gen_ai.response", true, "GenAI", Outcome.OUTPUT),
+    GEN_AI_REQUEST_MODEL("gen_ai.request_model", false, "GenAI", Outcome.MODEL, SpanType.llm),
+    GEN_AI_RESPONSE_MODEL("gen_ai.response_model", false, "GenAI", Outcome.MODEL, SpanType.llm),
+
+    LLM_INVOCATION_PARAMETERS("llm.invocation_parameters.*", true, "OpenInference", Outcome.INPUT, SpanType.llm),
+    LLM_MODEL_NAME("llm.model_name", false, "OpenInference", Outcome.MODEL, SpanType.llm),
+    LLM_TOKEN_COUNT("llm.token_count.", true, "OpenInference", Outcome.USAGE, SpanType.llm),
 
     LOGFIRE_MSG("logfire.msg", false, "Pydantic", Outcome.METADATA),
     LOGFIRE_MSG_TEMPLATE("logfire.msg_template", false, "Pydantic", Outcome.DROP),
     LOGFIRE_JSON_SCHEMA("logfire.json_schema", false, "Pydantic", Outcome.DROP),
     LOGFIRE_SPAN_TYPE("logfire.span_type", false, "Logfire", Outcome.DROP), // always general
 
-    MODEL_NAME("model_name", false, "Logfire", Outcome.MODEL),
+    MODEL_NAME("model_name", false, "Logfire", Outcome.MODEL, SpanType.llm),
+
+    INPUT("input", true, "General", Outcome.INPUT),
+    OUTPUT("output", true, "General", Outcome.OUTPUT),
 
     PARAMS("params", false, "Logfire", Outcome.INPUT),
-    PROMPT("prompt", false, "Logfire", Outcome.INPUT),
+    PROMPT("prompt", false, "Logfire", Outcome.INPUT, SpanType.llm),
 
     RESPONSE("response", false, "Logfire", Outcome.OUTPUT),
     RESULT("result", false, "Logfire", Outcome.OUTPUT),
@@ -33,7 +47,7 @@ public enum OpenTelemetryMappingRule {
     TOOLS("tools", false, "Logfire", Outcome.INPUT),
     TOOL_RESPONSES("tool_responses", false, "Logfire", Outcome.OUTPUT),
 
-    USAGE("usage", false, "Logfire", Outcome.USAGE),
+    USAGE("usage", false, "Logfire", Outcome.USAGE, SpanType.llm),
 
     SMOLAGENTS("smolagents.", true, "Smolagents", Outcome.METADATA);
 
@@ -44,7 +58,7 @@ public enum OpenTelemetryMappingRule {
     private final SpanType spanType;
 
     OpenTelemetryMappingRule(String rule, boolean isPrefix, String source, Outcome outcome) {
-        this(rule, isPrefix, source, outcome, SpanType.general);
+        this(rule, isPrefix, source, outcome, null);
     }
 
     public static Optional<OpenTelemetryMappingRule> findRule(String key) {
@@ -56,6 +70,13 @@ public enum OpenTelemetryMappingRule {
                         return rule.rule.equals(key);
                 })
                 .findFirst();
+    }
+
+    // list of 'non-real' integrations, like Pydantic uses logfire under the hood,
+    // so part of the calls are tagged as 'logfire', but we want to see Pydantic
+    private static Set<String> INTEGRATIONS_TO_IGNORE = Set.of("logfire");
+    public static boolean isValidInstrumentation(String name) {
+        return !INTEGRATIONS_TO_IGNORE.contains(name.toLowerCase());
     }
 
     enum Outcome {

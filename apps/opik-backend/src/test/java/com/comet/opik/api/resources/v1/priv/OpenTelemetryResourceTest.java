@@ -14,6 +14,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -21,6 +22,8 @@ import com.google.protobuf.ByteString;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+import io.opentelemetry.proto.common.v1.AnyValue;
+import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import io.opentelemetry.proto.trace.v1.Span;
@@ -37,6 +40,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -51,6 +55,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -64,6 +69,7 @@ import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANG
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.domain.OpenTelemetryMappingRule.*;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -315,5 +321,55 @@ class OpenTelemetryResourceTest {
 
             sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, errorMessage);
         }
+
+        @Test
+        void testRuleMapping() {
+            var attributes = List.of(
+                    KeyValue.newBuilder().setKey("model_name").setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
+                            .build(),
+                    KeyValue.newBuilder().setKey("code.line").setValue(AnyValue.newBuilder().setIntValue(11)).build(),
+                    KeyValue.newBuilder().setKey("input")
+                            .setValue(AnyValue.newBuilder().setStringValue("{\"key\": \"value\"}")).build(),
+                    KeyValue.newBuilder().setKey("tools")
+                            .setValue(AnyValue.newBuilder().setStringValue("[\"key\", \"value\"]")).build(),
+                    KeyValue.newBuilder().setKey("all_messages")
+                            .setValue(AnyValue.newBuilder().setStringValue("[\"key\", \"value\"]")).build(),
+                    KeyValue.newBuilder().setKey("tool_responses")
+                            .setValue(AnyValue.newBuilder().setStringValue("[\"key\", \"value\"]")).build(),
+
+                    KeyValue.newBuilder().setKey("smolagents.single")
+                            .setValue(AnyValue.newBuilder().setStringValue("value")).build(),
+                    KeyValue.newBuilder().setKey("smolagents.node")
+                            .setValue(AnyValue.newBuilder().setStringValue("{\"key\": \"value\"}")).build(),
+                    KeyValue.newBuilder().setKey("smolagents.array")
+                            .setValue(AnyValue.newBuilder().setStringValue("[\"key\", \"value\"]")).build()
+
+            );
+
+            var spanBuilder = com.comet.opik.api.Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null);
+
+            var span = spanBuilder.build();
+
+            assertThat(span.model()).isEqualTo("gpt-4o");
+            assertThat(span.type()).isEqualTo(SpanType.llm);
+
+            assertThat(span.metadata().get("code.line").asInt()).isEqualTo(11);
+            assertThat(span.metadata().get("smolagents.single").asText()).isEqualTo("value");
+            assertThat(span.metadata().get("smolagents.node").get("key").asText()).isEqualTo("value");
+            assertThat(span.metadata().get("smolagents.array").isArray()).isEqualTo(Boolean.TRUE);
+
+            assertThat(span.input().get("input").get("key").asText()).isEqualTo("value");
+            assertThat(span.input().get("tools").isArray()).isEqualTo(Boolean.TRUE);
+            assertThat(span.input().get("all_messages").isArray()).isEqualTo(Boolean.TRUE);
+
+            assertThat(span.output().get("tool_responses").isArray()).isEqualTo(Boolean.TRUE);
+        }
+
     }
 }
