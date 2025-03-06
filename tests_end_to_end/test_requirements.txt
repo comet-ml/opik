@@ -1,3 +1,4 @@
 pytest
 playwright==1.49.0
 pytest-playwright
+pytest-rerunfailures

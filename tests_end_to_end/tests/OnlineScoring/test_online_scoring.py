@@ -99,6 +99,7 @@ class TestOnlineScoring:
         self,
         page: Page,
         client: opik.Opik,
+        create_project_api,
         create_moderation_rule_fixture,
         create_10_test_traces,
     ):
