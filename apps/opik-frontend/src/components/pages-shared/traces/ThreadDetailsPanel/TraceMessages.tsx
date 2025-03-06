@@ -37,7 +37,7 @@ const TraceMessages: React.FC<TraceMessagesProps> = ({
       className="relative flex size-full justify-center overflow-y-auto"
       ref={setRef}
     >
-      <div className="flex max-w-full flex-col gap-2">
+      <div className="flex w-full flex-col gap-2">
         {traces.map((t) => (
           <TraceMessage
             key={t.id}
