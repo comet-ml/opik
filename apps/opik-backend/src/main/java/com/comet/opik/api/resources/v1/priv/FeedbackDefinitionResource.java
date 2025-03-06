@@ -9,6 +9,7 @@ import com.comet.opik.domain.FeedbackDefinitionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -144,7 +145,8 @@ public class FeedbackDefinitionResource {
     @DELETE
     @Path("{id}")
     @Operation(operationId = "deleteFeedbackDefinitionById", summary = "Delete feedback definition by id", description = "Delete feedback definition by id", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content")
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     public Response deleteById(@PathParam("id") UUID id) {
 
@@ -161,6 +163,7 @@ public class FeedbackDefinitionResource {
     @Path("/delete")
     @Operation(operationId = "deleteFeedbackDefinitionsBatch", summary = "Delete feedback definitions", description = "Delete feedback definitions batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     public Response deleteFeedbackDefinitionsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {

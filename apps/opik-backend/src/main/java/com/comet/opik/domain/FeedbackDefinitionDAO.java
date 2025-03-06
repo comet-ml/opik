@@ -70,4 +70,8 @@ public interface FeedbackDefinitionDAO {
             @Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
             @Define("type") @Bind("type") FeedbackType type);
+
+    @SqlQuery("SELECT COUNT(*) FROM feedback_definitions WHERE id IN (<ids>) AND workspace_id = :workspaceId AND name = :name")
+    long containsNameByIds(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId,
+            @Bind("name") String name);
 }

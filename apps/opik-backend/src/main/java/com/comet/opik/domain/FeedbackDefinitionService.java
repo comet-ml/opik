@@ -10,6 +10,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -28,6 +29,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(FeedbackDefinitionServiceImpl.class)
 public interface FeedbackDefinitionService {
+    String MESSAGE = "Cannot delete feedback definition 'User feedback'";
 
     <E, T extends FeedbackDefinition<E>> T create(T feedback);
 
@@ -48,6 +50,7 @@ public interface FeedbackDefinitionService {
 class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
     private static final String FEEDBACK_ALREADY_EXISTS = "Feedback already exists";
+    public static final String USER_FEEDBACK = "User feedback";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator generator;
@@ -193,6 +196,11 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(FeedbackDefinitionDAO.class);
+
+            Set<UUID> ids = Set.of(id);
+
+            validateDefinitionName(ids, dao, workspaceId);
+
             dao.delete(id, workspaceId);
             return null;
         });
@@ -208,9 +216,19 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         template.inTransaction(WRITE, handle -> {
-            handle.attach(FeedbackDefinitionDAO.class).delete(ids, workspaceId);
+            FeedbackDefinitionDAO dao = handle.attach(FeedbackDefinitionDAO.class);
+
+            validateDefinitionName(ids, dao, workspaceId);
+
+            dao.delete(ids, workspaceId);
             return null;
         });
+    }
+
+    private void validateDefinitionName(Set<UUID> ids, FeedbackDefinitionDAO dao, String workspaceId) {
+        if (dao.containsNameByIds(ids, workspaceId, USER_FEEDBACK) > 0) {
+            throw new ClientErrorException(MESSAGE, Response.Status.CONFLICT);
+        }
     }
 
     private NotFoundException createNotFoundError() {
