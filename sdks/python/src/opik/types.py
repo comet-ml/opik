@@ -1,7 +1,7 @@
 import dataclasses
 import sys
 
-from typing import Dict, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
@@ -39,13 +39,22 @@ class UsageDict(TypedDict):
     """ The details of tokens used for the prompt."""
 
 
-class UsageDictGoogle(UsageDict):
+class UsageDictGoogle(TypedDict):
     """
     A TypedDict representing token usage information for Google Vertex AI.
 
     This class defines the structure for token usage, including fields
     for completion tokens, prompt tokens, and the total number of tokens used.
     """
+
+    completion_tokens: int
+    """The number of tokens used for the completion."""
+
+    prompt_tokens: int
+    """The number of tokens used for the prompt."""
+
+    total_tokens: int
+    """The total number of tokens used, including both prompt and completion."""
 
     cached_content_token_count: NotRequired[int]
     """The number of tokens cached."""
@@ -58,6 +67,9 @@ class UsageDictGoogle(UsageDict):
 
     total_token_count: int
     """The total number of tokens used, including both prompt and completion."""
+
+    prompt_tokens_details: NotRequired[List[Dict[str, int]]]
+    """ The details of tokens used for the prompt."""
 
 
 class DistributedTraceHeadersDict(TypedDict):
