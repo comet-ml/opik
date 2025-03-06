@@ -34,8 +34,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
     ? experiment?.name
     : `Compare (${experimentsIds.length})`;
 
-  const [showCompareFeedback = false, setShowCompareFeedback] = useQueryParam(
-    "scoreTable",
+  const [showCharts = false, setShowCharts] = useQueryParam(
+    "chartsExpanded",
     BooleanParam,
     {
       updateType: "replaceIn",
@@ -75,17 +75,15 @@ const CompareExperimentsDetails: React.FunctionComponent<
   const renderCompareFeedbackScoresButton = () => {
     if (!isCompare) return null;
 
-    const text = showCompareFeedback
-      ? "Collapse feedback scores"
-      : "Expand feedback scores";
-    const Icon = showCompareFeedback ? Minimize2 : Maximize2;
+    const text = showCharts ? "Collapse charts" : "Expand charts";
+    const Icon = showCharts ? Minimize2 : Maximize2;
 
     return (
       <Button
         variant="outline"
         size="sm"
         onClick={() => {
-          setShowCompareFeedback(!showCompareFeedback);
+          setShowCharts(!showCharts);
         }}
       >
         <Icon className="mr-2 size-4 shrink-0" />
@@ -141,8 +139,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
     }
   };
 
-  const renderCompareFeedbackScores = () => {
-    if (!isCompare || !showCompareFeedback) return null;
+  const renderCharts = () => {
+    if (!isCompare || !showCharts) return null;
 
     return (
       <div className="mb-2 mt-4 max-h-[227px] overflow-auto rounded-md border">
@@ -210,7 +208,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
         />
       </div>
       {renderSubSection()}
-      {renderCompareFeedbackScores()}
+      {renderCharts()}
     </div>
   );
 };
