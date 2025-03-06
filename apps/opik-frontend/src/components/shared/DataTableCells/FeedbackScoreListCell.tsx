@@ -15,6 +15,52 @@ type CustomMeta<TData> = {
   isAverageScores?: boolean;
 };
 
+const calculateVisibleCount = (
+  cellWidth: number,
+  tagWidths: number[],
+  sortedListLength: number,
+  setVisibleCount: React.Dispatch<React.SetStateAction<number>>,
+) => {
+  const tagListWidth = tagWidths.reduce((acc, w) => acc + w + TAG_GAP, 0);
+  const containerWidth = cellWidth - 8;
+
+  if (containerWidth > tagListWidth) {
+    setVisibleCount(sortedListLength);
+    return;
+  }
+
+  const lastIdx = tagWidths.length - 1;
+  const remainingWidth = 30;
+  const counterWidth = remainingWidth + TAG_GAP;
+  const minFirstTagWidth = Math.max(tagWidths[0] / 2, 70) + counterWidth;
+
+  const isSingleTag = tagWidths.length === 1;
+  const isNarrowContainer =
+    tagWidths.length >= 2 &&
+    containerWidth < tagWidths[0] + tagWidths[1] + TAG_GAP * 2;
+
+  if (isSingleTag || isNarrowContainer) {
+    if (containerWidth >= minFirstTagWidth) {
+      setVisibleCount(1);
+      return;
+    }
+  }
+
+  let availableWidth = containerWidth - counterWidth;
+
+  for (let idx = 0; idx <= lastIdx; idx++) {
+    const nextItemWidth =
+      tagWidths[idx] + (idx > 0 && idx < lastIdx ? TAG_GAP * 2 : 0);
+
+    availableWidth -= nextItemWidth;
+
+    if (availableWidth < 0) {
+      setVisibleCount(idx);
+      break;
+    }
+  }
+};
+
 const FeedbackScoreListCell = <TData,>(
   context: CellContext<TData, unknown>,
 ) => {
@@ -28,50 +74,13 @@ const FeedbackScoreListCell = <TData,>(
   const widthList = useRef<number[]>([]);
   const remainingCount = feedbackScoreList.length - visibleCount;
 
-  const calcVisibleCount = (cellWidth: number) => {
-    const tagWidths = widthList.current;
-    const tagListWidth = tagWidths.reduce((acc, w) => acc + w + TAG_GAP, 0);
-
-    const containerWidth = cellWidth - 8;
-
-    if (containerWidth > tagListWidth) {
-      setVisibleCount(sortedList.length);
-      return;
-    }
-
-    const lastIdx = tagWidths.length - 1;
-    const remainingWidth = 30;
-    const counterWidth = remainingWidth + TAG_GAP;
-    const minFirstTagWidth = Math.max(tagWidths[0] / 2, 70) + counterWidth;
-
-    if (
-      (tagWidths.length >= 2 &&
-        containerWidth < tagWidths[0] + tagWidths[1] + TAG_GAP * 2) ||
-      tagWidths.length === 1
-    ) {
-      if (containerWidth >= minFirstTagWidth) {
-        setVisibleCount(1);
-        return;
-      }
-    }
-
-    let availableWidth = containerWidth - counterWidth;
-
-    for (let idx = 0; idx <= lastIdx; idx++) {
-      const nextItemWidth =
-        widthList.current[idx] + (idx > 0 && idx < lastIdx ? TAG_GAP * 2 : 0);
-
-      availableWidth -= nextItemWidth;
-
-      if (availableWidth < 0) {
-        setVisibleCount(idx);
-        break;
-      }
-    }
-  };
-
   const { ref: cellRef } = useObserveResizeNode<HTMLDivElement>((node) => {
-    calcVisibleCount(node.clientWidth);
+    calculateVisibleCount(
+      node.clientWidth,
+      widthList.current,
+      sortedList.length,
+      setVisibleCount,
+    );
   });
 
   const sortedList = feedbackScoreList.sort((c1, c2) =>
