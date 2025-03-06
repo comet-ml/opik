@@ -110,8 +110,11 @@ In order to develop features in the Python SDK, you will need to have Opik runni
 ```bash
 cd deployment/docker-compose
 
+# Optionally, you can force a pull of the latest images
+docker compose pull
+
 # Starting the Opik platform
-docker compose up --detach
+docker compose up -d
 
 # Configure the Python SDK to point to the local Opik deployment
 opik configure --use_local
@@ -184,6 +187,9 @@ If you want to run the front-end locally and see your changes instantly on savin
 - Run the following command to start the necessary services and expose the required ports:
 
   ```bash
+  # Optionally, you can force a pull of the latest images
+  docker compose pull
+  
   docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
   ```
 
@@ -250,6 +256,9 @@ In order to run the external services (Clickhouse, MySQL, Redis), you can use `d
 
 ```bash
 cd deployment/docker-compose
+
+# Optionally, you can force a pull of the latest images
+docker compose pull
 
 docker compose up clickhouse redis mysql -d
 ```
