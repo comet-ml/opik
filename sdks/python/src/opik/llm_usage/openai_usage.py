@@ -20,7 +20,7 @@ class OpenAICompletionsUsage(base_original_provider_usage.BaseOriginalProviderUs
     prompt_tokens_details: Optional["PromptTokensDetails"] = None
     """Breakdown of tokens used in the prompt."""
 
-    def to_backend_compatible_flat_dict(self) -> Dict[str, int]:
+    def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> Dict[str, int]:
         result = {**self.__dict__}
 
         if self.completion_tokens_details is not None:
@@ -32,7 +32,7 @@ class OpenAICompletionsUsage(base_original_provider_usage.BaseOriginalProviderUs
             result["prompt_tokens_details"] = self.prompt_tokens_details.__dict__
 
         result = dict_utils.flatten_dict(
-            d=result, delim=".", parent_key=self._PARENT_KEY_PREFIX
+            d=result, delim=".", parent_key=parent_key_prefix
         )
         result = dict_utils.keep_only_values_of_type(d=result, value_type=int)
         return result

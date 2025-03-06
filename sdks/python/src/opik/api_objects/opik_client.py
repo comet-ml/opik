@@ -8,7 +8,7 @@ from typing import Optional, Any, Dict, List
 from .prompt import Prompt
 from .prompt.client import PromptClient
 
-from ..types import SpanType, UsageDict, FeedbackScoreDict, ErrorInfoDict
+from ..types import SpanType, UsageDict, FeedbackScoreDict, ErrorInfoDict, LLMProvider
 from . import (
     opik_query_language,
     span,
@@ -315,7 +315,7 @@ class Opik:
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
         model: Optional[str] = None,
-        provider: Optional[str] = None,
+        provider: LLMProvider = LLMProvider.OPENAI,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
     ) -> span.Span:
@@ -351,16 +351,14 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        parsed_usage = validation_helpers.validate_and_parse_usage(
+        opik_usage = validation_helpers.validate_and_parse_usage(
             usage=usage,
             logger=LOGGER,
             provider=provider,
         )
-        if parsed_usage.full_usage is not None:
+        if opik_usage is not None:
             metadata = (
-                {"usage": parsed_usage.full_usage}
-                if metadata is None
-                else {"usage": parsed_usage.full_usage, **metadata}
+                {"usage": usage} if metadata is None else {"usage": usage, **metadata}
             )
 
         if project_name is None:
@@ -398,7 +396,7 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=parsed_usage.supported_usage,
+            usage=opik_usage,
             model=model,
             provider=provider,
             error_info=error_info,

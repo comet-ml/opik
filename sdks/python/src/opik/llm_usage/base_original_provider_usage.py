@@ -1,15 +1,14 @@
 import abc
-from typing import Dict, Any, Literal
+from typing import Dict, Any
 
 import pydantic
 
 
 class BaseOriginalProviderUsage(pydantic.BaseModel, abc.ABC):
     model_config = pydantic.ConfigDict(extra="allow")
-    _PARENT_KEY_PREFIX: Literal["original"] = "original"
 
     @abc.abstractmethod
-    def to_backend_compatible_flat_dict(self) -> Dict[str, int]:
+    def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> Dict[str, int]:
         pass
 
     @classmethod

@@ -1,12 +1,13 @@
 import datetime
 import logging
 
-from typing import Optional, Any, List, Dict
+from typing import Optional, Any, List, Dict, Union
 from ...types import (
     SpanType,
     UsageDict,
     DistributedTraceHeadersDict,
     ErrorInfoDict,
+    LLMProvider,
 )
 
 from ...message_processing import streamer, messages
@@ -88,7 +89,7 @@ class Span:
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
-        provider: Optional[str] = None,
+        provider: Optional[Union[LLMProvider, str]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
     ) -> None:
@@ -110,14 +111,14 @@ class Span:
         Returns:
             None
         """
-        parsed_usage = validation_helpers.validate_and_parse_usage(
-            usage, LOGGER, provider
+        opik_usage = validation_helpers.validate_and_parse_usage(
+            usage=usage,
+            logger=LOGGER,
+            provider=provider,
         )
-        if parsed_usage.full_usage is not None:
+        if opik_usage is not None:
             metadata = (
-                {"usage": parsed_usage.full_usage}
-                if metadata is None
-                else {"usage": parsed_usage.full_usage, **metadata}
+                {"usage": usage} if metadata is None else {"usage": usage, **metadata}
             )
 
         end_span_message = messages.UpdateSpanMessage(
@@ -130,7 +131,7 @@ class Span:
             input=input,
             output=output,
             tags=tags,
-            usage=parsed_usage.supported_usage,
+            usage=opik_usage,
             model=model,
             provider=provider,
             error_info=error_info,
@@ -151,7 +152,7 @@ class Span:
         tags: Optional[List[str]] = None,
         usage: Optional[UsageDict] = None,
         model: Optional[str] = None,
-        provider: Optional[str] = None,
+        provider: LLMProvider = LLMProvider.OPENAI,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
     ) -> "Span":
@@ -181,14 +182,14 @@ class Span:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        parsed_usage = validation_helpers.validate_and_parse_usage(
-            usage, LOGGER, provider
+        opik_usage = validation_helpers.validate_and_parse_usage(
+            usage=usage,
+            logger=LOGGER,
+            provider=provider,
         )
-        if parsed_usage.full_usage is not None:
+        if opik_usage is not None:
             metadata = (
-                {"usage": parsed_usage.full_usage}
-                if metadata is None
-                else {"usage": parsed_usage.full_usage, **metadata}
+                {"usage": usage} if metadata is None else {"usage": usage, **metadata}
             )
 
         create_span_message = messages.CreateSpanMessage(
@@ -204,7 +205,7 @@ class Span:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=parsed_usage.supported_usage,
+            usage=opik_usage,
             model=model,
             provider=provider,
             error_info=error_info,

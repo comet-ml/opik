@@ -1,18 +1,28 @@
-import dataclasses
+import enum
 import sys
+from typing import Literal, Optional
 
-from typing import Literal, Optional, Union
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
-    from typing_extensions import Required, NotRequired
+    from typing_extensions import NotRequired, Required
 else:
-    from typing import Required, NotRequired
+    from typing import NotRequired, Required
 
 SpanType = Literal["general", "tool", "llm"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
-LLMProvider = Literal["openai", "google_vertexai", "google_ai"]
+
+
+class LLMProvider(str, enum.Enum):
+    GOOGLE_VERTEXAI = "google_vertexai"
+    GOOGLE_AI = "google_ai"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+
+    @classmethod
+    def has_value(cls, value: str) -> bool:
+        return value in [enum_item.value for enum_item in cls]
 
 
 class UsageDict(TypedDict):
@@ -104,10 +114,3 @@ class ErrorInfoDict(TypedDict):
 
     traceback: str
     """Exception traceback"""
-
-
-@dataclasses.dataclass
-class LLMUsageInfo:
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    usage: Optional[Union[UsageDict, UsageDictGoogle]] = None

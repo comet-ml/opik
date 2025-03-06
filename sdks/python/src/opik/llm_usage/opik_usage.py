@@ -15,6 +15,21 @@ class OpikUsage(pydantic.BaseModel):
 
     provider_usage: ProviderUsage
 
+    def to_backend_compatible_flat_dict(self) -> Dict[str, int]:
+        generic_keys: Dict[str, int] = {
+            "completion_tokens": self.completion_tokens,
+            "prompt_tokens": self.prompt_tokens,
+            "total_tokens": self.total_tokens,
+        }
+
+        provider_usage: Dict[str, int] = (
+            self.provider_usage.to_backend_compatible_flat_dict(
+                parent_key_prefix="provider"
+            )
+        )
+
+        return {**generic_keys, **provider_usage}
+
     @classmethod
     def from_openai_completions_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
         provider_usage = openai_usage.OpenAICompletionsUsage.from_original_usage_dict(

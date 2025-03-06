@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional, Set, Tuple, Type
 import pydantic
 
 import opik.rest_api.core.datetime_utils as datetime_utils
+from opik import llm_usage
 
 try:
     import numpy as np
@@ -41,6 +42,9 @@ def jsonable_encoder(obj: Any, seen: Optional[Set[int]] = None) -> Any:
         seen.add(obj_id)
 
     try:
+        if isinstance(obj, llm_usage.OpikUsage):
+            return obj.to_backend_compatible_flat_dict()
+
         if dataclasses.is_dataclass(obj) or isinstance(obj, pydantic.BaseModel):
             obj_dict = obj.__dict__
             return jsonable_encoder(obj_dict, seen)

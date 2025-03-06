@@ -4,7 +4,8 @@ from llama_index.core import Settings
 from llama_index.core.base.llms.types import ChatResponse
 from llama_index.core.callbacks import schema as llama_index_schema
 
-from opik.types import LLMUsageInfo
+from opik import llm_usage
+from opik.types import LLMProvider
 
 
 def get_span_input_from_events(
@@ -118,8 +119,8 @@ def get_span_output_from_event(
 
 def get_usage_data(
     payload: Optional[Dict[str, Any]],
-) -> LLMUsageInfo:
-    llm_usage_info = LLMUsageInfo()
+) -> llm_usage.LLMUsageInfo:
+    llm_usage_info = llm_usage.LLMUsageInfo()
 
     if payload is None or len(payload) == 0:
         return llm_usage_info
@@ -139,11 +140,11 @@ def get_usage_data(
     if response and hasattr(response, "raw"):
         if hasattr(response.raw, "model"):
             llm_usage_info.model = response.raw.model
-            llm_usage_info.provider = "openai"
+            llm_usage_info.provider = LLMProvider.OPENAI
         if hasattr(response.raw, "usage"):
             usage_info = response.raw.usage.model_dump()
-            usage_info.pop("completion_tokens_details", None)
-            usage_info.pop("prompt_tokens_details", None)
-            llm_usage_info.usage = usage_info
+            llm_usage_info.usage = llm_usage.OpikUsage.from_openai_completions_dict(
+                usage_info
+            )
 
     return llm_usage_info
