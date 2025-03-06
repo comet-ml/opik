@@ -51,8 +51,6 @@ public class OpenTelemetryResource {
         var userName = requestContext.get().getUserName();
         var workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Request payload: {}", traceRequest);
-
         log.info("Received spans batch via OpenTelemetry for project '{}' in workspaceId '{}'", projectName,
                 workspaceId);
 
