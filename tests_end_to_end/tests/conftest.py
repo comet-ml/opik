@@ -512,12 +512,10 @@ def create_ai_provider_config(page: Page):
     ai_providers_page.go_to_page()
     ai_providers_page.delete_provider(provider_name="OPENAI_API_KEY")
 
+
 @pytest.fixture
 def create_moderation_rule_fixture(
-    create_ai_provider_config,
-    create_10_test_traces,
-    page: Page,
-    create_project_api
+    create_ai_provider_config, create_10_test_traces, page: Page, create_project_api
 ):
     project_name = create_project_api
 
@@ -552,9 +550,7 @@ def create_moderation_rule_fixture(
     ).click()
     traces_page.page.get_by_label("Moderation", exact=True).click()
 
-    variable_map = traces_page.page.get_by_placeholder(
-        "Select a key from recent trace"
-    )
+    variable_map = traces_page.page.get_by_placeholder("Select a key from recent trace")
     variable_map.click()
     variable_map.fill("output.output")
     traces_page.page.get_by_role("option", name="output.output").click()

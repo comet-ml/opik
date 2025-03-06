@@ -9,6 +9,7 @@ import allure
 
 logger = logging.getLogger(__name__)
 
+
 class TestOnlineScoring:
     @allure.title("Basic moderation rule creation")
     def test_create_moderation_rule(
@@ -95,11 +96,11 @@ class TestOnlineScoring:
 
     @allure.title("Basic online scoring Moderation full flow")
     def test_online_scoring_basic_moderation(
-            self,
-            page: Page,
-            client: opik.Opik,
-            create_moderation_rule_fixture,
-            create_10_test_traces
+        self,
+        page: Page,
+        client: opik.Opik,
+        create_moderation_rule_fixture,
+        create_10_test_traces,
     ):
         for i in range(10):
             _ = client.trace(
@@ -108,9 +109,13 @@ class TestOnlineScoring:
                 input={"input": "test input", "context": "test context"},
                 output={"output": "test output"},
             )
-        wait_for_number_of_traces_to_be_visible(project_name=os.environ["OPIK_PROJECT_NAME"], number_of_traces=10)
+        wait_for_number_of_traces_to_be_visible(
+            project_name=os.environ["OPIK_PROJECT_NAME"], number_of_traces=10
+        )
 
-        logger.info(f"Navigating to traces page for project {os.environ["OPIK_PROJECT_NAME"]}")
+        logger.info(
+            f"Navigating to traces page for project {os.environ["OPIK_PROJECT_NAME"]}"
+        )
         traces_page = TracesPage(page)
         logger.info(f"Navigating to project '{os.environ["OPIK_PROJECT_NAME"]}'")
         projects_page = ProjectsPage(page)
@@ -120,12 +125,14 @@ class TestOnlineScoring:
 
         # Wait for moderation cell with retries
         max_retries = 5
-        retry_delay = 2 #seconds
-        
+        retry_delay = 2  # seconds
+
         for attempt in range(max_retries):
             try:
                 traces_page.page.reload()
-                expect(traces_page.page.get_by_role("cell", name="Moderation")).to_be_visible()
+                expect(
+                    traces_page.page.get_by_role("cell", name="Moderation")
+                ).to_be_visible()
                 break
             except Exception as e:
                 logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
@@ -137,31 +144,37 @@ class TestOnlineScoring:
                     f"Project name: {os.environ["OPIK_PROJECT_NAME"]}\n"
                     f"Last error: {str(e)}"
                 ) from e
-                
-       # Filter columns to show only ID and Moderation
+
+        # Filter columns to show only ID and Moderation
         traces_page.page.get_by_role("button", name="Columns").click()
         traces_page.page.get_by_role("menuitem", name="Hide all").click()
         traces_page.page.get_by_role("button", name="Columns").click()
         traces_page.page.get_by_role("button", name="Moderation").click()
-        
+
         max_retries = 10
-        retry_delay = 3 # seconds
-        
+        retry_delay = 3  # seconds
+
         for attempt in range(max_retries):
-            moderation_cells = traces_page.page.get_by_role("cell", name="0", exact=True)
+            moderation_cells = traces_page.page.get_by_role(
+                "cell", name="0", exact=True
+            )
             cell_count = moderation_cells.count()
-            
+
             if cell_count == 10:
-                logger.info("All 10 traces have been properly scored according to the rule")
+                logger.info(
+                    "All 10 traces have been properly scored according to the rule"
+                )
                 break
-                
-            logger.info(f"Found {cell_count} moderation cells with value 0 (attempt {attempt + 1})")
-            
+
+            logger.info(
+                f"Found {cell_count} moderation cells with value 0 (attempt {attempt + 1})"
+            )
+
             if attempt < max_retries:
                 traces_page.page.reload()
                 traces_page.page.wait_for_timeout(retry_delay * 1000)
                 continue
-                
+
             raise AssertionError(
                 f"Failed to find 10 moderation cells with value 0 after {max_retries} attempts"
             )
