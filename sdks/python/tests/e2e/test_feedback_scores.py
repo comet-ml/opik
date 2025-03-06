@@ -101,9 +101,9 @@ def test_feedbacks_are_logged_via_trace_and_span__and_deleted(opik_client: opik.
 
     opik_client.flush()
 
-    opik_client.delete_feedback_score_for_trace(trace.id, "trace-metric-1")
-    opik_client.delete_feedback_score_for_span(span.id, "span-metric-1")
-    opik_client.delete_feedback_score_for_span(span.id, "span-metric-2")
+    opik_client.delete_trace_feedback_score(trace.id, "trace-metric-1")
+    opik_client.delete_span_feedback_score(span.id, "span-metric-1")
+    opik_client.delete_span_feedback_score(span.id, "span-metric-2")
 
     opik_client.flush()
 

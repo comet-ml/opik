@@ -507,7 +507,7 @@ class Opik:
 
             self._streamer.put(add_span_feedback_scores_batch_message)
 
-    def delete_feedback_score_for_trace(self, trace_id: str, name: str) -> None:
+    def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
         """
         Deletes a feedback score associated with a specific trace.
 
@@ -525,7 +525,7 @@ class Opik:
             name=name,
         )
 
-    def delete_feedback_score_for_span(self, span_id: str, name: str) -> None:
+    def delete_span_feedback_score(self, span_id: str, name: str) -> None:
         """
         Deletes a feedback score associated with a specific span.
 
