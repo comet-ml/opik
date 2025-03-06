@@ -90,9 +90,7 @@ def test_crewai__happyflow(
                                         type="llm",
                                         usage={
                                             "prompt_tokens": ANY_BUT_NONE,
-                                            "prompt_tokens_details": ANY_BUT_NONE,
                                             "completion_tokens": ANY_BUT_NONE,
-                                            "completion_tokens_details": ANY_BUT_NONE,
                                             "total_tokens": ANY_BUT_NONE,
                                         },
                                         spans=[],
@@ -142,9 +140,7 @@ def test_crewai__happyflow(
                                         type="llm",
                                         usage={
                                             "prompt_tokens": ANY_BUT_NONE,
-                                            "prompt_tokens_details": ANY_BUT_NONE,
                                             "completion_tokens": ANY_BUT_NONE,
-                                            "completion_tokens_details": ANY_BUT_NONE,
                                             "total_tokens": ANY_BUT_NONE,
                                         },
                                         spans=[],

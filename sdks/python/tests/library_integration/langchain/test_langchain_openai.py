@@ -48,20 +48,10 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         "max_tokens": 10,
         "name": "custom-openai-llm-name",
     }
-    token_usage_info = {
-        "prompt_tokens": ANY_BUT_NONE,
-        "completion_tokens": ANY_BUT_NONE,
-        "total_tokens": ANY_BUT_NONE,
-    }
-
     if stream_usage is True:
         llm_args["stream_usage"] = stream_usage
 
     llm = llm_model(**llm_args)
-
-    if isinstance(llm, langchain_openai.ChatOpenAI):
-        token_usage_info["prompt_tokens_details"] = ANY_BUT_NONE
-        token_usage_info["completion_tokens_details"] = ANY_BUT_NONE
 
     template = "Given the title of play, write a synopsys for that. Title: {title}."
 
@@ -115,7 +105,11 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                         metadata=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        usage=token_usage_info,
+                        usage={
+                            "completion_tokens": ANY_BUT_NONE,
+                            "prompt_tokens": ANY_BUT_NONE,
+                            "total_tokens": ANY_BUT_NONE,
+                        },
                         spans=[],
                         provider="openai",
                         model=ANY_STRING(startswith="gpt-3.5-turbo"),
