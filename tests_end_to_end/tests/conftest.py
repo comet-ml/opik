@@ -514,7 +514,7 @@ def create_ai_provider_config(page: Page):
 
 
 @pytest.fixture
-def  create_moderation_rule_fixture(
+def create_moderation_rule_fixture(
     create_ai_provider_config, create_10_test_traces, page: Page, create_project_api
 ):
     project_name = create_project_api
