@@ -1,4 +1,5 @@
 import React from "react";
+import isFunction from "lodash/isFunction";
 import {
   Select,
   SelectContent,
@@ -6,9 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { DropdownOption } from "@/types/shared";
-import isFunction from "lodash/isFunction";
 
 export type SelectBoxProps = {
   value: string;
@@ -59,7 +60,7 @@ export const SelectBox = ({
             return renderOption(option);
           }
 
-          return (
+          const item = (
             <SelectItem
               key={option.value}
               value={option.value}
@@ -69,6 +70,16 @@ export const SelectBox = ({
               {option.label}
             </SelectItem>
           );
+
+          if (option.tooltip) {
+            return (
+              <TooltipWrapper content={option.tooltip}>
+                <div>{item}</div>
+              </TooltipWrapper>
+            );
+          }
+
+          return item;
         })}
 
         {!options.length && (
