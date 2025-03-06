@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from . import base_original_provider_usage
 from opik import dict_utils
 
+
 class OpenAICompletionsUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     completion_tokens: int
     """Number of tokens in the generated completion."""
@@ -19,32 +20,39 @@ class OpenAICompletionsUsage(base_original_provider_usage.BaseOriginalProviderUs
     prompt_tokens_details: Optional["PromptTokensDetails"] = None
     """Breakdown of tokens used in the prompt."""
 
-
     def to_backend_compatible_flat_dict(self) -> Dict[str, int]:
         result = {**self.__dict__}
-        
+
         if self.completion_tokens_details is not None:
-            result["completion_tokens_details"] = self.completion_tokens_details.__dict__
-        
+            result["completion_tokens_details"] = (
+                self.completion_tokens_details.__dict__
+            )
+
         if self.prompt_tokens_details is not None:
             result["prompt_tokens_details"] = self.prompt_tokens_details.__dict__
 
-        result = dict_utils.remove_none_from_dict(result)
-        result = dict_utils.flatten_dict(d=result, delim=".", parent_key="original_usage")
-
+        result = dict_utils.flatten_dict(
+            d=result, delim=".", parent_key=self._PARENT_KEY_PREFIX
+        )
+        result = dict_utils.keep_only_values_of_type(d=result, value_type=int)
         return result
-    
-    @classmethod
-    def from_original_usage_dict(usage_dict: Dict[str, Any]) -> "OpenAICompletionsUsage":
-        completion_tokens_details = CompletionTokensDetails(**usage_dict.pop("completion_tokens_details", None))
-        prompt_tokens_details = PromptTokensDetails(**usage_dict.pop("completion_tokens_details", None))
 
-        return OpenAICompletionsUsage(
-            **usage_dict,
-            completion_tokens_details=completion_tokens_details,
-            prompt_tokens_details=prompt_tokens_details
+    @classmethod
+    def from_original_usage_dict(
+        cls, usage_dict: Dict[str, Any]
+    ) -> "OpenAICompletionsUsage":
+        completion_tokens_details = CompletionTokensDetails(
+            **usage_dict.pop("completion_tokens_details", None)
+        )
+        prompt_tokens_details = PromptTokensDetails(
+            **usage_dict.pop("completion_tokens_details", None)
         )
 
+        return cls(
+            **usage_dict,
+            completion_tokens_details=completion_tokens_details,
+            prompt_tokens_details=prompt_tokens_details,
+        )
 
 
 class CompletionTokensDetails(pydantic.BaseModel):

@@ -1,13 +1,15 @@
 import copy
 import logging
-from typing import Any, Dict, Mapping, Optional, List, Tuple
+from typing import Any, Dict, Mapping, Optional, List, Tuple, TypeVar, Type
 
 from . import logging_messages
 
 LOGGER = logging.getLogger(__name__)
 
 
-def flatten_dict(d: Dict[str, Any], delim: str = ".", parent_key: Optional[str] = None ) -> Dict[str, Any]:
+def flatten_dict(
+    d: Dict[str, Any], delim: str = ".", parent_key: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Convert {'prefix': {'key': value}} to {'prefix.key': value}.
 
@@ -26,6 +28,15 @@ def flatten_dict(d: Dict[str, Any], delim: str = ".", parent_key: Optional[str] 
             flattened[key] = value
 
     return flattened
+
+
+_ValueType = TypeVar("_ValueType")
+
+
+def keep_only_values_of_type(
+    d: Dict[str, Any], value_type: Type[_ValueType]
+) -> Dict[str, _ValueType]:
+    return {key: value for key, value in d.items() if isinstance(value, value_type)}  # type: ignore
 
 
 def deepmerge(
