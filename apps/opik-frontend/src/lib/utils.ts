@@ -9,6 +9,7 @@ import times from "lodash/times";
 import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
 import snakeCase from "lodash/snakeCase";
+import isString from "lodash/isString";
 import { twMerge } from "tailwind-merge";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { JsonNode } from "@/types/shared";
@@ -22,6 +23,73 @@ export const buildDocsUrl = (path: string = "", hash: string = "") => {
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+export const isStringMarkdown = (string: unknown): boolean => {
+  if (!isString(string)) {
+    return false;
+  }
+
+  // Return false for very short strings that are unlikely to be markdown
+  if (string.length < 3) {
+    return false;
+  }
+
+  // More comprehensive regex patterns for markdown detection
+  const markdownPatterns = [
+    // Headers (h1-h6)
+    /^#{1,6}\s+.+$/m,
+
+    // Emphasis (bold, italic, strikethrough)
+    /(\*\*|__).+?(\*\*|__)/, // bold
+    /(\*|_).+?(\*|_)/, // italic
+    /~~.+?~~/, // strikethrough
+
+    // Links and images
+    /\[.+?\]\(.+?\)/, // links
+    /!\[.+?\]\(.+?\)/, // images
+
+    // Lists
+    /^(\s*[*\-+]\s+.+)$/m, // unordered lists
+    /^(\s*\d+\.\s+.+)$/m, // ordered lists
+
+    // Blockquotes
+    /^>\s+.+$/m, // blockquotes
+
+    // Code
+    /```[\s\S]*?```/, // code blocks
+    /`[^`]+`/, // inline code
+
+    // Tables
+    /^\|.+\|\s*$/m, // table rows
+    /^[|\-:\s]+$/m, // table separators
+
+    // Horizontal rules
+    /^(\*{3,}|-{3,}|_{3,})$/m, // hr
+
+    // Task lists
+    /^\s*[*\-+]\s+\[[ xX]]\s+.+$/m, // task lists
+
+    // Definition lists
+    /^.+?\n:\s+.+$/m, // definition lists
+
+    // Footnote references and definitions
+    /\[\^.+?]/, // footnote references
+    /^\[\^.+?]:/m, // footnote definitions
+  ];
+
+  // Check if the string contains URLs - common in markdown content
+  const urlPattern = /https?:\/\/\S+/.test(string);
+
+  // Check if we have multiple paragraphs (a strong indicator of structured text)
+  const multipleParagraphs = /\n\s*\n/.test(string);
+
+  // Check for markdown patterns
+  const hasMarkdownSyntax = markdownPatterns.some((pattern) =>
+    pattern.test(string),
+  );
+
+  return hasMarkdownSyntax || urlPattern || multipleParagraphs;
+};
 
 export const isValidJsonObject = (string: string) => {
   let json = null;
