@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
+import dayjs from "dayjs";
 
-import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -10,12 +9,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Filter } from "@/types/filters";
 import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector";
+import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
+import TimePicker from "@/components/shared/TimePicker/TimePicker";
 import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
+import { Filter } from "@/types/filters";
 import { COLUMN_TYPE } from "@/types/shared";
-import dayjs from "dayjs";
-import { SelectSingleEventHandler } from "react-day-picker";
+import { formatDate, isStringValidFormattedDate } from "@/lib/date";
+import { cn } from "@/lib/utils";
 
 type TimeRowProps = {
   filter: Filter;
@@ -27,17 +28,49 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   onChange,
 }) => {
   const [open, setOpen] = useState(false);
-  const date = useMemo(
-    () => (dayjs(filter.value).isValid() ? new Date(filter.value) : undefined),
-    [filter.value],
+  const [error, setError] = useState(false);
+  const [date, setDate] = useState<Date | undefined>(
+    dayjs(filter.value).isValid() ? new Date(filter.value) : undefined,
   );
 
-  const onSelectDate: SelectSingleEventHandler = (value) => {
-    onChange({
-      ...filter,
-      value: value ? value.toISOString() : "",
-    });
-    setOpen(false);
+  const [dateString, setDateString] = useState<string>(
+    dayjs(filter.value).isValid() ? formatDate(filter.value as string) : "",
+  );
+
+  const onSelectDate = (value: Date | undefined) => {
+    setDate(value);
+    if (value) {
+      setDateString(formatDate(value.toISOString()));
+      setError(false);
+    }
+  };
+
+  const onValueChange = (value: string) => {
+    setDateString(value);
+
+    const isValid = isStringValidFormattedDate(value);
+
+    if (isValid) {
+      const parsedDate = dayjs(
+        value,
+        ["MM/DD/YY HH:mm A", "MM/DD/YYYY HH:mm A"],
+        true,
+      );
+      setDate(parsedDate.toDate());
+      onChange({
+        ...filter,
+        value: parsedDate.toISOString(),
+      });
+    }
+    setError(!isValid);
+  };
+
+  const onOpenChange = (open: boolean) => {
+    if (!open && date) {
+      onValueChange(formatDate(date.toISOString()));
+    }
+
+    setOpen(open);
   };
 
   return (
@@ -52,23 +85,25 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
         />
       </td>
       <td className="p-1">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant={"outline"}
-              className={cn(
-                "w-full min-w-40 justify-start text-left font-normal",
-                !filter.value && "text-muted-foreground",
-              )}
-            >
-              <CalendarIcon className="mr-2 size-4" />
-              {filter.value ? (
-                formatDate(filter.value as string)
-              ) : (
-                <span>Pick a date</span>
-              )}
-            </Button>
-          </PopoverTrigger>
+        <Popover open={open} onOpenChange={onOpenChange}>
+          <div className="relative w-full">
+            <DebounceInput
+              className={cn("pr-10", {
+                "border-destructive focus-visible:border-destructive": error,
+              })}
+              onValueChange={(value) => onValueChange(value as string)}
+              placeholder="MM/DD/YY HH:mm A"
+              value={dateString}
+              delay={500}
+            />
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon-sm">
+                  <CalendarIcon />
+                </Button>
+              </PopoverTrigger>
+            </div>
+          </div>
           <PopoverContent className="w-auto p-0">
             <Calendar
               mode="single"
@@ -76,6 +111,9 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
               onSelect={onSelectDate}
               initialFocus
             />
+            <div className="border-t border-border p-3">
+              <TimePicker date={date} setDate={onSelectDate} />
+            </div>
           </PopoverContent>
         </Popover>
       </td>

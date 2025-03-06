@@ -9,6 +9,9 @@ import isNull from "lodash/isNull";
 dayjs.extend(utc);
 dayjs.extend(relativeTime);
 
+const FORMATTED_DATE_STRING_REGEXP =
+  /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(\d{2}|\d{4})\s(0[1-9]|1[0-2]):([0-5][0-9])\s(AM|PM)$/;
+
 export const formatDate = (value: string, utc: boolean = false) => {
   const dateTimeFormat = "MM/DD/YY hh:mm A";
   if (isString(value) && dayjs(value).isValid()) {
@@ -21,6 +24,10 @@ export const formatDate = (value: string, utc: boolean = false) => {
   return "";
 };
 
+export const isStringValidFormattedDate = (value: string) => {
+  return isString(value) && FORMATTED_DATE_STRING_REGEXP.test(value);
+};
+
 export const getTimeFromNow = (date: string) => {
   if (isString(date) && dayjs(date).isValid()) {
     return dayjs().to(dayjs(date));
@@ -28,12 +35,12 @@ export const getTimeFromNow = (date: string) => {
   return "";
 };
 
-export const makeStartOfDay = (value: string) => {
-  return dayjs(value).startOf("date").utcOffset(0, true).toISOString();
+export const makeStartOfMinute = (value: string) => {
+  return dayjs(value).startOf("minute").toISOString();
 };
 
-export const makeEndOfDay = (value: string) => {
-  return dayjs(value).endOf("date").utcOffset(0, true).toISOString();
+export const makeEndOfMinute = (value: string) => {
+  return dayjs(value).endOf("minute").toISOString();
 };
 
 const millisecondsToSeconds = (milliseconds: number) => {
