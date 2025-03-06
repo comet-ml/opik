@@ -1,4 +1,3 @@
-import inspect
 import sys
 from typing import get_origin
 
@@ -6,6 +5,11 @@ if sys.version_info < (3, 11):
     from typing_extensions import NotRequired
 else:
     from typing import NotRequired
+
+if sys.version_info < (3, 10):
+    from typing import get_type_hints as get_annotations
+else:
+    from inspect import get_annotations
 
 import pytest
 
@@ -80,7 +84,7 @@ def test_usage_validator(usage_dict, is_valid):
     if tested.validate().ok():
         assert tested.parsed_usage.full_usage == usage_dict
 
-        usage_dict_type_hints = inspect.get_annotations(UsageDict)
+        usage_dict_type_hints = get_annotations(UsageDict)
         supported_usage_keys = set(tested.parsed_usage.supported_usage.keys())
 
         usage_dict_all_keys = set(usage_dict_type_hints.keys())
