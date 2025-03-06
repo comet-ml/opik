@@ -3,6 +3,7 @@ name: opik
 services:
   mysql:
     image: mysql:8.4.2
+    pull_policy: always
     hostname: mysql
     environment:
       MYSQL_ROOT_PASSWORD: opik
@@ -19,6 +20,7 @@ services:
 
   redis:
     image: redis:7.2.4-alpine3.19
+    pull_policy: always
     hostname: redis
     command: redis-server --requirepass opik
     healthcheck:
@@ -30,6 +32,7 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.3.6.48-alpine
+    pull_policy: always
     hostname: clickhouse
     environment:
       CLICKHOUSE_DB: opik
@@ -49,6 +52,7 @@ services:
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
@@ -93,6 +97,7 @@ services:
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -104,6 +109,7 @@ services:
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
+    pull_policy: always
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile
