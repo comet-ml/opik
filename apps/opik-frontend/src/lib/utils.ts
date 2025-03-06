@@ -24,21 +24,71 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const isStringMarkdown = (string: unknown) => {
-  if (isString(string)) {
-    const markdownPatterns = [
-      /#\s\w+/, // headers
-      /\*{2}\w+\*{2}/, // bold
-      /\*\w+\*/, // italics
-      /\[.+\]\(.+\)/, // links
-      /!\[.*\]\(.*\)/, // images
-      /\d\.\s\w+/, // numbered lists
-      /\*\s\w+/, // bullet lists
-    ];
-
-    return markdownPatterns.some((pattern) => pattern.test(string));
+export const isStringMarkdown = (string: unknown): boolean => {
+  if (!isString(string)) {
+    return false;
   }
-  return false;
+
+  // Return false for very short strings that are unlikely to be markdown
+  if (string.length < 3) {
+    return false;
+  }
+
+  // More comprehensive regex patterns for markdown detection
+  const markdownPatterns = [
+    // Headers (h1-h6)
+    /^#{1,6}\s+.+$/m,
+
+    // Emphasis (bold, italic, strikethrough)
+    /(\*\*|__).+?(\*\*|__)/, // bold
+    /(\*|_).+?(\*|_)/, // italic
+    /~~.+?~~/, // strikethrough
+
+    // Links and images
+    /\[.+?\]\(.+?\)/, // links
+    /!\[.+?\]\(.+?\)/, // images
+
+    // Lists
+    /^(\s*[*\-+]\s+.+)$/m, // unordered lists
+    /^(\s*\d+\.\s+.+)$/m, // ordered lists
+
+    // Blockquotes
+    /^>\s+.+$/m, // blockquotes
+
+    // Code
+    /```[\s\S]*?```/, // code blocks
+    /`[^`]+`/, // inline code
+
+    // Tables
+    /^\|.+\|\s*$/m, // table rows
+    /^[|\-:\s]+$/m, // table separators
+
+    // Horizontal rules
+    /^(\*{3,}|-{3,}|_{3,})$/m, // hr
+
+    // Task lists
+    /^\s*[*\-+]\s+\[[ xX]]\s+.+$/m, // task lists
+
+    // Definition lists
+    /^.+?\n:\s+.+$/m, // definition lists
+
+    // Footnote references and definitions
+    /\[\^.+?]/, // footnote references
+    /^\[\^.+?]:/m, // footnote definitions
+  ];
+
+  // Check if the string contains URLs - common in markdown content
+  const urlPattern = /https?:\/\/\S+/.test(string);
+
+  // Check if we have multiple paragraphs (a strong indicator of structured text)
+  const multipleParagraphs = /\n\s*\n/.test(string);
+
+  // Check for markdown patterns
+  const hasMarkdownSyntax = markdownPatterns.some((pattern) =>
+    pattern.test(string),
+  );
+
+  return hasMarkdownSyntax || urlPattern || multipleParagraphs;
 };
 
 export const isValidJsonObject = (string: string) => {
