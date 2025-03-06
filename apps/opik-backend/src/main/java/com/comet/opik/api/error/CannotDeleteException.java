@@ -9,9 +9,4 @@ public class CannotDeleteException extends ClientErrorException {
         super(Response.status(Response.Status.CONFLICT).entity(response).build());
     }
 
-    public CannotDeleteException(String message) {
-        super(Response.status(Response.Status.CONFLICT).entity(
-                new io.dropwizard.jersey.errors.ErrorMessage(Response.Status.CONFLICT.getStatusCode(), message))
-                .build());
-    }
 }

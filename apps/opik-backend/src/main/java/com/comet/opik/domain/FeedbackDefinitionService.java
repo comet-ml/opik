@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackDefinitionCriteria;
 import com.comet.opik.api.Page;
-import com.comet.opik.api.error.CannotDeleteException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -11,6 +10,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -227,7 +227,7 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
     private void validateDefinitionName(Set<UUID> ids, FeedbackDefinitionDAO dao, String workspaceId) {
         if (dao.containsNameByIds(ids, workspaceId, USER_FEEDBACK) > 0) {
-            throw new CannotDeleteException(MESSAGE);
+            throw new ClientErrorException(MESSAGE, Response.Status.CONFLICT);
         }
     }
 
