@@ -19,6 +19,10 @@ Run docker-compose from the root of the project:
 
 ```bash
 cd deployment/docker-compose
+
+# Optionally, you can force a pull of the latest images
+docker compose pull
+
 docker compose -f docker-compose.yaml up -d
 ```
 
@@ -27,7 +31,15 @@ docker compose -f docker-compose.yaml up -d
 From the root of the project:
 ```bash
 cd deployment/docker-compose
+
+# Optionally, you can force a pull of the latest images
+docker compose pull
+
+# Build the images
 docker compose -f docker-compose.yaml up -d --build
+
+# Alternatively, you can force a pull of the latest images and build the images
+docker compose -f docker-compose.yaml up -d --build --pull always
 ```
 
 ## Exposing Database and Backend Ports for Local Development
@@ -40,6 +52,9 @@ debugging, you can use the provided Docker Compose override file.
 Run the following command to start the services and expose the ports:
 
 ```bash
+# Optionally, you can force a pull of the latest images
+docker compose pull
+
 docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
 ```
 
@@ -87,6 +102,9 @@ http://172.17.0.1:8080
 2. Run docker-compose including exposing ports to localhost:
 
 ```bash
+# Optionally, you can force a pull of the latest images
+docker compose pull
+
 docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
 ```
 
