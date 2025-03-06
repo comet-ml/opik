@@ -7,7 +7,7 @@ import noDataMetricsImageUrl from "/images/no-data-metrics.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
-import NoDataTab from "@/components/pages/TracesPage/NoDataTab";
+import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const NoTracesPage = () => {
@@ -28,10 +28,11 @@ const NoTracesPage = () => {
   }, [type]);
 
   return (
-    <NoDataTab
+    <NoDataPage
       title="Log your first trace"
       description="Logging traces helps you understand the flow of your application and identify specific points in your application that may be causing issues."
       imageUrl={imageUrl}
+      height={188}
       buttons={
         <>
           <Button variant="secondary" asChild>
@@ -51,7 +52,7 @@ const NoTracesPage = () => {
           <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
         </>
       }
-    ></NoDataTab>
+    ></NoDataPage>
   );
 };
 
