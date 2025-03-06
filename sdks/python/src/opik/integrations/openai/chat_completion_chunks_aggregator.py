@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import pydantic
 from openai.types.chat import chat_completion_chunk
 
-from opik import logging_messages, types
+from opik import logging_messages
 
 LOGGER = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class ChatCompletionChunksAggregated(pydantic.BaseModel):
     model: str
     object: str
     system_fingerprint: Optional[str]
-    usage: Optional[types.UsageDict]
+    usage: Optional[Dict[str, Any]]
 
 
 def aggregate(
