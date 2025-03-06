@@ -36,15 +36,16 @@ import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import PythonCodeRuleDetails from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/PythonCodeRuleDetails";
-import LLMJudgeRuleDetails from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/LLMJudgeRuleDetails";
+import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
+import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
+import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
   EvaluationRuleFormSchema,
   EvaluationRuleFormType,
   LLMJudgeDetailsFormType,
-} from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/schema";
+} from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import { LLM_JUDGE } from "@/types/llm";
 import { LLM_PROMPT_CUSTOM_TEMPLATE } from "@/constants/llm";
 
@@ -64,7 +65,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA: LLMJudgeDetailsFormType = {
 type AddEditRuleDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  projectId: string;
+  projectId?: string;
   rule?: EvaluatorsRule;
 };
 
@@ -81,6 +82,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     resolver: zodResolver(EvaluationRuleFormSchema),
     defaultValues: {
       ruleName: defaultRule?.name || "",
+      projectId: defaultRule?.project_id || projectId || "",
       samplingRate: defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
       type: defaultRule?.type || EVALUATORS_RULE_TYPE.llm_judge,
       pythonCodeDetails:
@@ -108,31 +110,29 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     return {
       name: formData.ruleName,
-      project_id: projectId,
+      project_id: formData.projectId,
       sampling_rate: formData.samplingRate,
       type: formData.type,
       code: isLLMJudge
         ? convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails)
         : formData.pythonCodeDetails,
     } as EvaluatorsRule;
-  }, [form, projectId, isLLMJudge]);
+  }, [form, isLLMJudge]);
 
   const createPrompt = useCallback(() => {
     createMutate({
-      projectId,
       rule: getRule(),
     });
     setOpen(false);
-  }, [createMutate, getRule, projectId, setOpen]);
+  }, [createMutate, getRule, setOpen]);
 
   const editPrompt = useCallback(() => {
     updateMutate({
       ruleId: defaultRule!.id,
-      projectId,
       rule: getRule(),
     });
     setOpen(false);
-  }, [updateMutate, getRule, defaultRule, projectId, setOpen]);
+  }, [updateMutate, getRule, defaultRule, setOpen]);
 
   const onSubmit = useCallback(
     () => (isEdit ? editPrompt() : createPrompt()),
@@ -178,6 +178,35 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   );
                 }}
               />
+              {!projectId && (
+                <FormField
+                  control={form.control}
+                  name="projectId"
+                  render={({ field, formState }) => {
+                    const validationErrors = get(formState.errors, [
+                      "projectId",
+                    ]);
+
+                    return (
+                      <FormItem>
+                        <Label>Project</Label>
+                        <FormControl>
+                          <ProjectsSelectBox
+                            value={field.value}
+                            onChange={field.onChange}
+                            className={cn({
+                              "border-destructive": Boolean(
+                                validationErrors?.message,
+                              ),
+                            })}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              )}
               <FormField
                 control={form.control}
                 name="samplingRate"
@@ -198,7 +227,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
               {isLLMJudge ? (
                 <LLMJudgeRuleDetails
                   workspaceName={workspaceName}
-                  projectId={projectId}
                   form={form}
                 />
               ) : (

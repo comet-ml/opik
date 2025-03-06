@@ -43,6 +43,7 @@ export type EvaluatorsRule = {
   id: string;
   name: string;
   project_id: string;
+  project_name?: string;
   sampling_rate: number;
   created_at: string;
   created_by: string;

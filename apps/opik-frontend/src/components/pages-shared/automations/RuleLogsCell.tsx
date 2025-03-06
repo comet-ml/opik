@@ -23,7 +23,6 @@ const RuleLogsCell = (context: CellContext<EvaluatorsRule, string>) => {
         params={{ workspaceName }}
         search={{
           rule_id: rule.id,
-          project_id: rule.project_id,
         }}
         target="_blank"
       >

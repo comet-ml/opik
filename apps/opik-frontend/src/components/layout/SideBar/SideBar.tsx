@@ -15,6 +15,7 @@ import {
   LucideHome,
   Blocks,
   Bolt,
+  Brain,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -22,6 +23,7 @@ import useAppStore from "@/store/AppStore";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
+import useRulesList from "@/api/automations/useRulesList";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -125,6 +127,20 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Blocks,
         label: "Playground",
+      },
+    ],
+  },
+  {
+    id: "production",
+    label: "Production",
+    items: [
+      {
+        id: "online_evaluation",
+        path: "/$workspaceName/online-evaluation",
+        type: MENU_ITEM_TYPE.router,
+        icon: Brain,
+        label: "Online evaluation",
+        count: "rules",
       },
     ],
   },
@@ -268,11 +284,24 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: rulesData } = useRulesList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
     experiments: experimentsData?.total,
     prompts: promptsData?.total,
+    rules: rulesData?.total,
   };
 
   const bottomMenuItems: MenuItem[] = [

@@ -9,7 +9,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import DataTable from "@/components/shared/DataTable/DataTable";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
 import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
-import { feedbackScoreSourceMap } from "@/lib/feedback-scores";
+import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useLocalStorageState from "use-local-storage-state";
 
@@ -22,7 +22,7 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
     label: "Source",
     type: COLUMN_TYPE.string,
     size: 100,
-    accessorFn: (row) => feedbackScoreSourceMap[row.source],
+    accessorFn: (row) => FEEDBACK_SCORE_SOURCE_MAP[row.source],
   },
   {
     id: "name",

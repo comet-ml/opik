@@ -1,12 +1,15 @@
-import useTracesList from "@/api/traces/useTracesList";
-import useSpansList from "@/api/traces/useSpansList";
-import { Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
   keepPreviousData,
   QueryObserverResult,
   RefetchOptions,
   UseQueryOptions,
 } from "@tanstack/react-query";
+
+import isBoolean from "lodash/isBoolean";
+
+import useTracesList from "@/api/traces/useTracesList";
+import useSpansList from "@/api/traces/useSpansList";
+import { Span, SPAN_TYPE, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
 
 export enum TRACE_DATA_TYPE {
@@ -42,6 +45,7 @@ export default function useTracesOrSpansList(
   config: Omit<UseQueryOptions, "queryKey" | "queryFn">,
 ) {
   const isTracesData = params.type === TRACE_DATA_TYPE.traces;
+  const isEnabled = isBoolean(config.enabled) ? config.enabled : true;
 
   const {
     data: tracesData,
@@ -51,7 +55,7 @@ export default function useTracesOrSpansList(
     refetch: refetchTrace,
   } = useTracesList(params, {
     ...config,
-    enabled: isTracesData,
+    enabled: isTracesData && isEnabled,
     placeholderData: keepPreviousData,
   } as never);
 
@@ -68,7 +72,7 @@ export default function useTracesOrSpansList(
     },
     {
       ...config,
-      enabled: !isTracesData,
+      enabled: !isTracesData && isEnabled,
       placeholderData: keepPreviousData,
     } as never,
   );

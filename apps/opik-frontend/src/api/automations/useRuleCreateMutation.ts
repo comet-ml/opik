@@ -7,7 +7,6 @@ import { useToast } from "@/components/ui/use-toast";
 
 type UseRuleCreateMutationParams = {
   rule: Partial<EvaluatorsRule>;
-  projectId: string;
 };
 
 const useRuleCreateMutation = () => {
@@ -15,9 +14,9 @@ const useRuleCreateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ rule, projectId }: UseRuleCreateMutationParams) => {
+    mutationFn: async ({ rule }: UseRuleCreateMutationParams) => {
       const { data } = await api.post(
-        `${AUTOMATIONS_REST_ENDPOINT}projects/${projectId}/evaluators`,
+        `${AUTOMATIONS_REST_ENDPOINT}evaluators`,
         {
           ...rule,
         },

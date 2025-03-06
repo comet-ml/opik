@@ -8,12 +8,10 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { EvaluatorsRule } from "@/types/automations";
 
 type RulesActionsPanelsProps = {
-  projectId: string;
   rules: EvaluatorsRule[];
 };
 
 const RulesActionsPanel: React.FunctionComponent<RulesActionsPanelsProps> = ({
-  projectId,
   rules,
 }) => {
   const resetKeyRef = useRef(0);
@@ -24,10 +22,9 @@ const RulesActionsPanel: React.FunctionComponent<RulesActionsPanelsProps> = ({
 
   const deleteRulesHandler = useCallback(() => {
     mutate({
-      projectId,
       ids: rules.map((p) => p.id),
     });
-  }, [rules, mutate, projectId]);
+  }, [rules, mutate]);
 
   return (
     <div className="flex items-center gap-2">

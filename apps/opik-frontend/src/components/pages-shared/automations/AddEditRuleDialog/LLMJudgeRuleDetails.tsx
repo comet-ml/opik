@@ -31,7 +31,7 @@ import {
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
-import { EvaluationRuleFormType } from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/schema";
+import { EvaluationRuleFormType } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 const MESSAGE_TYPE_OPTIONS = [
@@ -55,13 +55,11 @@ const MESSAGE_TYPE_OPTIONS = [
 
 type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
-  projectId: string;
   form: UseFormReturn<EvaluationRuleFormType>;
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   workspaceName,
-  projectId,
   form,
 }) => {
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
@@ -242,7 +240,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 <LLMPromptMessagesVariables
                   parsingError={parsingVariablesError}
                   validationErrors={validationErrors}
-                  projectId={projectId}
+                  projectId={form.watch("projectId")}
                   variables={field.value}
                   onChange={field.onChange}
                 />

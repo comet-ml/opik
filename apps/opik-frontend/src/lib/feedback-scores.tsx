@@ -10,8 +10,8 @@ import { UseCompareExperimentsListResponse } from "@/api/datasets/useCompareExpe
 import { UseTracesListResponse } from "@/api/traces/useTracesList";
 import { UseSpansListResponse } from "@/api/traces/useSpansList";
 
-export const feedbackScoreSourceMap = {
-  [FEEDBACK_SCORE_TYPE.online_scoring]: "Online scoring",
+export const FEEDBACK_SCORE_SOURCE_MAP = {
+  [FEEDBACK_SCORE_TYPE.online_scoring]: "Online evaluation",
   [FEEDBACK_SCORE_TYPE.sdk]: "SDK",
   [FEEDBACK_SCORE_TYPE.ui]: "Human Review",
 };

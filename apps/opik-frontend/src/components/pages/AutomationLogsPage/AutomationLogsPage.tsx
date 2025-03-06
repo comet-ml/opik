@@ -8,26 +8,23 @@ import Loader from "@/components/shared/Loader/Loader";
 const AutomationLogsPage = () => {
   const {
     rule_id,
-    project_id,
   }: {
-    project_id?: string;
     rule_id?: string;
   } = useSearch({ strict: false });
 
   const { data, isPending } = useRulesLogsList(
     {
-      projectId: project_id!,
       ruleId: rule_id!,
     },
     {
-      enabled: Boolean(rule_id) && Boolean(project_id),
+      enabled: Boolean(rule_id),
     },
   );
 
   const items = data?.content ?? [];
 
-  if (!rule_id || !project_id) {
-    return <NoData message="No project and/or rule parameters set."></NoData>;
+  if (!rule_id) {
+    return <NoData message="No rule parameters set."></NoData>;
   }
 
   if (isPending) {

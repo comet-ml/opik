@@ -30,14 +30,16 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import { formatDate } from "@/lib/date";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import useRulesList from "@/api/automations/useRulesList";
+import { formatDate } from "@/lib/date";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoRulesPage from "@/components/pages-shared/automations/NoRulesPage";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -49,23 +51,33 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     cell: IdCell as never,
   },
   {
+    id: "project",
+    label: "Project",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    accessorFn: (row) => row.project_id,
+    customMeta: {
+      nameKey: "project_name",
+      idKey: "project_id",
+      resource: RESOURCE_TYPE.project,
+    },
+  },
+  {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.last_updated_at),
-    sortable: true,
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
   },
   {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => formatDate(row.created_at),
-    sortable: true,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
   },
   {
     id: "sampling_rate",
@@ -84,17 +96,14 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_by",
   "created_at",
   "sampling_rate",
+  "project",
 ];
 
-const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
-const COLUMNS_WIDTH_KEY = "project-rules-columns-width";
-const COLUMNS_ORDER_KEY = "project-rules-columns-order";
+const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns";
+const COLUMNS_WIDTH_KEY = "workspace-rules-columns-width";
+const COLUMNS_ORDER_KEY = "workspace-rules-columns-order";
 
-type RulesTabProps = {
-  projectId: string;
-};
-
-export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
+export const OnlineEvaluationPage: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
@@ -114,7 +123,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const { data, isPending } = useRulesList(
     {
-      projectId,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -204,15 +212,10 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   if (noData && rows.length === 0 && page === 1) {
     return (
       <>
-        <NoRulesPage
-          openModal={handleNewRuleClick}
-          Wrapper={NoDataPage}
-          height={188}
-        />
+        <NoRulesPage openModal={handleNewRuleClick} Wrapper={NoDataPage} />
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
           open={openDialog}
-          projectId={projectId}
           setOpen={setOpenDialog}
         />
       </>
@@ -220,7 +223,12 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   }
 
   return (
-    <div>
+    <div className="pt-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-title-l truncate break-words">
+          Online evaluation
+        </h1>
+      </div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -233,7 +241,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         </div>
         <div className="flex items-center gap-2">
           <RulesActionsPanel rules={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
@@ -270,11 +278,10 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
-        projectId={projectId}
         setOpen={setOpenDialog}
       />
     </div>
   );
 };
 
-export default RulesTab;
+export default OnlineEvaluationPage;

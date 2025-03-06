@@ -3,18 +3,32 @@ import { Book, Plus } from "lucide-react";
 import noDataRulesImageUrl from "/images/no-data-rules.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
-import NoDataTab from "@/components/pages/TracesPage/NoDataTab";
+
+type NoDataWrapperProps = {
+  title: string;
+  description: string;
+  imageUrl: string;
+  buttons: React.ReactNode;
+  height?: number;
+};
 
 type NoRulesPageProps = {
   openModal: () => void;
+  height?: number;
+  Wrapper: React.FC<NoDataWrapperProps>;
 };
 
-const NoRulesPage: React.FC<NoRulesPageProps> = ({ openModal }) => {
+const NoRulesPage: React.FC<NoRulesPageProps> = ({
+  openModal,
+  Wrapper,
+  height,
+}) => {
   return (
-    <NoDataTab
+    <Wrapper
       title="Automate your scores"
       description="An automated rule is a predefined logic that scores LLM outputs in real-time based on set criteria, ensuring efficient and consistent performance assessment."
       imageUrl={noDataRulesImageUrl}
+      height={height}
       buttons={
         <>
           <Button variant="secondary" asChild>
@@ -33,7 +47,7 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({ openModal }) => {
           </Button>
         </>
       }
-    ></NoDataTab>
+    ></Wrapper>
   );
 };
 

@@ -7,7 +7,8 @@ import api, {
 import { EvaluatorsRule } from "@/types/automations";
 
 type UseRulesListParams = {
-  projectId: string;
+  workspaceName?: string;
+  projectId?: string;
   search?: string;
   page: number;
   size: number;
@@ -23,10 +24,11 @@ const getRulesList = async (
   { projectId, search, size, page }: UseRulesListParams,
 ) => {
   const { data } = await api.get<UseRulesListResponse>(
-    `${AUTOMATIONS_REST_ENDPOINT}projects/${projectId}/evaluators`,
+    `${AUTOMATIONS_REST_ENDPOINT}evaluators`,
     {
       signal,
       params: {
+        project_id: projectId,
         ...(search && { name: search }),
         size,
         page,

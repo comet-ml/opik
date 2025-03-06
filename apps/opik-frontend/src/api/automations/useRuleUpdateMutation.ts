@@ -9,7 +9,6 @@ import { useToast } from "@/components/ui/use-toast";
 type UseRuleUpdateMutationParams = {
   rule: Partial<EvaluatorsRule>;
   ruleId: string;
-  projectId: string;
 };
 
 const useRuleUpdateMutation = () => {
@@ -17,13 +16,9 @@ const useRuleUpdateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({
-      rule,
-      ruleId,
-      projectId,
-    }: UseRuleUpdateMutationParams) => {
+    mutationFn: async ({ rule, ruleId }: UseRuleUpdateMutationParams) => {
       const { data } = await api.patch(
-        `${AUTOMATIONS_REST_ENDPOINT}projects/${projectId}/evaluators/${ruleId}`,
+        `${AUTOMATIONS_REST_ENDPOINT}evaluators/${ruleId}`,
         rule,
       );
       return data;
