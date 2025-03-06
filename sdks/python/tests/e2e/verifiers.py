@@ -59,6 +59,12 @@ def verify_trace(
         assert trace_project.name == project_name
 
     if feedback_scores is not mock.ANY:
+        if trace.feedback_scores is None:
+            assert (
+                feedback_scores is None
+            ), f"Expected feedback scores to be None, but got {feedback_scores}"
+            return
+
         actual_feedback_scores = (
             [] if trace.feedback_scores is None else trace.feedback_scores
         )
@@ -147,6 +153,12 @@ def verify_span(
         assert span_project.name == project_name
 
     if feedback_scores is not mock.ANY:
+        if span.feedback_scores is None:
+            assert (
+                feedback_scores is None
+            ), f"Expected feedback scores to be None, but got {feedback_scores}"
+            return
+
         actual_feedback_scores = (
             [] if span.feedback_scores is None else span.feedback_scores
         )
