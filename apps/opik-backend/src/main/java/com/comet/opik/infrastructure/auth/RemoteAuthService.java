@@ -84,7 +84,8 @@ class RemoteAuthService implements AuthService {
                 .cookie(sessionToken)
                 .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).path(path).build()))) {
             var credentials = verifyResponse(response);
-            setCredentialIntoContext(credentials.user(), credentials.workspaceId(), credentials.workspaceName());
+            setCredentialIntoContext(credentials.user(), credentials.workspaceId(),
+                    Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName));
             requestContext.get().setApiKey(sessionToken.getValue());
         }
     }
@@ -101,7 +102,8 @@ class RemoteAuthService implements AuthService {
             cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId(),
                     credentials.workspaceName());
         }
-        setCredentialIntoContext(credentials.userName(), credentials.workspaceId(), credentials.workspaceName());
+        setCredentialIntoContext(credentials.userName(), credentials.workspaceId(),
+                Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName));
         requestContext.get().setApiKey(apiKey);
     }
 
