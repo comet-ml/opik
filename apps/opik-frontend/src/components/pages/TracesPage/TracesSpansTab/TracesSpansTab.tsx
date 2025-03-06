@@ -51,6 +51,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -63,6 +64,7 @@ import TraceDetailsPanel, {
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { formatDate, formatDuration } from "@/lib/date";
+import { prettifyMessage } from "@/lib/traces";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 
@@ -94,9 +96,8 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     size: 400,
     type: COLUMN_TYPE.string,
     iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.input) ? JSON.stringify(row.input, null, 2) : row.input,
-    cell: CodeCell as never,
+    accessorFn: (row) => prettifyMessage(row.input).message,
+    cell: AutodetectCell as never,
   },
   {
     id: "output",
@@ -105,8 +106,8 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.string,
     iconType: COLUMN_TYPE.dictionary,
     accessorFn: (row) =>
-      isObject(row.output) ? JSON.stringify(row.output, null, 2) : row.output,
-    cell: CodeCell as never,
+      prettifyMessage(row.output, { type: "output" }).message,
+    cell: AutodetectCell as never,
   },
   {
     id: "duration",
