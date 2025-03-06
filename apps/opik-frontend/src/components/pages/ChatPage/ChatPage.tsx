@@ -6,7 +6,6 @@ import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { useChat, useResetChat } from "@/store/ChatStore";
 import ChatMessages from "@/components/pages/ChatPage/ChatMessages";
-import { cn } from "@/lib/utils";
 import ChatModelSettings from "@/components/pages/ChatPage/ChatModelSettings";
 import { Separator } from "@/components/ui/separator";
 
@@ -75,7 +74,7 @@ const ChatPage = () => {
         >
           <ChatMessages messages={chat.messages} />
         </div>
-        <div className={cn("flex items-center justify-center")}>
+        <div className="flex items-center justify-center">
           <ChatInput
             workspaceName={workspaceName}
             chat={chat}

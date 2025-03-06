@@ -60,7 +60,7 @@ const TracesPage = () => {
             Metrics
           </TabsTrigger>
           <TabsTrigger variant="underline" value="rules">
-            Rules
+            Online evaluation
           </TabsTrigger>
         </TabsList>
         <TabsContent value={TRACE_DATA_TYPE.traces}>

@@ -71,6 +71,11 @@ export const EvaluationRuleFormSchema = z.object({
       required_error: "Rule name is required",
     })
     .min(1, { message: "Rule name is required" }),
+  projectId: z
+    .string({
+      required_error: "Project is required",
+    })
+    .min(1, { message: "Project is required" }),
   samplingRate: z.number(),
   type: z.nativeEnum(EVALUATORS_RULE_TYPE),
   llmJudgeDetails: LLMJudgeDetailsFormSchema,
