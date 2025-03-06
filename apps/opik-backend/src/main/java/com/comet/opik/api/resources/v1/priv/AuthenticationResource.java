@@ -46,7 +46,7 @@ public class AuthenticationResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        log.info("User {} has access to workspace_id '{}'", userName, workspaceId);
+        log.info("User '{}' has access to workspace_id '{}'", userName, workspaceId);
 
         return Response.noContent().build();
     }
@@ -63,7 +63,7 @@ public class AuthenticationResource {
         String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
-        log.info("User {} has workspaceName '{}'", userName, workspaceName);
+        log.info("User '{}' has workspaceName '{}'", userName, workspaceName);
 
         return Response.ok().entity(workspaceName).build();
     }
