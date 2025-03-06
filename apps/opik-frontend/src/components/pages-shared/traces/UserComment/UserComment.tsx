@@ -1,4 +1,4 @@
-import { Comment } from "@/types/comment";
+import { CommentItem } from "@/types/comment";
 import React, { createContext, useContext, useState } from "react";
 import UserCommentAvatar from "./UserCommentAvatar";
 import {
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import UserCommentForm, { UserCommentFormProps } from "./UserCommentForm";
-import { formatDate } from "@/lib/date";
+import { formatDate, getTimeFromNow } from "@/lib/date";
 import {
   createdAtStyleVariants,
   rootStyleVariants,
@@ -19,11 +19,12 @@ import {
   usernameStyleVariants,
 } from "./styles";
 import { isUndefined } from "lodash";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type UserCommentContextType = {
   size?: "default" | "sm";
   userName?: string;
-  comment: Comment;
+  comment: CommentItem;
   isLocalComment: boolean;
   isEditMode: boolean;
   setIsEditMode: (v: boolean) => void;
@@ -65,9 +66,12 @@ const Username = () => {
 const CreatedAt = () => {
   const { comment, size } = useUserCommentContext();
   const formattedDate = formatDate(comment.created_at);
+  const timeFromNow = getTimeFromNow(comment.created_at);
 
   return (
-    <div className={createdAtStyleVariants({ size })}>{formattedDate}</div>
+    <TooltipWrapper content={formattedDate}>
+      <div className={createdAtStyleVariants({ size })}>{timeFromNow}</div>
+    </TooltipWrapper>
   );
 };
 
@@ -191,7 +195,7 @@ type UserCommentComponents = {
 };
 
 type UserCommentProps = {
-  comment: Comment;
+  comment: CommentItem;
   size?: "default" | "sm";
   avatar?: React.ReactNode;
   header?: React.ReactNode;

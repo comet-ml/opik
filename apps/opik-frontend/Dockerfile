@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.15.0-alpine3.20 as builder
+FROM node:20.15.0-alpine3.20 AS builder
 
 WORKDIR /opt/frontend
 
@@ -11,7 +11,13 @@ RUN npm install
 COPY . .
 
 ARG OPIK_VERSION
+ARG SENTRY_ENABLED
+ARG SENTRY_DSN
+
 ENV VITE_APP_VERSION=${OPIK_VERSION}
+ENV VITE_SENTRY_ENABLED=${SENTRY_ENABLED}
+ENV VITE_SENTRY_DSN=${SENTRY_DSN}
+
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 ARG BUILD_MODE=production

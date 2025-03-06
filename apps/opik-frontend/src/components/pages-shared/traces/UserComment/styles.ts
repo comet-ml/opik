@@ -12,7 +12,7 @@ export const rootStyleVariants = cva("group flex max-w-full items-start ", {
   },
 });
 
-export const textStyleVariants = cva("break-words", {
+export const textStyleVariants = cva("whitespace-pre-line break-words", {
   variants: {
     size: {
       default: "comet-body-s pr-8",

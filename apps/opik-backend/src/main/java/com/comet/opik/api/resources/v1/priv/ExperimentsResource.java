@@ -131,18 +131,16 @@ public class ExperimentsResource {
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Experiment.class))) @JsonView(Experiment.View.Write.class) @NotNull @Valid Experiment experiment,
             @Context UriInfo uriInfo) {
-
-        log.info("Creating experiment with id '{}', datasetName '{}' workspaceId '{}' ", experiment.id(),
-                experiment.datasetName(),
-                requestContext.get().getWorkspaceId());
-
-        var newExperiment = experimentService
-                .create(experiment)
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Creating experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);
+        var newExperiment = experimentService.create(experiment)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(newExperiment.id())).build();
-        log.info("Created experiment with id '{}', datasetId '{}', datasetName '{}'",
-                newExperiment.id(), newExperiment.datasetId(), newExperiment.datasetName());
+        log.info("Created experiment with id '{}', name '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
+                newExperiment.id(), newExperiment.name(), newExperiment.datasetId(), newExperiment.datasetName(),
+                workspaceId);
         return Response.created(uri).build();
     }
 

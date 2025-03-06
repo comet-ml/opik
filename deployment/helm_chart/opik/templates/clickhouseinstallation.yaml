@@ -43,14 +43,18 @@ spec:
     {{- end }}
 
     {{- if .Values.clickhouse.configuration }}
-    {{- with .Values.clickhouse.configuration.files }}
-    files:
-      {{- toYaml . | nindent 8 }}
-    {{- end }}
     {{- with .Values.clickhouse.configuration.additional_configuration }}
     {{- toYaml . | nindent 6 }}
     {{- end }}
     {{- end }}
+
+    files:
+      config.d/logger.xml: "<yandex><logger><level>{{ .Values.clickhouse.logsLevel }}</level></logger></yandex>"
+      {{- if .Values.clickhouse.configuration }}
+      {{- with .Values.clickhouse.configuration.files }}
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
     
     {{- if .Values.zookeeper.enabled }}
     zookeeper:
@@ -112,6 +116,13 @@ spec:
 
     volumeClaimTemplates:
       - name: storage-vc-template
+        {{- if .Values.clickhouse.volumeAnnotations }}
+        metadata:
+          annotations:
+        {{- with .Values.clickhouse.volumeAnnotations }}
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- end }}
         spec:
           {{- if .Values.clickhouse.storageClassName }}
           storageClassName:  {{ .Values.clickhouse.storageClassName }}

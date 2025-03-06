@@ -1,12 +1,15 @@
 import { uniqBy } from "lodash";
 import UserCommentAvatar from "./UserCommentAvatar";
-import { Comment } from "@/types/comment";
+import { CommentItems } from "@/types/comment";
+import { cn } from "@/lib/utils";
 
 type UserCommentAvatarListProps = {
-  commentsList: Comment[];
+  commentsList: CommentItems;
+  className?: string;
 };
 const UserCommentAvatarList: React.FC<UserCommentAvatarListProps> = ({
   commentsList,
+  className,
 }) => {
   const uniqueCommentsList = uniqBy(commentsList, "created_by");
   const maxCount = 3;
@@ -14,7 +17,7 @@ const UserCommentAvatarList: React.FC<UserCommentAvatarListProps> = ({
   const remainingCount = Math.max(uniqueCommentsList.length - maxCount, 0);
 
   return (
-    <div className="flex shrink-0">
+    <div className={cn("flex shrink-0", className)}>
       {uniqueCommentsList.slice(0, maxCount).map((comment) => (
         <UserCommentAvatar
           key={comment.id}

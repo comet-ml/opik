@@ -14,8 +14,9 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.RedirectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.infrastructure.DeploymentConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -28,14 +29,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -43,6 +43,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -57,12 +58,9 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Redirect Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class RedirectResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/session/redirect";
-
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String NON_EXISTING_WORKSPACE_ID = UUID.randomUUID().toString();
@@ -75,12 +73,15 @@ class RedirectResourceTest {
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
     public static final String NO_SUCH_WORKSPACE = "No such workspace: %s";
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    static {
+    {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -88,32 +89,31 @@ class RedirectResourceTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
+    private String baseURI;
     private RedirectResourceClient redirectResourceClient;
     private TraceResourceClient traceResourceClient;
     private DatasetResourceClient datasetResourceClient;
-    private DeploymentConfig config;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, @Config("deployment") DeploymentConfig config) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         }
 
-        String baseURI = "http://localhost:%d".formatted(client.getPort());
+        baseURI = "http://localhost:%d".formatted(client.getPort());
         this.redirectResourceClient = new RedirectResourceClient(client);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
-        this.config = config;
 
         ClientSupportUtils.config(client);
     }
@@ -145,7 +145,7 @@ class RedirectResourceTest {
         wireMock.server().stop();
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -165,7 +165,8 @@ class RedirectResourceTest {
         void create__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, int expectedStatus) {
             var trace = factory.manufacturePojo(Trace.class);
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
-            redirectResourceClient.projectsRedirect(trace.id(), sessionToken, WORKSPACE_NAME, expectedStatus);
+            redirectResourceClient.projectsRedirect(trace.id(), sessionToken, WORKSPACE_NAME, getBaseUrlEncoded(),
+                    expectedStatus);
         }
     }
 
@@ -178,16 +179,18 @@ class RedirectResourceTest {
         traceResourceClient.createTrace(trace, API_KEY, workspaceName);
         trace = traceResourceClient.getById(trace.id(), workspaceName, API_KEY);
         var redirectURL = redirectResourceClient.projectsRedirect(trace.id(), UUID.randomUUID().toString(),
-                workspaceNameForRedirectRequest, expectedStatus);
+                workspaceNameForRedirectRequest, getBaseUrlEncoded(), expectedStatus);
         if (expectedStatus == 303) {
             assertThat(redirectURL).isEqualTo(
-                    PROJECT_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik", workspaceName, trace.projectId()));
+                    PROJECT_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(), workspaceName,
+                            trace.projectId()));
         }
     }
 
     @Test
     void projectRedirectUrlNoTrace() {
-        redirectResourceClient.projectsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), WORKSPACE_NAME, 404);
+        redirectResourceClient.projectsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), WORKSPACE_NAME, "path",
+                404);
     }
 
     @ParameterizedTest
@@ -198,16 +201,17 @@ class RedirectResourceTest {
         var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
         var redirectURL = redirectResourceClient.datasetsRedirect(datasetId, UUID.randomUUID().toString(),
-                workspaceNameForRedirectRequest, expectedStatus);
+                workspaceNameForRedirectRequest, getBaseUrlEncoded(), expectedStatus);
         if (expectedStatus == 303) {
             assertThat(redirectURL)
-                    .isEqualTo(DATASET_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik", workspaceName, datasetId));
+                    .isEqualTo(DATASET_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(), workspaceName,
+                            datasetId));
         }
     }
 
     @Test
     void datasetsRedirectUrlNoDataset() {
-        redirectResourceClient.datasetsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), null, 404);
+        redirectResourceClient.datasetsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), null, "path", 404);
     }
 
     @ParameterizedTest
@@ -220,17 +224,17 @@ class RedirectResourceTest {
         var experimentId = UUID.randomUUID();
 
         var redirectURL = redirectResourceClient.experimentsRedirect(datasetId, experimentId,
-                UUID.randomUUID().toString(), workspaceNameForRedirectRequest, expectedStatus);
+                UUID.randomUUID().toString(), workspaceNameForRedirectRequest, getBaseUrlEncoded(), expectedStatus);
         if (expectedStatus == 303) {
             var experimentIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(experimentId), StandardCharsets.UTF_8);
-            assertThat(redirectURL).isEqualTo(EXPERIMENT_REDIRECT_URL.formatted(config.getBaseUrl() + "/opik",
+            assertThat(redirectURL).isEqualTo(EXPERIMENT_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(),
                     workspaceName, datasetId, experimentIdEncoded));
         }
     }
 
     @Test
     void experimentsRedirectUrlNoDataset() {
-        redirectResourceClient.datasetsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), null, 404);
+        redirectResourceClient.datasetsRedirect(UUID.randomUUID(), UUID.randomUUID().toString(), null, "path", 404);
     }
 
     Stream<Arguments> parameters() {
@@ -238,5 +242,10 @@ class RedirectResourceTest {
                 arguments(WORKSPACE_NAME, WORKSPACE_NAME, 303),
                 arguments(WORKSPACE_NAME, null, 303),
                 arguments(NON_EXISTING_WORKSPACE_NAME, null, 404));
+    }
+
+    private String getBaseUrlEncoded() {
+        String path = wireMock.runtimeInfo().getHttpBaseUrl() + "/api";
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(path.getBytes());
     }
 }

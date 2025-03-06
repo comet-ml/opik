@@ -32,6 +32,8 @@ const FeedbackScoresEditor: React.FunctionComponent<
             label={feedbackScore.name}
             value={feedbackScore.value}
             reason={feedbackScore.reason}
+            lastUpdatedAt={feedbackScore.last_updated_at}
+            lastUpdatedBy={feedbackScore.last_updated_by}
             onDelete={handleDeleteFeedbackScore}
             className="max-w-full"
           />

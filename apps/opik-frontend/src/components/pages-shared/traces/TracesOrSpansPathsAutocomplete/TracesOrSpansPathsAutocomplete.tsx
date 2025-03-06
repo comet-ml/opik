@@ -12,7 +12,7 @@ import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 export type TRACE_AUTOCOMPLETE_ROOT_KEY = "input" | "output" | "metadata";
 
 type TracesOrSpansPathsAutocompleteProps = {
-  projectId: string;
+  projectId: string | "";
   rootKeys: TRACE_AUTOCOMPLETE_ROOT_KEY[];
   hasError?: boolean;
   value: string;
@@ -34,6 +34,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
   placeholder = "Select a key from recent trace",
   excludeRoot = false,
 }) => {
+  const isProjectId = Boolean(projectId);
   const { data, isPending } = useTracesOrSpansList(
     {
       projectId,
@@ -42,7 +43,9 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       size: 100,
       truncate: true,
     },
-    {},
+    {
+      enabled: isProjectId,
+    },
   );
 
   const items = useMemo(() => {
@@ -77,7 +80,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       onValueChange={onValueChange}
       items={items}
       hasError={hasError}
-      isLoading={isPending}
+      isLoading={isProjectId ? isPending : false}
       placeholder={placeholder}
     />
   );

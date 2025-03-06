@@ -3,6 +3,7 @@ name: opik
 services:
   mysql:
     image: mysql:8.4.2
+    pull_policy: always
     hostname: mysql
     environment:
       MYSQL_ROOT_PASSWORD: opik
@@ -19,6 +20,7 @@ services:
 
   redis:
     image: redis:7.2.4-alpine3.19
+    pull_policy: always
     hostname: redis
     command: redis-server --requirepass opik
     healthcheck:
@@ -30,6 +32,7 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.3.6.48-alpine
+    pull_policy: always
     hostname: clickhouse
     environment:
       CLICKHOUSE_DB: opik
@@ -49,6 +52,7 @@ services:
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
@@ -57,6 +61,7 @@ services:
     hostname: backend
     command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
     environment:
+      # WARNING: Do not set OPIK_VERSION as env var here. It's a multi-stage build, so build and runtime values can differ.
       DOCKER_BUILDKIT: 1
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
@@ -82,7 +87,6 @@ services:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
-      OPIK_VERSION: ${OPIK_VERSION:-latest}
     ports:
       - "3003" # OpenAPI specification port
     depends_on:
@@ -93,6 +97,7 @@ services:
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -104,6 +109,7 @@ services:
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
+    pull_policy: always
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile

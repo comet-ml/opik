@@ -63,51 +63,58 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
       />
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          setOpen(true);
-          resetKeyRef.current = resetKeyRef.current + 1;
-        }}
-      >
-        <DatabasePlus className="size-3.5" />
-        {showFullActionLabel && <div className="pl-1">Add to dataset</div>}
-      </Button>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setLastSection(LastSection.Comments)}
-        className={cn(
-          "gap-1",
-          lastSection === LastSection.Comments &&
-            "bg-primary-100 hover:bg-primary-100",
-        )}
-      >
-        <MessageSquareMore className="size-3.5" />
-        {showFullActionLabel && <div className="pl-1">Comments</div>}
-        {Boolean(commentsCount) && (
-          <div>{formatCounter(layoutSize, commentsCount)}</div>
-        )}
-      </Button>
+      <TooltipWrapper content="Add to dataset">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(true);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+        >
+          <DatabasePlus className="size-3.5" />
+          {showFullActionLabel && <div className="pl-1">Add to dataset</div>}
+        </Button>
+      </TooltipWrapper>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setLastSection(LastSection.Annotations)}
-        className={cn(
-          "gap-1",
-          lastSection === LastSection.Annotations &&
-            "bg-primary-100 hover:bg-primary-100",
-        )}
-      >
-        <PenLine className="size-3.5" />
-        {showFullActionLabel && <div className="pl-1">Feedback scores</div>}
-        {Boolean(annotationCount) && (
-          <div>{formatCounter(layoutSize, annotationCount)}</div>
-        )}
-      </Button>
+      <TooltipWrapper content="Comments">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setLastSection(LastSection.Comments)}
+          className={cn(
+            "gap-1",
+            lastSection === LastSection.Comments &&
+              "bg-primary-100 hover:bg-primary-100",
+          )}
+        >
+          <MessageSquareMore className="size-3.5" />
+          {showFullActionLabel && <div className="pl-1">Comments</div>}
+          {Boolean(commentsCount) && (
+            <div>{formatCounter(layoutSize, commentsCount)}</div>
+          )}
+        </Button>
+      </TooltipWrapper>
+
+      <TooltipWrapper content="Feedback scores">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setLastSection(LastSection.Annotations)}
+          className={cn(
+            "gap-1",
+            lastSection === LastSection.Annotations &&
+              "bg-primary-100 hover:bg-primary-100",
+          )}
+        >
+          <PenLine className="size-3.5" />
+          {showFullActionLabel && <div className="pl-1">Feedback scores</div>}
+          {Boolean(annotationCount) && (
+            <div>{formatCounter(layoutSize, annotationCount)}</div>
+          )}
+        </Button>
+      </TooltipWrapper>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
