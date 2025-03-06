@@ -1,9 +1,3 @@
----
-subtitle: >-
-  Describes how to log LLM calls to the Opik platform using function decorators,
-  integrations or the low level client.
----
-
 <Tip>
   If you are just getting started with Opik, we recommend first checking out the
   [Quickstart](/quickstart) guide that will walk you through the process of
@@ -450,6 +444,31 @@ client = Opik()
 client.flush()
 ```
 
+#### Copying traces to a new project
+
+You can copy traces between projects using the [`copy_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.copy_traces) method. This
+method allows you to move traces from one project to another without having to re-log them.
+
+```python
+from opik import Opik
+
+client = Opik()
+
+client.copy_traces(
+    project_name="<name of the project where the traces were created>",
+    destination_project_name="<name of the new project>"
+)
+```
+
+<Note>
+By default, the `copy_traces` method will not delete the traces in the source project. You can optionally set
+the `delete_original_project` parameter to `true` to delete the traces in the source project after copying them.
+
+This is not recommended, instead we recommend moving the traces and once everything has been migrated you can delete
+the source project from the UI.
+
+</Note>
+
 ## Logging with the JS / TS SDK
 
 You can log your LLM calls using the Opik typescript SDK `opik`. We are actively adding functionality to the TypeScript SDK,
@@ -466,10 +485,10 @@ The easiest way to log your LLM calls is using the low-level Opik client. We do 
 The first step is to install the Opik library:
 
 ```bash
-npm install --save opik
+npm install opik
 ```
 
-Once the library is installed, you can use initialized the Opik client:
+Once the library is installed, you can initialize the Opik client with explicit configuration:
 
 ```typescript
 import { Opik } from "opik";
@@ -481,6 +500,21 @@ const client = new Opik({
   projectName: "<your-project-name>",
   workspaceName: "<your-workspace-name>",
 });
+```
+
+Or using environment variables instead:
+
+```bash filename=".env"
+OPIK_API_KEY="<your-api-key>"
+OPIK_URL_OVERRIDE=https://www.comet.com/opik/api # in case you are using the Cloud version
+OPIK_PROJECT_NAME="<your-project-name>"
+OPIK_WORKSPACE="<your-workspace-name>"
+```
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
 ```
 
 <Tip>
@@ -521,7 +555,31 @@ const span = trace.span({
 await client.flush();
 ```
 
-### Decorators (experimental)
+### Decorators
+
+```typescript
+import { track } from "opik";
+
+const generateText = track({ name: "generateText", type: "llm" }, async () => {
+  return "Generate text";
+});
+
+const translate = track({ name: "translate" }, async (text: string) => {
+  return `Translated: ${text}`;
+});
+
+const process = track(
+  { name: "process", projectName: "translation-service" },
+  async () => {
+    const text = await generateText();
+    return translate(text);
+  }
+);
+```
+
+On calling `process()` it'll create a trace and create all the spans for each tracked function called in this function
+
+#### Class method decorators (TypeScript)
 
 TypeScript started supporting decorators from version 5 but it's use is still not widespread.
 The Opik typescript SDK also supports decorators but it's currently considered experimental.

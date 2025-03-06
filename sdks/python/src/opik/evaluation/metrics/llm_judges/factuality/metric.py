@@ -7,7 +7,7 @@ from opik.evaluation.metrics import score_result, base_metric
 from opik import logging_messages
 
 from . import template
-from ...exceptions import MetricComputationError
+from opik.exceptions import MetricComputationError
 
 LOGGER = logging.getLogger(__name__)
 

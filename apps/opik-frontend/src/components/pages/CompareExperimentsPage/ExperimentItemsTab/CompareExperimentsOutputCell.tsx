@@ -68,7 +68,7 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
             }}
             className="absolute right-1 top-1 hidden group-hover:flex"
           >
-            <ListTree className="size-4" />
+            <ListTree />
           </Button>
         </TooltipWrapper>
         {isObject(data)

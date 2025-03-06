@@ -4,6 +4,7 @@ import find from "lodash/find";
 import get from "lodash/get";
 import sortBy from "lodash/sortBy";
 import {
+  ArrayParam,
   JsonParam,
   NumberParam,
   StringParam,
@@ -20,6 +21,7 @@ import useLocalStorageState from "use-local-storage-state";
 
 import {
   CELL_VERTICAL_ALIGNMENT,
+  COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -68,6 +70,8 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import { isUndefined } from "lodash";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -104,7 +108,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", COLUMN_COMMENTS_ID];
 
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
@@ -121,6 +125,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
   });
+
+  const [, setExpandedCommentSections] = useQueryParam(
+    "expandedCommentSections",
+    ArrayParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
@@ -278,6 +290,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...dynamicDatasetColumns.map((c) => c.id),
       ...dynamicOutputColumns.map((c) => c.id),
       ...dynamicScoresColumns.map((c) => c.id),
+      COLUMN_COMMENTS_ID,
     ],
     [dynamicDatasetColumns, dynamicOutputColumns, dynamicScoresColumns],
   );
@@ -315,22 +328,33 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   }, [dynamicDatasetColumns, experimentsCount]);
 
   const outputColumnsData = useMemo(() => {
-    return dynamicOutputColumns.map(
-      ({ label, id, columnType }) =>
-        ({
-          id,
-          label,
-          type: columnType,
-          cell: CompareExperimentsOutputCell as never,
-          customMeta: {
-            experiments,
-            experimentsIds,
-            outputKey: label,
-            openTrace: setTraceId,
-          },
-          ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
-        }) as ColumnData<ExperimentsCompare>,
-    );
+    return [
+      ...dynamicOutputColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            cell: CompareExperimentsOutputCell as never,
+            customMeta: {
+              experiments,
+              experimentsIds,
+              outputKey: label,
+              openTrace: setTraceId,
+            },
+            ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
+          }) as ColumnData<ExperimentsCompare>,
+      ),
+      {
+        id: COLUMN_COMMENTS_ID,
+        label: "Comments",
+        type: COLUMN_TYPE.string,
+        cell: CommentsCell.Compare as never,
+        customMeta: {
+          experimentsIds,
+        },
+      } as ColumnData<ExperimentsCompare>,
+    ];
   }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
 
   const scoresColumnsData = useMemo(() => {
@@ -525,7 +549,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     [rowIndex, rows, setActiveRowId],
   );
 
-  const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
+  const handleClose = useCallback(() => {
+    setExpandedCommentSections(null);
+    setActiveRowId("");
+  }, [setActiveRowId, setExpandedCommentSections]);
 
   const activeRow = useMemo(
     () => find(rows, (row) => activeRowId === row.id),
@@ -570,13 +597,26 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
     ];
   }, [
-    scoresColumnsData,
-    scoresColumnsOrder,
-    setScoresColumnsOrder,
     outputColumnsData,
     outputColumnsOrder,
     setOutputColumnsOrder,
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
   ]);
+
+  const meta = useMemo(
+    () => ({
+      onCommentsReply: (row: ExperimentsCompare, idx?: number) => {
+        handleRowClick(row);
+
+        if (isUndefined(idx)) return;
+
+        setExpandedCommentSections([String(idx)]);
+      },
+    }),
+    [handleRowClick, setExpandedCommentSections],
+  );
 
   if (isPending || isFeedbackScoresPending || isExperimentsOutputPending) {
     return <Loader />;
@@ -599,7 +639,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             columnsToExport={columnsToExport}
             experimentName={experiments?.[0]?.name}
           />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
@@ -628,6 +668,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         getRowHeightStyle={getRowHeightStyle}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        meta={meta}
       />
       <div className="py-4">
         <DataTablePagination
@@ -650,9 +691,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         isTraceDetailsOpened={Boolean(traceId)}
       />
       <TraceDetailsPanel
-        traceId={traceId as string}
-        spanId={spanId as string}
+        traceId={traceId!}
+        spanId={spanId!}
         setSpanId={setSpanId}
+        open={Boolean(traceId)}
         onClose={() => {
           setTraceId("");
         }}

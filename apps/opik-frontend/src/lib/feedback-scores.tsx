@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { Trace, TraceFeedbackScore } from "@/types/traces";
+import { FEEDBACK_SCORE_TYPE, Trace, TraceFeedbackScore } from "@/types/traces";
 import {
   COMPARE_EXPERIMENTS_KEY,
   SPANS_KEY,
@@ -9,6 +9,12 @@ import {
 import { UseCompareExperimentsListResponse } from "@/api/datasets/useCompareExperimentsList";
 import { UseTracesListResponse } from "@/api/traces/useTracesList";
 import { UseSpansListResponse } from "@/api/traces/useSpansList";
+
+export const FEEDBACK_SCORE_SOURCE_MAP = {
+  [FEEDBACK_SCORE_TYPE.online_scoring]: "Online evaluation",
+  [FEEDBACK_SCORE_TYPE.sdk]: "SDK",
+  [FEEDBACK_SCORE_TYPE.ui]: "Human Review",
+};
 
 export const setExperimentsCompareCache = async (
   queryClient: QueryClient,
@@ -61,30 +67,35 @@ export const setTracesCache = async (
     feedbackScores?: TraceFeedbackScore[],
   ) => TraceFeedbackScore[] | undefined,
 ) => {
-  const { queryKey } =
-    queryClient.getQueryCache().find({
+  // we can have few active request that we need to update
+  // one on TracesSpansTab and another on ThreadDetailsPanel
+  const query =
+    queryClient.getQueryCache().findAll({
       exact: false,
       type: "active",
       queryKey: [TRACES_KEY],
     }) ?? {};
 
-  if (!queryKey) return;
+  query.map(async ({ queryKey }) => {
+    await queryClient.cancelQueries({ queryKey });
 
-  await queryClient.cancelQueries({ queryKey });
-
-  queryClient.setQueryData(queryKey, (originalData: UseTracesListResponse) => {
-    return {
-      ...originalData,
-      content: originalData.content.map((trace) => {
-        if (trace.id === params.traceId) {
-          return {
-            ...trace,
-            feedback_scores: mutate(trace.feedback_scores),
-          };
-        }
-        return trace;
-      }),
-    };
+    queryClient.setQueryData(
+      queryKey,
+      (originalData: UseTracesListResponse) => {
+        return {
+          ...originalData,
+          content: originalData.content.map((trace) => {
+            if (trace.id === params.traceId) {
+              return {
+                ...trace,
+                feedback_scores: mutate(trace.feedback_scores),
+              };
+            }
+            return trace;
+          }),
+        };
+      },
+    );
   });
 };
 
@@ -156,7 +167,7 @@ export const generateUpdateMutation =
     retVal = retVal.map((feedbackScore) => {
       if (feedbackScore.name === score.name) {
         isUpdated = true;
-        return score;
+        return { ...feedbackScore, ...score };
       }
 
       return feedbackScore;
@@ -174,3 +185,12 @@ export const generateDeleteMutation =
     (feedbackScores || []).filter(
       (feedbackScore) => feedbackScore.name !== name,
     );
+
+export const categoryOptionLabelRenderer = (
+  name: string,
+  value?: number | string,
+) => {
+  if (!value) return name;
+
+  return `${name} (${value})`;
+};

@@ -57,8 +57,8 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon" disabled={disabled}>
-          <Download className="size-4" />
+        <Button variant="outline" size="icon-sm" disabled={disabled}>
+          <Download />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">

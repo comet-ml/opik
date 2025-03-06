@@ -93,8 +93,11 @@ const FiltersButton = <TColumnData,>({
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>
-        <Button variant="secondary">
-          <FilterIcon className="mr-2 size-4" />
+        <Button variant="secondary" size="sm">
+          <FilterIcon
+            className="mr-2 size-3.5
+          "
+          />
           Filters
           {` (${validFilters.length})`}
         </Button>

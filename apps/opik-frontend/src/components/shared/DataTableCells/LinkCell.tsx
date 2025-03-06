@@ -37,26 +37,30 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
       tableMetadata={context.table.options.meta}
       className="group py-1"
     >
-      <TooltipWrapper content={value}>
-        <div className="flex max-w-full items-center">
-          <Button
-            variant="tableLink"
-            size="sm"
-            className="block truncate px-0 leading-8"
-            onClick={() => callback(context.row.original)}
-          >
-            {value}
-          </Button>
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            className={cn("hidden", asId && "group-hover:inline-flex")}
-            onClick={copyClickHandler}
-          >
-            <Copy className="size-3.5" />
-          </Button>
-        </div>
-      </TooltipWrapper>
+      {value ? (
+        <TooltipWrapper content={value}>
+          <div className="flex max-w-full items-center">
+            <Button
+              variant="tableLink"
+              size="sm"
+              className="block truncate px-0 leading-8"
+              onClick={() => callback(context.row.original)}
+            >
+              {value}
+            </Button>
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              className={cn("hidden", asId && "group-hover:inline-flex")}
+              onClick={copyClickHandler}
+            >
+              <Copy />
+            </Button>
+          </div>
+        </TooltipWrapper>
+      ) : (
+        "-"
+      )}
     </CellWrapper>
   );
 };

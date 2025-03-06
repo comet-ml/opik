@@ -50,6 +50,7 @@ class Opik:
         host: Optional[str] = None,
         api_key: Optional[str] = None,
         _use_batching: bool = False,
+        _show_misconfiguration_message: bool = True,
     ) -> None:
         """
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.
@@ -61,16 +62,22 @@ class Opik:
             api_key: The API key for Opik. This parameter is ignored for local installations.
             _use_batching: intended for internal usage in specific conditions only.
                 Enabling it is unsafe and can lead to data loss.
+            _show_misconfiguration_message: intended for internal usage in specific conditions only.
+                Print a warning message if the Opik server is not configured properly.
         Returns:
             None
         """
+
         config_ = config.get_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
             url_override=host,
             api_key=api_key,
         )
-        config.is_misconfigured(config_, show_misconfiguration_message=True)
+
+        config_.check_for_known_misconfigurations(
+            show_misconfiguration_message=_show_misconfiguration_message,
+        )
         self._config = config_
 
         self._workspace: str = config_.workspace
@@ -163,13 +170,14 @@ class Opik:
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
         Create and log a new trace.
 
         Args:
-            id: The unique identifier for the trace, if not provided a new ID will be generated. Must be a valid [UUIDv8](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
+            id: The unique identifier for the trace, if not provided a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
             name: The name of the trace.
             start_time: The start time of the trace. If not provided, the current local time will be used.
             end_time: The end time of the trace.
@@ -181,6 +189,8 @@ class Opik:
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
             error_info: The dictionary with error information (typically used when the trace function has failed).
+            thread_id: Used to group multiple traces into a thread.
+                The identifier is user-defined and has to be unique per project.
 
         Returns:
             trace.Trace: The created trace object.
@@ -204,6 +214,7 @@ class Opik:
             metadata=metadata,
             tags=tags,
             error_info=error_info,
+            thread_id=thread_id,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(workspace=self._workspace, project_name=project_name)
@@ -312,8 +323,8 @@ class Opik:
         Create and log a new span.
 
         Args:
-            trace_id: The unique identifier for the trace. If not provided, a new ID will be generated. Must be a valid [UUIDv8](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
-            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv8](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
+            trace_id: The unique identifier for the trace. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
+            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
             parent_span_id: The unique identifier for the parent span.
             name: The name of the span.
             type: The type of the span. Default is "general".
@@ -370,6 +381,7 @@ class Opik:
                 metadata=metadata,
                 tags=tags,
                 error_info=error_info,
+                thread_id=None,
             )
             self._streamer.put(create_trace_message)
 
@@ -494,6 +506,42 @@ class Opik:
             )
 
             self._streamer.put(add_span_feedback_scores_batch_message)
+
+    def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
+        """
+        Deletes a feedback score associated with a specific trace.
+
+        Args:
+            trace_id:
+                The unique identifier of the trace for which the feedback score needs to be deleted.
+            name: str
+                The name associated with the feedback score that should be deleted.
+
+        Returns:
+            None
+        """
+        self._rest_client.traces.delete_trace_feedback_score(
+            id=trace_id,
+            name=name,
+        )
+
+    def delete_span_feedback_score(self, span_id: str, name: str) -> None:
+        """
+        Deletes a feedback score associated with a specific span.
+
+        Args:
+            span_id:
+                The unique identifier of the trace for which the feedback score needs to be deleted.
+            name: str
+                The name associated with the feedback score that should be deleted.
+
+        Returns:
+            None
+        """
+        self._rest_client.spans.delete_span_feedback_score(
+            id=span_id,
+            name=name,
+        )
 
     def get_dataset(self, name: str) -> dataset.Dataset:
         """
@@ -895,6 +943,7 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             prompt: The template content of the prompt.
+            metadata: Optional metadata to be included in the prompt.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
