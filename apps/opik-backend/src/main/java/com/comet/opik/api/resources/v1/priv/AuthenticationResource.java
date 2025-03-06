@@ -58,12 +58,12 @@ public class AuthenticationResource {
             @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    public Response getWorkspaceName(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AuthDetailsHolder.class))) @Valid AuthDetailsHolder authDetailsHolder) {
+    public Response getWorkspaceName() {
         String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
+        String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("User '{}' has workspaceName '{}'", userName, workspaceName);
+        log.info("User '{}' has workspaceName '{}', workspaceid '{}'", userName, workspaceName, workspaceId);
 
         return Response.ok().entity(workspaceName).build();
     }
