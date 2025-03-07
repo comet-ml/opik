@@ -30,6 +30,12 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
     "original_usage.prompt_tokens": ANY_BUT_NONE,
     "original_usage.completion_tokens": ANY_BUT_NONE,
     "original_usage.total_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
 }
 
 
