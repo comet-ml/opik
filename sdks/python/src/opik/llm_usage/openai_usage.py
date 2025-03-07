@@ -25,15 +25,22 @@ class OpenAICompletionsUsage(base_original_provider_usage.BaseOriginalProviderUs
 
         if self.completion_tokens_details is not None:
             result["completion_tokens_details"] = (
-                self.completion_tokens_details.__dict__
+                self.completion_tokens_details.model_dump()
             )
 
         if self.prompt_tokens_details is not None:
-            result["prompt_tokens_details"] = self.prompt_tokens_details.__dict__
+            result["prompt_tokens_details"] = self.prompt_tokens_details.model_dump()
 
         result = dict_utils.flatten_dict(
             d=result, delim=".", parent_key=parent_key_prefix
         )
+
+        if self.model_extra is not None:
+            model_extra = dict_utils.flatten_dict(
+                d=self.model_extra, delim=".", parent_key=parent_key_prefix
+            )
+            result.update(model_extra)
+
         result = dict_utils.keep_only_values_of_type(d=result, value_type=int)
         return result
 
