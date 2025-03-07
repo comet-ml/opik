@@ -1,16 +1,18 @@
-# Load test
-
-The goal of this performance test is to understand how many traces and spans can be ingested by the Opik platform per
-second.
-
-To keep this test simple, we will run the Opik platform locally with the default configuration.
+# Load tests
 
 ## Install Opik locally
 
 You can follow the Opik documentation to install Opik locally using the docker compose deployment
 type: [https://www.comet.com/docs/opik/self-host/local_deployment](https://www.comet.com/docs/opik/self-host/local_deployment)
 
-## Run the test
+## Trace and span ingestion test
+
+The goal of this performance test is to understand how many traces and spans can be ingested by the Opik platform per
+second.
+
+To keep this test simple, we will run the Opik platform locally with the default configuration.
+
+### Run the test
 
 The test will consist in logging 1000 traces using the Python SDK and measuring two key metrics:
 
@@ -20,10 +22,10 @@ The test will consist in logging 1000 traces using the Python SDK and measuring 
 To run the test, you can use the following command:
 
 ```bash
-python tests/test_load.py --num-traces 1000
+python tests/test_trace_span_ingestion.py --num-traces 1000
 ```
 
-## Results
+### Results
 
 We ran the scripts for 2 different configurations:
 
@@ -46,3 +48,13 @@ Total time                             : 23.44 seconds
 ```
 
 **Note:** These tests were run on a M3 Macbook Pro using version 1.3.0 of the Opik platform.
+
+## Trace and span retrieval test
+
+### Run the test
+
+To run the test, you can use the following command:
+
+```bash
+python tests/test_trace_span_retrieval.py --project-name performance_test --start-date 2025-03-07
+```
