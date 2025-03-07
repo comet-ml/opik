@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -89,6 +90,7 @@ class RateLimitE2ETest {
     private static final String CUSTOM_LIMIT = "customLimit";
     private static final String GET_SPAN_ID_LIMIT = "getSpanById";
     private static final long LIMIT = 4L;
+    private static final long WORKSPACE_LIMIT = 6L;
     private static final long LIMIT_DURATION_IN_SECONDS = 1L;
     public static final String TOO_MANY_REQUESTS_MESSAGEE = "Too Many Requests: %s";
 
@@ -140,6 +142,7 @@ class RateLimitE2ETest {
                         .redisUrl(REDIS.getRedisURI())
                         .rateLimitEnabled(true)
                         .limit(LIMIT)
+                        .workspaceLimit(WORKSPACE_LIMIT)
                         .limitDurationInSeconds(LIMIT_DURATION_IN_SECONDS)
                         .customLimits(Map.of(CUSTOM_LIMIT, customLimit, GET_SPAN_ID_LIMIT, getSpanIdLimit))
                         .build());
@@ -148,6 +151,7 @@ class RateLimitE2ETest {
     private String baseURI;
     private ClientSupport client;
     private SpanResourceClient spanResourceClient;
+    private TraceResourceClient traceResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
@@ -163,6 +167,7 @@ class RateLimitE2ETest {
         this.client = client;
 
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
 
         ClientSupportUtils.config(client);
     }
@@ -399,44 +404,34 @@ class RateLimitE2ETest {
         String workspaceId = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
 
+        String workspaceId2 = UUID.randomUUID().toString();
+        String workspaceName2 = UUID.randomUUID().toString();
+
         mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+        mockTargetWorkspace(apiKey, workspaceName2, workspaceId2, user);
 
-        String projectName = UUID.randomUUID().toString();
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .feedbackScores(null)
+                .comments(null)
+                .build();
 
-        Map<Integer, Long> responseMap = triggerCallsWithApiKey(1, projectName, apiKey, workspaceName);
-
-        assertEquals(1, responseMap.get(HttpStatus.SC_CREATED));
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
         List<Trace> traces = IntStream.range(0, (int) LIMIT)
                 .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                        .projectName(projectName)
-                        .projectId(null)
+                        .feedbackScores(null)
+                        .comments(null)
                         .build())
                 .toList();
 
-        try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                .path("batch")
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new TraceBatch(traces)))) {
-
+        try (var response = traceResourceClient.callBatchCreateTraces(traces, apiKey, workspaceName)) {
             assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
+
             var error = response.readEntity(ErrorMessage.class);
             assertEquals(getUserLimitErrorMessage(configuration), error.getMessage());
         }
 
-        try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                .path("batch")
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new TraceBatch(traces.subList(0, (int) LIMIT - 1))))) {
-
-            assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatus());
-        }
+        traceResourceClient.batchCreateTraces(traces.subList(0, (int) LIMIT - 1), apiKey, workspaceName2);
     }
 
     @ParameterizedTest
@@ -517,8 +512,6 @@ class RateLimitE2ETest {
     void workspaceRateLimit__whenProcessingOperations__thenReturnRemainingLimitAsHeader(
             OpikConfiguration opikConfiguration) {
 
-        int workspaceLimit = (int) LIMIT * 2;
-
         String apiKey = UUID.randomUUID().toString();
         String user = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -532,7 +525,7 @@ class RateLimitE2ETest {
 
         String projectName = UUID.randomUUID().toString();
 
-        IntStream.range(0, workspaceLimit + 1).forEach(i -> {
+        IntStream.range(0, (int) WORKSPACE_LIMIT + 1).forEach(i -> {
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .build();
@@ -546,10 +539,10 @@ class RateLimitE2ETest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(trace))) {
 
-                if (i < workspaceLimit) {
+                if (i < WORKSPACE_LIMIT) {
                     assertEquals(HttpStatus.SC_CREATED, response.getStatus());
 
-                    assertLimitHeaders(response, workspaceLimit - i - 1, RateLimited.WORKSPACE_EVENTS,
+                    assertLimitHeaders(response, WORKSPACE_LIMIT - i - 1, RateLimited.WORKSPACE_EVENTS,
                             (int) LIMIT_DURATION_IN_SECONDS, opikConfiguration.getRateLimit().getWorkspaceLimit());
                 } else {
                     assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
@@ -770,14 +763,8 @@ class RateLimitE2ETest {
                             .projectName(projectName)
                             .build();
 
-                    try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                            .request()
-                            .accept(MediaType.APPLICATION_JSON_TYPE)
-                            .header(HttpHeaders.AUTHORIZATION, apiKey)
-                            .header(WORKSPACE_HEADER, workspaceName)
-                            .post(Entity.json(trace))) {
-
-                        return Flux.just(response);
+                    try (Response data = traceResourceClient.callCreateTrace(trace, apiKey, workspaceName)) {
+                        return Flux.just(data);
                     }
                 }, 5)
                 .toStream()

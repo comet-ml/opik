@@ -37,6 +37,7 @@ public class TestDropwizardAppExtensionUtils {
             Integer authCacheTtlInSeconds,
             boolean rateLimitEnabled,
             Long limit,
+            Long workspaceLimit,
             Long limitDurationInSeconds,
             Map<String, LimitConfig> customLimits,
             List<Object> customBeans,
@@ -178,7 +179,7 @@ public class TestDropwizardAppExtensionUtils {
             configs.add("rateLimit.generalLimit.errorMessage: %s"
                     .formatted("You have exceeded the rate limit for user general events. Please try again later."));
 
-            configs.add("rateLimit.workspaceLimit.limit: %d".formatted(appContextConfig.limit() * 2));
+            configs.add("rateLimit.workspaceLimit.limit: %d".formatted(appContextConfig.workspaceLimit()));
             configs.add("rateLimit.workspaceLimit.durationInSeconds: %d"
                     .formatted(appContextConfig.limitDurationInSeconds()));
 
