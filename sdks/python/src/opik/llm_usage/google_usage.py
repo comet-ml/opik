@@ -24,6 +24,13 @@ class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
         result = dict_utils.flatten_dict(
             d=result, delim=".", parent_key=parent_key_prefix
         )
+
+        if self.model_extra is not None:
+            model_extra = dict_utils.flatten_dict(
+                d=self.model_extra, delim=".", parent_key=parent_key_prefix
+            )
+            result.update(model_extra)
+
         result = dict_utils.keep_only_values_of_type(d=result, value_type=int)
 
         return result
