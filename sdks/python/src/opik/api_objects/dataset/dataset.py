@@ -1,5 +1,6 @@
 import logging
 import json
+import functools
 from typing import Optional, Any, List, Dict, Sequence, Set, TYPE_CHECKING
 
 from opik.rest_api import client as rest_api_client
@@ -32,6 +33,13 @@ class Dataset:
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
+
+    @functools.cached_property
+    def id(self) -> str:
+        """The id of the dataset"""
+        return self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=self._name
+        ).id
 
     @property
     def name(self) -> str:
