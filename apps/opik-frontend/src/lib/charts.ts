@@ -17,3 +17,32 @@ export const getDefaultHashedColorsChartConfig = (
     return acc;
   }, {});
 };
+
+export const hexToRgba = (hex: string, opacity: number = 1): string => {
+  let cleanHex = hex.replace(/^#/, "");
+
+  let alpha = opacity;
+  if (cleanHex.length === 8) {
+    alpha = parseInt(cleanHex.slice(6, 8), 16) / 255;
+    cleanHex = cleanHex.slice(0, 6);
+  }
+
+  if (cleanHex.length === 3) {
+    cleanHex = cleanHex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+
+  const r = parseInt(cleanHex.slice(0, 2), 16);
+  const g = parseInt(cleanHex.slice(2, 4), 16);
+  const b = parseInt(cleanHex.slice(4, 6), 16);
+
+  if (isNaN(r) || isNaN(g) || isNaN(b)) {
+    throw new Error(`Invalid hex color: ${hex}`);
+  }
+
+  alpha = Math.max(0, Math.min(1, alpha));
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
