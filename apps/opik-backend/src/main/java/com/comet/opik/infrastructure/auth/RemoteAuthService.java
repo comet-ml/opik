@@ -42,11 +42,11 @@ class RemoteAuthService implements AuthService {
     }
 
     @Builder(toBuilder = true)
-    record AuthResponse(String user, String workspaceId) {
+    record AuthResponse(String user, String workspaceId, String workspaceName) {
     }
 
     @Builder(toBuilder = true)
-    record ValidatedAuthCredentials(boolean shouldCache, String userName, String workspaceId) {
+    record ValidatedAuthCredentials(boolean shouldCache, String userName, String workspaceId, String workspaceName) {
     }
 
     @Override
@@ -84,7 +84,8 @@ class RemoteAuthService implements AuthService {
                 .cookie(sessionToken)
                 .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).path(path).build()))) {
             var credentials = verifyResponse(response);
-            setCredentialIntoContext(credentials.user(), credentials.workspaceId());
+            setCredentialIntoContext(credentials.user(), credentials.workspaceId(),
+                    Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName));
             requestContext.get().setApiKey(sessionToken.getValue());
         }
     }
@@ -98,9 +99,11 @@ class RemoteAuthService implements AuthService {
         var credentials = validateApiKeyAndGetCredentials(workspaceName, apiKey, path);
         if (credentials.shouldCache()) {
             log.debug("Caching user and workspace id for API key");
-            cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId());
+            cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId(),
+                    credentials.workspaceName());
         }
-        setCredentialIntoContext(credentials.userName(), credentials.workspaceId());
+        setCredentialIntoContext(credentials.userName(), credentials.workspaceId(),
+                Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName));
         requestContext.get().setApiKey(apiKey);
     }
 
@@ -119,6 +122,7 @@ class RemoteAuthService implements AuthService {
                         .shouldCache(true)
                         .userName(authResponse.user())
                         .workspaceId(authResponse.workspaceId())
+                        .workspaceName(authResponse.workspaceName())
                         .build();
             }
         } else {
@@ -126,6 +130,7 @@ class RemoteAuthService implements AuthService {
                     .shouldCache(false)
                     .userName(credentials.get().userName())
                     .workspaceId(credentials.get().workspaceId())
+                    .workspaceName(credentials.get().workspaceName())
                     .build();
         }
     }
@@ -153,8 +158,9 @@ class RemoteAuthService implements AuthService {
         throw new InternalServerErrorException();
     }
 
-    private void setCredentialIntoContext(String userName, String workspaceId) {
+    private void setCredentialIntoContext(String userName, String workspaceId, String workspaceName) {
         requestContext.get().setUserName(userName);
         requestContext.get().setWorkspaceId(workspaceId);
+        requestContext.get().setWorkspaceName(workspaceName);
     }
 }
