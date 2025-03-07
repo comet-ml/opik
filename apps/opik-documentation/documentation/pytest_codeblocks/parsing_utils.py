@@ -102,9 +102,14 @@ def get_code_blocs(
             else:
                 history = []
 
-            code_blocks.append(
-                evaluators.PythonEvaluator(code_str, start_line, history=history)
-            )
+            if code_str[0:12] == "%pip install":
+                code_blocks.append(
+                    evaluators.BashEvaluator(code=code_str[1:], start_line=start_line)
+                )
+            else:
+                code_blocks.append(
+                    evaluators.PythonEvaluator(code_str, start_line, history=history)
+                )
         elif language == "bash":
             code_blocks.append(
                 evaluators.BashEvaluator(code=code_str, start_line=start_line)
