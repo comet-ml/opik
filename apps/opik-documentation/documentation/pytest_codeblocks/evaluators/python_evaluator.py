@@ -1,6 +1,9 @@
 import os
 import subprocess
 import tempfile
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 class PythonEvaluator:
@@ -19,8 +22,16 @@ class PythonEvaluator:
         # Run the code in a subprocess
         with tempfile.TemporaryDirectory() as temp_dir:
             script_path = os.path.join(temp_dir, "script.py")
+
+            python_history = [
+                x["content"] for x in self.history if x["language"] == "python"
+            ]
+            bash_history = [
+                x["content"] for x in self.history if x["language"] == "bash"
+            ]
+
             with open(script_path, "w") as f:
-                f.write("\n".join([*self.history, self.code]))
+                f.write("\n".join([*python_history, self.code]))
 
             env = os.environ.copy()
             env.update(
@@ -32,6 +43,9 @@ class PythonEvaluator:
             )
 
             try:
+                for bash_command in bash_history:
+                    subprocess.run(bash_command, shell=True, env=env)
+
                 subprocess.run(
                     [self.python_path, script_path],
                     capture_output=True,
