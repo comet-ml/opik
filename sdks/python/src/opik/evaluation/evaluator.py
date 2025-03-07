@@ -28,6 +28,7 @@ def evaluate(
     prompt: Optional[Prompt] = None,
     prompts: Optional[List[Prompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
+    dataset_item_ids: Optional[List[str]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -70,6 +71,8 @@ def evaluate(
             so that they match the keys expected by the scoring metrics. For example if you have a dataset item with the following content:
             {"user_question": "What is Opik ?"} and a scoring metric that expects a key "input", you can use scoring_key_mapping
             `{"input": "user_question"}` to map the "user_question" key to "input".
+
+        dataset_item_ids: list of dataset item ids to evaluate. If not provided, all samples in the dataset will be evaluated.
     """
     if scoring_metrics is None:
         scoring_metrics = []
@@ -104,6 +107,7 @@ def evaluate(
             dataset_=dataset,
             task=task,
             nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
         )
 
     total_time = time.time() - start_time
@@ -239,6 +243,7 @@ def evaluate_prompt(
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
     prompt: Optional[Prompt] = None,
+    dataset_item_ids: Optional[List[str]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -266,6 +271,8 @@ def evaluate_prompt(
         task_threads: amount of thread workers to run scoring metrics.
 
         prompt: Prompt object to link with experiment.
+
+        dataset_item_ids: list of dataset item ids to evaluate. If not provided, all samples in the dataset will be evaluated.
     """
     if isinstance(model, str):
         model = models_factory.get(model_name=model)
@@ -311,6 +318,7 @@ def evaluate_prompt(
             dataset_=dataset,
             task=_build_prompt_evaluation_task(model=model, messages=messages),
             nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
         )
 
     total_time = time.time() - start_time
