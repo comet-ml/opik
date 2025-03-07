@@ -63,6 +63,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
@@ -3900,6 +3901,10 @@ class SpansResourceTest {
                         provider,
                         usage);
 
+        if (MapUtils.isNotEmpty(usage)) {
+            assertThat(expectedCost.compareTo(BigDecimal.ZERO) > 0).isTrue();
+        }
+
         Span span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
         assertThat(span.totalEstimatedCost())
@@ -3922,6 +3927,19 @@ class SpansResourceTest {
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                         "gemini-1.5-pro-preview-0514", "google_vertexai",
+                        null, null),
+                Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                        "claude-3-sonnet-20240229", "anthropic",
+                        null, null),
+                Arguments.of(
+                        Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                "original_usage.output_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                "original_usage.cache_read_input_tokens",
+                                Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                "original_usage.cache_creation_input_tokens",
+                                Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                        "claude-3-5-sonnet-latest", "anthropic",
                         null, null),
                 Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                         "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
