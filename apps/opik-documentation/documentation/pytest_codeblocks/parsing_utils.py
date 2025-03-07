@@ -76,6 +76,8 @@ def get_code_blocs(
         return []
 
     page_frontmatter = get_page_frontmatter(path)
+    is_cookbook = "/cookbook/" in path
+
     code_blocks = []
     markdown = MarkdownAnalyzer(path)
     mrkdwn_analysis_code_blocks = markdown.identify_code_blocks().get("Code block", [])
@@ -97,7 +99,10 @@ def get_code_blocs(
 
         code_str = _reindent_code_block(mk_code_block["content"])
         if language == "python":
-            if page_frontmatter.get("pytest_codeblocks_execute_previous", False):
+            if (
+                page_frontmatter.get("pytest_codeblocks_execute_previous", False)
+                or is_cookbook
+            ):
                 history = [x["content"] for x in mrkdwn_analysis_code_blocks[:i]]
             else:
                 history = []
