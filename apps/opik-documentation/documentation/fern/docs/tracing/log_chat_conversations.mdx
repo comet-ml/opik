@@ -1,0 +1,78 @@
+You can log chat conversations to the Opik platform and track the full conversations
+your users are having with your chatbot.
+
+<Frame>
+  <img src="/img/tracing/chat_conversations.png" />
+</Frame>
+
+## Logging conversations
+
+You can log chat conversations by specifying the `thread_id` parameter when using either the low level SDK or
+Python decorators:
+
+<Tabs>
+    <Tab title="Python decorators" value="Python decorators">
+    ```python
+    import opik
+    from opik import opik_context
+    
+    @opik.track
+    def chat_message(input, thread_id):
+        opik_context.update_current_trace(
+            thread_id=thread_id
+        )
+        return "Opik is an Open Source GenAI platform"
+
+    thread_id = 12345
+    chat_message("What is Opik ?", thread_id)
+    chat_message("Repeat the previous message", thread_id)
+    ```
+    </Tab>
+    <Tab title="Low level SDK" value="Low level SDK">
+    ```python
+    import opik
+
+    opik_client = opik.Opik()
+
+    thread_id = 12345
+
+    # Log a first message
+    trace = opik_client.trace(
+        name="chat_conversation"
+        input="What is Opik?",
+        output="Opik is an Open Source GenAI platform",
+        thread_id=thread_id
+    )
+
+    # Log a second message
+    trace = opik_client.trace(
+        name="chat_conversation",
+        input="Can you track chat conversations in Opik",
+        output="Yes, of course !",
+        thread_id=thread_id
+    )
+    ```
+    </Tab>
+
+</Tabs>
+
+<Note>
+  The input to each trace will be displayed as the user message while the output will be displayed as the AI assistant
+  response.
+</Note>
+
+## Reviewing conversations
+
+Conversations can be viewed at a project level in the `threads` tab. All conversations are tracked and by clicking on the thread ID you will be able to
+view the full conversation.
+
+The thread view supports markdown making it easier for you to review the content that was returned to the user. If you would like to dig in deeper, you
+can click on the `View trace` button to deepdive into how the AI assistant response was generated.
+
+By clicking on the thumbs up or thumbs down icons, you can quickly rate the AI assistant response. This feedback score will be logged and associated to
+the relevant trace. By switching to the trace view, you can review the full trace as well as add additional feedback scores through the annotation
+functionality.
+
+<Frame>
+  <img src="/img/tracing/chat_conversations_actions.png" />
+</Frame>
