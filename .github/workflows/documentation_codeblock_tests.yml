@@ -26,7 +26,7 @@ jobs:
             # For pull requests, compare with base branch
             echo "paths=$(
               git diff --name-only origin/${{ github.base_ref }} |
-              grep -E '^apps/opik-documentation/documentation/docs/.*\.(md|mdx)$' |
+              grep -E '^apps/opik-documentation/documentation/fern/docs/.*\.(md|mdx)$' |
               sed 's|apps/opik-documentation/documentation/||' |
               jq -R -s -c 'split("\n")[:-1]'
             )" >> $GITHUB_OUTPUT
@@ -34,8 +34,8 @@ jobs:
             # For manual runs and scheduled runs, check all files
             echo "paths=$(
               (
-                ls -d docs/*/ 2>/dev/null;
-                find docs -maxdepth 1 -type f -name "*.md" -o -name "*.mdx"
+                ls -d fern/docs/*/ 2>/dev/null;
+                find fern/docs -maxdepth 1 -type f -name "*.md" -o -name "*.mdx"
               ) | jq -R -s -c 'split("\n")[:-1]'
             )" >> $GITHUB_OUTPUT
           fi
