@@ -15,10 +15,14 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 @UtilityClass
 public class AuthTestUtils {
 
-    public static final String AUTH_RESPONSE = "{\"user\": \"%s\", \"workspaceId\": \"%s\" }";
+    public static final String AUTH_RESPONSE = "{\"user\": \"%s\", \"workspaceId\": \"%s\" , \"workspaceName\": \"%s\"}";
 
     public static String newWorkspaceAuthResponse(String user, String workspaceId) {
-        return AUTH_RESPONSE.formatted(user, workspaceId);
+        return newWorkspaceAuthResponse(user, workspaceId, "");
+    }
+
+    public static String newWorkspaceAuthResponse(String user, String workspaceId, String workspaceName) {
+        return AUTH_RESPONSE.formatted(user, workspaceId, workspaceName);
     }
 
     public static void mockTargetWorkspace(WireMockServer server, String apiKey, String workspaceName,
@@ -28,7 +32,7 @@ public class AuthTestUtils {
                         .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
                         .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
                         .withRequestBody(matchingJsonPath("$.path", matching("/v1/private/.*")))
-                        .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(user, workspaceId))));
+                        .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(user, workspaceId, workspaceName))));
     }
 
     public static void mockSessionCookieTargetWorkspace(WireMockServer server, String sessionToken,

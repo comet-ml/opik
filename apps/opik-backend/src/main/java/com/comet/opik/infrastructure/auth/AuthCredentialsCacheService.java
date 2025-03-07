@@ -16,6 +16,7 @@ class AuthCredentialsCacheService implements CacheService {
     private static final String KEY_FORMAT = "authV2-%s-%s";
     private static final String USER_NAME_KEY = "userName";
     private static final String WORKSPACE_ID_KEY = "workspaceId";
+    private static final String WORKSPACE_NAME_KEY = "workspaceName";
 
     private final @NonNull RedissonReactiveClient redissonClient;
     private final int ttlInSeconds;
@@ -24,22 +25,25 @@ class AuthCredentialsCacheService implements CacheService {
             @NonNull String apiKey, @NonNull String workspaceName) {
         var key = getKey(apiKey, workspaceName);
         RMapReactive<String, String> map = redissonClient.getMap(key);
-        return map.getAll(Set.of(USER_NAME_KEY, WORKSPACE_ID_KEY))
+        return map.getAll(Set.of(USER_NAME_KEY, WORKSPACE_ID_KEY, WORKSPACE_NAME_KEY))
                 .blockOptional()
                 .filter(m -> !m.isEmpty())
                 .map(m -> AuthCredentials.builder()
                         .userName(m.get(USER_NAME_KEY))
                         .workspaceId(m.get(WORKSPACE_ID_KEY))
+                        .workspaceName(m.get(WORKSPACE_NAME_KEY))
                         .build());
     }
 
     public void cache(
             @NonNull String apiKey,
-            @NonNull String workspaceName,
+            @NonNull String requestWorkspaceName,
             @NonNull String userName,
-            @NonNull String workspaceId) {
-        var key = getKey(apiKey, workspaceName);
-        redissonClient.getMap(key).putAll(Map.of(USER_NAME_KEY, userName, WORKSPACE_ID_KEY, workspaceId)).block();
+            @NonNull String workspaceId,
+            String resolvedWorkspaceName) {
+        var key = getKey(apiKey, requestWorkspaceName);
+        redissonClient.getMap(key).putAll(Map.of(USER_NAME_KEY, userName, WORKSPACE_ID_KEY, workspaceId,
+                WORKSPACE_NAME_KEY, Optional.ofNullable(resolvedWorkspaceName).orElse(requestWorkspaceName))).block();
         redissonClient.getMap(key).expire(Duration.ofSeconds(ttlInSeconds)).block();
     }
 
