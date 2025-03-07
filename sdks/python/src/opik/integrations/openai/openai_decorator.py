@@ -19,6 +19,7 @@ from opik import dict_utils, llm_usage
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.integrations.openai import chat_completion_chunks_aggregator
 from . import stream_patchers
+from opik.types import LLMProvider
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,11 +101,12 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         result_dict = output.model_dump(mode="json")
         output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
 
-        opik_usage = (
-            llm_usage.OpikUsage.from_openai_completions_dict(result_dict["usage"])
-            if result_dict["usage"] is not None
-            else None
-        )  # TODO: maybe add a try-except block to play safe?
+        opik_usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=LLMProvider.OPENAI,  # TODO: check if other options are possible, this is just old behavior
+            usage=result_dict["usage"],
+            logger=LOGGER,
+            error_message="Failed to log token usage from openai call",
+        )
         model = result_dict["model"]
 
         result = arguments_helpers.EndSpanParameters(

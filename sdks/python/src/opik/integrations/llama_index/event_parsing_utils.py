@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, Optional
 
 from llama_index.core import Settings
@@ -6,6 +7,8 @@ from llama_index.core.callbacks import schema as llama_index_schema
 
 from opik import llm_usage
 from opik.types import LLMProvider
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_span_input_from_events(
@@ -143,8 +146,11 @@ def get_usage_data(
             llm_usage_info.provider = LLMProvider.OPENAI
         if hasattr(response.raw, "usage"):
             usage_info = response.raw.usage.model_dump()
-            llm_usage_info.usage = llm_usage.OpikUsage.from_openai_completions_dict(
-                usage_info
+            llm_usage_info.usage = llm_usage.try_build_opik_usage_or_log_error(
+                provider=LLMProvider.OPENAI,  # TODO: check if other options are possible, this is just old behavior
+                usage=usage_info,
+                logger=LOGGER,
+                error_message="Failed to log token usage from llama_index run",
             )
 
     return llm_usage_info

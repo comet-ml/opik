@@ -16,7 +16,7 @@ from google.genai import types as genai_types
 from opik import dict_utils
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik import llm_usage
-
+from opik.types import LLMProvider
 from . import stream_wrappers
 
 LOGGER = logging.getLogger(__name__)
@@ -91,8 +91,12 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         model = result_dict["model_version"]
 
-        usage = llm_usage.OpikUsage.from_google_dict(result_dict["usage_metadata"])
-
+        usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=LLMProvider(self.provider),
+            usage=result_dict["usage_metadata"],
+            logger=LOGGER,
+            error_message="Failed to log token usage from genai generate_response call",
+        )
         result = arguments_helpers.EndSpanParameters(
             output=output,
             usage=usage,
