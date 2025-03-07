@@ -117,7 +117,12 @@ class Span:
         )
         if opik_usage is not None:
             metadata = (
-                {"usage": usage} if metadata is None else {"usage": usage, **metadata}
+                {"usage": opik_usage.provider_usage.model_dump(exclude_none=True)}
+                if metadata is None
+                else {
+                    "usage": opik_usage.provider_usage.model_dump(exclude_none=True),
+                    **metadata,
+                }
             )
 
         end_span_message = messages.UpdateSpanMessage(
@@ -130,9 +135,11 @@ class Span:
             input=input,
             output=output,
             tags=tags,
-            usage=opik_usage.to_backend_compatible_flat_dict()
-            if opik_usage is not None
-            else None,
+            usage=(
+                opik_usage.to_backend_compatible_full_usage_dict()
+                if opik_usage is not None
+                else None
+            ),
             model=model,
             provider=provider,
             error_info=error_info,
@@ -190,7 +197,9 @@ class Span:
         )
         if opik_usage is not None:
             metadata = (
-                {"usage": usage} if metadata is None else {"usage": usage, **metadata}
+                {"usage": opik_usage.provider_usage.model_dump()}
+                if metadata is None
+                else {"usage": opik_usage.provider_usage.model_dump(), **metadata}
             )
 
         create_span_message = messages.CreateSpanMessage(
@@ -206,9 +215,11 @@ class Span:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=opik_usage.to_backend_compatible_flat_dict()
-            if opik_usage is not None
-            else None,
+            usage=(
+                opik_usage.to_backend_compatible_full_usage_dict()
+                if opik_usage is not None
+                else None
+            ),
             model=model,
             provider=provider,
             error_info=error_info,

@@ -280,10 +280,13 @@ class OpikTracer(BaseTracer):
 
         span_data.init_end_time().update(
             output=run_dict["outputs"],
-            usage=usage_info.usage,
+            usage=usage_info.usage.provider_usage.model_dump()
+            if isinstance(usage_info.usage, llm_usage.OpikUsage)
+            else usage_info.usage,
             provider=usage_info.provider,
             model=usage_info.model,
         )
+
         self._opik_client.span(**span_data.__dict__)
 
     def _process_end_span_with_error(self, run: "Run") -> None:

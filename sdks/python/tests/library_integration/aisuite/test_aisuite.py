@@ -34,6 +34,7 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
     "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
 }
 
+
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
         "usage",

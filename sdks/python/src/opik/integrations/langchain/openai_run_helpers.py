@@ -40,16 +40,13 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
         elif token_usage_dict := run_dict["outputs"]["generations"][-1][-1]["message"][
             "kwargs"
         ].get("usage_metadata"):
-            # For some mysterious reason langchain decided to use different names of generation tokens.
-            # Since this dict is already a result of langchain's conversion and simplification, we
-            # just convert it to openai format for easier further processing.
-
+            # TODO: provide better support for langchain usage. We probably need to convert it
+            # to the full openai usage dict (with details) or find a way to access raw data
             openai_formatted_dict = {
                 "completion_tokens": token_usage_dict["output_tokens"],
                 "prompt_tokens": token_usage_dict["input_tokens"],
                 "total_tokens": token_usage_dict["total_tokens"],
             }
-
             opik_usage = llm_usage.OpikUsage.from_openai_completions_dict(
                 openai_formatted_dict
             )

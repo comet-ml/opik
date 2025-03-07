@@ -159,7 +159,12 @@ class Trace:
         )
         if opik_usage is not None:
             metadata = (
-                {"usage": usage} if metadata is None else {"usage": usage, **metadata}
+                {"usage": opik_usage.provider_usage.model_dump(exclude_none=True)}
+                if metadata is None
+                else {
+                    "usage": opik_usage.provider_usage.model_dump(exclude_none=True),
+                    **metadata,
+                }
             )
 
         create_span_message = messages.CreateSpanMessage(
@@ -175,9 +180,11 @@ class Trace:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=opik_usage.to_backend_compatible_flat_dict()
-            if opik_usage is not None
-            else None,
+            usage=(
+                opik_usage.to_backend_compatible_full_usage_dict()
+                if opik_usage is not None
+                else None
+            ),
             model=model,
             provider=provider,
             error_info=error_info,
