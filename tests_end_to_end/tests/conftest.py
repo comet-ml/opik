@@ -659,14 +659,14 @@ def create_moderation_rule_fixture(
         ) from e
 
     try:
-        expect(traces_page.page.get_by_role("tab", name="Rules")).to_be_visible()
+        expect(traces_page.page.get_by_role("tab", name="Online evaluation")).to_be_visible()
     except Exception as e:
         raise AssertionError(
             f"Rules tab not found, possible error loading" f"Error: {str(e)}"
         ) from e
 
-    traces_page.page.get_by_role("tab", name="Rules").click()
-    traces_page.page.get_by_role("tab", name="Rules").click()
+    traces_page.page.get_by_role("tab", name="Online evaluation").click()
+    traces_page.page.get_by_role("tab", name="Online evaluation").click()
     rule_name = "Test Moderation Rule"
     traces_page.page.get_by_role("button", name="Create your first rule").click()
     traces_page.page.get_by_placeholder("Rule name").fill(rule_name)
