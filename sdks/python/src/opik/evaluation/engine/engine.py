@@ -158,9 +158,11 @@ class EvaluationEngine:
         dataset_: dataset.Dataset,
         task: LLMTask,
         nb_samples: Optional[int],
+        dataset_item_ids: Optional[List[str]],
     ) -> List[test_result.TestResult]:
         dataset_items = dataset_.__internal_api__get_items_as_dataclasses__(
-            nb_samples=nb_samples
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
         )
 
         evaluation_tasks: List[EvaluationTask] = [
