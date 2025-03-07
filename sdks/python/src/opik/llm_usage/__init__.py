@@ -1,5 +1,10 @@
 from .opik_usage import OpikUsage
-from .opik_usage_factory import build_opik_usage
+from .opik_usage_factory import build_opik_usage, try_build_opik_usage_or_log_error
 from .llm_usage_info import LLMUsageInfo
 
-__all__ = ["OpikUsage", "build_opik_usage", "LLMUsageInfo"]
+__all__ = [
+    "OpikUsage",
+    "build_opik_usage",
+    "LLMUsageInfo",
+    "try_build_opik_usage_or_log_error",
+]
