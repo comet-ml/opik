@@ -90,6 +90,7 @@ public class SpansResource {
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
             @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = SpanPage.class)))})
     @JsonView(Span.View.Public.class)
+    @RateLimited(value = "getSpans:{workspaceId}", shouldAffectWorkspaceWriteLimit = false, shouldAffectUserWriteLimit = false)
     public Response getSpansByProject(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -127,6 +128,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "200", description = "Span resource", content = @Content(schema = @Schema(implementation = Span.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = Span.class)))})
     @JsonView(Span.View.Public.class)
+    @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceWriteLimit = false, shouldAffectUserWriteLimit = false)
     public Response getById(@PathParam("id") @NotNull UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -354,6 +356,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @JsonView(Span.View.Public.class)
+    @RateLimited(value = "search_spans:{workspaceId}", shouldAffectWorkspaceWriteLimit = false, shouldAffectUserWriteLimit = false)
     public ChunkedOutput<JsonNode> searchSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();

@@ -175,6 +175,42 @@ rateLimit:
     # Default: 60
     # Description: Time bucket size in seconds
     durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-60}
+    # Description: Header name to use for rate limiting
+    headerName: User
+    # Description: User facing bucket name
+    userFacingBucketName: general_events
+    # Description: Rate limit error message
+    errorMessage: "You have exceeded the rate limit for user general events. Please try again later."
+
+  workspaceLimit:
+    # Default: 5000
+    # Description: how many write events are allowed in the specified time bucket
+    limit: ${RATE_LIMIT_WORKSPACE_EVENTS_LIMIT:-5000}
+    # Default: 60
+    # Description: Time bucket size in seconds
+    durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+    # Description: Header name to use for rate limiting
+    headerName: Workspace
+    # Description: User facing bucket name
+    userFacingBucketName: workspace_events
+    # Description: Rate limit error message
+    errorMessage: "You have exceeded the rate limit for user workspace events. Please try again later."
+
+  customLimits:
+    getSpanById:
+      # Default: 250
+      # Description: how many events are allowed in the specified time bucket
+      limit: ${RATE_LIMIT_GET_SPANS_BY_ID_EVENTS_PER_WORKSPACE_LIMIT:-250}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Get-Span-Id
+      # Description: User facing bucket name
+      userFacingBucketName: get_span_by_id
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operations Please try again later."
+
 
 # Configuration for anonymous usage reporting
 usageReport:

@@ -4888,7 +4888,8 @@ class TracesResourceTest {
 
     private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status,
             String errorMessage) {
-        try (var response = traceResourceClient.createTrace(trace, apiKey, workspaceName, status)) {
+        try (var response = traceResourceClient.callCreateTrace(trace, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(status);
             assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
         }
     }

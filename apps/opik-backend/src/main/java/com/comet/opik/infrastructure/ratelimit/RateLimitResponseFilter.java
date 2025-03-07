@@ -1,10 +1,10 @@
 package com.comet.opik.infrastructure.ratelimit;
 
-import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
+import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.Provider;
 import lombok.RequiredArgsConstructor;
 
@@ -15,23 +15,23 @@ import java.util.List;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class RateLimitResponseFilter implements ContainerResponseFilter {
 
+    public static final String MATCHING = "Opik-.*-Limit(-TTL-Millis)?";
+
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext)
             throws IOException {
-        List<Object> userLimit = getValueFromHeader(requestContext, RequestContext.USER_LIMIT);
-        List<Object> remainingLimit = getValueFromHeader(requestContext, RequestContext.USER_REMAINING_LIMIT);
-        List<Object> remainingTtl = getValueFromHeader(requestContext, RequestContext.USER_LIMIT_REMAINING_TTL);
-
-        responseContext.getHeaders().put(RequestContext.USER_LIMIT, userLimit);
-        responseContext.getHeaders().put(RequestContext.USER_REMAINING_LIMIT, remainingLimit);
-        responseContext.getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL, remainingTtl);
+        moveHeader(requestContext, MATCHING, responseContext.getHeaders());
     }
 
-    private List<Object> getValueFromHeader(ContainerRequestContext requestContext, String key) {
-        return requestContext.getHeaders().getOrDefault(key, List.of())
+    private void moveHeader(ContainerRequestContext requestContext, String keyPattern,
+            MultivaluedMap<String, Object> headers) {
+        requestContext.getHeaders().keySet()
                 .stream()
-                .map(Object.class::cast)
-                .toList();
+                .filter(k -> k.matches(keyPattern))
+                .forEach(key -> {
+                    List<String> values = requestContext.getHeaders().get(key);
+                    headers.add(key, values.getFirst());
+                });
     }
 
 }
