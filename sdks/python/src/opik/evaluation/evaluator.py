@@ -71,6 +71,8 @@ def evaluate(
             so that they match the keys expected by the scoring metrics. For example if you have a dataset item with the following content:
             {"user_question": "What is Opik ?"} and a scoring metric that expects a key "input", you can use scoring_key_mapping
             `{"input": "user_question"}` to map the "user_question" key to "input".
+
+        dataset_item_ids: list of dataset item ids to evaluate. If not provided, all samples in the dataset will be evaluated.
     """
     if scoring_metrics is None:
         scoring_metrics = []
@@ -269,6 +271,8 @@ def evaluate_prompt(
         task_threads: amount of thread workers to run scoring metrics.
 
         prompt: Prompt object to link with experiment.
+
+        dataset_item_ids: list of dataset item ids to evaluate. If not provided, all samples in the dataset will be evaluated.
     """
     if isinstance(model, str):
         model = models_factory.get(model_name=model)
