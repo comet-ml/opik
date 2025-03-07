@@ -18,8 +18,10 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -84,6 +86,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class RateLimitE2ETest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/traces";
+    private static final String CUSTOM_LIMIT = "customLimit";
+    private static final String GET_SPAN_ID_LIMIT = "getSpanById";
+    private static final long LIMIT = 4L;
+    private static final long LIMIT_DURATION_IN_SECONDS = 1L;
+    public static final String TOO_MANY_REQUESTS_MESSAGEE = "Too Many Requests: %s";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -93,9 +100,8 @@ class RateLimitE2ETest {
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
-    private static final long LIMIT = 4L;
-    private static final long LIMIT_DURATION_IN_SECONDS = 1L;
-    public static final String CUSTOM_LIMIT = "customLimit";
+    private LimitConfig customLimit;
+    private LimitConfig getSpanIdLimit;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
@@ -122,6 +128,10 @@ class RateLimitE2ETest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);
 
+        customLimit = new LimitConfig(CUSTOM_LIMIT, CUSTOM_LIMIT, 1, 1, "custom limit");
+
+        getSpanIdLimit = new LimitConfig("Get-Span-Id", GET_SPAN_ID_LIMIT, 3, 1, "get span id");
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
@@ -131,12 +141,13 @@ class RateLimitE2ETest {
                         .rateLimitEnabled(true)
                         .limit(LIMIT)
                         .limitDurationInSeconds(LIMIT_DURATION_IN_SECONDS)
-                        .customLimits(Map.of(CUSTOM_LIMIT, new LimitConfig(1, 1)))
+                        .customLimits(Map.of(CUSTOM_LIMIT, customLimit, GET_SPAN_ID_LIMIT, getSpanIdLimit))
                         .build());
     }
 
     private String baseURI;
     private ClientSupport client;
+    private SpanResourceClient spanResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
@@ -150,6 +161,8 @@ class RateLimitE2ETest {
 
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
+
+        this.spanResourceClient = new SpanResourceClient(client, baseURI);
 
         ClientSupportUtils.config(client);
     }
@@ -331,7 +344,8 @@ class RateLimitE2ETest {
 
     @Test
     @DisplayName("Rate limit: When remaining limit is less than the batch size, Then reject the request")
-    void rateLimit__whenRemainingLimitIsLessThanRequestedSize__thenRejectTheRequest() {
+    void rateLimit__whenRemainingLimitIsLessThanRequestedSize__thenRejectTheRequest(
+            OpikConfiguration opikConfiguration) {
 
         String apiKey = UUID.randomUUID().toString();
         String user = UUID.randomUUID().toString();
@@ -363,13 +377,22 @@ class RateLimitE2ETest {
 
             assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
             var error = response.readEntity(ErrorMessage.class);
-            assertEquals("Too Many Requests", error.getMessage());
+            assertEquals(getUserLimitErrorMessage(opikConfiguration), error.getMessage());
         }
+    }
+
+    private String getUserLimitErrorMessage(OpikConfiguration opikConfiguration) {
+        return getLimitErrorMessage(opikConfiguration.getRateLimit().getGeneralLimit().errorMessage());
+    }
+
+    private String getLimitErrorMessage(String errorMessage) {
+        return TOO_MANY_REQUESTS_MESSAGEE.formatted(errorMessage);
     }
 
     @Test
     @DisplayName("Rate limit: When after reject request due to batch size, Then accept the request with remaining limit")
-    void rateLimit__whenAfterRejectRequestDueToBatchSize__thenAcceptTheRequestWithRemainingLimit() {
+    void rateLimit__whenAfterRejectRequestDueToBatchSize__thenAcceptTheRequestWithRemainingLimit(
+            OpikConfiguration configuration) {
 
         String apiKey = UUID.randomUUID().toString();
         String user = UUID.randomUUID().toString();
@@ -401,7 +424,7 @@ class RateLimitE2ETest {
 
             assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
             var error = response.readEntity(ErrorMessage.class);
-            assertEquals("Too Many Requests", error.getMessage());
+            assertEquals(getUserLimitErrorMessage(configuration), error.getMessage());
         }
 
         try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -423,7 +446,8 @@ class RateLimitE2ETest {
             Object batch,
             Object batch2,
             String url,
-            String method) {
+            String method,
+            OpikConfiguration configuration) {
 
         String apiKey = UUID.randomUUID().toString();
         String user = UUID.randomUUID().toString();
@@ -447,13 +471,13 @@ class RateLimitE2ETest {
 
             assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
             var error = response.readEntity(ErrorMessage.class);
-            assertEquals("Too Many Requests", error.getMessage());
+            assertEquals(getUserLimitErrorMessage(configuration), error.getMessage());
         }
     }
 
     @Test
     @DisplayName("Rate limit: When processing operations, Then return remaining limit as header")
-    void rateLimit__whenProcessingOperations__thenReturnRemainingLimitAsHeader() {
+    void rateLimit__whenProcessingOperations__thenReturnRemainingLimitAsHeader(OpikConfiguration opikConfiguration) {
 
         String apiKey = UUID.randomUUID().toString();
         String user = UUID.randomUUID().toString();
@@ -480,7 +504,53 @@ class RateLimitE2ETest {
                     assertEquals(HttpStatus.SC_CREATED, response.getStatus());
 
                     assertLimitHeaders(response, LIMIT - i - 1, RateLimited.GENERAL_EVENTS,
-                            (int) LIMIT_DURATION_IN_SECONDS);
+                            (int) LIMIT_DURATION_IN_SECONDS, opikConfiguration.getRateLimit().getGeneralLimit());
+                } else {
+                    assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
+                }
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("Workspace Rate limit: When processing operations, Then return remaining limit as header")
+    void workspaceRateLimit__whenProcessingOperations__thenReturnRemainingLimitAsHeader(
+            OpikConfiguration opikConfiguration) {
+
+        int workspaceLimit = (int) LIMIT * 2;
+
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        String apiKey2 = UUID.randomUUID().toString();
+        String user2 = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+        mockTargetWorkspace(apiKey2, workspaceName, workspaceId, user2);
+
+        String projectName = UUID.randomUUID().toString();
+
+        IntStream.range(0, workspaceLimit + 1).forEach(i -> {
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+
+            var currentApiKey = i % 2 == 0 ? apiKey : apiKey2;
+
+            try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, currentApiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(trace))) {
+
+                if (i < workspaceLimit) {
+                    assertEquals(HttpStatus.SC_CREATED, response.getStatus());
+
+                    assertLimitHeaders(response, workspaceLimit - i - 1, RateLimited.WORKSPACE_EVENTS,
+                            (int) LIMIT_DURATION_IN_SECONDS, opikConfiguration.getRateLimit().getWorkspaceLimit());
                 } else {
                     assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
                 }
@@ -569,7 +639,7 @@ class RateLimitE2ETest {
 
             assertEquals(HttpStatus.SC_CREATED, response.getStatus());
 
-            assertLimitHeaders(response, 0, CUSTOM_LIMIT, 1);
+            assertLimitHeaders(response, 0, CUSTOM_LIMIT, 1, customLimit);
         }
 
         try (var response = client.target("%s/v1/private/test".formatted(baseURI))
@@ -581,7 +651,7 @@ class RateLimitE2ETest {
 
             assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
 
-            assertLimitHeaders(response, 0, CUSTOM_LIMIT, 1);
+            assertLimitHeaders(response, 0, CUSTOM_LIMIT, 1, customLimit);
         }
 
     }
@@ -605,7 +675,7 @@ class RateLimitE2ETest {
 
             assertEquals(HttpStatus.SC_CREATED, response.getStatus());
 
-            assertLimitHeaders(response, 1, CUSTOM_LIMIT, 1);
+            assertLimitHeaders(response, 1, CUSTOM_LIMIT, 1, customLimit);
         }
     }
 
@@ -615,16 +685,55 @@ class RateLimitE2ETest {
         String apiKey = UUID.randomUUID().toString();
         int limit = 100;
 
-        Long availableEvents = rateLimitService.availableEvents(apiKey, "generalLimit", new LimitConfig(limit, 1))
+        String generalLimit = "generalLimit";
+
+        Long availableEvents = rateLimitService
+                .availableEvents(apiKey, new LimitConfig(generalLimit, generalLimit, limit, 1, "general limit"))
                 .block();
 
         assertEquals(limit, availableEvents);
     }
 
-    private static void assertLimitHeaders(Response response, long expected, String limitBucket, int limitDuration) {
-        String remainingLimit = response.getHeaderString(RequestContext.USER_REMAINING_LIMIT);
-        String userLimit = response.getHeaderString(RequestContext.USER_LIMIT);
-        String remainingTtl = response.getHeaderString(RequestContext.USER_LIMIT_REMAINING_TTL);
+    @Test
+    @DisplayName("Rate limit: When custom rate limit has placeholder, Then set and return limit")
+    void rateLimit__whenRateLimitHasPlaceholder__thenSetAndReturnLimit(RateLimitService rateLimitService) {
+
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        Span span = factory.manufacturePojo(Span.class);
+
+        spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+        IntStream.range(0, (int) getSpanIdLimit.limit() + 1)
+                .forEach(i -> {
+                    if (i < getSpanIdLimit.limit()) {
+                        try (var response = spanResourceClient.callGetSpanIdApi(span.id(), workspaceName, apiKey)) {
+                            assertLimitHeaders(response, getSpanIdLimit.limit() - i - 1, GET_SPAN_ID_LIMIT, 1,
+                                    getSpanIdLimit);
+                        }
+                    } else {
+                        try (var response = spanResourceClient.callGetSpanIdApi(span.id(), workspaceName, apiKey)) {
+                            assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, response.getStatus());
+                            ErrorMessage errorMessage = response.readEntity(ErrorMessage.class);
+                            assertThat(errorMessage.getMessage())
+                                    .isEqualTo(getLimitErrorMessage(getSpanIdLimit.errorMessage()));
+                        }
+                    }
+                });
+    }
+
+    private static void assertLimitHeaders(Response response, long expected, String limitBucket, int limitDuration,
+            LimitConfig limitConfig) {
+        String remainingLimit = response
+                .getHeaderString(RequestContext.REMAINING_LIMIT.formatted(limitConfig.headerName()));
+        String userLimit = response.getHeaderString(RequestContext.LIMIT.formatted(limitConfig.headerName()));
+        String remainingTtl = response
+                .getHeaderString(RequestContext.LIMIT_REMAINING_TTL.formatted(limitConfig.headerName()));
 
         assertEquals(expected, Long.parseLong(remainingLimit));
         assertEquals(limitBucket, userLimit);

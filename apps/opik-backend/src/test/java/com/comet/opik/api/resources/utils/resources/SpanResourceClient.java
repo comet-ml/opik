@@ -135,15 +135,20 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Span getById(UUID id, String workspaceName, String apiKey) {
-        var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var response = callGetSpanIdApi(id, workspaceName, apiKey)) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(Span.class);
+        }
+    }
+
+    public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
-
-        assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-        return response.readEntity(Span.class);
     }
 
     public Span.SpanPage getByTraceIdAndProject(UUID traceId, String projectName, String workspaceName, String apiKey) {
