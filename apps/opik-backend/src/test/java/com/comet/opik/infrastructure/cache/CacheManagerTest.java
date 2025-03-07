@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
@@ -37,7 +38,8 @@ class CacheManagerTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
     static final String CACHE_NAME_1 = "test";
     static final String CACHE_NAME_2 = "test2";
@@ -46,7 +48,7 @@ class CacheManagerTest {
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);

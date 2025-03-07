@@ -81,6 +81,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
@@ -157,10 +158,10 @@ class TracesResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-
-    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -168,7 +169,7 @@ class TracesResourceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     {
-        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 

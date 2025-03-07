@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
@@ -68,11 +69,10 @@ class UsageResourceTest {
     private final String USER = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer();
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -80,7 +80,7 @@ class UsageResourceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     {
-        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 

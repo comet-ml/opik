@@ -80,6 +80,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
@@ -154,14 +155,16 @@ class SpansResourceTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
+        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
