@@ -24,7 +24,7 @@ class OpikUsage(pydantic.BaseModel):
 
         provider_usage: Dict[str, int] = (
             self.provider_usage.to_backend_compatible_flat_dict(
-                parent_key_prefix="provider"
+                parent_key_prefix="original_usage"
             )
         )
 

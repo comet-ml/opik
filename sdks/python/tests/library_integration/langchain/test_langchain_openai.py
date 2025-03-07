@@ -16,23 +16,50 @@ from ...testlib import (
     assert_equal,
 )
 
+EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens": ANY_BUT_NONE,
+    "original_usage.total_tokens": ANY_BUT_NONE,
+}
+
+EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens": ANY_BUT_NONE,
+    "original_usage.total_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
+}
+
 
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt, stream_usage",
+    "llm_model, expected_input_prompt, expected_usage, stream_usage",
     [
         (
             langchain_openai.OpenAI,
             "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
             False,
         ),
         (
             langchain_openai.ChatOpenAI,
             "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
             False,
         ),
         (
             langchain_openai.ChatOpenAI,
             "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
             True,
         ),
     ],
@@ -42,6 +69,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     ensure_openai_configured,
     llm_model,
     expected_input_prompt,
+    expected_usage,
     stream_usage,
 ):
     llm_args = {
@@ -105,11 +133,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                         metadata=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        usage={
-                            "completion_tokens": ANY_BUT_NONE,
-                            "prompt_tokens": ANY_BUT_NONE,
-                            "total_tokens": ANY_BUT_NONE,
-                        },
+                        usage=expected_usage,
                         spans=[],
                         provider="openai",
                         model=ANY_STRING(startswith="gpt-3.5-turbo"),
@@ -211,11 +235,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                 type="llm",
                 model=ANY_STRING(startswith="gpt-3.5-turbo"),
                 provider="openai",
-                usage={
-                    "completion_tokens": ANY_BUT_NONE,
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
             )
         ],
     )

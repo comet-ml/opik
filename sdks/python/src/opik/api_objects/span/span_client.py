@@ -1,18 +1,17 @@
 import datetime
 import logging
+from typing import Any, Dict, List, Optional, Union
 
-from typing import Optional, Any, List, Dict, Union
-from ...types import (
-    SpanType,
-    UsageDict,
+from opik import datetime_helpers, id_helpers, llm_usage
+from opik.message_processing import messages, streamer
+
+from opik.types import (
     DistributedTraceHeadersDict,
     ErrorInfoDict,
     LLMProvider,
+    SpanType,
 )
-
-from ...message_processing import streamer, messages
-from ... import datetime_helpers, id_helpers
-from .. import validation_helpers, constants
+from .. import constants, validation_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class Span:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        usage: Optional[UsageDict] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
     ) -> None:
@@ -87,7 +86,7 @@ class Span:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        usage: Optional[UsageDict] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
         model: Optional[str] = None,
         provider: Optional[Union[LLMProvider, str]] = None,
         error_info: Optional[ErrorInfoDict] = None,
@@ -131,7 +130,9 @@ class Span:
             input=input,
             output=output,
             tags=tags,
-            usage=opik_usage,
+            usage=opik_usage.to_backend_compatible_flat_dict()
+            if opik_usage is not None
+            else None,
             model=model,
             provider=provider,
             error_info=error_info,
@@ -150,7 +151,7 @@ class Span:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        usage: Optional[UsageDict] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
         model: Optional[str] = None,
         provider: LLMProvider = LLMProvider.OPENAI,
         error_info: Optional[ErrorInfoDict] = None,
@@ -205,7 +206,9 @@ class Span:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=opik_usage,
+            usage=opik_usage.to_backend_compatible_flat_dict()
+            if opik_usage is not None
+            else None,
             model=model,
             provider=provider,
             error_info=error_info,

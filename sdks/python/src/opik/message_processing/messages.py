@@ -2,7 +2,6 @@ import dataclasses
 import datetime
 from typing import Optional, Any, Dict, List, Union
 from ..types import SpanType, ErrorInfoDict, LLMProvider
-from opik import llm_usage
 
 
 @dataclasses.dataclass
@@ -69,7 +68,7 @@ class CreateSpanMessage(BaseMessage):
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
     type: SpanType
-    usage: Optional[llm_usage.OpikUsage]
+    usage: Optional[Dict[str, int]]
     model: Optional[str]
     provider: Optional[Union[LLMProvider, str]]
     error_info: Optional[ErrorInfoDict]
@@ -95,7 +94,7 @@ class UpdateSpanMessage(BaseMessage):
     output: Optional[Dict[str, Any]]
     metadata: Optional[Dict[str, Any]]
     tags: Optional[List[str]]
-    usage: Optional[llm_usage.OpikUsage]
+    usage: Optional[Dict[str, int]]
     model: Optional[str]
     provider: Optional[Union[LLMProvider, str]]
     error_info: Optional[ErrorInfoDict]

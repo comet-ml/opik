@@ -8,26 +8,21 @@ LOGGER = logging.getLogger(__name__)
 
 
 def flatten_dict(
-    d: Dict[str, Any], delim: str = ".", parent_key: Optional[str] = None
+    d: Dict[str, Any], parent_key: str, delim: str = "."
 ) -> Dict[str, Any]:
     """
-    Convert {'prefix': {'key': value}} to {'prefix.key': value}.
-
     Current implementation does not have max depth restrictions or cyclic references handling!
     """
-    if parent_key is not None:
-        d = {parent_key: d}
-
-    flattened = {}
+    items = []  # type: ignore
 
     for key, value in d.items():
+        new_key = f"{parent_key}{delim}{key}" if parent_key else key
         if isinstance(value, dict):
-            for subkey, subkey_value in value.items():
-                flattened[f"{key}{delim}{subkey}"] = subkey_value
+            items.extend(flatten_dict(value, parent_key=new_key, delim=delim).items())
         else:
-            flattened[key] = value
+            items.append((new_key, value))
 
-    return flattened
+    return dict(items)
 
 
 _ValueType = TypeVar("_ValueType")

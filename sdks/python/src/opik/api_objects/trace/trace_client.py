@@ -3,9 +3,9 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 
-from opik import datetime_helpers, id_helpers
+from opik import datetime_helpers, id_helpers, llm_usage
 from opik.message_processing import messages, streamer
-from opik.types import ErrorInfoDict, SpanType, UsageDict, LLMProvider
+from opik.types import ErrorInfoDict, SpanType, LLMProvider
 from .. import constants, span, validation_helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ class Trace:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        usage: Optional[UsageDict] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
         model: Optional[str] = None,
         provider: Optional[Union[LLMProvider, str]] = None,
         error_info: Optional[ErrorInfoDict] = None,
@@ -175,7 +175,9 @@ class Trace:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=opik_usage,
+            usage=opik_usage.to_backend_compatible_flat_dict()
+            if opik_usage is not None
+            else None,
             model=model,
             provider=provider,
             error_info=error_info,

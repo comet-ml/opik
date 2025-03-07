@@ -3,12 +3,12 @@ import atexit
 import datetime
 import logging
 
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Union
 
 from .prompt import Prompt
 from .prompt.client import PromptClient
 
-from ..types import SpanType, UsageDict, FeedbackScoreDict, ErrorInfoDict, LLMProvider
+from ..types import SpanType, FeedbackScoreDict, ErrorInfoDict, LLMProvider
 from . import (
     opik_query_language,
     span,
@@ -36,6 +36,7 @@ from .. import (
     url_helpers,
     rest_client_configurator,
     id_helpers,
+    llm_usage,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -311,11 +312,11 @@ class Opik:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        usage: Optional[UsageDict] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
         model: Optional[str] = None,
-        provider: LLMProvider = LLMProvider.OPENAI,
+        provider: Optional[Union[str, LLMProvider]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
     ) -> span.Span:
@@ -396,7 +397,9 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=opik_usage,
+            usage=opik_usage.to_backend_compatible_flat_dict()
+            if opik_usage is not None
+            else None,
             model=model,
             provider=provider,
             error_info=error_info,

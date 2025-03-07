@@ -41,11 +41,22 @@ class OpenAICompletionsUsage(base_original_provider_usage.BaseOriginalProviderUs
     def from_original_usage_dict(
         cls, usage_dict: Dict[str, Any]
     ) -> "OpenAICompletionsUsage":
-        completion_tokens_details = CompletionTokensDetails(
-            **usage_dict.pop("completion_tokens_details", None)
+        usage_dict = {**usage_dict}
+        completion_tokens_details_raw = usage_dict.pop(
+            "completion_tokens_details", None
         )
-        prompt_tokens_details = PromptTokensDetails(
-            **usage_dict.pop("prompt_tokens_details", None)
+        prompt_tokens_details_raw = usage_dict.pop("prompt_tokens_details", None)
+
+        completion_tokens_details = (
+            CompletionTokensDetails(**completion_tokens_details_raw)
+            if isinstance(completion_tokens_details_raw, dict)
+            else None
+        )
+
+        prompt_tokens_details = (
+            PromptTokensDetails(**prompt_tokens_details_raw)
+            if isinstance(prompt_tokens_details_raw, dict)
+            else None
         )
 
         return cls(

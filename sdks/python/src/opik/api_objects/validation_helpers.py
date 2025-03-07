@@ -12,6 +12,9 @@ def validate_and_parse_usage(
     logger: logging.Logger,
     provider: Optional[Union[LLMProvider, str]],
 ) -> Optional[llm_usage.OpikUsage]:
+    if isinstance(usage, llm_usage.OpikUsage) or usage is None:
+        return usage
+
     default_provider_used = False
 
     if provider is not None and LLMProvider.has_value(provider):
@@ -19,7 +22,6 @@ def validate_and_parse_usage(
     else:
         default_provider_used = True
         provider = LLMProvider.OPENAI
-
     try:
         opik_usage = llm_usage.build_opik_usage(provider=provider, usage=usage)
         return opik_usage
