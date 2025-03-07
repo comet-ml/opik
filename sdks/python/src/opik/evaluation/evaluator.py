@@ -28,6 +28,7 @@ def evaluate(
     prompt: Optional[Prompt] = None,
     prompts: Optional[List[Prompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
+    dataset_item_ids: Optional[List[str]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -104,6 +105,7 @@ def evaluate(
             dataset_=dataset,
             task=task,
             nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
         )
 
     total_time = time.time() - start_time
@@ -239,6 +241,7 @@ def evaluate_prompt(
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
     prompt: Optional[Prompt] = None,
+    dataset_item_ids: Optional[List[str]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -311,6 +314,7 @@ def evaluate_prompt(
             dataset_=dataset,
             task=_build_prompt_evaluation_task(model=model, messages=messages),
             nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
         )
 
     total_time = time.time() - start_time
