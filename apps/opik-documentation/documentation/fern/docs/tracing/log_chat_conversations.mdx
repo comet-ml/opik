@@ -15,7 +15,7 @@ Python decorators:
     ```python
     import opik
     from opik import opik_context
-    
+
     @opik.track
     def chat_message(input, thread_id):
         opik_context.update_current_trace(
@@ -23,7 +23,7 @@ Python decorators:
         )
         return "Opik is an Open Source GenAI platform"
 
-    thread_id = 12345
+    thread_id = "f174a"
     chat_message("What is Opik ?", thread_id)
     chat_message("Repeat the previous message", thread_id)
     ```
@@ -34,11 +34,11 @@ Python decorators:
 
     opik_client = opik.Opik()
 
-    thread_id = 12345
+    thread_id = "55d84"
 
     # Log a first message
     trace = opik_client.trace(
-        name="chat_conversation"
+        name="chat_conversation",
         input="What is Opik?",
         output="Opik is an Open Source GenAI platform",
         thread_id=thread_id
