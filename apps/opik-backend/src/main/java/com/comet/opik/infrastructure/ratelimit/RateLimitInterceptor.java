@@ -72,6 +72,7 @@ class RateLimitInterceptor implements MethodInterceptor {
 
                 limits.put(limit, limitConfig);
             }
+
             log.warn("Rate limit bucket not found: {}", bucketName);
         }
 
@@ -141,13 +142,9 @@ class RateLimitInterceptor implements MethodInterceptor {
                         RequestContext.LIMIT_REMAINING_TTL.formatted(limitConfig.headerName()),
                         List.of("" + values.getT1()));
 
-                log.info("Rate limit remaining ttl: {}", values.getT1());
-
                 requestContext.get().getHeaders().put(
                         RequestContext.REMAINING_LIMIT.formatted(limitConfig.headerName()),
                         List.of("" + values.getT2()));
-
-                log.info("Rate limit remaining events: {}", values.getT2());
 
             } catch (Exception e) {
                 log.error("Error setting rate limit headers", e);
