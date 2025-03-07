@@ -4,7 +4,6 @@ import opik
 import tempfile
 import time
 import shutil
-from pathlib import Path
 from opik import track, opik_context
 from tests.config import EnvConfig, get_environment_config
 from playwright.sync_api import Page, Browser, Playwright, expect
@@ -83,15 +82,15 @@ def video_dir():
     # Create a temp directory for videos
     video_path = tempfile.mkdtemp(prefix="playwright_videos_")
     logging.info(f"Created video directory: {video_path}")
-    
+
     # Dictionary to track test status and video paths
     video_info = {}
-    
+
     # Store the video path and info dictionary in a container that can be accessed by other fixtures
     container = {"path": video_path, "info": video_info}
-    
+
     yield container
-    
+
     # Clean up videos for successful tests
     for test_id, info in video_info.items():
         if not info.get("failed", False) and info.get("video_path"):
@@ -101,8 +100,10 @@ def video_dir():
                     os.remove(video_file)
                     logging.info(f"Removed video for successful test: {test_id}")
             except Exception as e:
-                logging.warning(f"Failed to remove video for successful test {test_id}: {str(e)}")
-    
+                logging.warning(
+                    f"Failed to remove video for successful test {test_id}: {str(e)}"
+                )
+
     # Clean up the directory at the end of the session
     if os.path.exists(video_path):
         try:
@@ -120,12 +121,12 @@ def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
     # Enable video recording
     context = browser.new_context(
         record_video_dir=video_dir["path"],
-        record_video_size={"width": 1280, "height": 720}
+        record_video_size={"width": 1280, "height": 720},
     )
-    
+
     # Store the video info container for access by other fixtures
     context._video_info = video_dir["info"]
-    
+
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
     # Handle cloud environment authentication
@@ -216,24 +217,26 @@ def client(env_config: EnvConfig, browser_context) -> opik.Opik:
 def page(browser_context, request):
     """Create a new page with authentication already handled"""
     page = browser_context.new_page()
-    
+
     test_id = f"{request.node.name}_{id(request)}"
     test_name = request.node.name
-    
+
     console_logs = []
+
     def log_handler(msg):
         console_logs.append(f"{msg.type}: {msg.text}")
+
     page.on("console", log_handler)
-    
+
     page._console_messages = console_logs
     page._test_name = test_name
     page._test_id = test_id
-    
+
     if hasattr(browser_context, "_video_info"):
         browser_context._video_info[test_id] = {"failed": False, "video_path": None}
-    
+
     yield page
-    
+
     failed = False
     try:
         for report in getattr(request.node, "_reports", {}).values():
@@ -242,49 +245,54 @@ def page(browser_context, request):
                 break
     except Exception:
         pass
-    
+
     video_path = None
     if hasattr(page, "video") and page.video:
         try:
             video_path = page.video.path()
         except Exception as e:
             logging.error(f"Failed to get video path: {str(e)}")
-    
+
     page.close()
-    
-    if hasattr(browser_context, "_video_info") and test_id in browser_context._video_info:
+
+    if (
+        hasattr(browser_context, "_video_info")
+        and test_id in browser_context._video_info
+    ):
         browser_context._video_info[test_id]["failed"] = failed
         if video_path:
             browser_context._video_info[test_id]["video_path"] = video_path
-    
+
     if failed and video_path:
         try:
             max_retries = 10
             retry_count = 0
-            
+
             while retry_count < max_retries:
                 if os.path.exists(video_path):
                     try:
                         with open(video_path, "rb") as f:
                             video_content = f.read()
-                        
+
                         allure.attach(
                             video_content,
                             name=f"Test Failure Video - {test_name}",
-                            attachment_type=allure.attachment_type.WEBM
+                            attachment_type=allure.attachment_type.WEBM,
                         )
-                        logging.info(f"Successfully attached video for failed test: {test_name}")
+                        logging.info(
+                            f"Successfully attached video for failed test: {test_name}"
+                        )
                         break
                     except Exception as e:
                         logging.error(f"Failed to attach video content: {str(e)}")
                         break
-                
+
                 retry_count += 1
                 time.sleep(0.5)
-            
+
             if retry_count >= max_retries:
                 logging.warning(f"Video file not found after waiting: {video_path}")
-                
+
         except Exception as e:
             logging.error(f"Failed to handle video in page fixture: {str(e)}")
 
@@ -654,10 +662,9 @@ def create_moderation_rule_fixture(
         expect(traces_page.page.get_by_role("tab", name="Rules")).to_be_visible()
     except Exception as e:
         raise AssertionError(
-            f"Rules tab not found, possible error loading"
-            f"Error: {str(e)}"
+            f"Rules tab not found, possible error loading" f"Error: {str(e)}"
         ) from e
-    
+
     traces_page.page.get_by_role("tab", name="Rules").click()
     traces_page.page.get_by_role("tab", name="Rules").click()
     rule_name = "Test Moderation Rule"
@@ -700,12 +707,12 @@ def pytest_runtest_makereport(item, call):
     """
     outcome = yield
     report = outcome.get_result()
-    
+
     # Store the report for later use
     if not hasattr(item, "_reports"):
         item._reports = {}
     item._reports[report.when] = report
-    
+
     # Only capture for failed tests
     if report.when == "call" and report.failed:
         try:
@@ -715,7 +722,7 @@ def pytest_runtest_makereport(item, call):
                 # Take screenshot
                 screenshot_name = f"failure_{item.name}_{int(time.time())}.png"
                 screenshot_path = os.path.join(os.getcwd(), screenshot_name)
-                
+
                 try:
                     page.screenshot(path=screenshot_path)
                     if os.path.exists(screenshot_path):
@@ -723,24 +730,24 @@ def pytest_runtest_makereport(item, call):
                         allure.attach.file(
                             screenshot_path,
                             name="Screenshot on Failure",
-                            attachment_type=allure.attachment_type.PNG
+                            attachment_type=allure.attachment_type.PNG,
                         )
                         # Clean up the file after attaching
                         os.remove(screenshot_path)
                 except Exception as e:
                     logging.error(f"Failed to capture screenshot: {str(e)}")
-                
+
                 # Capture HTML source
                 try:
                     html_content = page.content()
                     allure.attach(
                         html_content,
                         name="Page HTML on Failure",
-                        attachment_type=allure.attachment_type.HTML
+                        attachment_type=allure.attachment_type.HTML,
                     )
                 except Exception as e:
                     logging.error(f"Failed to capture HTML: {str(e)}")
-                
+
                 # Capture console logs
                 try:
                     # Get console logs if available
@@ -748,12 +755,10 @@ def pytest_runtest_makereport(item, call):
                         allure.attach(
                             "\n".join(page._console_messages),
                             name="Browser Console Logs",
-                            attachment_type=allure.attachment_type.TEXT
+                            attachment_type=allure.attachment_type.TEXT,
                         )
                 except Exception as e:
                     logging.error(f"Failed to capture console logs: {str(e)}")
-                    
+
         except Exception as e:
             logging.error(f"Failed to capture failure evidence: {str(e)}")
-
-
