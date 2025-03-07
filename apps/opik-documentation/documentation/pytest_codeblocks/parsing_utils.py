@@ -76,7 +76,7 @@ def get_code_blocs(
         return []
 
     page_frontmatter = get_page_frontmatter(path)
-    is_cookbook = "/cookbook/" in path
+    is_cookbook = "/cookbook/" in str(path)
 
     code_blocks = []
     markdown = MarkdownAnalyzer(path)
