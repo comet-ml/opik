@@ -4,6 +4,7 @@ import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
 import lombok.experimental.UtilityClass;
@@ -34,7 +35,7 @@ public class OpenTelemetryMapper {
      *
      * @param otelSpan        an OpenTelemetry Span
      * @param opikTraceId     the Opik UUID to be used for this span
-     * @param integrationName
+     * @param integrationName the detected (if any) integration name
      * @return a converted Opik Span
      */
     public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId, String integrationName) {
@@ -97,23 +98,7 @@ public class OpenTelemetryMapper {
                         break;
 
                     case USAGE :
-                        // usage might appear as int values or an json object
-                        if (value.hasIntValue()) {
-                            var actualKey = key.substring(rule.getRule().length());
-                            usage.put(actualKey, (int) value.getIntValue());
-                        } else {
-                            JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
-                            if (usageNode.isTextual()) {
-                                usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
-                            }
-                            usageNode.fields().forEachRemaining(entry -> {
-                                if (entry.getValue().isNumber()) {
-                                    usage.put(entry.getKey(), entry.getValue().intValue());
-                                } else {
-                                    log.warn("Unrecognized usage attribute {}: {}", entry.getKey(), entry.getValue());
-                                }
-                            });
-                        }
+                        extractUsageField(usage, rule, key, value);
                         break;
 
                     case INPUT :
@@ -126,30 +111,7 @@ public class OpenTelemetryMapper {
                             default -> metadata;
                         };
 
-                        switch (value.getValueCase()) {
-                            case STRING_VALUE -> {
-                                var stringValue = value.getStringValue();
-                                // check if string value is actually a string or a stringfied json
-                                if (stringValue.startsWith("\"") || stringValue.startsWith("[")
-                                        || stringValue.startsWith("{")) {
-                                    var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
-                                    if (jsonNode.isTextual()) {
-                                        jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
-                                    }
-                                    node.set(key, jsonNode);
-                                } else
-                                    node.put(key, stringValue);
-                            }
-                            case INT_VALUE -> node.put(key, value.getIntValue());
-                            case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
-                            case BOOL_VALUE -> node.put(key, value.getBoolValue());
-                            case ARRAY_VALUE -> {
-                                var array = JsonUtils.MAPPER.createArrayNode();
-                                value.getArrayValue().getValuesList().forEach(val -> array.add(val.getStringValue()));
-                                node.set(key, array);
-                            }
-                            default -> log.warn("Unsupported attribute: {}", attribute);
-                        }
+                        extractToJsonColumn(node, key, value);
                 }
             }, () -> log.debug("No rule found for key: {} (value: {}). Ignoring it.", key, attribute.getValue()));
         });
@@ -168,11 +130,60 @@ public class OpenTelemetryMapper {
         }
     }
 
+    private static void extractToJsonColumn(ObjectNode node, String key, AnyValue value) {
+        switch (value.getValueCase()) {
+            case STRING_VALUE -> {
+                var stringValue = value.getStringValue();
+                // check if string value is actually a string or a stringfied json
+                if (stringValue.startsWith("\"") || stringValue.startsWith("[")
+                        || stringValue.startsWith("{")) {
+                    var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
+                    if (jsonNode.isTextual()) {
+                        jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
+                    }
+                    node.set(key, jsonNode);
+                } else
+                    node.put(key, stringValue);
+            }
+            case INT_VALUE -> node.put(key, value.getIntValue());
+            case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
+            case BOOL_VALUE -> node.put(key, value.getBoolValue());
+            case ARRAY_VALUE -> {
+                var array = JsonUtils.MAPPER.createArrayNode();
+                value.getArrayValue().getValuesList().forEach(val -> array.add(val.getStringValue()));
+                node.set(key, array);
+            }
+            default -> log.warn("Unsupported attribute: {} -> {}", key, value);
+        }
+    }
+
+    private static void extractUsageField(Map<String, Integer> usage, OpenTelemetryMappingRule rule, String key,
+            AnyValue value) {
+        // usage might appear as single int values or an json object
+        if (value.hasIntValue()) {
+            var actualKey = key.substring(rule.getRule().length());
+            usage.put(actualKey, (int) value.getIntValue());
+        } else {
+            JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
+            if (usageNode.isTextual()) {
+                usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
+            }
+
+            // we expect only integers for usage fields
+            usageNode.fields().forEachRemaining(entry -> {
+                if (entry.getValue().isNumber()) {
+                    usage.put(entry.getKey(), entry.getValue().intValue());
+                } else {
+                    log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
+                }
+            });
+        }
+    }
+
     /**
      * Uses 64-bit integer OpenTelemetry SpanId and its timestamp to prepare a good UUIDv7 id. This is actually
      * a good UUIDv7 (in opposition of the traceId) as its composed from an id and a timestamp, so spans will be
      * properly ordered in the span table.
-     *
      * The truncate timestamp option is relevant when you receive non-UUIDs in multiple batches and can't predict
      * what's going to be the actual Opik UUID from the Otel integer id you know. So we take the span timestamp truncated
      * by time window as form to make it predictable. This works fine as makes UUID predictable and they are stored next
