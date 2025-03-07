@@ -114,6 +114,10 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
         value: formatNumericData(score.value),
       })),
     cell: FeedbackScoreListCell as never,
+    customMeta: {
+      getHoverCardName: (row: GroupedExperiment) => row.name,
+      isAverageScores: true,
+    },
   },
   {
     id: COLUMN_COMMENTS_ID,
