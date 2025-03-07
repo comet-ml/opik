@@ -1,8 +1,6 @@
 import pytest
 import pydantic
-from opik.llm_usage.google_usage import (
-    GoogleGeminiUsage,
-)  # Replace with the actual module path
+from opik.llm_usage.google_usage import GoogleGeminiUsage
 
 
 def test_google_gemini_usage_creation__happyflow():
