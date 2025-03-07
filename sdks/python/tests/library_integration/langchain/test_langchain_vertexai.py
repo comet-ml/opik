@@ -16,14 +16,26 @@ from ...testlib import (
 
 
 pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
+EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.total_token_count": ANY_BUT_NONE,
+    "original_usage.candidates_token_count": ANY_BUT_NONE,
+    "original_usage.prompt_token_count": ANY_BUT_NONE,
+    "original_usage.cached_content_token_count": ANY_BUT_NONE,
+}
 
 
 def _assert_usage_validity(usage: Dict[str, Any]):
     REQUIRED_USAGE_KEYS = [
-        "candidates_token_count",
-        "prompt_token_count",
-        "total_token_count",
-        # there are more keys possible, but we don't check them for now
+        "completion_tokens",
+        "prompt_tokens",
+        "total_tokens",
+        "original_usage.total_token_count",
+        "original_usage.candidates_token_count",
+        "original_usage.prompt_token_count",
+        "original_usage.cached_content_token_count",
     ]
 
     assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
@@ -32,10 +44,10 @@ def _assert_usage_validity(usage: Dict[str, Any]):
 @pytest.mark.parametrize(
     "llm_model, expected_input_prompt",
     [
-        # (
-        #     langchain_google_vertexai.VertexAI,
-        #     "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-        # ),
+        (
+            langchain_google_vertexai.VertexAI,
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+        ),
         (
             langchain_google_vertexai.ChatVertexAI,
             "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",

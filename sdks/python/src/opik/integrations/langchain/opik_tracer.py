@@ -4,9 +4,9 @@ from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING, cast
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 
-from opik import dict_utils, opik_context
+from opik import dict_utils, opik_context, llm_usage
 from opik.api_objects import span, trace
-from opik.types import DistributedTraceHeadersDict, ErrorInfoDict, LLMUsageInfo
+from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from . import (
     base_llm_patcher,
     google_run_helpers,
@@ -271,7 +271,7 @@ class OpikTracer(BaseTracer):
     def _process_end_span(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
         span_data = self._span_data_map[run.id]
-        usage_info: LLMUsageInfo = LLMUsageInfo()
+        usage_info = llm_usage.LLMUsageInfo()
 
         if openai_run_helpers.is_openai_run(run):
             usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
@@ -280,10 +280,13 @@ class OpikTracer(BaseTracer):
 
         span_data.init_end_time().update(
             output=run_dict["outputs"],
-            usage=usage_info.usage,
+            usage=usage_info.usage.provider_usage.model_dump()
+            if isinstance(usage_info.usage, llm_usage.OpikUsage)
+            else usage_info.usage,
             provider=usage_info.provider,
             model=usage_info.model,
         )
+
         self._opik_client.span(**span_data.__dict__)
 
     def _process_end_span_with_error(self, run: "Run") -> None:
