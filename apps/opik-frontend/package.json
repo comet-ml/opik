@@ -60,7 +60,7 @@
     "@uiw/codemirror-theme-github": "^4.23.3",
     "@uiw/react-codemirror": "^4.23.0",
     "async": "^3.2.6",
-    "axios": "^1.7.2",
+    "axios": "^1.8.2",
     "class-variance-authority": "^0.7.0",
     "clipboard-copy": "^4.0.1",
     "clsx": "^2.1.1",
