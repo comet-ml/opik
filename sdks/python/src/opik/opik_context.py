@@ -71,7 +71,8 @@ def update_current_span(
         feedback_scores: The feedback scores of the span.
         model: The name of LLM (in this case type parameter should be == llm)
         provider: The provider of LLM. You can find providers for which Opik officially supports cost tracking
-            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik
+            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+            If your provider not in the list, you can still specify it but the usage must be logged in the openai format.
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
     """
     new_params = {
