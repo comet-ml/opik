@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from opik import llm_usage
 from opik.api_objects import span, trace
-from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict
+from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, LLMProvider
 
 from . import context_storage, exceptions
 
@@ -54,7 +54,7 @@ def update_current_span(
     usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     model: Optional[str] = None,
-    provider: Optional[str] = None,
+    provider: Optional[Union[str, LLMProvider]] = None,
     total_cost: Optional[float] = None,
 ) -> None:
     """
