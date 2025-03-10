@@ -36,13 +36,12 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import { formatDate } from "@/lib/date";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
-import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
-import { prettifyMessage } from "@/lib/traces";
 import useThreadList from "@/api/traces/useThreadsList";
 
 const getRowId = (d: Thread) => d.id;
@@ -55,17 +54,20 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     label: "First message",
     size: 400,
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => prettifyMessage(row.first_message).message,
-    cell: AutodetectCell as never,
+    cell: PrettyCell as never,
+    customMeta: {
+      fieldType: "input",
+    },
   },
   {
     id: "last_message",
     label: "Last message",
     size: 400,
     type: COLUMN_TYPE.string,
-    accessorFn: (row) =>
-      prettifyMessage(row.last_message, { type: "output" }).message,
-    cell: AutodetectCell as never,
+    cell: PrettyCell as never,
+    customMeta: {
+      fieldType: "output",
+    },
   },
   {
     id: "number_of_messages",

@@ -52,13 +52,19 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
       <AccordionItem value="input">
         <AccordionTrigger>Input</AccordionTrigger>
         <AccordionContent>
-          <SyntaxHighlighter data={data.input} />
+          <SyntaxHighlighter
+            data={data.input}
+            prettifyConfig={{ fieldType: "input" }}
+          />
         </AccordionContent>
       </AccordionItem>
       <AccordionItem value="output">
         <AccordionTrigger>Output</AccordionTrigger>
         <AccordionContent>
-          <SyntaxHighlighter data={data.output} />
+          <SyntaxHighlighter
+            data={data.output}
+            prettifyConfig={{ fieldType: "output" }}
+          />
         </AccordionContent>
       </AccordionItem>
     </Accordion>

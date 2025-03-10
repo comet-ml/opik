@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import JsonView from "react18-json-view";
 import isObject from "lodash/isObject";
+import isUndefined from "lodash/isUndefined";
 
 import { Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import { prettifyMessage } from "@/lib/traces";
 import { toString } from "@/lib/utils";
+
 type TraceMessageProps = {
   trace: Trace;
   handleOpenTrace: (id: string) => void;
@@ -39,6 +41,8 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
           enableClipboard={false}
         />
       );
+    } else if (isUndefined(message)) {
+      return <span className="text-white">-</span>;
     } else {
       return (
         <MarkdownPreview className="text-white">
@@ -61,6 +65,8 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
           enableClipboard={false}
         />
       );
+    } else if (isUndefined(message)) {
+      return "-";
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
