@@ -335,12 +335,14 @@ class Opik:
             input: The input data for the span. This can be any valid JSON serializable object.
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
-            usage: Usage data for the span.
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
+            usage: Usage data for the span. The usage must be in the official format of the LLM provider argument.
+                If your provider is not officially supported by Opik yet, you can only pass the usage in openai format.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
-            provider: The provider of LLM.
+            provider: The provider of LLM. You can find providers for which Opik officially supports cost tracking
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik
             error_info: The dictionary with error information (typically used when the span function has failed).
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
