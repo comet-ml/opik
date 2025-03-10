@@ -4,7 +4,9 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
@@ -48,7 +50,9 @@ class SpanDAOTest {
         spanDAO = new SpanDAO(
                 factory,
                 new FeedbackScoreDAOImpl(TransactionTemplateAsync.create(factory)),
-                new FilterQueryBuilder());
+                new FilterQueryBuilder(),
+                new SpanSortingFactory(),
+                new SortingQueryBuilder());
     }
 
     @AfterAll

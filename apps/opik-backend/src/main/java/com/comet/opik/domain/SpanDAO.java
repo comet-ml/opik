@@ -4,9 +4,11 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -488,7 +490,7 @@ class SpanDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) AS duration_millis
+                            NULL) AS duration
                 FROM spans
                 WHERE id = :id
                 AND workspace_id = :workspace_id
@@ -554,7 +556,7 @@ class SpanDAO {
                 s.last_updated_at as last_updated_at,
                 s.created_by as created_by,
                 s.last_updated_by as last_updated_by,
-                s.duration_millis as duration_millis,
+                s.duration as duration,
                 groupArray(tuple(c.*)) AS comments
             FROM (
                 SELECT
@@ -562,7 +564,7 @@ class SpanDAO {
                       if(end_time IS NOT NULL AND start_time IS NOT NULL
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                           NULL) AS duration_millis
+                           NULL) AS duration
                 FROM spans
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -586,14 +588,20 @@ class SpanDAO {
                   HAVING <feedback_scores_filters>
                 )
                 <endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                <if(stream)>
+                ORDER BY id DESC, last_updated_at DESC
+                <else>
+                ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
+                <endif>
                 LIMIT 1 BY id
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             ) AS s
             LEFT JOIN comments_final AS c ON s.id = c.entity_id
             GROUP BY
               s.*
-            ORDER BY s.id DESC
+            <if(!last_received_span_id)>
+            ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
+            <endif>
             SETTINGS join_algorithm='full_sorting_merge'
             ;
             """;
@@ -608,7 +616,7 @@ class SpanDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                                          AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                      (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration_millis
+                                     NULL) AS duration
                 FROM spans
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -699,7 +707,7 @@ class SpanDAO {
                     s.workspace_id as workspace_id,
                     s.project_id as project_id,
                     s.id as span_id,
-                    s.duration_millis as duration,
+                    s.duration as duration,
                     s.input_count as input_count,
                     s.output_count as output_count,
                     s.metadata_count as metadata_count,
@@ -715,7 +723,7 @@ class SpanDAO {
                          if(end_time IS NOT NULL AND start_time IS NOT NULL
                                      AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                  (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                 NULL) AS duration_millis,
+                                 NULL) AS duration,
                          if(length(input) > 0, 1, 0) as input_count,
                          if(length(output) > 0, 1, 0) as output_count,
                          if(length(metadata) > 0, 1, 0) as metadata_count,
@@ -768,6 +776,8 @@ class SpanDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull SpanSortingFactory sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -1169,7 +1179,7 @@ class SpanDAO {
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .duration(row.get("duration_millis", Double.class))
+                    .duration(row.get("duration", Double.class))
                     .build();
         });
     }
@@ -1186,7 +1196,7 @@ class SpanDAO {
                 .flatMap(this::mapToDto)
                 .collectList()
                 .flatMap(this::enhanceWithFeedbackScores)
-                .map(spans -> new Span.SpanPage(page, spans.size(), total, spans));
+                .map(spans -> new Span.SpanPage(page, spans.size(), total, spans, sortingFactory.getSortableFields()));
     }
 
     @WithSpan
@@ -1229,6 +1239,9 @@ class SpanDAO {
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+
+        template = template.add("stream", true);
+
         var statement = connection.createStatement(template.render())
                 .bind("project_id", criteria.projectId())
                 .bind("limit", limit);
@@ -1250,6 +1263,11 @@ class SpanDAO {
         template.add("offset", (page - 1) * size);
 
         template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
+
+        var finalTemplate = template;
+        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
+                .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
+
         var statement = connection.createStatement(template.render())
                 .bind("project_id", spanSearchCriteria.projectId())
                 .bind("limit", size)
