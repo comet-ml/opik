@@ -2,9 +2,11 @@ package com.comet.opik.api.resources.v1.internal;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BiInformationResponse;
+import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -30,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 @Tag(name = "System usage", description = "System usage related resource")
 public class UsageResource {
     private final @NonNull TraceService traceService;
+    private final @NonNull SpanService spanService;
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetService datasetService;
 
@@ -40,6 +43,16 @@ public class UsageResource {
     public Response getTracesCountForWorkspaces() {
         return traceService.countTracesPerWorkspace()
                 .map(tracesCountResponse -> Response.ok(tracesCountResponse).build())
+                .block();
+    }
+
+    @GET
+    @Path("/workspace-span-counts")
+    @Operation(operationId = "getSpansCountForWorkspaces", summary = "Get spans count on previous day for all available workspaces", description = "Get spans count on previous day for all available workspaces", responses = {
+            @ApiResponse(responseCode = "200", description = "SpanCountResponse resource", content = @Content(schema = @Schema(implementation = SpansCountResponse.class)))})
+    public Response getSpansCountForWorkspaces() {
+        return spanService.countSpansPerWorkspace()
+                .map(spansCountResponse -> Response.ok(spansCountResponse).build())
                 .block();
     }
 

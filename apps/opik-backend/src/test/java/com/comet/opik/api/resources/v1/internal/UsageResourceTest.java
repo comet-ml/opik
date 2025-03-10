@@ -2,6 +2,8 @@ package com.comet.opik.api.resources.v1.internal;
 
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.Span;
+import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -62,6 +64,7 @@ class UsageResourceTest {
 
     public static final String USAGE_RESOURCE_URL_TEMPLATE = "%s/v1/internal/usage";
     public static final String TRACE_RESOURCE_URL_TEMPLATE = "%s/v1/private/traces";
+    public static final String SPANS_RESOURCE_URL_TEMPLATE = "%s/v1/private/spans";
     private static final String EXPERIMENT_RESOURCE_URL_TEMPLATE = "%s/v1/private/experiments";
     private static final String DATASET_RESOURCE_URL_TEMPLATE = "%s/v1/private/datasets";
 
@@ -177,6 +180,53 @@ class UsageResourceTest {
                 var workspaceTraceCountToday = getMatch(response.workspacesTracesCount(),
                         wtc -> wtc.workspace().equals(workspaceIdForToday));
                 assertThat(workspaceTraceCountToday).isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("Get spans count on previous day for all workspaces, no Auth")
+        void spansCountForWorkspace() {
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .build())
+                    .toList();
+
+            // Setup mock workspace with spans
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            int spansCount = setupEntitiesForWorkspace(workspaceId, apiKey, spans, SPANS_RESOURCE_URL_TEMPLATE);
+
+            // Change created_at to the previous day in order to capture those spans in count query, since for Stripe we
+            // need to count it daily for yesterday
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            // Setup second workspace with spans, but leave created_at date set to today, so spans do not end up in the
+            // pool
+            var workspaceIdForToday = UUID.randomUUID().toString();
+            var apiKey2 = UUID.randomUUID().toString();
+
+            setupEntitiesForWorkspace(workspaceIdForToday, apiKey2, spans, SPANS_RESOURCE_URL_TEMPLATE);
+
+            try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                    .path("/workspace-span-counts")
+                    .request()
+                    .get()) {
+
+                var response = validateResponse(actualResponse, SpansCountResponse.class);
+
+                var workspaceSpanCount = getMatch(response.workspacesSpansCount(),
+                        workspaceCount -> workspaceCount.workspace().equals(workspaceId));
+
+                assertThat(workspaceSpanCount).isPresent();
+                assertThat(workspaceSpanCount.get())
+                        .isEqualTo(new SpansCountResponse.WorkspaceSpansCount(workspaceId, spansCount));
+
+                // Check that today's workspace is not returned
+                var workspaceSpanCountToday = getMatch(response.workspacesSpansCount(),
+                        workspaceCount -> workspaceCount.workspace().equals(workspaceIdForToday));
+                assertThat(workspaceSpanCountToday).isEmpty();
             }
         }
 

@@ -7,6 +7,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
@@ -347,5 +348,16 @@ public class SpanService {
                         spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, new HashSet<>(spanIds)))
                 .then(Mono.defer(() -> spanDAO.deleteByTraceIds(traceIds)))
                 .then();
+    }
+
+    @WithSpan
+    public Mono<SpansCountResponse> countSpansPerWorkspace() {
+        return spanDAO.countSpansPerWorkspace()
+                .collectList()
+                .flatMap(items -> Mono.just(
+                        SpansCountResponse.builder()
+                                .workspacesSpansCount(items)
+                                .build()))
+                .switchIfEmpty(Mono.just(SpansCountResponse.empty()));
     }
 }
