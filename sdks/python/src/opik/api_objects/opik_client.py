@@ -3,12 +3,12 @@ import atexit
 import datetime
 import logging
 
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Union
 
 from .prompt import Prompt
 from .prompt.client import PromptClient
 
-from ..types import SpanType, UsageDict, FeedbackScoreDict, ErrorInfoDict
+from ..types import SpanType, FeedbackScoreDict, ErrorInfoDict, LLMProvider
 from . import (
     opik_query_language,
     span,
@@ -36,6 +36,7 @@ from .. import (
     url_helpers,
     rest_client_configurator,
     id_helpers,
+    llm_usage,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -311,11 +312,11 @@ class Opik:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        usage: Optional[UsageDict] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
         model: Optional[str] = None,
-        provider: Optional[str] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
     ) -> span.Span:
@@ -334,12 +335,15 @@ class Opik:
             input: The input data for the span. This can be any valid JSON serializable object.
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
-            usage: Usage data for the span.
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
+            usage: Usage data for the span. The usage must be in the official format of the LLM provider argument.
+                If your provider is not officially supported by Opik yet, you can only pass the usage in openai format.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
-            provider: The provider of LLM.
+            provider: The provider of LLM. You can find providers for which Opik officially supports cost tracking
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+                If your provider not in the list, you can still specify it but the usage must be logged in the openai format.
             error_info: The dictionary with error information (typically used when the span function has failed).
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
@@ -351,16 +355,19 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        parsed_usage = validation_helpers.validate_and_parse_usage(
+        opik_usage = validation_helpers.validate_and_parse_usage(
             usage=usage,
             logger=LOGGER,
             provider=provider,
         )
-        if parsed_usage.full_usage is not None:
+        if opik_usage is not None:
             metadata = (
-                {"usage": parsed_usage.full_usage}
+                {"usage": opik_usage.provider_usage.model_dump(exclude_none=True)}
                 if metadata is None
-                else {"usage": parsed_usage.full_usage, **metadata}
+                else {
+                    "usage": opik_usage.provider_usage.model_dump(exclude_none=True),
+                    **metadata,
+                }
             )
 
         if project_name is None:
@@ -398,7 +405,11 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=parsed_usage.supported_usage,
+            usage=(
+                opik_usage.to_backend_compatible_full_usage_dict()
+                if opik_usage is not None
+                else None
+            ),
             model=model,
             provider=provider,
             error_info=error_info,

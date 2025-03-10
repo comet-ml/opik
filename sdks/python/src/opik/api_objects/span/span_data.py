@@ -1,14 +1,14 @@
 import dataclasses
 import datetime
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from opik import datetime_helpers, dict_utils
+from opik import datetime_helpers, dict_utils, llm_usage
 from opik.types import (
     ErrorInfoDict,
     FeedbackScoreDict,
+    LLMProvider,
     SpanType,
-    UsageDict,
 )
 
 from .. import helpers
@@ -42,11 +42,11 @@ class SpanData:
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
-    usage: Optional[UsageDict] = None
+    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
     model: Optional[str] = None
-    provider: Optional[str] = None
+    provider: Optional[Union[str, LLMProvider]] = None
     error_info: Optional[ErrorInfoDict] = None
     total_cost: Optional[float] = None
 

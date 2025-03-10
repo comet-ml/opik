@@ -1,12 +1,14 @@
 import logging
+import opik
 from typing import List, Any, Dict, Optional, Callable, Tuple, Union
 from opik.decorator import base_track_decorator, arguments_helpers
-from opik import dict_utils
+from opik import dict_utils, llm_usage
 
 import anthropic
 from anthropic.types import Message as AnthropicMessage
 
 from . import stream_patchers
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -60,11 +62,12 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
 
             return result
 
-        usage = {
-            "prompt_tokens": output.usage.input_tokens,
-            "completion_tokens": output.usage.output_tokens,
-            "total_tokens": output.usage.input_tokens + output.usage.output_tokens,
-        }
+        opik_usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=opik.LLMProvider.ANTHROPIC,
+            usage=output.usage.model_dump(),
+            logger=LOGGER,
+            error_message="Failed to log token usage from anthropic call",
+        )
 
         output_dict = output.model_dump()
         span_output, metadata = dict_utils.split_dict_by_keys(
@@ -72,7 +75,7 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         result = arguments_helpers.EndSpanParameters(
-            output=span_output, usage=usage, metadata=metadata
+            output=span_output, usage=opik_usage, metadata=metadata
         )
 
         return result

@@ -1,7 +1,9 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
+from opik import llm_usage
 from opik.api_objects import span, trace
-from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, UsageDict
+from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, LLMProvider
+
 from . import context_storage, exceptions
 
 
@@ -49,10 +51,10 @@ def update_current_span(
     output: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
-    usage: Optional[UsageDict] = None,
+    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     model: Optional[str] = None,
-    provider: Optional[str] = None,
+    provider: Optional[Union[str, LLMProvider]] = None,
     total_cost: Optional[float] = None,
 ) -> None:
     """
@@ -64,11 +66,13 @@ def update_current_span(
         output: The output data of the span.
         metadata: The metadata of the span.
         tags: The tags of the span.
-        usage: The usage data of the span.
+        usage: Usage data for the span. The usage must be in the official format of the LLM provider argument.
+            If your provider is not officially supported by Opik yet, you can only pass the usage in openai format.
         feedback_scores: The feedback scores of the span.
         model: The name of LLM (in this case type parameter should be == llm)
-        provider: The provider of LLM.
-
+        provider: The provider of LLM. You can find providers for which Opik officially supports cost tracking
+            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+            If your provider not in the list, you can still specify it but the usage must be logged in the openai format.
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
     """
     new_params = {
