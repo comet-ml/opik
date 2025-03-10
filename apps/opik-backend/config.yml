@@ -209,7 +209,7 @@ rateLimit:
       # Description: User facing bucket name
       userFacingBucketName: get_span_by_id
       # Description: Rate limit error message
-      errorMessage: "You have exceeded the rate limit for this operations Please try again later."
+      errorMessage: "You have exceeded the rate limit for this operation Please try again later."
 
 
 # Configuration for anonymous usage reporting

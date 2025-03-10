@@ -26,7 +26,7 @@ import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 @RequiredArgsConstructor
 class RateLimitInterceptor implements MethodInterceptor {
 
-    private static final String KEY = "%s:%s";
+    private static final String KEY = "rate-limit:%s-%s";
 
     private final Provider<RequestContext> requestContext;
     private final Provider<RateLimitService> rateLimitService;
@@ -66,16 +66,15 @@ class RateLimitInterceptor implements MethodInterceptor {
             String bucketName = getBucketName(limit);
             LimitConfig limitConfig = rateLimitConfig.getCustomLimits().get(bucketName);
             if (limitConfig != null) {
-
                 if (containsPlacedHolder(limit)) {
                     var actualLimit = replaceLimitVariables(limit);
                     limits.put(actualLimit, limitConfig);
+                } else {
+                    limits.put(limit, limitConfig);
                 }
-
-                limits.put(limit, limitConfig);
+            } else {
+                log.warn("Rate limit bucket not found: {}", bucketName);
             }
-
-            log.warn("Rate limit bucket not found: {}", bucketName);
         }
 
         Object body = getParameters(invocation);
