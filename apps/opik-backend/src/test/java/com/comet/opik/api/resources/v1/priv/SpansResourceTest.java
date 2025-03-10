@@ -3851,10 +3851,10 @@ class SpansResourceTest {
                     Arguments.of(usageComparator.reversed(),
                             SortingField.builder().field(SortableFields.USAGE).direction(Direction.DESC).build()),
                     Arguments.of(Comparator.comparing(Span::createdAt)
-                                    .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
                             SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
                     Arguments.of(Comparator.comparing(Span::createdAt).reversed()
-                                    .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
                             SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
                     Arguments.of(Comparator.comparing(Span::lastUpdatedAt),
                             SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)

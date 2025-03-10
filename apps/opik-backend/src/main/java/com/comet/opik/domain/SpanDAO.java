@@ -4,6 +4,7 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -771,6 +772,16 @@ class SpanDAO {
             AND workspace_id = :workspace_id
             """;
 
+    private static final String SPAN_COUNT_BY_WORKSPACE_ID = """
+                SELECT
+                     workspace_id,
+                     COUNT(DISTINCT id) as span_count
+                 FROM spans
+                 WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+                 GROUP BY workspace_id
+            ;
+            """;
+
     private static final String ESTIMATED_COST_VERSION = "1.0";
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -1404,6 +1415,19 @@ class SpanDAO {
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
                 .collectList();
+    }
+
+    @WithSpan
+    public Flux<SpansCountResponse.WorkspaceSpansCount> countSpansPerWorkspace() {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SPAN_COUNT_BY_WORKSPACE_ID);
+                    return Flux.from(statement.execute());
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> SpansCountResponse.WorkspaceSpansCount.builder()
+                        .workspace(row.get("workspace_id", String.class))
+                        .spanCount(row.get("span_count", Integer.class))
+                        .build()));
     }
 
     private boolean isManualCost(Span span) {
