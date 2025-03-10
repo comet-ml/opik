@@ -1,10 +1,9 @@
 from typing import Optional, Dict, Any
 from . import base_original_provider_usage
-from opik import dict_utils
 
 
 class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
-    """Usage metadata about response(s)."""
+    """Google AI / VertexAI calls token usage data"""
 
     candidates_token_count: int
     """Number of tokens in the response(s)."""
@@ -19,21 +18,7 @@ class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     """Output only. Number of tokens in the cached part in the input (the cached content)."""
 
     def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> Dict[str, int]:
-        result = {**self.__dict__}
-
-        result = dict_utils.flatten_dict(
-            d=result, delim=".", parent_key=parent_key_prefix
-        )
-
-        if self.model_extra is not None:
-            model_extra = dict_utils.flatten_dict(
-                d=self.model_extra, delim=".", parent_key=parent_key_prefix
-            )
-            result.update(model_extra)
-
-        result = dict_utils.keep_only_values_of_type(d=result, value_type=int)
-
-        return result
+        return super().to_backend_compatible_flat_dict(parent_key_prefix)
 
     @classmethod
     def from_original_usage_dict(cls, usage: Dict[str, Any]) -> "GoogleGeminiUsage":
