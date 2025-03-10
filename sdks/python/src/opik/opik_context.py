@@ -97,6 +97,7 @@ def update_current_trace(
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+    thread_id: Optional[str] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
@@ -108,6 +109,8 @@ def update_current_trace(
         metadata: The metadata of the trace.
         tags: The tags of the trace.
         feedback_scores: The feedback scores of the trace.
+        thread_id: Used to group multiple traces into a thread.
+            The identifier is user-defined and has to be unique per project.
     """
     new_params = {
         "name": name,
@@ -116,6 +119,7 @@ def update_current_trace(
         "metadata": metadata,
         "tags": tags,
         "feedback_scores": feedback_scores,
+        "thread_id": thread_id,
     }
     current_trace_data = context_storage.get_trace_data()
     if current_trace_data is None:

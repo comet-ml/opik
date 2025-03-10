@@ -29,6 +29,7 @@ def verify_trace(
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
     project_name: Optional[str] = mock.ANY,  # type: ignore
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
+    thread_id: Optional[str] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: (opik_client.get_trace_content(id=trace_id) is not None),
@@ -51,11 +52,19 @@ def verify_trace(
         _try_get__dict__(trace.error_info) == error_info
     ), testlib.prepare_difference_report(trace.error_info, error_info)
 
+    assert thread_id == trace.thread_id, f"{trace.thread_id} != {thread_id}"
+
     if project_name is not mock.ANY:
         trace_project = opik_client.get_project(trace.project_id)
         assert trace_project.name == project_name
 
     if feedback_scores is not mock.ANY:
+        if trace.feedback_scores is None:
+            assert (
+                feedback_scores is None
+            ), f"Expected feedback scores to be None, but got {feedback_scores}"
+            return
+
         actual_feedback_scores = (
             [] if trace.feedback_scores is None else trace.feedback_scores
         )
@@ -144,6 +153,12 @@ def verify_span(
         assert span_project.name == project_name
 
     if feedback_scores is not mock.ANY:
+        if span.feedback_scores is None:
+            assert (
+                feedback_scores is None
+            ), f"Expected feedback scores to be None, but got {feedback_scores}"
+            return
+
         actual_feedback_scores = (
             [] if span.feedback_scores is None else span.feedback_scores
         )

@@ -2,11 +2,13 @@ import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
 import {
   DEFAULT_ANTHROPIC_CONFIGS,
+  DEFAULT_GEMINI_CONFIGS,
   DEFAULT_OPEN_AI_CONFIGS,
   DEFAULT_OPEN_ROUTER_CONFIGS,
 } from "@/constants/llm";
 import {
   LLMAnthropicConfigsType,
+  LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
@@ -52,6 +54,14 @@ export const getDefaultConfigByProvider = (
       minP: DEFAULT_OPEN_ROUTER_CONFIGS.MIN_P,
       topA: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_A,
     } as LLMOpenRouterConfigsType;
+  }
+
+  if (provider === PROVIDER_TYPE.GEMINI) {
+    return {
+      temperature: DEFAULT_GEMINI_CONFIGS.TEMPERATURE,
+      maxCompletionTokens: DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS,
+      topP: DEFAULT_GEMINI_CONFIGS.TOP_P,
+    } as LLMGeminiConfigsType;
   }
 
   return {};

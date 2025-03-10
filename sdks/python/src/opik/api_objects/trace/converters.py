@@ -1,5 +1,5 @@
 from ...rest_api.types import trace_public
-from . import trace
+from . import trace_data
 from .. import feedback_score
 
 
@@ -7,13 +7,13 @@ from .. import feedback_score
 # we want to avoid an API call to get it. This should be improved.
 def trace_public_to_trace_data(
     project_name: str, trace_public: trace_public.TracePublic
-) -> trace.TraceData:
+) -> trace_data.TraceData:
     feedback_scores = trace_public.feedback_scores or []
     feedback_scores_dict = (
         feedback_score.feedback_scores_public_to_feedback_scores_dict(feedback_scores)
     )
 
-    return trace.TraceData(
+    return trace_data.TraceData(
         project_name=project_name,
         id=trace_public.id,
         name=trace_public.name,

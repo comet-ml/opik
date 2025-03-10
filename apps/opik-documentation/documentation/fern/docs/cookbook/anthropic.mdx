@@ -46,7 +46,9 @@ import os
 from opik.integrations.anthropic import track_anthropic
 
 anthropic_client = anthropic.Anthropic()
-anthropic_client = track_anthropic(anthropic, project_name="anthropic-integration-demo")
+anthropic_client = track_anthropic(
+    anthropic_client, project_name="anthropic-integration-demo"
+)
 ```
 
 
@@ -79,7 +81,7 @@ from opik.integrations.anthropic import track_anthropic
 os.environ["OPIK_PROJECT_NAME"] = "anthropic-integration-demo"
 
 anthropic_client = anthropic.Anthropic()
-anthropic_client = track_anthropic(anthropic)
+anthropic_client = track_anthropic(anthropic_client)
 
 
 @track

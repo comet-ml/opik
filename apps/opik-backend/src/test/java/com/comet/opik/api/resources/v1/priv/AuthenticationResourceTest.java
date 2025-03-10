@@ -10,6 +10,8 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -24,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -56,24 +58,24 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("CheckAccess Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class AuthenticationResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/auth";
-
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String UNAUTHORISED_WORKSPACE_NAME = UUID.randomUUID().toString();
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    static {
+    {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -94,7 +96,7 @@ class AuthenticationResourceTest {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
         try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         }
 
@@ -104,7 +106,7 @@ class AuthenticationResourceTest {
         ClientSupportUtils.config(client);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -186,6 +188,23 @@ class AuthenticationResourceTest {
                     arguments(UNAUTHORISED_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE));
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void getWorkspaceName(String apiKey, int expectedStatus,
+                String errorMessage) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            getAndAsserWorkspaceName(apiKey, workspaceName, expectedStatus, errorMessage);
+        }
+
+        private Stream<Arguments> getWorkspaceName() {
+            return Stream.of(
+                    arguments(okApikey, 200, ""),
+                    arguments(fakeApikey, 401, FAKE_API_KEY_MESSAGE),
+                    arguments("", 401, MISSING_API_KEY));
+        }
+
         private void checkProjectAccess(String apiKey,
                 String workspaceName,
                 int expectedStatus,
@@ -202,6 +221,30 @@ class AuthenticationResourceTest {
                 if (expectedStatus == 204) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                     assertThat(actualResponse.hasEntity()).isFalse();
+                } else {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError.getMessage()).isEqualTo(expectedErrorMessage);
+                }
+            }
+        }
+
+        private void getAndAsserWorkspaceName(String apiKey,
+                String workspaceName,
+                int expectedStatus,
+                String expectedErrorMessage) {
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("workspace")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                if (expectedStatus == 200) {
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+                    assertThat(actualResponse.readEntity(String.class)).isEqualTo(workspaceName);
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);

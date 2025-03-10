@@ -7,8 +7,11 @@ from . import base_batcher
 from . import batchers
 from . import batch_manager
 
-CREATE_SPANS_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS = 1.0
+CREATE_SPANS_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS = 2.0
 CREATE_SPANS_MESSAGE_BATCHER_MAX_BATCH_SIZE = 1000
+
+CREATE_TRACES_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS = 2.0
+CREATE_TRACES_MESSAGE_BATCHER_MAX_BATCH_SIZE = 1000
 
 FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS = 1.0
 FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE = 1000
@@ -22,8 +25,8 @@ def create_batch_manager(message_queue: queue.Queue) -> batch_manager.BatchManag
     )
 
     create_trace_message_batcher_ = batchers.CreateTraceMessageBatcher(
-        flush_interval_seconds=CREATE_SPANS_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS,
-        max_batch_size=CREATE_SPANS_MESSAGE_BATCHER_MAX_BATCH_SIZE,
+        flush_interval_seconds=CREATE_TRACES_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS,
+        max_batch_size=CREATE_TRACES_MESSAGE_BATCHER_MAX_BATCH_SIZE,
         flush_callback=message_queue.put,
     )
 

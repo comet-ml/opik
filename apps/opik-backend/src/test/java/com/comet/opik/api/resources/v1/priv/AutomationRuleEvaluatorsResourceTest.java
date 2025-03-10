@@ -22,6 +22,8 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -49,7 +51,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -96,11 +98,13 @@ import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Automation Rule Evaluators Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class AutomationRuleEvaluatorsResourceTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/automations/evaluators/";
 
-    private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {"createdAt", "lastUpdatedAt"};
+    private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {"createdAt", "lastUpdatedAt",
+            "projectName"};
 
     private static final String messageToTest = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
     private static final String testEvaluator = """
@@ -160,16 +164,15 @@ class AutomationRuleEvaluatorsResourceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
         wireMock = WireMockUtils.startWireMock();
@@ -371,7 +374,8 @@ class AutomationRuleEvaluatorsResourceTest {
                 boolean isAuthorized,
                 String workspaceName) {
 
-            var projectId = generator.generate();
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
+                    WORKSPACE_NAME);
 
             int samplesToCreate = 15;
             var newWorkspaceName = "workspace-" + UUID.randomUUID();
@@ -522,7 +526,8 @@ class AutomationRuleEvaluatorsResourceTest {
                 boolean isAuthorized,
                 String workspaceName) {
 
-            var projectId = generator.generate();
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
+                    WORKSPACE_NAME);
 
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectId(projectId).build();
@@ -695,7 +700,8 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @MethodSource
         void find(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass) {
-            var projectId = generator.generate();
+            String projectName = factory.manufacturePojo(String.class);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var unexpectedProjectId = generator.generate();
 
             var evaluators = PodamFactoryUtils.manufacturePojoList(factory, evaluatorClass)
@@ -709,6 +715,7 @@ class AutomationRuleEvaluatorsResourceTest {
                                 .id(id)
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
+                                .projectName(projectName)
                                 .build();
                     }).toList();
 
@@ -757,7 +764,8 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @MethodSource
         void findByName(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, boolean withProjectId) {
-            var projectId = generator.generate();
+            String projectName = factory.manufacturePojo(String.class);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var evaluators = PodamFactoryUtils.manufacturePojoList(factory, evaluatorClass)
                     .stream()
@@ -770,6 +778,7 @@ class AutomationRuleEvaluatorsResourceTest {
                                 .id(id)
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
+                                .projectName(projectName)
                                 .build();
                     }).toList();
 
@@ -844,7 +853,8 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
         void delete(boolean includeProjectId) {
-            var projectId = generator.generate();
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
+                    WORKSPACE_NAME);
             var id1 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
             var id2 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
             var id3 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
@@ -977,6 +987,8 @@ class AutomationRuleEvaluatorsResourceTest {
                 var actualAutomationRuleEvaluator = actualAutomationRuleEvaluators.get(i);
                 var expectedAutomationRuleEvaluator = expectedAutomationRuleEvaluators.get(i);
                 assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
+                assertThat(actualAutomationRuleEvaluator.getProjectName())
+                        .isEqualTo(expectedAutomationRuleEvaluator.getProjectName());
             }
 
             assertThat(actualAutomationRuleEvaluators)

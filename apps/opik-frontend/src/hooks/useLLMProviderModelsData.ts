@@ -1462,6 +1462,30 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "01-ai/yi-vision",
     },
   ],
+
+  [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      label: "Gemini 2.0 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
+      label: "Gemini 1.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH_8B,
+      label: "Gemini 1.5 Flash-8B",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_1_5_PRO,
+      label: "Gemini 1.5 Pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_1_0_PRO,
+      label: "Gemini 1.0 Pro",
+    },
+  ],
+
   [PROVIDER_TYPE.OLLAMA]: [
     // the list will be full filled base on data in localstorage
   ],

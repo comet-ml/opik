@@ -37,7 +37,7 @@ class SpanDAOTest {
     static void beforeAll() throws SQLException {
         CLICK_HOUSE_CONTAINER.start();
         try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runDbMigration(connection, MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
+            MigrationUtils.runClickhouseDbMigration(connection, MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
                     ClickHouseContainerUtils.migrationParameters());
         }
 

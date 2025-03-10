@@ -31,6 +31,7 @@ import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
+import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -284,7 +285,19 @@ const configurationRoute = createRoute({
   component: ConfigurationPage,
 });
 
+// --------- production
+
+const onlineEvaluationRoute = createRoute({
+  path: "/online-evaluation",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Online evaluation",
+  },
+  component: OnlineEvaluationPage,
+});
+
 // ----------- Automation logs
+
 const automationLogsRoute = createRoute({
   path: "/$workspaceName/automation-logs",
   getParentRoute: () => workspaceGuardEmptyLayoutRoute,
@@ -322,6 +335,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       playgroundRoute,
       configurationRoute,
+      onlineEvaluationRoute,
     ]),
   ]),
 ]);

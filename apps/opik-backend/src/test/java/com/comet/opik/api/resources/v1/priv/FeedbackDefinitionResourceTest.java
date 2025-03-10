@@ -6,12 +6,17 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.FeedbackScoreDefinitionAssertions;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.FeedbackDefinitionResourceClient;
+import com.comet.opik.domain.FeedbackDefinitionService;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
@@ -31,7 +36,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -46,6 +51,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -72,6 +78,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Feedback Resource Test")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class FeedbackDefinitionResourceTest {
 
     private static final String URL_PATTERN = "http://.*/v1/private/feedback-definitions/.{8}-.{4}-.{4}-.{4}-.{12}";
@@ -84,21 +91,19 @@ class FeedbackDefinitionResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension app;
-
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
+    {
         Startables.deepStart(REDIS, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(MYSQL.getJdbcUrl(), null,
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(MYSQL.getJdbcUrl(), null,
                 wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -107,6 +112,7 @@ class FeedbackDefinitionResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private FeedbackDefinitionResourceClient feedbackDefinitionResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) {
@@ -118,10 +124,12 @@ class FeedbackDefinitionResourceTest {
 
         ClientSupportUtils.config(client);
 
+        feedbackDefinitionResourceClient = new FeedbackDefinitionResourceClient(client, baseURI);
+
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -1267,9 +1275,59 @@ class FeedbackDefinitionResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .delete()) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
         }
+
+        @Test
+        @DisplayName("when trying to delete the user feedback, then return conflict")
+        void deleteById__whenTryingToDeleteUserFeedback__thenReturnConflict() {
+
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var feedback = CategoricalFeedbackDefinition.builder()
+                    .name("User feedback")
+                    .details(CategoricalFeedbackDetail.builder()
+                            .categories(Map.of(" \uD83D\uDC4D", 1.0, " \uD83D\uDC4E", 0.0))
+                            .build())
+                    .build();
+
+            UUID id = create(feedback, apiKey, workspaceName);
+
+            try (var actualResponse = feedbackDefinitionResourceClient.deleteFeedbackDefinition(id, apiKey,
+                    workspaceName)) {
+                FeedbackScoreDefinitionAssertions.assertErrorResponse(actualResponse, FeedbackDefinitionService.MESSAGE,
+                        HttpStatus.SC_CONFLICT);
+            }
+        }
+
+        @Test
+        @DisplayName("when trying to batch delete the user feedback, then return conflict")
+        void deleteBatch__whenTryingToDeleteUserFeedback__thenReturnConflict() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var feedback = CategoricalFeedbackDefinition.builder()
+                    .name("User feedback")
+                    .details(CategoricalFeedbackDetail.builder()
+                            .categories(Map.of(" \uD83D\uDC4D", 1.0, " \uD83D\uDC4E", 0.0))
+                            .build())
+                    .build();
+
+            UUID id = create(feedback, apiKey, workspaceName);
+
+            try (var actualResponse = feedbackDefinitionResourceClient.deleteBatchFeedbackDefinition(Set.of(id), apiKey,
+                    workspaceName)) {
+                FeedbackScoreDefinitionAssertions.assertErrorResponse(actualResponse, FeedbackDefinitionService.MESSAGE,
+                        HttpStatus.SC_CONFLICT);
+            }
+        }
+
     }
 }

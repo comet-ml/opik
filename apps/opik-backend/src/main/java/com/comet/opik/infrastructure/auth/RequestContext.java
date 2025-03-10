@@ -21,6 +21,7 @@ public class RequestContext {
 
     private String userName;
     private String workspaceId;
+    private String workspaceName;
     private String apiKey;
     private MultivaluedMap<String, String> headers;
 }

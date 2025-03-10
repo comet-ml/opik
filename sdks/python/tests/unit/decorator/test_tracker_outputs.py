@@ -1283,6 +1283,7 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
         opik_context.update_current_trace(
             name="trace-name",
             metadata={"trace-metadata-key": "trace-metadata-value"},
+            thread_id="some-thread-id",
         )
 
         return "f-output"
@@ -1298,6 +1299,7 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
         output={"output": "f-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        thread_id="some-thread-id",
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
