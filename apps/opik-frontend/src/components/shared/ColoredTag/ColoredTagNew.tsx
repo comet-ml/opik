@@ -8,11 +8,13 @@ import { cn } from "@/lib/utils";
 export interface ColoredTagNewProps {
   label: string;
   className?: string;
+  labelClassName?: string;
 }
 
 const ColoredTagNew: React.FunctionComponent<ColoredTagNewProps> = ({
   label,
   className,
+  labelClassName,
 }) => {
   const variant = useMemo(() => generateTagVariant(label), [label]);
   const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(variant!)!];
@@ -30,7 +32,12 @@ const ColoredTagNew: React.FunctionComponent<ColoredTagNewProps> = ({
         style={{ "--bg-color": color } as React.CSSProperties}
       />
       <TooltipWrapper content={label}>
-        <div className="comet-body-s-accented min-w-0 flex-1 truncate text-muted-slate">
+        <div
+          className={cn(
+            "comet-body-s-accented min-w-0 flex-1 truncate text-muted-slate",
+            labelClassName,
+          )}
+        >
           {label}
         </div>
       </TooltipWrapper>
