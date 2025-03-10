@@ -4372,7 +4372,6 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
-                            .threadId(null)
                             .build())
                     .map(trace -> trace.toBuilder()
                             .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
@@ -4443,7 +4442,11 @@ class TracesResourceTest {
                     Arguments.of(errorInfoComparator,
                             SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.ASC).build()),
                     Arguments.of(errorInfoComparator.reversed(),
-                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()));
+                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Trace::threadId), SortingField.builder()
+                            .field(SortableFields.THREAD_ID).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Trace::threadId).reversed(), SortingField.builder()
+                            .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()));
         }
 
         @Test
