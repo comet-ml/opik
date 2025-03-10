@@ -7,6 +7,7 @@ export type DropdownOption<TDataType> = {
   value: TDataType;
   label: string;
   description?: string;
+  tooltip?: string;
   disabled?: boolean;
 };
 
