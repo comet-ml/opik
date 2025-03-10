@@ -36,7 +36,7 @@ jobs:
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
               run: mvn clean test -Dmaven.test.failure.ignore=true
-    
+
             - name: Publish Test Report
               uses: EnricoMi/publish-unit-test-result-action/linux@v2
               if: always()
