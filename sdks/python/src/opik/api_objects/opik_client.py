@@ -39,7 +39,7 @@ from .. import (
 )
 
 LOGGER = logging.getLogger(__name__)
-OPIK_API_REQUESTS_TIMEOUT_SECONDS = 5.0
+OPIK_API_REQUESTS_TIMEOUT_SECONDS = 30.0
 
 
 class Opik:
