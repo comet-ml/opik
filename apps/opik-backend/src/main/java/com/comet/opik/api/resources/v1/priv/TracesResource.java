@@ -65,6 +65,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -111,7 +112,7 @@ public class TracesResource {
                 .block();
 
         if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
-            throw new BadRequestException("Dynamic sorting is not enabled for this workspace");
+            sortingFields = List.of();
         }
 
         var searchCriteria = TraceSearchCriteria.builder()
@@ -127,6 +128,13 @@ public class TracesResource {
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
         TracePage tracePage = service.find(page, size, searchCriteria)
+                .map(it -> {
+                    // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
+                    if (!workspaceMetadata.canUseDynamicSorting()) {
+                        return it.toBuilder().sortableBy(List.of()).build();
+                    }
+                    return it;
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

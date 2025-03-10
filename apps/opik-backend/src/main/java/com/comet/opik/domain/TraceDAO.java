@@ -303,7 +303,7 @@ class TraceDAOImpl implements TraceDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) AS duration_millis
+                            NULL) AS duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND id = :id
@@ -417,8 +417,7 @@ class TraceDAOImpl implements TraceDAO {
                   t.last_updated_at as last_updated_at,
                   t.created_by as created_by,
                   t.last_updated_by as last_updated_by,
-                  t.duration_millis as duration_millis,
-                  t.duration_millis as duration,
+                  t.duration as duration,
                   t.thread_id as thread_id,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
@@ -429,7 +428,7 @@ class TraceDAOImpl implements TraceDAO {
                      if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration_millis
+                         NULL) AS duration
                  FROM traces t
                  <if(trace_aggregation_filters)>
                  LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -457,7 +456,7 @@ class TraceDAOImpl implements TraceDAO {
                  <if(trace_aggregation_filters)>
                  AND <trace_aggregation_filters>
                  <endif>
-                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                 ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
                  LIMIT 1 BY id
                  LIMIT :limit OFFSET :offset
              ) AS t
@@ -507,7 +506,7 @@ class TraceDAOImpl implements TraceDAO {
                         if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration_millis
+                         NULL) AS duration
                     FROM traces
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
@@ -744,7 +743,7 @@ class TraceDAOImpl implements TraceDAO {
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
                 countDistinct(t.id) AS trace_count,
-                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(t.duration_millis)) AS duration,
+                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(t.duration)) AS duration,
                 sum(notEmpty(t.input)) AS input,
                 sum(notEmpty(t.output)) AS output,
                 sum(notEmpty(t.metadata)) AS metadata,
@@ -759,7 +758,7 @@ class TraceDAOImpl implements TraceDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                        NULL) as duration_millis
+                        NULL) as duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
@@ -818,7 +817,7 @@ class TraceDAOImpl implements TraceDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                           NULL) AS duration_millis,
+                           NULL) AS duration,
                     <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
                     <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
                     count(DISTINCT t.id) * 2 as number_of_messages,
@@ -859,7 +858,7 @@ class TraceDAOImpl implements TraceDAO {
                 if(end_time IS NOT NULL AND start_time IS NOT NULL
                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                       NULL) AS duration_millis,
+                       NULL) AS duration,
                 <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
                 <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
                 count(DISTINCT t.id) * 2 as number_of_messages,
@@ -915,7 +914,7 @@ class TraceDAOImpl implements TraceDAO {
                 if(end_time IS NOT NULL AND start_time IS NOT NULL
                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                       NULL) AS duration_millis,
+                       NULL) AS duration,
                 argMin(t.input, t.start_time) as first_message,
                 argMax(t.output, t.end_time) as last_message,
                 count(DISTINCT t.id) * 2 as number_of_messages,
@@ -1189,7 +1188,7 @@ class TraceDAOImpl implements TraceDAO {
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .duration(row.get("duration_millis", Double.class))
+                .duration(row.get("duration", Double.class))
                 .threadId(Optional.ofNullable(row.get("thread_id", String.class))
                         .filter(StringUtils::isNotEmpty)
                         .orElse(null))
@@ -1529,7 +1528,7 @@ class TraceDAOImpl implements TraceDAO {
                 .projectId(row.get("project_id", UUID.class))
                 .startTime(row.get("start_time", Instant.class))
                 .endTime(row.get("end_time", Instant.class))
-                .duration(row.get("duration_millis", Double.class))
+                .duration(row.get("duration", Double.class))
                 .firstMessage(Optional.ofNullable(row.get("first_message", String.class))
                         .filter(it -> !it.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)

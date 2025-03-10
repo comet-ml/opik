@@ -37,6 +37,9 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.SpanMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
@@ -98,6 +101,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -258,7 +262,7 @@ class SpansResourceTest {
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
-                                                    401)))));
+                                                    HttpStatus.SC_UNAUTHORIZED)))));
         }
 
         @ParameterizedTest
@@ -277,7 +281,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(span))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 201, errorMessage);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_CREATED, errorMessage);
             }
         }
 
@@ -306,7 +310,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .method(HttpMethod.PATCH, Entity.json(update))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204, errorMessage);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT, errorMessage);
             }
         }
 
@@ -329,7 +333,8 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .delete()) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 501, errorMessage);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NOT_IMPLEMENTED,
+                        errorMessage);
             }
         }
 
@@ -353,12 +358,12 @@ class SpansResourceTest {
                     .get()) {
 
                 if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
                     var expectedSpan = actualResponse.readEntity(Span.class);
                     assertThat(expectedSpan.id()).isEqualTo(spanId);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(errorMessage);
                 }
@@ -386,12 +391,12 @@ class SpansResourceTest {
                     .get()) {
 
                 if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
                     var expectedSpans = actualResponse.readEntity(Span.SpanPage.class);
                     assertThat(expectedSpans.content()).hasSize(1);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(errorMessage);
                 }
@@ -420,7 +425,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedbackScore))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204, errorMessage);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT, errorMessage);
             }
         }
 
@@ -449,7 +454,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(new DeleteFeedbackScore(feedbackScore.name())))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204, errorMessage);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT, errorMessage);
             }
         }
 
@@ -484,7 +489,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedbackScoreBatch))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204, errorMessage);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT, errorMessage);
             }
         }
 
@@ -528,7 +533,7 @@ class SpansResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
             assertThat(actualResponse.hasEntity()).isFalse();
         } else {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
             assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                     .isEqualTo(expectedErrorMessage);
         }
@@ -579,7 +584,8 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(span))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 201, UNAUTHORIZED_RESPONSE);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_CREATED,
+                        UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -607,7 +613,8 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .method(HttpMethod.PATCH, Entity.json(update))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204, UNAUTHORIZED_RESPONSE);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT,
+                        UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -629,7 +636,8 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .delete()) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 501, UNAUTHORIZED_RESPONSE);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NOT_IMPLEMENTED,
+                        UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -652,12 +660,12 @@ class SpansResourceTest {
                     .get()) {
 
                 if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
                     var expectedSpan = actualResponse.readEntity(Span.class);
                     assertThat(expectedSpan.id()).isEqualTo(spanId);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
@@ -686,12 +694,12 @@ class SpansResourceTest {
                     .get()) {
 
                 if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
                     var expectedSpans = actualResponse.readEntity(Span.SpanPage.class);
                     assertThat(expectedSpans.content()).hasSize(1);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
@@ -719,7 +727,8 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedbackScore))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204, UNAUTHORIZED_RESPONSE);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT,
+                        UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -747,7 +756,8 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(new DeleteFeedbackScore(feedbackScore.name())))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204, UNAUTHORIZED_RESPONSE);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT,
+                        UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -781,7 +791,8 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .put(Entity.json(feedbackScoreBatch))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, 204, UNAUTHORIZED_RESPONSE);
+                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT,
+                        UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -873,7 +884,8 @@ class SpansResourceTest {
                     expectedSpans1,
                     spans.size(),
                     unexpectedSpans,
-                    apiKey);
+                    apiKey,
+                    List.of());
             getAndAssertPage(
                     workspaceName,
                     projectName,
@@ -886,7 +898,8 @@ class SpansResourceTest {
                     expectedSpans2,
                     spans.size(),
                     unexpectedSpans,
-                    apiKey);
+                    apiKey,
+                    List.of());
         }
 
         @Test
@@ -930,7 +943,9 @@ class SpansResourceTest {
                     pageSize,
                     expectedSpans1,
                     spans.size(),
-                    unexpectedSpans, apiKey);
+                    unexpectedSpans,
+                    apiKey,
+                    List.of());
 
             getAndAssertPage(
                     workspaceName,
@@ -943,7 +958,9 @@ class SpansResourceTest {
                     pageSize,
                     expectedSpans2,
                     spans.size(),
-                    unexpectedSpans, apiKey);
+                    unexpectedSpans,
+                    apiKey,
+                    List.of());
         }
 
         @ParameterizedTest
@@ -1085,7 +1102,9 @@ class SpansResourceTest {
                     pageSize,
                     expectedSpans1,
                     spans.size(),
-                    unexpectedSpans, apiKey);
+                    unexpectedSpans,
+                    apiKey,
+                    List.of());
             getAndAssertPage(
                     workspaceName,
                     projectName,
@@ -1097,7 +1116,9 @@ class SpansResourceTest {
                     pageSize,
                     expectedSpans2,
                     spans.size(),
-                    unexpectedSpans, apiKey);
+                    unexpectedSpans,
+                    apiKey,
+                    List.of());
         }
 
         @Test
@@ -1149,7 +1170,9 @@ class SpansResourceTest {
                     pageSize,
                     expectedSpans1,
                     spans.size(),
-                    unexpectedSpans, apiKey);
+                    unexpectedSpans,
+                    apiKey,
+                    List.of());
             getAndAssertPage(
                     workspaceName,
                     null,
@@ -1161,7 +1184,9 @@ class SpansResourceTest {
                     pageSize,
                     expectedSpans2,
                     spans.size(),
-                    unexpectedSpans, apiKey);
+                    unexpectedSpans,
+                    apiKey,
+                    List.of());
         }
 
         @ParameterizedTest
@@ -3724,15 +3749,179 @@ class SpansResourceTest {
             destination.set(index, source.get(index).toBuilder().build());
             return destination;
         }
+
+        @ParameterizedTest
+        @MethodSource
+        void getSpansByProject__whenSortingByValidFields__thenReturnTracesSorted(Comparator<Span> comparator,
+                SortingField sorting) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .endTime(span.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                            .comments(null)
+                            .createdAt(Instant.now())
+                            .lastUpdatedAt(Instant.now())
+                            .build())
+                    .map(span -> span.toBuilder()
+                            .duration(span.startTime().until(span.endTime(), ChronoUnit.MICROS) / 1000.0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            if (Set.of(SortableFields.CREATED_AT, SortableFields.LAST_UPDATED_AT).contains(sorting.field())) {
+                spans.forEach(span -> spanResourceClient.createSpan(span, apiKey, workspaceName));
+            } else {
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            }
+
+            var expectedSpans = spans.stream()
+                    .sorted(comparator)
+                    .toList();
+
+            getSpansAndAssert(false, projectName, List.of(), apiKey, workspaceName, expectedSpans,
+                    spans,
+                    List.of(),
+                    List.of(sorting));
+        }
+
+        static Stream<Arguments> getSpansByProject__whenSortingByValidFields__thenReturnTracesSorted() {
+
+            Comparator<Span> inputComparator = Comparator.comparing(span -> span.input().toString());
+            Comparator<Span> outputComparator = Comparator.comparing(span -> span.output().toString());
+            Comparator<Span> metadataComparator = Comparator.comparing(span -> span.metadata().toString());
+            Comparator<Span> tagsComparator = Comparator.comparing(span -> span.tags().toString());
+            Comparator<Span> errorInfoComparator = Comparator.comparing(span -> span.errorInfo().toString());
+            Comparator<Span> usageComparator = Comparator.comparing(span -> StringUtils.join(span.usage()));
+
+            return Stream.of(
+                    Arguments.of(Comparator.comparing(Span::id),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::id).reversed(),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::traceId),
+                            SortingField.builder().field(SortableFields.TRACE_ID).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::traceId).reversed(),
+                            SortingField.builder().field(SortableFields.TRACE_ID).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::parentSpanId),
+                            SortingField.builder().field(SortableFields.PARENT_SPAN_ID).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(Comparator.comparing(Span::parentSpanId).reversed(),
+                            SortingField.builder().field(SortableFields.PARENT_SPAN_ID).direction(Direction.DESC)
+                                    .build()),
+                    Arguments.of(Comparator.comparing(Span::name),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::name).reversed(),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::startTime),
+                            SortingField.builder().field(SortableFields.START_TIME).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::startTime).reversed(),
+                            SortingField.builder().field(SortableFields.START_TIME).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::endTime),
+                            SortingField.builder().field(SortableFields.END_TIME).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::endTime).reversed(),
+                            SortingField.builder().field(SortableFields.END_TIME).direction(Direction.DESC).build()),
+                    Arguments.of(inputComparator,
+                            SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build()),
+                    Arguments.of(inputComparator.reversed(),
+                            SortingField.builder().field(SortableFields.INPUT).direction(Direction.DESC).build()),
+                    Arguments.of(outputComparator,
+                            SortingField.builder().field(SortableFields.OUTPUT).direction(Direction.ASC).build()),
+                    Arguments.of(outputComparator.reversed(),
+                            SortingField.builder().field(SortableFields.OUTPUT).direction(Direction.DESC).build()),
+                    Arguments.of(metadataComparator,
+                            SortingField.builder().field(SortableFields.METADATA).direction(Direction.ASC).build()),
+                    Arguments.of(metadataComparator.reversed(),
+                            SortingField.builder().field(SortableFields.METADATA).direction(Direction.DESC).build()),
+                    Arguments.of(tagsComparator,
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    Arguments.of(tagsComparator.reversed(),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()),
+                    Arguments.of(usageComparator,
+                            SortingField.builder().field(SortableFields.USAGE).direction(Direction.ASC).build()),
+                    Arguments.of(usageComparator.reversed(),
+                            SortingField.builder().field(SortableFields.USAGE).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::createdAt)
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::createdAt).reversed()
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::lastUpdatedAt),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(Comparator.comparing(Span::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()),
+                    Arguments.of(Comparator.comparing(Span::totalEstimatedCost),
+                            SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(Comparator.comparing(Span::totalEstimatedCost).reversed(),
+                            SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST).direction(Direction.DESC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator.comparing(Span::duration)
+                                    .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.DURATION).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Span::duration).reversed()
+                                    .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.DURATION).direction(Direction.DESC).build()),
+                    Arguments.of(errorInfoComparator,
+                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.ASC).build()),
+                    Arguments.of(errorInfoComparator.reversed(),
+                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()));
+        }
+
+        @Test
+        void getSpansByProject__whenSortingByInvalidField__thenReturn400() {
+            var field = RandomStringUtils.secure().nextAlphanumeric(10);
+            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    400,
+                    "Invalid sorting fields '%s'".formatted(field));
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("project_name", projectName)
+                    .queryParam("sorting",
+                            URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualError).isEqualTo(expectedError);
+        }
     }
 
     private void getSpansAndAssert(boolean useStreamSearch, String projectName, List<SpanFilter> filters, String apiKey,
             String workspaceName, List<Span> expectedSpans, List<Span> spans, List<Span> unexpectedSpans) {
+        getSpansAndAssert(useStreamSearch, projectName, filters, apiKey, workspaceName, expectedSpans, spans,
+                unexpectedSpans, List.of());
+    }
+
+    private void getSpansAndAssert(boolean useStreamSearch, String projectName, List<SpanFilter> filters, String apiKey,
+            String workspaceName, List<Span> expectedSpans, List<Span> spans, List<Span> unexpectedSpans,
+            List<SortingField> sortingFields) {
         if (useStreamSearch) {
             var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName).filters(filters).build();
             spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest, expectedSpans, USER);
         } else {
-            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey);
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, unexpectedSpans, apiKey,
+                    sortingFields);
         }
     }
 
@@ -3742,7 +3931,9 @@ class SpansResourceTest {
             List<? extends Filter> filters,
             List<Span> spans,
             List<Span> expectedSpans,
-            List<Span> unexpectedSpans, String apiKey) {
+            List<Span> unexpectedSpans,
+            String apiKey,
+            List<SortingField> sortingFields) {
         int page = 1;
         int size = spans.size() + expectedSpans.size() + unexpectedSpans.size();
         getAndAssertPage(
@@ -3756,7 +3947,9 @@ class SpansResourceTest {
                 size,
                 expectedSpans,
                 expectedSpans.size(),
-                unexpectedSpans, apiKey);
+                unexpectedSpans,
+                apiKey,
+                sortingFields);
     }
 
     private void getAndAssertPage(
@@ -3770,7 +3963,9 @@ class SpansResourceTest {
             int size,
             List<Span> expectedSpans,
             int expectedTotal,
-            List<Span> unexpectedSpans, String apiKey) {
+            List<Span> unexpectedSpans,
+            String apiKey,
+            List<SortingField> sortingFields) {
         try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size)
@@ -3779,6 +3974,7 @@ class SpansResourceTest {
                 .queryParam("trace_id", traceId)
                 .queryParam("type", type)
                 .queryParam("filters", toURLEncodedQueryParam(filters))
+                .queryParam("sorting", toURLEncodedQueryParam(sortingFields))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -3807,7 +4003,7 @@ class SpansResourceTest {
         }
     }
 
-    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
+    private String toURLEncodedQueryParam(List<?> filters) {
         return CollectionUtils.isEmpty(filters)
                 ? null
                 : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
@@ -4132,7 +4328,7 @@ class SpansResourceTest {
             batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
-                    API_KEY);
+                    API_KEY, List.of());
         }
 
         Stream<Arguments> batch__whenCreateSpans__thenReturnNoContent() {
@@ -4160,7 +4356,7 @@ class SpansResourceTest {
             batchCreateAndAssert(expectedSpans, apiKey, workspaceName);
 
             getAndAssertPage(workspaceName, DEFAULT_PROJECT, List.of(), List.of(), expectedSpans.reversed(), List.of(),
-                    apiKey);
+                    apiKey, List.of());
         }
 
         @Test
@@ -4289,7 +4485,7 @@ class SpansResourceTest {
             }
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
-                    API_KEY);
+                    API_KEY, List.of());
         }
 
     }
@@ -5677,7 +5873,7 @@ class SpansResourceTest {
                     .toList();
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), expectedSpansWithScores.reversed(),
-                    expectedSpansWithScores.reversed(), List.of(), API_KEY);
+                    expectedSpansWithScores.reversed(), List.of(), API_KEY, List.of());
         }
 
         Stream<Arguments> feedback__whenLinkingByProjectName__thenReturnNoContent() {
@@ -5804,7 +6000,7 @@ class SpansResourceTest {
                     .toList();
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), spans.reversed(), spans.reversed(), List.of(),
-                    API_KEY);
+                    API_KEY, List.of());
         }
     }
 

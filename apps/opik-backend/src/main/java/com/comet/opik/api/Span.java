@@ -58,13 +58,15 @@ public record Span(
         @JsonView({
                 Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration){
 
+    @Builder(toBuilder = true)
     public record SpanPage(
             @JsonView(Span.View.Public.class) int page,
             @JsonView(Span.View.Public.class) int size,
             @JsonView(Span.View.Public.class) long total,
-            @JsonView(Span.View.Public.class) List<Span> content) implements com.comet.opik.api.Page<Span> {
+            @JsonView(Span.View.Public.class) List<Span> content,
+            @JsonView(Trace.View.Public.class) List<String> sortableBy) implements com.comet.opik.api.Page<Span> {
         public static SpanPage empty(int page) {
-            return new SpanPage(page, 0, 0, List.of());
+            return new SpanPage(page, 0, 0, List.of(), List.of());
         }
     }
 

@@ -49,7 +49,7 @@ public class FilterQueryBuilder {
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
-    private static final String DURATION_ANALYTICS_DB = "duration_millis";
+    private static final String DURATION_ANALYTICS_DB = "duration";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
     private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
