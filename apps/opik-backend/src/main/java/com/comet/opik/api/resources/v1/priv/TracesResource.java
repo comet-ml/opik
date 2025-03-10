@@ -130,7 +130,7 @@ public class TracesResource {
         TracePage tracePage = service.find(page, size, searchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!it.sortableBy().isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
+                    if (!workspaceMetadata.canUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;

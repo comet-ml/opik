@@ -136,7 +136,7 @@ public class SpansResource {
         SpanPage spans = spanService.find(page, size, spanSearchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!it.sortableBy().isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
+                    if (!workspaceMetadata.canUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;
