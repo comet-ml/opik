@@ -4,6 +4,7 @@ from typing import Dict, Any
 import pydantic
 from opik import dict_utils
 
+
 class BaseOriginalProviderUsage(pydantic.BaseModel, abc.ABC):
     model_config = pydantic.ConfigDict(extra="allow")
     """

@@ -2,6 +2,7 @@ import pytest
 import pydantic
 from opik.llm_usage.anthropic_usage import AnthropicUsage
 
+
 def test_anthropic_usage_creation__happyflow():
     usage_data = {
         "input_tokens": 200,
@@ -15,6 +16,7 @@ def test_anthropic_usage_creation__happyflow():
     assert usage.cache_creation_input_tokens == 50
     assert usage.cache_read_input_tokens == 30
 
+
 def test_anthropic_usage_creation__no_cache_keys__cache_values_are_None():
     usage_data = {
         "input_tokens": 200,
@@ -25,6 +27,7 @@ def test_anthropic_usage_creation__no_cache_keys__cache_values_are_None():
     assert usage.output_tokens == 100
     assert usage.cache_creation_input_tokens is None
     assert usage.cache_read_input_tokens is None
+
 
 def test_anthropic_usage__to_backend_compatible_flat_dict__happyflow():
     usage_data = {
@@ -42,6 +45,7 @@ def test_anthropic_usage__to_backend_compatible_flat_dict__happyflow():
         "original_usage.cache_read_input_tokens": 30,
     }
 
+
 def test_anthropic_usage__to_backend_compatible_flat_dict__no_cache_keys():
     usage_data = {
         "input_tokens": 200,
@@ -54,6 +58,7 @@ def test_anthropic_usage__to_backend_compatible_flat_dict__no_cache_keys():
         "original_usage.output_tokens": 100,
     }
 
+
 def test_anthropic_usage__invalid_data_passed__validation_error_is_raised():
     usage_data = {
         "input_tokens": "invalid",
@@ -62,6 +67,7 @@ def test_anthropic_usage__invalid_data_passed__validation_error_is_raised():
     }
     with pytest.raises(pydantic.ValidationError):
         AnthropicUsage.from_original_usage_dict(usage_data)
+
 
 def test_anthropic_usage__extra_unknown_keys_are_passed__fields_are_accepted__all_integers_included_to_the_resulting_flat_dict():
     usage_data = {

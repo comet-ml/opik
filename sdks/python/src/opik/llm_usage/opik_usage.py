@@ -1,10 +1,11 @@
 import pydantic
 from typing import Union, Dict, Any
-from . import openai_usage, google_usage
+from . import openai_usage, google_usage, anthropic_usage
 
 ProviderUsage = Union[
     openai_usage.OpenAICompletionsUsage,
     google_usage.GoogleGeminiUsage,
+    anthropic_usage.AnthropicUsage,
 ]
 
 
@@ -51,5 +52,28 @@ class OpikUsage(pydantic.BaseModel):
             completion_tokens=provider_usage.candidates_token_count,
             prompt_tokens=provider_usage.prompt_token_count,
             total_tokens=provider_usage.total_token_count,
+            provider_usage=provider_usage,
+        )
+
+    @classmethod
+    def from_anthropic_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        provider_usage = anthropic_usage.AnthropicUsage.from_original_usage_dict(usage)
+
+        prompt_tokens = provider_usage.input_tokens + (
+            provider_usage.cache_read_input_tokens
+            if provider_usage.cache_read_input_tokens is not None
+            else 0
+        )
+        completion_tokens = provider_usage.output_tokens + (
+            provider_usage.cache_creation_input_tokens
+            if provider_usage.cache_creation_input_tokens is not None
+            else 0
+        )
+        total_tokens = prompt_tokens + completion_tokens
+
+        return cls(
+            completion_tokens=completion_tokens,
+            prompt_tokens=prompt_tokens,
+            total_tokens=total_tokens,
             provider_usage=provider_usage,
         )

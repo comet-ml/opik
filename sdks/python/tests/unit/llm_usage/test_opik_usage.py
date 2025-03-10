@@ -92,9 +92,31 @@ def test_opik_usage__to_backend_compatible_full_usage_dict__google_source():
     }
 
 
+def test_opik_usage__to_backend_compatible_full_usage_dict__anthropic_source():
+    usage_data = {
+        "input_tokens": 200,
+        "output_tokens": 100,
+        "cache_creation_input_tokens": 50,
+        "cache_read_input_tokens": 30,
+    }
+    usage = OpikUsage.from_anthropic_dict(usage_data)
+    full_dict = usage.to_backend_compatible_full_usage_dict()
+    assert full_dict == {
+        "completion_tokens": 150,
+        "prompt_tokens": 230,
+        "total_tokens": 380,
+        "original_usage.input_tokens": 200,
+        "original_usage.output_tokens": 100,
+        "original_usage.cache_creation_input_tokens": 50,
+        "original_usage.cache_read_input_tokens": 30,
+    }
+
+
 def test_opik_usage__invalid_data_passed__validation_error_is_raised():
     usage_data = {"a": 123}
     with pytest.raises(pydantic.ValidationError):
         OpikUsage.from_openai_completions_dict(usage_data)
     with pytest.raises(pydantic.ValidationError):
         OpikUsage.from_google_dict(usage_data)
+    with pytest.raises(pydantic.ValidationError):
+        OpikUsage.from_anthropic_dict(usage_data)
