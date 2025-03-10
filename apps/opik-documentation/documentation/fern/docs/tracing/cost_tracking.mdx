@@ -63,17 +63,44 @@ trace = client.get_trace_content("<TRACE_ID>")
 print(trace.total_estimated_cost)
 ```
 
-## Manually Setting Span Costs
+## Manually setting the provider and model name
 
-### Setting the model provider and model
-
-If you are not using one of Opik's integration, Opik can still compute the cost. For this you will need to pass:
+If you are not using one of Opik's integration, Opik can still compute the cost. For you will need to ensure the
+span type is `llm` and you will need to pass:
 
 1. `provider`: The name of the provider, typically `openai`, `anthropci` or `gemini` for example
 2. `model`: The name of the model
 3. `usage`: The input, output and total tokens for this LLM call.
 
-Once you have this information you can use the low level SDK to log your trace:
+You can then update your code to log traces and spans:
+
+<Tabs>
+<Tab title="Function decorator" value="Function decorator">
+If you are using function decorators, you will need to use the `update_current_span` method:
+
+```python
+from opik import track, opik_context
+
+@track(type="llm") # Note - Specifying the type is this is important
+def llm_call(input):
+  opik_context.update_current_span(
+    provider="openai",
+    model="gpt-3.5-turbo",
+    usage={
+      "prompt_tokens": 4,
+      "completion_tokens": 6,
+      "total_tokens": 10
+    }
+  )
+  return "Hello, world!"
+
+llm_call("Hello world!")
+```
+
+</Tab>
+<Tab title="Low level Python SDK" value="Low level Python SDK">
+
+When using the low level Python SDK, you will need to update the `client.span` or `trace.span` methods:
 
 ```python
 import opik
@@ -101,7 +128,10 @@ span = trace.span(
 )
 ```
 
-### Specifying the cost manually
+</Tab>
+</Tabs>
+
+## Manually Setting Span Costs
 
 For cases where you need to set a custom cost or when using an unsupported model, you can manually set the cost of a span using `update_current_span`. Note that manually setting a cost will override any automatically computed cost by Opik:
 

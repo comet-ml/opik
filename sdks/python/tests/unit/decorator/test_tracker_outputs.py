@@ -1277,6 +1277,8 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
             name="span-name",
             metadata={"span-metadata-key": "span-metadata-value"},
             total_cost=0.42,
+            model="gpt-3.5-turbo",
+            provider="openai",
         )
         opik_context.update_current_trace(
             name="trace-name",
@@ -1309,6 +1311,8 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
                 end_time=ANY_BUT_NONE,
                 total_cost=0.42,
                 spans=[],
+                model="gpt-3.5-turbo",
+                provider="openai",
             )
         ],
     )
