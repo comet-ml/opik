@@ -104,7 +104,10 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
               </PopoverTrigger>
             </div>
           </div>
-          <PopoverContent className="w-auto p-0">
+          <PopoverContent
+            className="max-h-[calc(var(--radix-popper-available-height)-4px)] w-auto overflow-y-auto p-0"
+            sideOffset={8}
+          >
             <Calendar
               mode="single"
               selected={date}
