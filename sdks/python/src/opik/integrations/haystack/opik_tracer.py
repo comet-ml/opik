@@ -1,16 +1,17 @@
 import contextlib
-import os
 import contextvars
+import os
 from typing import Any, Dict, Iterator, List, Optional, Union
 
-from haystack import logging
 from haystack import dataclasses as haystack_dataclasses
-from haystack import tracing
+from haystack import logging, tracing
 from haystack.tracing import utils as tracing_utils
 
 import opik
+from opik import url_helpers
 from opik.api_objects import span as opik_span
 from opik.api_objects import trace as opik_trace
+
 from . import converters
 
 logger = logging.getLogger(__name__)
@@ -249,9 +250,17 @@ class OpikTracer(tracing.Tracer):
 
         if last_span is None:
             return ""
-        else:
-            project_name = last_span.raw_span()._project_name
-            return self._opik_client.get_project_url(project_name)
+
+        opik_span_or_trace = last_span.raw_span()
+        trace_id = (
+            opik_span_or_trace.id
+            if isinstance(opik_span_or_trace, opik.Trace)
+            else opik_span_or_trace.id
+        )
+
+        return url_helpers.get_project_url_by_trace_id(
+            trace_id=trace_id, url_override=self._opik_client.config.url_override
+        )
 
     def get_trace_id(self) -> Optional[str]:
         """
