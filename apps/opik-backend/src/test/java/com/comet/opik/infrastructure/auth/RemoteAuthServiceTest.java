@@ -69,6 +69,7 @@ class RemoteAuthServiceTest {
                         .writeValueAsString(RemoteAuthService.AuthResponse.builder()
                                 .user(user)
                                 .workspaceId(workspaceId.toString())
+                                .workspaceName(workspaceName)
                                 .build()))));
 
         var requestContext = new RequestContext();
@@ -78,6 +79,7 @@ class RemoteAuthServiceTest {
         assertThat(requestContext.getWorkspaceId()).isEqualTo(workspaceId.toString());
         assertThat(requestContext.getUserName()).isEqualTo(user);
         assertThat(requestContext.getApiKey()).isEqualTo(apiKey);
+        assertThat(requestContext.getWorkspaceName()).isEqualTo(workspaceName);
     }
 
     @ParameterizedTest

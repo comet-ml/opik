@@ -515,6 +515,42 @@ class Opik:
 
             self._streamer.put(add_span_feedback_scores_batch_message)
 
+    def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
+        """
+        Deletes a feedback score associated with a specific trace.
+
+        Args:
+            trace_id:
+                The unique identifier of the trace for which the feedback score needs to be deleted.
+            name: str
+                The name associated with the feedback score that should be deleted.
+
+        Returns:
+            None
+        """
+        self._rest_client.traces.delete_trace_feedback_score(
+            id=trace_id,
+            name=name,
+        )
+
+    def delete_span_feedback_score(self, span_id: str, name: str) -> None:
+        """
+        Deletes a feedback score associated with a specific span.
+
+        Args:
+            span_id:
+                The unique identifier of the trace for which the feedback score needs to be deleted.
+            name: str
+                The name associated with the feedback score that should be deleted.
+
+        Returns:
+            None
+        """
+        self._rest_client.spans.delete_span_feedback_score(
+            id=span_id,
+            name=name,
+        )
+
     def get_dataset(self, name: str) -> dataset.Dataset:
         """
         Get dataset by name

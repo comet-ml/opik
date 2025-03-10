@@ -9,21 +9,15 @@ import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { EvaluatorsRule } from "@/types/automations";
 import { CellContext } from "@tanstack/react-table";
-import AddEditRuleDialog from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/AddEditRuleDialog";
+import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useRulesBatchDeleteMutation from "@/api/automations/useRulesBatchDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
-type CustomMeta = {
-  projectId: string;
-};
-
-export const RuleRowActionsCell: React.FC<
-  CellContext<EvaluatorsRule, unknown>
-> = (context) => {
+const RuleRowActionsCell: React.FC<CellContext<EvaluatorsRule, unknown>> = (
+  context,
+) => {
   const resetKeyRef = useRef(0);
-  const { custom } = context.column.columnDef.meta ?? {};
-  const { projectId } = (custom ?? {}) as CustomMeta;
   const rule = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
@@ -31,10 +25,9 @@ export const RuleRowActionsCell: React.FC<
 
   const deleteRuleHandler = useCallback(() => {
     mutate({
-      projectId,
       ids: [rule.id],
     });
-  }, [projectId, rule.id, mutate]);
+  }, [rule.id, mutate]);
 
   return (
     <CellWrapper
@@ -44,7 +37,7 @@ export const RuleRowActionsCell: React.FC<
     >
       <AddEditRuleDialog
         key={`add-${resetKeyRef.current}`}
-        projectId={projectId}
+        projectId={rule.project_id}
         rule={rule}
         open={open === 2}
         setOpen={setOpen}
@@ -89,3 +82,5 @@ export const RuleRowActionsCell: React.FC<
     </CellWrapper>
   );
 };
+
+export default RuleRowActionsCell;

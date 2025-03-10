@@ -78,6 +78,9 @@ navigation:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
+          - page: Log conversations
+            path: docs/tracing/log_chat_conversations.mdx
+            slug: log_chat_conversations
           - page: Log agents
             path: docs/tracing/log_agents.mdx
             slug: log_agents
