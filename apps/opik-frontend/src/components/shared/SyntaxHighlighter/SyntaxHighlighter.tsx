@@ -106,7 +106,7 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
           label: "Pretty ✨",
           ...(!code.canBePrettified && {
             disabled: !code.canBePrettified,
-            tooltip: "Pretty ✨ is not available yet for this trace format.",
+            tooltip: "Pretty ✨ is not available yet for this format.",
           }),
         },
         ...DEFAULT_OPTIONS,
