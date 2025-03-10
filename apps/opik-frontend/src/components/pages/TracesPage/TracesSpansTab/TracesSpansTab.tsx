@@ -51,6 +51,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -65,7 +66,6 @@ import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { DEFAULT_COLUMN_PINNING } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -94,20 +94,20 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Input",
     size: 400,
     type: COLUMN_TYPE.string,
-    iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.input) ? JSON.stringify(row.input, null, 2) : row.input,
-    cell: CodeCell as never,
+    cell: PrettyCell as never,
+    customMeta: {
+      fieldType: "input",
+    },
   },
   {
     id: "output",
     label: "Output",
     size: 400,
     type: COLUMN_TYPE.string,
-    iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.output) ? JSON.stringify(row.output, null, 2) : row.output,
-    cell: CodeCell as never,
+    cell: PrettyCell as never,
+    customMeta: {
+      fieldType: "output",
+    },
   },
   {
     id: "duration",
@@ -529,7 +529,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         c === COLUMN_SELECT_ID
           ? false
           : selectedColumns.includes(c) ||
-            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+            (DEFAULT_TRACES_COLUMN_PINNING.left || []).includes(c),
       );
   }, [columns, selectedColumns]);
 

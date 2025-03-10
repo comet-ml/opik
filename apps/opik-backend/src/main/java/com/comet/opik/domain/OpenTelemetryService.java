@@ -73,13 +73,22 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                     .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
                     .toList();
 
+            // find out whats the name of the integration library
+            var integrationName = traceRequest.getResourceSpansList().stream()
+                    .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
+                    .map(scopeSpans -> scopeSpans.getScope().getName())
+                    .distinct()
+                    .filter(OpenTelemetryMappingRule::isValidInstrumentation)
+                    .findFirst()
+                    .orElse(null);
+
             // otelTraceId -> minimum timestamp seen with that traceId
             var otelTracesAndMinTimestamp = otelSpans.stream()
                     .collect(Collectors.toMap(Span::getTraceId, Span::getStartTimeUnixNano, Math::min));
 
             // get or create a mapping of otel trace id -> opik trace id
             return otelToOpikTraceIdMapper(otelTracesAndMinTimestamp, projectId, workspaceId)
-                    .flatMap(traceMapper -> doStoreSpans(otelSpans, traceMapper, projectName));
+                    .flatMap(traceMapper -> doStoreSpans(otelSpans, traceMapper, projectName, integrationName));
         })).subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -91,7 +100,8 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         return "otelTraceId:" + workspaceId + ":" + projectId + ":" + otelId;
     }
 
-    private Mono<Long> doStoreSpans(List<Span> otelSpans, Map<String, UUID> traceIdMapper, String projectName) {
+    private Mono<Long> doStoreSpans(List<Span> otelSpans, Map<String, UUID> traceIdMapper, String projectName,
+            String integrationName) {
 
         // converts otel spans into opik spans, using the mapped opik trace id
         var opikSpans = otelSpans.stream()
@@ -100,7 +110,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
                     var opikTraceId = traceIdMapper.get(otelTraceIdBase64);
 
-                    return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId);
+                    return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, integrationName);
                 })
                 .map(opikSpan -> opikSpan.toBuilder()
                         .projectName(projectName)

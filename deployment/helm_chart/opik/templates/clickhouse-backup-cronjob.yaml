@@ -24,7 +24,7 @@ spec:
               - "-c"
             args:
               - export backupname=backup$(date +'%Y%m%d%H%M'); echo "BACKUP ALL EXCEPT DATABASE system TO S3('{{ include "common.tplvalues.render" (dict "value" .Values.clickhouse.backup.bucketURL "context" $) }}/$backupname/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql; clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql;
-            {{- with .Values.clickhouse.backup.reources }}
+            {{- with .Values.clickhouse.backup.resources }}
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}

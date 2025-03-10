@@ -10,7 +10,7 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
   if (isObject(value)) {
     const codeContext = {
       ...context,
-      getValue: () => JSON.stringify(value),
+      getValue: () => JSON.stringify(value, null, 2),
     } as CellContext<unknown, unknown>;
 
     return <CodeCell {...codeContext} />;

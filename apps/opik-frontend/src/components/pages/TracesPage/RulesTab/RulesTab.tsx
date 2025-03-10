@@ -22,7 +22,6 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
-import NoRulesPage from "@/components/pages/TracesPage/RulesTab/NoRulesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -33,10 +32,12 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import { formatDate } from "@/lib/date";
 import useRulesList from "@/api/automations/useRulesList";
-import AddEditRuleDialog from "@/components/pages/TracesPage/RulesTab/AddEditRuleDialog/AddEditRuleDialog";
-import RulesActionsPanel from "@/components/pages/TracesPage/RulesTab/RulesActionsPanel";
-import { RuleRowActionsCell } from "@/components/pages/TracesPage/RulesTab/RuleRowActionsCell";
-import RuleLogsCell from "@/components/pages/TracesPage/RulesTab/RuleLogsCell";
+import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
+import NoRulesPage from "@/components/pages-shared/automations/NoRulesPage";
+import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
+import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
+import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -178,12 +179,9 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
       } as ColumnDef<EvaluatorsRule>,
       generateActionsColumDef({
         cell: RuleRowActionsCell,
-        customMeta: {
-          projectId,
-        },
       }),
     ];
-  }, [columnsOrder, selectedColumns, projectId]);
+  }, [columnsOrder, selectedColumns]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -206,7 +204,11 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   if (noData && rows.length === 0 && page === 1) {
     return (
       <>
-        <NoRulesPage openModal={handleNewRuleClick} />
+        <NoRulesPage
+          openModal={handleNewRuleClick}
+          Wrapper={NoDataPage}
+          height={188}
+        />
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
           open={openDialog}
@@ -230,7 +232,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           ></SearchInput>
         </div>
         <div className="flex items-center gap-2">
-          <RulesActionsPanel rules={selectedRows} projectId={projectId} />
+          <RulesActionsPanel rules={selectedRows} />
           <Separator orientation="vertical" className="mx-1 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}

@@ -433,8 +433,6 @@ We can now use the `evaluate` method to evaluate the summaries in our dataset:
 ```python
 from opik.evaluation import evaluate
 
-os.environ["OPIK_PROJECT_NAME"] = "summary-evaluation-prompts"
-
 MODEL = "gpt-4o-mini"
 DENSITY_ITERATIONS = 2
 
@@ -489,8 +487,6 @@ Guidelines:
 
 ```python
 from opik.evaluation import evaluate
-
-os.environ["OPIK_PROJECT_NAME"] = "summary-evaluation-prompts"
 
 MODEL = "gpt-4o-mini"
 DENSITY_ITERATIONS = 2

@@ -85,6 +85,9 @@ git clone https://github.com/comet-ml/opik.git
 # Navigate to the opik/deployment/docker-compose directory
 cd opik/deployment/docker-compose
 
+# Optionally, you can force a pull of the latest images
+docker compose pull
+
 # Start the Opik platform
 docker compose up --detach
 
