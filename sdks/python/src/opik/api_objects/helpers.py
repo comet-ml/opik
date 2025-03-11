@@ -58,6 +58,9 @@ def add_usage_to_metadata(
     if usage is None and metadata is None:
         return None
 
+    if usage is None:
+        return metadata
+
     if metadata is None:
         metadata = {}
 

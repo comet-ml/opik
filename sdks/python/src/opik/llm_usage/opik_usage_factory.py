@@ -25,13 +25,13 @@ def build_opik_usage(
     return result
 
 
-def try_build_backend_compatible_usage_from_unknown_provider(
+def try_build_backend_compatible_usage_dict_from_unknown_provider(
     usage: Dict[str, Any],
-) -> Union[Dict[str, int], opik_usage.OpikUsage]:
+) -> Dict[str, int]:
     for build_function in _PROVIDER_TO_OPIK_USAGE_BUILDER.values():
         try:
             opik_usage = build_function(usage)
-            return opik_usage
+            return opik_usage.to_backend_compatible_full_usage_dict()
         except Exception:
             pass
 
