@@ -6,9 +6,9 @@ from opik.types import LLMProvider
 _PROVIDER_TO_OPIK_USAGE_BUILDER: Dict[
     LLMProvider, Callable[[Dict[str, Any]], opik_usage.OpikUsage]
 ] = {
+    LLMProvider.OPENAI: opik_usage.OpikUsage.from_openai_completions_dict,
     LLMProvider.GOOGLE_VERTEXAI: opik_usage.OpikUsage.from_google_dict,
     LLMProvider.GOOGLE_AI: opik_usage.OpikUsage.from_google_dict,
-    LLMProvider.OPENAI: opik_usage.OpikUsage.from_openai_completions_dict,
     LLMProvider.ANTHROPIC: opik_usage.OpikUsage.from_anthropic_dict,
 }
 
