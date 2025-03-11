@@ -1,7 +1,7 @@
 import logging
 from . import opik_usage
 from opik import dict_utils
-from typing import Dict, Any, Callable, Optional, Union
+from typing import Dict, Any, Callable, Optional
 from opik.types import LLMProvider
 
 _PROVIDER_TO_OPIK_USAGE_BUILDER: Dict[
