@@ -53,8 +53,18 @@ Total time                             : 23.44 seconds
 
 ### Run the test
 
+At least, you should specify the `--start-date` as command line argument. When the `--end-date` is omitted, the traces 
+and spans from the `--start-date` until the end of that day will be retrieved.
+
 To run the test, you can use the following command:
 
 ```bash
 python tests/test_trace_span_retrieval.py --project-name performance_test --start-date 2025-03-07
+```
+
+Optionally, you can specify the `--end-date` as command line argument, to retrieve the traces and spans for multiple 
+days.
+
+```bash
+python tests/test_trace_span_retrieval.py --project-name performance_test --start-date 2025-03-07 --end-date 2025-03-09
 ```
