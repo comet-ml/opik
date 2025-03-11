@@ -3,12 +3,12 @@ import atexit
 import datetime
 import logging
 
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Union
 
 from .prompt import Prompt
 from .prompt.client import PromptClient
 
-from ..types import SpanType, UsageDict, FeedbackScoreDict, ErrorInfoDict
+from ..types import SpanType, FeedbackScoreDict, ErrorInfoDict, LLMProvider
 from . import (
     opik_query_language,
     span,
@@ -17,6 +17,7 @@ from . import (
     experiment,
     constants,
     validation_helpers,
+    helpers,
 )
 from .trace import migration as trace_migration
 from .experiment import helpers as experiment_helpers
@@ -36,6 +37,7 @@ from .. import (
     url_helpers,
     rest_client_configurator,
     id_helpers,
+    llm_usage,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -311,11 +313,11 @@ class Opik:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        usage: Optional[UsageDict] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
         model: Optional[str] = None,
-        provider: Optional[str] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
     ) -> span.Span:
@@ -334,12 +336,17 @@ class Opik:
             input: The input data for the span. This can be any valid JSON serializable object.
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
-            usage: Usage data for the span.
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
+            usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+                If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
+                format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
-            provider: The provider of LLM.
+            provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+                If your provider not in the list, you can still specify it but the cost tracking will not be available
             error_info: The dictionary with error information (typically used when the span function has failed).
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
@@ -351,17 +358,14 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        parsed_usage = validation_helpers.validate_and_parse_usage(
+        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
             usage=usage,
             logger=LOGGER,
             provider=provider,
         )
-        if parsed_usage.full_usage is not None:
-            metadata = (
-                {"usage": parsed_usage.full_usage}
-                if metadata is None
-                else {"usage": parsed_usage.full_usage, **metadata}
-            )
+
+        if backend_compatible_usage is not None:
+            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
 
         if project_name is None:
             project_name = self._project_name
@@ -398,7 +402,7 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=parsed_usage.supported_usage,
+            usage=backend_compatible_usage,
             model=model,
             provider=provider,
             error_info=error_info,
