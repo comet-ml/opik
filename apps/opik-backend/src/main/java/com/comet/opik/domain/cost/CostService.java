@@ -73,19 +73,19 @@ public class CostService {
                         .map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
 
-                if (PROVIDERS_CACHE_COST_CALCULATOR.containsKey(provider)
-                        && (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
-                                || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0)) {
-                    parsedModelPrices.put(
-                            createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
-                            new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                                    cacheReadInputTokenPrice, PROVIDERS_CACHE_COST_CALCULATOR.get(provider)));
+                BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
+                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                        || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
+                            SpanCostCalculator::textGenerationCost);
                 } else if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    parsedModelPrices.put(
-                            createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
-                            new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
-                                    cacheReadInputTokenPrice, SpanCostCalculator::textGenerationCost));
+                    calculator = SpanCostCalculator::textGenerationCost;
                 }
+
+                parsedModelPrices.put(
+                        createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
+                        new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
+                                cacheReadInputTokenPrice, calculator));
             }
         });
 
