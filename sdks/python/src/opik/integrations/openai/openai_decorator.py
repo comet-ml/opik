@@ -102,7 +102,7 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
 
         opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider=LLMProvider.OPENAI,  # TODO: check if other options are possible, this is just old behavior
+            provider=LLMProvider.OPENAI,
             usage=result_dict["usage"],
             logger=LOGGER,
             error_message="Failed to log token usage from openai call",

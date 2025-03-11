@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from . import base_original_provider_usage
 
+
 class BedrockUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     """Anthropic calls token usage data. Updated 11.03.2025"""
 
