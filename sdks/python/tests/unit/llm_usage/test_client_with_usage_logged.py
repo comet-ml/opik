@@ -215,3 +215,64 @@ def test_span__unknown_provider_passed__usage_format_is_also_unknown__usage_flat
     trace_tree = fake_backend.trace_trees[0]
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_span__user_added_openai_keys_to_unknown_usage_themselves__they_are_included_to_usage_dict_without_prefix(
+    fake_backend,
+):
+    opik_client = opik.Opik(_use_batching=True)
+
+    opik_client.span(
+        type="llm",
+        name="some-name",
+        usage={
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+            "abc_input_tokens": 10,
+            "abc_output_tokens": 20,
+        },
+        provider="my-llm-provider",
+    )
+    opik_client.end()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="some-name",
+        metadata=ANY_DICT,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                type="llm",
+                name="some-name",
+                metadata={
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 20,
+                        "total_tokens": 30,
+                        "abc_input_tokens": 10,
+                        "abc_output_tokens": 20,
+                    }
+                },
+                usage={
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                    "original_usage.prompt_tokens": 10,
+                    "original_usage.completion_tokens": 20,
+                    "original_usage.total_tokens": 30,
+                    "original_usage.abc_input_tokens": 10,
+                    "original_usage.abc_output_tokens": 20,
+                },
+                provider="my-llm-provider",
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
