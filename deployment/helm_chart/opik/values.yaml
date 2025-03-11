@@ -182,6 +182,12 @@ component:
         "time_local": "$time_local",
         "x_forwarded_for": "$http_x_forwarded_for"
         }'
+    upstreamConfig: {}
+      # proxy_read_timeout: 60
+      # proxy_connect_timeout: 60
+      # proxy_send_timeout: 60
+      # proxy_buffering: 'on'
+      # proxy_request_buffering: 'on'
 
 mysql:
   enabled: true 

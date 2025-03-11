@@ -171,6 +171,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.service.type | string | `"ClusterIP"` |  |
 | component.frontend.serviceAccount.create | bool | `true` |  |
 | component.frontend.throttling | object | `{}` |  |
+| component.frontend.upstreamConfig | object | `{}` |  |
 | component.frontend.volumeMounts[0].mountPath | string | `"/etc/nginx/conf.d/"` |  |
 | component.frontend.volumeMounts[0].name | string | `"opik-frontend-nginx"` |  |
 | component.frontend.volumes[0].configMap.items[0].key | string | `"default.conf"` |  |
