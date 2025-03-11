@@ -5,7 +5,7 @@ from opik import dict_utils
 
 
 class OpenAICompletionsUsage(base_original_provider_usage.BaseOriginalProviderUsage):
-    """OpenAI calls token usage data (or token usage data in OpenAI format)"""
+    """OpenAI calls token usage data (or token usage data in OpenAI format). Updated 11.03.2025"""
 
     completion_tokens: int
     """Number of tokens in the generated completion."""

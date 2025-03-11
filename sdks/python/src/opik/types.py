@@ -16,9 +16,16 @@ CreatedByType = Literal["evaluation"]
 
 class LLMProvider(str, enum.Enum):
     GOOGLE_VERTEXAI = "google_vertexai"
+    """Used for gemini models hosted in VertexAI. https://cloud.google.com/vertex-ai"""
+
     GOOGLE_AI = "google_ai"
+    """Used for gemini models hosted in GoogleAI. https://ai.google.dev/aistudio"""
+
     OPENAI = "openai"
+    """Used for models hosted by OpenAI. https://platform.openai.com"""
+
     ANTHROPIC = "anthropic"
+    """Used for models hosted by Anthropic. https://www.anthropic.com"""
 
     @classmethod
     def has_value(cls, value: str) -> bool:

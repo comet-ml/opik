@@ -3,7 +3,7 @@ from . import base_original_provider_usage
 
 
 class AnthropicUsage(base_original_provider_usage.BaseOriginalProviderUsage):
-    """Anthropic calls token usage data"""
+    """Anthropic calls token usage data. Updated 11.03.2025"""
 
     input_tokens: int
     """The number of input tokens which were used."""
