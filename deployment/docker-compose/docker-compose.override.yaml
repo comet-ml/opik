@@ -12,6 +12,10 @@ services:
       - "8123:8123" # Exposing ClickHouse HTTP port to host
       - "9000:9000" # Exposing ClickHouse Native Protocol port to host
 
+  zookeeper:
+    ports:
+      - "2181:2181"
+      
   backend:
     ports:
       - "8080:8080" # Exposing backend HTTP port to host
