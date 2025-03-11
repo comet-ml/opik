@@ -13,6 +13,14 @@ ProviderUsage = Union[
 
 
 class OpikUsage(pydantic.BaseModel):
+    """
+        A class used to convert different formats of token usage dictionaries
+    into format supported by Opik ecosystem.
+
+        `from_PROVIDER_usage_dict methods` methods are used to parse original provider's token
+    usage dicts and calculate openai-formatted extra key-value pairs (that can later be used on the FE and BE sides).
+    """
+
     completion_tokens: Optional[int] = None
     prompt_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
@@ -20,6 +28,13 @@ class OpikUsage(pydantic.BaseModel):
     provider_usage: ProviderUsage
 
     def to_backend_compatible_full_usage_dict(self) -> Dict[str, int]:
+        """
+        Returns usage dictionary in backend compatible format:
+            * flattened, original usage keys have `original_usage.` prefix
+            * only integer values
+            * if available, adds openai-formatted keys to the result dict
+                so that they can be used on the BE and FE sides.
+        """
         short_openai_like_usage: Dict[str, int] = dict_utils.keep_only_values_of_type(
             {
                 "completion_tokens": self.completion_tokens,
