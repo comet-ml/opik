@@ -11,7 +11,7 @@ from opik.types import (
     LLMProvider,
     SpanType,
 )
-from .. import constants, validation_helpers
+from .. import constants, validation_helpers, helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -122,20 +122,14 @@ class Span:
         Returns:
             None
         """
-        opik_usage = validation_helpers.validate_and_parse_usage(
+        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
             usage=usage,
             logger=LOGGER,
             provider=provider,
         )
-        if opik_usage is not None:
-            metadata = (
-                {"usage": opik_usage.provider_usage.model_dump(exclude_none=True)}
-                if metadata is None
-                else {
-                    "usage": opik_usage.provider_usage.model_dump(exclude_none=True),
-                    **metadata,
-                }
-            )
+
+        if backend_compatible_usage is not None:
+            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
 
         end_span_message = messages.UpdateSpanMessage(
             span_id=self.id,
@@ -147,11 +141,7 @@ class Span:
             input=input,
             output=output,
             tags=tags,
-            usage=(
-                opik_usage.to_backend_compatible_full_usage_dict()
-                if opik_usage is not None
-                else None
-            ),
+            usage=backend_compatible_usage,
             model=model,
             provider=provider,
             error_info=error_info,
@@ -205,17 +195,14 @@ class Span:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
-        opik_usage = validation_helpers.validate_and_parse_usage(
+        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
             usage=usage,
             logger=LOGGER,
             provider=provider,
         )
-        if opik_usage is not None:
-            metadata = (
-                {"usage": opik_usage.provider_usage.model_dump()}
-                if metadata is None
-                else {"usage": opik_usage.provider_usage.model_dump(), **metadata}
-            )
+
+        if backend_compatible_usage is not None:
+            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
 
         create_span_message = messages.CreateSpanMessage(
             span_id=span_id,
@@ -230,11 +217,7 @@ class Span:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=(
-                opik_usage.to_backend_compatible_full_usage_dict()
-                if opik_usage is not None
-                else None
-            ),
+            usage=backend_compatible_usage,
             model=model,
             provider=provider,
             error_info=error_info,

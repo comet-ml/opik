@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional, cast, Union
+from typing import Any, Optional, cast, Union, Dict
 
 from ..types import FeedbackScoreDict
 from ..validation import feedback_score as feedback_score_validator
@@ -11,32 +11,25 @@ def validate_and_parse_usage(
     usage: Any,
     logger: logging.Logger,
     provider: Optional[Union[LLMProvider, str]],
-) -> Optional[llm_usage.OpikUsage]:
-    if isinstance(usage, llm_usage.OpikUsage) or usage is None:
+) -> Optional[Dict[str, int]]:
+    if isinstance(usage, llm_usage.OpikUsage):
+        return usage.to_backend_compatible_full_usage_dict()
+
+    if usage is None:
         return usage
 
-    default_provider_used = False
+    unknown_provider = (provider is None) or (not LLMProvider.has_value(provider))
 
-    if provider is not None and LLMProvider.has_value(provider):
-        provider = LLMProvider(provider)
-    else:
-        default_provider_used = True
-        provider = LLMProvider.OPENAI
+    if unknown_provider:
+        return llm_usage.try_build_backend_compatible_usage_from_unknown_provider(usage)
+
+    provider = LLMProvider(provider)
+
     try:
         opik_usage = llm_usage.build_opik_usage(provider=provider, usage=usage)
-        return opik_usage
+        return opik_usage.to_backend_compatible_full_usage_dict()
     except Exception:
-        logger.warning(
-            "The usage %s will not be logged because it does not follow expected format for the given provider: %s."
-            "Make sure you specified the correct provider or the usage dict is valid for the given provider",
-            usage,
-            f"{provider} (default if not set or not recognized)"
-            if default_provider_used
-            else provider,
-            exc_info=True,
-        )
-
-        return None
+        return llm_usage.try_build_backend_compatible_usage_from_unknown_provider(usage)
 
 
 def validate_feedback_score(

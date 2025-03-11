@@ -17,6 +17,7 @@ from . import (
     experiment,
     constants,
     validation_helpers,
+    helpers,
 )
 from .trace import migration as trace_migration
 from .experiment import helpers as experiment_helpers
@@ -355,20 +356,14 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        opik_usage = validation_helpers.validate_and_parse_usage(
+        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
             usage=usage,
             logger=LOGGER,
             provider=provider,
         )
-        if opik_usage is not None:
-            metadata = (
-                {"usage": opik_usage.provider_usage.model_dump(exclude_none=True)}
-                if metadata is None
-                else {
-                    "usage": opik_usage.provider_usage.model_dump(exclude_none=True),
-                    **metadata,
-                }
-            )
+
+        if backend_compatible_usage is not None:
+            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
 
         if project_name is None:
             project_name = self._project_name
@@ -405,11 +400,7 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=(
-                opik_usage.to_backend_compatible_full_usage_dict()
-                if opik_usage is not None
-                else None
-            ),
+            usage=backend_compatible_usage,
             model=model,
             provider=provider,
             error_info=error_info,
