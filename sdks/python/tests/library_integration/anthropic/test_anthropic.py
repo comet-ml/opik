@@ -33,6 +33,16 @@ retry_on_internal_server_errors = tenacity.retry(
     retry=tenacity.retry_if_exception(_is_internal_server_error),
 )
 
+EXPECTED_ANTHROPIC_USAGE_DICT = {
+    "completion_tokens": ANY_BUT_NONE,
+    "prompt_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.input_tokens": ANY_BUT_NONE,
+    "original_usage.output_tokens": ANY_BUT_NONE,
+    "original_usage.cache_creation_input_tokens": ANY_BUT_NONE,
+    "original_usage.cache_read_input_tokens": ANY_BUT_NONE,
+}
+
 
 @pytest.fixture(autouse=True)
 def ensure_anthropic_configured():
@@ -94,7 +104,7 @@ def test_anthropic_messages_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -232,7 +242,7 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
                         end_time=ANY_BUT_NONE,
                         project_name="anthropic-integration-test",
                         type="llm",
-                        usage=ANY_DICT,
+                        usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                         spans=[],
                     )
                 ],
@@ -300,7 +310,7 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
                         end_time=ANY_BUT_NONE,
                         project_name=ANY_BUT_NONE,
                         type="llm",
-                        usage=ANY_DICT,
+                        usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                         spans=[],
                     )
                 ],
@@ -361,7 +371,7 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -433,7 +443,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -461,7 +471,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -520,7 +530,7 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -580,7 +590,7 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -642,7 +652,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -704,7 +714,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -763,7 +773,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],
@@ -837,7 +847,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
                 spans=[],
             )
         ],

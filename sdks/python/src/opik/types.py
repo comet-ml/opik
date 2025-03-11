@@ -1,57 +1,35 @@
-import dataclasses
+import enum
 import sys
+from typing import Literal, Optional
 
-from typing import Literal, Optional, Union
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
-    from typing_extensions import Required, NotRequired
+    from typing_extensions import NotRequired, Required
 else:
-    from typing import Required, NotRequired
+    from typing import NotRequired, Required
 
 SpanType = Literal["general", "tool", "llm"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
-LLMProvider = Literal["openai", "google_vertexai", "google_ai"]
 
 
-class UsageDict(TypedDict):
-    """
-    A TypedDict representing token usage information.
+class LLMProvider(str, enum.Enum):
+    GOOGLE_VERTEXAI = "google_vertexai"
+    """Used for gemini models hosted in VertexAI. https://cloud.google.com/vertex-ai"""
 
-    This class defines the structure for token usage, including fields
-    for completion tokens, prompt tokens, and the total number of tokens used.
-    """
+    GOOGLE_AI = "google_ai"
+    """Used for gemini models hosted in GoogleAI. https://ai.google.dev/aistudio"""
 
-    completion_tokens: int
-    """The number of tokens used for the completion."""
+    OPENAI = "openai"
+    """Used for models hosted by OpenAI. https://platform.openai.com"""
 
-    prompt_tokens: int
-    """The number of tokens used for the prompt."""
+    ANTHROPIC = "anthropic"
+    """Used for models hosted by Anthropic. https://www.anthropic.com"""
 
-    total_tokens: int
-    """The total number of tokens used, including both prompt and completion."""
-
-
-class UsageDictGoogle(UsageDict):
-    """
-    A TypedDict representing token usage information for Google Vertex AI.
-
-    This class defines the structure for token usage, including fields
-    for completion tokens, prompt tokens, and the total number of tokens used.
-    """
-
-    cached_content_token_count: NotRequired[int]
-    """The number of tokens cached."""
-
-    candidates_token_count: int
-    """The number of tokens used for the completion."""
-
-    prompt_token_count: int
-    """The number of tokens used for the prompt."""
-
-    total_token_count: int
-    """The total number of tokens used, including both prompt and completion."""
+    @classmethod
+    def has_value(cls, value: str) -> bool:
+        return value in [enum_item.value for enum_item in cls]
 
 
 class DistributedTraceHeadersDict(TypedDict):
@@ -104,10 +82,3 @@ class ErrorInfoDict(TypedDict):
 
     traceback: str
     """Exception traceback"""
-
-
-@dataclasses.dataclass
-class LLMUsageInfo:
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    usage: Optional[Union[UsageDict, UsageDictGoogle]] = None

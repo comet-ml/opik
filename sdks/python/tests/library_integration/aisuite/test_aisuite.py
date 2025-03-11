@@ -19,6 +19,20 @@ from ...testlib import (
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 PROJECT_NAME = "aisuite-integration-test"
+EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens": ANY_BUT_NONE,
+    "original_usage.total_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
+}
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
@@ -75,11 +89,7 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
                 output={"choices": ANY_BUT_NONE},
                 tags=["aisuite"],
                 metadata=ANY_DICT,
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
@@ -282,11 +292,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                         output={"choices": ANY_BUT_NONE},
                         tags=["aisuite"],
                         metadata=ANY_DICT,
-                        usage={
-                            "prompt_tokens": ANY_BUT_NONE,
-                            "completion_tokens": ANY_BUT_NONE,
-                            "total_tokens": ANY_BUT_NONE,
-                        },
+                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=PROJECT_NAME,

@@ -10,6 +10,21 @@ from ...testlib import (
     assert_equal,
 )
 
+EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens": ANY_BUT_NONE,
+    "original_usage.total_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
+}
+
 
 def test_crewai__happyflow(
     fake_backend,
@@ -88,11 +103,7 @@ def test_crewai__happyflow(
                                         start_time=ANY_BUT_NONE,
                                         tags=["crewai"],
                                         type="llm",
-                                        usage={
-                                            "prompt_tokens": ANY_BUT_NONE,
-                                            "completion_tokens": ANY_BUT_NONE,
-                                            "total_tokens": ANY_BUT_NONE,
-                                        },
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
                                     )
                                 ],
@@ -138,11 +149,7 @@ def test_crewai__happyflow(
                                         start_time=ANY_BUT_NONE,
                                         tags=["crewai"],
                                         type="llm",
-                                        usage={
-                                            "prompt_tokens": ANY_BUT_NONE,
-                                            "completion_tokens": ANY_BUT_NONE,
-                                            "total_tokens": ANY_BUT_NONE,
-                                        },
+                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
                                     )
                                 ],

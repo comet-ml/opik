@@ -1,9 +1,8 @@
 import logging
-from typing import Any, Dict, Optional, TYPE_CHECKING, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union, Literal
 
-from opik import _logging as opik_logging, logging_messages
-from opik.types import LLMUsageInfo, UsageDict
-from opik.validation import usage as usage_validator
+from opik import _logging as opik_logging
+from opik import llm_usage, logging_messages
 
 if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run
@@ -12,17 +11,19 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def get_llm_usage_info(run_dict: Optional[Dict[str, Any]] = None) -> LLMUsageInfo:
+def get_llm_usage_info(
+    run_dict: Optional[Dict[str, Any]] = None,
+) -> llm_usage.LLMUsageInfo:
     if run_dict is None:
-        return LLMUsageInfo()
+        return llm_usage.LLMUsageInfo()
 
-    usage_dict = _try_get_token_usage(run_dict)
+    opik_usage = _try_get_token_usage(run_dict)
     provider, model = _get_provider_and_model(run_dict)
 
-    return LLMUsageInfo(provider=provider, model=model, usage=usage_dict)
+    return llm_usage.LLMUsageInfo(provider=provider, model=model, usage=opik_usage)
 
 
-def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
+def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     """
     Attempts to extract and return the token usage from the given run dictionary.
 
@@ -30,23 +31,26 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
     token usage info might be in different places, different formats or completely missing.
     """
     try:
-        provider, _ = _get_provider_and_model(run_dict)
-
         if run_dict["outputs"]["llm_output"] is not None:
-            token_usage = run_dict["outputs"]["llm_output"]["token_usage"]
-
+            token_usage_dict = run_dict["outputs"]["llm_output"]["token_usage"]
+            return llm_usage.OpikUsage.from_openai_completions_dict(token_usage_dict)
         # streaming mode handling
         # token usage data MAY be available at the end of streaming
         # in async mode may not provide token usage info
-        elif token_usage_full := run_dict["outputs"]["generations"][-1][-1]["message"][
+        elif token_usage_dict := run_dict["outputs"]["generations"][-1][-1]["message"][
             "kwargs"
         ].get("usage_metadata"):
-            token_usage = UsageDict(
-                completion_tokens=token_usage_full["output_tokens"],
-                prompt_tokens=token_usage_full["input_tokens"],
-                total_tokens=token_usage_full["total_tokens"],
+            # TODO: provide better support for langchain usage. We probably need to convert it
+            # to the full openai usage dict (with details) or find a way to access raw data
+            openai_formatted_dict = {
+                "completion_tokens": token_usage_dict["output_tokens"],
+                "prompt_tokens": token_usage_dict["input_tokens"],
+                "total_tokens": token_usage_dict["total_tokens"],
+            }
+            opik_usage = llm_usage.OpikUsage.from_openai_completions_dict(
+                openai_formatted_dict
             )
-            token_usage.update(token_usage_full)
+            return opik_usage
         else:
             opik_logging.log_once_at_level(
                 logging_level=logging.WARNING,
@@ -55,14 +59,6 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[UsageDict]:
             )
             return None
 
-        if (
-            usage_validator.UsageValidator(usage=token_usage, provider=provider)
-            .validate()
-            .ok()
-        ):
-            return cast(UsageDict, token_usage)
-
-        return None
     except Exception:
         LOGGER.warning(
             logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_OPENAI_LLM_RUN,
@@ -91,7 +87,7 @@ def is_openai_run(run: "Run") -> bool:
 
 def _get_provider_and_model(
     run_dict: Dict[str, Any],
-) -> Tuple[Optional[str], Optional[str]]:
+) -> Tuple[Optional[Union[Literal["openai"], str]], Optional[str]]:
     """
     Fetches the provider and model information from a given run dictionary.
 
