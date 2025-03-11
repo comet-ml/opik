@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiFunction;
 
 @Slf4j
 public class CostService {
@@ -21,8 +22,11 @@ public class CostService {
     private static final Map<String, String> PROVIDERS_MAPPING = Map.of(
             "openai", "openai",
             "vertex_ai-language-models", "google_vertexai",
-            "gemini", "google_ai");
+            "gemini", "google_ai",
+            "anthropic", "anthropic");
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
+    private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
+            .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic);
 
     static {
         try {
@@ -34,7 +38,7 @@ public class CostService {
     }
 
     private static final ModelPrice DEFAULT_COST = new ModelPrice(new BigDecimal("0"),
-            new BigDecimal("0"), SpanCostCalculator::defaultCost);
+            new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage) {
@@ -57,15 +61,31 @@ public class CostService {
         modelCosts.forEach((modelName, modelCost) -> {
             String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
             if (PROVIDERS_MAPPING.containsKey(provider)) {
+
                 BigDecimal inputPrice = Optional.ofNullable(modelCost.inputCostPerToken()).map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
                 BigDecimal outputPrice = Optional.ofNullable(modelCost.outputCostPerToken()).map(BigDecimal::new)
                         .orElse(BigDecimal.ZERO);
-                if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
-                    parsedModelPrices.put(
-                            createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
-                            new ModelPrice(inputPrice, outputPrice, SpanCostCalculator::textGenerationCost));
+                BigDecimal cacheCreationInputTokenPrice = Optional.ofNullable(modelCost.cacheCreationInputTokenCost())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+                BigDecimal cacheReadInputTokenPrice = Optional.ofNullable(modelCost.cacheReadInputTokenCost())
+                        .map(BigDecimal::new)
+                        .orElse(BigDecimal.ZERO);
+
+                BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = SpanCostCalculator::defaultCost;
+                if (cacheCreationInputTokenPrice.compareTo(BigDecimal.ZERO) > 0
+                        || cacheReadInputTokenPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    calculator = PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider,
+                            SpanCostCalculator::textGenerationCost);
+                } else if (inputPrice.compareTo(BigDecimal.ZERO) > 0 || outputPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    calculator = SpanCostCalculator::textGenerationCost;
                 }
+
+                parsedModelPrices.put(
+                        createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
+                        new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
+                                cacheReadInputTokenPrice, calculator));
             }
         });
 
