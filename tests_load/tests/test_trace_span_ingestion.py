@@ -7,7 +7,7 @@ import click
 import opik
 from opik.plugins.pytest.decorator import opik_context
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(asctime)s]: %(message)s")
 
 LOGGER = logging.getLogger(__name__)
 
