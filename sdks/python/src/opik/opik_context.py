@@ -67,7 +67,7 @@ def update_current_span(
         metadata: The metadata of the span.
         tags: The tags of the span.
         usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-            the usage must contain OpenAI-formatted keys:  prompt_tokens, completion_tokens and total_tokens. 
+            the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
             If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
             format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
         feedback_scores: The feedback scores of the span.

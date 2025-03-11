@@ -340,7 +340,7 @@ class Opik:
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
             usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-                the usage must contain OpenAI-formatted keys:  prompt_tokens, completion_tokens and total_tokens. 
+                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
                 format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
