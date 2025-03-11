@@ -34,7 +34,9 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public UUID createTrace(Trace trace, String apiKey, String workspaceName) {
-        try (var response = createTrace(trace, apiKey, workspaceName, HttpStatus.SC_CREATED)) {
+        try (var response = callCreateTrace(trace, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             UUID actualId = TestUtils.getIdFromLocation(response.getLocation());
 
             if (trace.id() != null) {
@@ -45,17 +47,13 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public Response createTrace(Trace trace, String apiKey, String workspaceName, int expectedStatus) {
-        var response = client.target(RESOURCE_PATH.formatted(baseURI))
+    public Response callCreateTrace(Trace trace, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(trace));
-
-        assertThat(response.getStatus()).isEqualTo(expectedStatus);
-
-        return response;
     }
 
     public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
@@ -86,16 +84,20 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public void batchCreateTraces(List<Trace> traces, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("batch")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(TraceBatch.builder().traces(traces).build()))) {
+        try (var actualResponse = callBatchCreateTraces(traces, apiKey, workspaceName)) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
+    }
+
+    public Response callBatchCreateTraces(List<Trace> traces, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(TraceBatch.builder().traces(traces).build()));
     }
 
     public Trace getById(UUID id, String workspaceName, String apiKey) {
