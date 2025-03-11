@@ -1,6 +1,5 @@
 import logging
 from . import opik_usage
-from opik import dict_utils
 from typing import Dict, Any, Callable, Optional
 from opik.types import LLMProvider
 
@@ -25,23 +24,17 @@ def build_opik_usage(
     return result
 
 
-def try_build_backend_compatible_usage_dict_from_unknown_provider(
+def build_opik_usage_from_unknown_provider(
     usage: Dict[str, Any],
-) -> Dict[str, int]:
+) -> opik_usage.OpikUsage:
     for build_function in _PROVIDER_TO_OPIK_USAGE_BUILDER.values():
         try:
-            opik_usage = build_function(usage)
-            return opik_usage.to_backend_compatible_full_usage_dict()
+            opik_usage_ = build_function(usage)
+            return opik_usage_
         except Exception:
             pass
 
-    backend_compatible_dictionary = dict_utils.flatten_dict(
-        usage, parent_key="original_usage", delim="."
-    )
-    backend_compatible_dictionary = dict_utils.keep_only_values_of_type(
-        backend_compatible_dictionary, value_type=int
-    )
-    return backend_compatible_dictionary
+    return opik_usage.OpikUsage.from_unknown_usage_dict(usage)
 
 
 def try_build_opik_usage_or_log_error(

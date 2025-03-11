@@ -1,27 +1,32 @@
 import pydantic
-from typing import Union, Dict, Any
-from . import openai_usage, google_usage, anthropic_usage
+from typing import Union, Dict, Any, Optional
+from . import openai_usage, google_usage, anthropic_usage, unknown_usage
+from opik import dict_utils
 
 ProviderUsage = Union[
     openai_usage.OpenAICompletionsUsage,
     google_usage.GoogleGeminiUsage,
     anthropic_usage.AnthropicUsage,
+    unknown_usage.UnknownUsage,
 ]
 
 
 class OpikUsage(pydantic.BaseModel):
-    completion_tokens: int
-    prompt_tokens: int
-    total_tokens: int
+    completion_tokens: Optional[int] = None
+    prompt_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
 
     provider_usage: ProviderUsage
 
     def to_backend_compatible_full_usage_dict(self) -> Dict[str, int]:
-        short_usage = {
-            "completion_tokens": self.completion_tokens,
-            "prompt_tokens": self.prompt_tokens,
-            "total_tokens": self.total_tokens,
-        }
+        short_openai_like_usage: Dict[str, int] = dict_utils.keep_only_values_of_type(
+            {
+                "completion_tokens": self.completion_tokens,
+                "prompt_tokens": self.prompt_tokens,
+                "total_tokens": self.total_tokens,
+            },
+            value_type=int,
+        )
 
         provider_usage: Dict[str, int] = (
             self.provider_usage.to_backend_compatible_flat_dict(
@@ -29,7 +34,13 @@ class OpikUsage(pydantic.BaseModel):
             )
         )
 
-        return {**short_usage, **provider_usage}
+        return {**short_openai_like_usage, **provider_usage}
+
+    @classmethod
+    def from_unknown_usage_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        provider_usage = unknown_usage.UnknownUsage.from_original_usage_dict(usage)
+
+        return cls(provider_usage=provider_usage)
 
     @classmethod
     def from_openai_completions_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":

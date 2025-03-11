@@ -21,9 +21,9 @@ def validate_and_parse_usage(
     unknown_provider = (provider is None) or (not LLMProvider.has_value(provider))
 
     if unknown_provider:
-        return llm_usage.try_build_backend_compatible_usage_dict_from_unknown_provider(
+        return llm_usage.build_opik_usage_from_unknown_provider(
             usage
-        )
+        ).to_backend_compatible_full_usage_dict()
 
     provider = LLMProvider(provider)
 
@@ -31,9 +31,9 @@ def validate_and_parse_usage(
         opik_usage = llm_usage.build_opik_usage(provider=provider, usage=usage)
         return opik_usage.to_backend_compatible_full_usage_dict()
     except Exception:
-        return llm_usage.try_build_backend_compatible_usage_dict_from_unknown_provider(
+        return llm_usage.build_opik_usage_from_unknown_provider(
             usage
-        )
+        ).to_backend_compatible_full_usage_dict()
 
 
 def validate_feedback_score(
