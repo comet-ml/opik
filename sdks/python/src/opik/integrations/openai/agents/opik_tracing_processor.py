@@ -16,10 +16,10 @@ class OpikTracingProcessor(tracing.TracingProcessor):
     ) -> None:
         super().__init__(**kwargs)
         self._span_data_map: Dict[str, span_data.SpanData] = {}
-        """Map from run id to span data."""
+        """Map from openai span id to opik span data."""
 
         self._created_traces_data_map: Dict[str, trace_data.TraceData] = {}
-        """Map from run id to trace data."""
+        """Map from openai trace id to opik trace data."""
 
         self._project_name = project_name
 
