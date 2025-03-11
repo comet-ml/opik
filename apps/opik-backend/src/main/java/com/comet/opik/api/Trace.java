@@ -53,6 +53,7 @@ public record Trace(
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId){
 
+    @Builder(toBuilder = true)
     public record TracePage(
             @JsonView(Trace.View.Public.class) int page,
             @JsonView(Trace.View.Public.class) int size,

@@ -13,6 +13,7 @@ import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.OUTPUT;
 import static com.comet.opik.api.sorting.SortableFields.START_TIME;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
+import static com.comet.opik.api.sorting.SortableFields.THREAD_ID;
 
 public class TraceSortingFactory extends SortingFactory {
 
@@ -27,6 +28,7 @@ public class TraceSortingFactory extends SortingFactory {
                 END_TIME,
                 DURATION,
                 METADATA,
+                THREAD_ID,
                 TAGS,
                 ERROR_INFO,
                 CREATED_BY);

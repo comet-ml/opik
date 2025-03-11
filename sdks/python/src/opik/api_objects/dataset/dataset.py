@@ -1,5 +1,6 @@
 import logging
 import json
+import functools
 from typing import Optional, Any, List, Dict, Sequence, Set, TYPE_CHECKING
 
 from opik.rest_api import client as rest_api_client
@@ -32,6 +33,13 @@ class Dataset:
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
+
+    @functools.cached_property
+    def id(self) -> str:
+        """The id of the dataset"""
+        return self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=self._name
+        ).id
 
     @property
     def name(self) -> str:
@@ -194,7 +202,7 @@ class Dataset:
             nb_samples: The number of samples to retrieve. If not set - all items are returned.
 
         Returns:
-            A list of dictionries objects representing the samples.
+            A list of dictionaries objects representing the samples.
         """
         dataset_items_as_dataclasses = self.__internal_api__get_items_as_dataclasses__(
             nb_samples
@@ -208,9 +216,14 @@ class Dataset:
 
     @retry_decorators.connection_retry
     def __internal_api__get_items_as_dataclasses__(
-        self, nb_samples: Optional[int] = None
+        self,
+        nb_samples: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
     ) -> List[dataset_item.DatasetItem]:
         results: List[dataset_item.DatasetItem] = []
+
+        if dataset_item_ids is not None:
+            dataset_item_ids = set(dataset_item_ids)  # type: ignore
 
         while True:
             stream = self._rest_client.datasets.stream_dataset_items(
@@ -234,6 +247,14 @@ class Dataset:
                     full_item_content["data"] if "data" in full_item_content else {}
                 )
 
+                dataset_item_id = full_item_content.get("id")
+
+                if dataset_item_ids is not None:
+                    if dataset_item_id not in dataset_item_ids:
+                        continue
+                    else:
+                        dataset_item_ids.remove(dataset_item_id)
+
                 item = dataset_item.DatasetItem(
                     id=full_item_content.get("id"),  # type: ignore
                     trace_id=full_item_content.get("trace_id"),  # type: ignore
@@ -251,6 +272,12 @@ class Dataset:
             # Break the loop if we have not received any new samples
             if len(results) == previous_results_size:
                 break
+
+        if dataset_item_ids and len(dataset_item_ids) > 0:
+            LOGGER.warning(
+                "The following dataset items were not found in the dataset: %s",
+                dataset_item_ids,
+            )
 
         return results
 

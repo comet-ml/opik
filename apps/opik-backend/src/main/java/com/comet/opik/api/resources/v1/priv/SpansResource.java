@@ -16,12 +16,15 @@ import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.workspaces.WorkspaceMetadata;
+import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
@@ -63,6 +66,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -83,6 +87,9 @@ public class SpansResource {
     private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
+    private final @NonNull SpanSortingFactory sortingFactory;
+
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull Streamer streamer;
 
@@ -90,6 +97,7 @@ public class SpansResource {
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
             @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = SpanPage.class)))})
     @JsonView(Span.View.Public.class)
+    @RateLimited(value = "getSpans:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getSpansByProject(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -98,10 +106,21 @@ public class SpansResource {
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
+            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
+            @QueryParam("sorting") String sorting) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
+        var sortingFields = sortingFactory.newSorting(sorting);
+
+        WorkspaceMetadata workspaceMetadata = workspaceMetadataService
+                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                .block();
+
+        if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
+            sortingFields = List.of();
+        }
+
         var spanSearchCriteria = SpanSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
@@ -109,12 +128,20 @@ public class SpansResource {
                 .type(type)
                 .filters(spanFilters)
                 .truncate(truncate)
+                .sortingFields(sortingFields)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
         SpanPage spans = spanService.find(page, size, spanSearchCriteria)
+                .map(it -> {
+                    // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
+                    if (!workspaceMetadata.canUseDynamicSorting()) {
+                        return it.toBuilder().sortableBy(List.of()).build();
+                    }
+                    return it;
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found spans by '{}', count '{}' on workspaceId '{}'", spanSearchCriteria, spans.size(), workspaceId);
@@ -127,6 +154,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "200", description = "Span resource", content = @Content(schema = @Schema(implementation = Span.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = Span.class)))})
     @JsonView(Span.View.Public.class)
+    @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getById(@PathParam("id") @NotNull UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -300,6 +328,7 @@ public class SpansResource {
                 .filters(spanFilters)
                 .traceId(traceId)
                 .type(type)
+                .sortingFields(List.of())
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -354,6 +383,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @JsonView(Span.View.Public.class)
+    @RateLimited(value = "search_spans:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public ChunkedOutput<JsonNode> searchSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -370,7 +400,7 @@ public class SpansResource {
                 .projectName(request.projectName())
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
-                .projectName(request.projectName())
+                .sortingFields(List.of())
                 .build();
 
         var items = spanService.search(request.limit(), criteria)

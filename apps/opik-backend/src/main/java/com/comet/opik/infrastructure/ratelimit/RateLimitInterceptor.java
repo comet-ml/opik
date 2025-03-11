@@ -10,10 +10,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.apache.hc.core5.http.HttpStatus;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple3;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
@@ -21,6 +25,8 @@ import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 @Slf4j
 @RequiredArgsConstructor
 class RateLimitInterceptor implements MethodInterceptor {
+
+    private static final String KEY = "rate-limit:%s-%s";
 
     private final Provider<RequestContext> requestContext;
     private final Provider<RateLimitService> rateLimitService;
@@ -39,56 +45,120 @@ class RateLimitInterceptor implements MethodInterceptor {
 
         RateLimited rateLimit = method.getAnnotation(RateLimited.class);
 
+        Map<String, LimitConfig> limits = new HashMap<>();
+
+        // Check if the workspace limit should be affected
+        if (rateLimit.shouldAffectWorkspaceLimit()) {
+            LimitConfig workspaceLimit = getLimitOrDefault(requestContext.get().getWorkspaceId(),
+                    rateLimitConfig.getWorkspaceLimit());
+            String key = KEY.formatted(RateLimited.WORKSPACE_EVENTS, requestContext.get().getWorkspaceId());
+            limits.put(key, workspaceLimit);
+        }
+
         // Check events bucket
-        Optional<LimitConfig> limitConfig = Optional.ofNullable(rateLimitConfig.getCustomLimits())
-                .map(limits -> limits.get(rateLimit.value()));
+        if (rateLimit.shouldAffectUserGeneralLimit()) {
+            LimitConfig generalLimit = rateLimitConfig.getGeneralLimit();
+            String key = KEY.formatted(RateLimited.GENERAL_EVENTS, requestContext.get().getApiKey());
+            limits.put(key, generalLimit);
+        }
 
-        String limitBucket = limitConfig.isPresent() ? rateLimit.value() : RateLimited.GENERAL_EVENTS;
+        for (var limit : rateLimit.value()) {
+            String bucketName = getBucketName(limit);
+            LimitConfig limitConfig = rateLimitConfig.getCustomLimits().get(bucketName);
+            if (limitConfig != null) {
+                if (containsPlacedHolder(limit)) {
+                    var actualLimit = replaceLimitVariables(limit);
+                    limits.put(actualLimit, limitConfig);
+                } else {
+                    limits.put(limit, limitConfig);
+                }
+            } else {
+                log.warn("Rate limit bucket not found: '{}'", bucketName);
+            }
+        }
 
-        LimitConfig generalLimit = limitConfig
-                .orElse(rateLimitConfig.getGeneralLimit());
-
-        String apiKey = requestContext.get().getApiKey();
         Object body = getParameters(invocation);
 
         long events = body instanceof RateEventContainer container ? container.eventCount() : 1;
 
-        verifyRateLimit(events, apiKey, limitBucket, generalLimit);
+        verifyRateLimit(events, limits);
 
         try {
             return invocation.proceed();
         } finally {
-            setLimitHeaders(apiKey, limitBucket, generalLimit);
+            setLimitHeaders(limits);
         }
     }
 
-    private void verifyRateLimit(long events, String apiKey, String bucket, LimitConfig limitConfig) {
+    private String replaceLimitVariables(String limit) {
+        return limit
+                .replace(":{workspaceId}", requestContext.get().getWorkspaceId())
+                .replace(":{apiKey}", requestContext.get().getApiKey());
+    }
+
+    private String getBucketName(String limit) {
+        return limit
+                .replace(":{workspaceId}", "")
+                .replace(":{apiKey}", "");
+    }
+
+    private LimitConfig getLimitOrDefault(String bucket, LimitConfig defaultLimit) {
+        return Optional.ofNullable(rateLimitConfig.getCustomLimits())
+                .map(limitConfigs -> limitConfigs.get(bucket))
+                .orElse(defaultLimit);
+    }
+
+    private boolean containsPlacedHolder(String limit) {
+        return limit.contains("{") && limit.contains("}");
+    }
+
+    private void verifyRateLimit(long events, Map<String, LimitConfig> limitConfigs) {
 
         // Check if the rate limit is exceeded
-        Boolean limitExceeded = rateLimitService.get()
-                .isLimitExceeded(apiKey, events, bucket, limitConfig)
-                .block();
+        limitConfigs.forEach((bucket, limitConfig) -> {
+            Boolean limitExceeded = rateLimitService.get()
+                    .isLimitExceeded(events, bucket, limitConfig)
+                    .block();
 
-        if (Boolean.TRUE.equals(limitExceeded)) {
-            setLimitHeaders(apiKey, bucket, limitConfig);
-            throw new ClientErrorException("Too Many Requests", HttpStatus.SC_TOO_MANY_REQUESTS);
-        }
+            if (Boolean.TRUE.equals(limitExceeded)) {
+                setLimitHeaders(limitConfigs);
+                throw new ClientErrorException("Too Many Requests: %s".formatted(limitConfig.errorMessage()),
+                        HttpStatus.SC_TOO_MANY_REQUESTS);
+            }
+        });
     }
 
-    private void setLimitHeaders(String apiKey, String bucket, LimitConfig limitConfig) {
-        requestContext.get().getHeaders().put(RequestContext.USER_LIMIT, List.of(bucket));
+    private void setLimitHeaders(Map<String, LimitConfig> limitConfigs) {
 
-        try {
-            var values = Mono.zip(
-                    rateLimitService.get().getRemainingTTL(apiKey, bucket, limitConfig),
-                    rateLimitService.get().availableEvents(apiKey, bucket, limitConfig)).block();
+        List<Tuple3<Long, Long, LimitConfig>> limits = Flux.fromIterable(limitConfigs.entrySet())
+                .flatMap(entry -> Mono.zip(
+                        rateLimitService.get().getRemainingTTL(entry.getKey(), entry.getValue()),
+                        rateLimitService.get().availableEvents(entry.getKey(), entry.getValue()),
+                        Mono.just(entry.getValue())))
+                .collectList()
+                .block();
 
-            requestContext.get().getHeaders().put(RequestContext.USER_LIMIT_REMAINING_TTL,
-                    List.of("" + values.getT1()));
-            requestContext.get().getHeaders().put(RequestContext.USER_REMAINING_LIMIT, List.of("" + values.getT2()));
-        } catch (Exception e) {
-            log.error("Error setting rate limit headers", e);
-        }
+        limits.forEach(tuple -> {
+            var ttl = tuple.getT1();
+            var remainingLimit = tuple.getT2();
+            var limitConfig = tuple.getT3();
+
+            requestContext.get().getHeaders().put(RequestContext.LIMIT.formatted(limitConfig.headerName()),
+                    List.of(limitConfig.userFacingBucketName()));
+
+            try {
+                requestContext.get().getHeaders().put(
+                        RequestContext.LIMIT_REMAINING_TTL.formatted(limitConfig.headerName()),
+                        List.of("" + ttl));
+
+                requestContext.get().getHeaders().put(
+                        RequestContext.REMAINING_LIMIT.formatted(limitConfig.headerName()),
+                        List.of("" + remainingLimit));
+
+            } catch (Exception e) {
+                log.error("Error setting rate limit headers", e);
+            }
+        });
     }
 
     private Object getParameters(MethodInvocation method) {

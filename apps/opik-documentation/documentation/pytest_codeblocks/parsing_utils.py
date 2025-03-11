@@ -66,6 +66,14 @@ def check_skip_frontmatter(path):
     return frontmatter.get("pytest_codeblocks_skip", False)
 
 
+def convert_jupyter_pip_install_to_bash(code_block):
+    if "%pip install" in code_block["content"]:
+        code_block["language"] = "bash"
+        code_block["content"] = code_block["content"].replace("%pip", "pip")
+
+    return code_block
+
+
 def get_code_blocs(
     path: str,
 ) -> List[Union[evaluators.PythonEvaluator, evaluators.BashEvaluator]]:
@@ -76,9 +84,16 @@ def get_code_blocs(
         return []
 
     page_frontmatter = get_page_frontmatter(path)
+    is_cookbook = "/cookbook/" in str(path)
+
     code_blocks = []
     markdown = MarkdownAnalyzer(path)
     mrkdwn_analysis_code_blocks = markdown.identify_code_blocks().get("Code block", [])
+    mrkdwn_analysis_code_blocks = [
+        convert_jupyter_pip_install_to_bash(code_block)
+        for code_block in mrkdwn_analysis_code_blocks
+    ]
+
     for i, mk_code_block in enumerate(mrkdwn_analysis_code_blocks):
         language = _get_code_block_language(mk_code_block["language"])
         start_line = mk_code_block["start_line"]
@@ -97,8 +112,11 @@ def get_code_blocs(
 
         code_str = _reindent_code_block(mk_code_block["content"])
         if language == "python":
-            if page_frontmatter.get("pytest_codeblocks_execute_previous", False):
-                history = [x["content"] for x in mrkdwn_analysis_code_blocks[:i]]
+            if (
+                page_frontmatter.get("pytest_codeblocks_execute_previous", False)
+                or is_cookbook
+            ):
+                history = [x for x in mrkdwn_analysis_code_blocks[:i]]
             else:
                 history = []
 

@@ -52,7 +52,7 @@ spec:
       config.d/logger.xml: "<yandex><logger><level>{{ .Values.clickhouse.logsLevel }}</level></logger></yandex>"
       {{- if .Values.clickhouse.configuration }}
       {{- with .Values.clickhouse.configuration.files }}
-      {{- toYaml . | nindent 8 }}
+      {{- toYaml . | nindent 6 }}
       {{- end }}
       {{- end }}
     
