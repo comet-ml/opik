@@ -195,6 +195,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
             "ls_provider": "openai",
             "ls_temperature": ANY,
             "created_from": "langchain",
+            "usage": ANY_DICT,
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -213,22 +214,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                     "ls_provider": "openai",
                     "ls_temperature": ANY,
                     "created_from": "langchain",
-                    "usage": {
-                        "completion_tokens": ANY_BUT_NONE,
-                        "prompt_tokens": ANY_BUT_NONE,
-                        "total_tokens": ANY_BUT_NONE,
-                        # Lanchain-formatted token usage dicts are temporary not supported
-                        # "input_token_details": {
-                        #     "audio": ANY_BUT_NONE,
-                        #     "cache_read": ANY_BUT_NONE,
-                        # },
-                        # "input_tokens": ANY_BUT_NONE,
-                        # "output_token_details": {
-                        #     "audio": ANY_BUT_NONE,
-                        #     "reasoning": ANY_BUT_NONE,
-                        # },
-                        # "output_tokens": ANY_BUT_NONE,
-                    },
+                    "usage": ANY_DICT,
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,

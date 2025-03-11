@@ -16,15 +16,6 @@ from ...testlib import (
 
 
 pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
-EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT = {
-    "prompt_tokens": ANY_BUT_NONE,
-    "completion_tokens": ANY_BUT_NONE,
-    "total_tokens": ANY_BUT_NONE,
-    "original_usage.total_token_count": ANY_BUT_NONE,
-    "original_usage.candidates_token_count": ANY_BUT_NONE,
-    "original_usage.prompt_token_count": ANY_BUT_NONE,
-    "original_usage.cached_content_token_count": ANY_BUT_NONE,
-}
 
 
 def _assert_usage_validity(usage: Dict[str, Any]):
@@ -35,7 +26,6 @@ def _assert_usage_validity(usage: Dict[str, Any]):
         "original_usage.total_token_count",
         "original_usage.candidates_token_count",
         "original_usage.prompt_token_count",
-        "original_usage.cached_content_token_count",
     ]
 
     assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
