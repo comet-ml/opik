@@ -48,7 +48,7 @@ class RateLimitInterceptor implements MethodInterceptor {
         Map<String, LimitConfig> limits = new HashMap<>();
 
         // Check if the workspace limit should be affected
-        if (rateLimit.shouldAffectWorkspaceWriteLimit()) {
+        if (rateLimit.shouldAffectWorkspaceLimit()) {
             LimitConfig workspaceLimit = getLimitOrDefault(requestContext.get().getWorkspaceId(),
                     rateLimitConfig.getWorkspaceLimit());
             String key = KEY.formatted(RateLimited.WORKSPACE_EVENTS, requestContext.get().getWorkspaceId());
@@ -56,7 +56,7 @@ class RateLimitInterceptor implements MethodInterceptor {
         }
 
         // Check events bucket
-        if (rateLimit.shouldAffectUserWriteLimit()) {
+        if (rateLimit.shouldAffectUserGeneralLimit()) {
             LimitConfig generalLimit = rateLimitConfig.getGeneralLimit();
             String key = KEY.formatted(RateLimited.GENERAL_EVENTS, requestContext.get().getApiKey());
             limits.put(key, generalLimit);
@@ -73,7 +73,7 @@ class RateLimitInterceptor implements MethodInterceptor {
                     limits.put(limit, limitConfig);
                 }
             } else {
-                log.warn("Rate limit bucket not found: {}", bucketName);
+                log.warn("Rate limit bucket not found: '{}'", bucketName);
             }
         }
 

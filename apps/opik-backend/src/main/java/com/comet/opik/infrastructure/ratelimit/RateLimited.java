@@ -29,6 +29,6 @@ public @interface RateLimited {
      * */
     String[] value() default {};
 
-    boolean shouldAffectWorkspaceWriteLimit() default true;
-    boolean shouldAffectUserWriteLimit() default true;
+    boolean shouldAffectWorkspaceLimit() default true;
+    boolean shouldAffectUserGeneralLimit() default true;
 }

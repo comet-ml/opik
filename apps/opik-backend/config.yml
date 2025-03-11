@@ -180,11 +180,11 @@ rateLimit:
     # Description: User facing bucket name
     userFacingBucketName: general_events
     # Description: Rate limit error message
-    errorMessage: "You have exceeded the rate limit for user general events. Please try again later."
+    errorMessage: "You have exceeded the general rate limit for this user. Please try again later."
 
   workspaceLimit:
     # Default: 5000
-    # Description: how many write events are allowed in the specified time bucket
+    # Description: how many events per workspace are allowed in the specified time bucket
     limit: ${RATE_LIMIT_WORKSPACE_EVENTS_LIMIT:-5000}
     # Default: 60
     # Description: Time bucket size in seconds
@@ -194,7 +194,7 @@ rateLimit:
     # Description: User facing bucket name
     userFacingBucketName: workspace_events
     # Description: Rate limit error message
-    errorMessage: "You have exceeded the rate limit for user workspace events. Please try again later."
+    errorMessage: "You have exceeded the rate limit for this user in this workspace. Please try again later."
 
   customLimits:
     getSpanById:
