@@ -728,6 +728,9 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
+        LOGGER.warning(
+            "Deprecated, use `get_experiments_by_name` or `get_experiment_by_id` instead."
+        )
         experiment_public = experiment_rest_operations.get_experiment_data_by_name(
             rest_client=self._rest_client, name=name
         )
@@ -739,6 +742,32 @@ class Opik:
             rest_client=self._rest_client,
             # TODO: add prompt if exists
         )
+
+    def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
+        """
+        Returns an existing experiments by its name.
+
+        Args:
+            name: The name of the experiment(s).
+
+        Returns:
+            List[experiment.Experiment]: List of existing experiments.
+        """
+        experiments_public = experiment_rest_operations.get_experiments_data_by_name(
+            rest_client=self._rest_client, name=name
+        )
+        result = []
+
+        for public_experiment in experiments_public:
+            experiment_ = experiment.Experiment(
+                id=public_experiment.id,
+                dataset_name=public_experiment.dataset_name,
+                name=name,
+                rest_client=self._rest_client,
+            )
+            result.append(experiment_)
+
+        return result
 
     def get_experiment_by_id(self, id: str) -> experiment.Experiment:
         """
