@@ -183,6 +183,9 @@ navigation:
               - page: Get Started
                 path: docs/tracing/opentelemetry/overview.mdx
                 slug: overview
+              - page: OTel Python SDK
+                path: docs/cookbook/otel_integration_python_sdk.mdx
+                slug: otel_integration_python_sdk
       - section: Evaluation
         slug: /evaluation
         contents:
