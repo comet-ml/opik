@@ -5,7 +5,7 @@ from opik.api_objects.span import span_data
 from opik.api_objects.trace import trace_data
 from opik.api_objects import opik_client
 
-from . import helpers
+from . import span_data_parsers
 
 
 class OpikTracingProcessor(tracing.TracingProcessor):
@@ -39,17 +39,20 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         parent_opik_span = self._span_data_map.get(span.parent_id)
         parent_opik_span_id = parent_opik_span.id if parent_opik_span else None
         opik_trace_id = self._created_traces_data_map[span.trace_id].id
+        parsed_span_data = span_data_parsers.parse_spandata(span.span_data)
 
         opik_span_data = span_data.SpanData(
-            name=helpers.span_name(span),
             parent_span_id=parent_opik_span_id,
             trace_id=opik_trace_id,
+            **parsed_span_data.__dict__,
         )
         self._span_data_map[span.span_id] = opik_span_data
 
     def on_span_end(self, span: tracing.Span[Any]) -> None:
+        parsed_span_data = span_data_parsers.parse_spandata(span.span_data)
+
         opik_span_data = self._span_data_map[span.span_id]
-        opik_span_data.init_end_time()
+        opik_span_data.init_end_time().update(**parsed_span_data.__dict__)
 
         self._opik_client.span(**opik_span_data.__dict__)
 
