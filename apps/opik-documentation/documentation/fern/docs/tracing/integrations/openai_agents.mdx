@@ -1,0 +1,60 @@
+OpenAI released an agentic framework aptly named [Agents](https://platform.openai.com/docs/guides/agents). What
+sets this framework apart from others is that it provides a rich set of core building blocks:
+
+1. [Models](https://platform.openai.com/docs/guides/agents#models): Support for all OpenAI Models
+2. [Tools](https://platform.openai.com/docs/guides/agents#tools): Similar function calling functionality than the one available when using the OpenAI models directly
+3. [Knowledge and Memory](https://platform.openai.com/docs/guides/agents#knowledge-memory): Seamless integration with OpenAI's vector store and Embeddings Anthropic
+4. [Guardrails](https://platform.openai.com/docs/guides/agents#guardrails): Run Guardrails checks in **parallel** to your agent execution which allows for secure execution
+   without slowing down the total agent execution.
+
+Opik's integration with Agents is just one line of code and allows you to analyse and debug the agent execution
+flow in our Open-Source platform.
+
+<Frame>
+  <img src="/img/tracing/openai_agents.png" />
+</Frame>
+
+## Getting started
+
+First, ensure you have both `opik` and `openai-agents` packages installed:
+
+```bash
+pip install opik openai-agents
+```
+
+In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+
+```bash
+opik configure
+```
+
+## Enabling logging to Opik
+
+To enable logging to Opik, simply add the following two lines of code to your existing OpenAI Agents code:
+
+```python {3,5}
+from agents import Agent, Runner
+from agents import set_trace_processors
+from opik.integrations.openai.agents import OpikTracingProcessor
+
+set_trace_processors(processors=[OpikTracingProcessor()])
+
+agent = Agent(name="Assistant", instructions="You are a helpful assistant")
+
+result = Runner.run_sync(agent, "Write a haiku about recursion in programming.")
+print(result.final_output)
+```
+
+<Tip>
+  The Opik integration will automatically track both the token usage and overall cost of each LLM call that is being
+  made. You can also view this information aggregated for the entire agent execution.
+</Tip>
+
+## Further improvements
+
+OpenAI Agents is still a relatively new framework and we are working on a couple of improvements:
+
+1. Improved rendering of the inputs and outputs for the LLM calls as part of our `Pretty Mode` functionality
+2. Logging of additional metadata to make it easier to debug long running agents
+
+If there are any additional improvements you would like us to make, feel free to open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues).
