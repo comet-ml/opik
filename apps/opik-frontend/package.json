@@ -91,6 +91,7 @@
     "react-textarea-autosize": "^8.5.7",
     "react18-json-view": "^0.2.8",
     "recharts": "^2.13.3",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "slugify": "^1.6.6",
     "stylelint-scss": "^6.4.1",
