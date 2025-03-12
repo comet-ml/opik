@@ -1,6 +1,13 @@
 import pydantic
 from typing import Union, Dict, Any, Optional
-from . import openai_usage, google_usage, anthropic_usage, unknown_usage, bedrock_usage
+from . import (
+    openai_agent_usage,
+    openai_usage,
+    google_usage,
+    anthropic_usage,
+    unknown_usage,
+    bedrock_usage,
+)
 from opik import dict_utils
 
 ProviderUsage = Union[
@@ -8,6 +15,7 @@ ProviderUsage = Union[
     google_usage.GoogleGeminiUsage,
     anthropic_usage.AnthropicUsage,
     bedrock_usage.BedrockUsage,
+    openai_agent_usage.OpenAIAgentUsage,
     unknown_usage.UnknownUsage,
 ]
 
@@ -118,5 +126,18 @@ class OpikUsage(pydantic.BaseModel):
             completion_tokens=completion_tokens,
             prompt_tokens=prompt_tokens,
             total_tokens=total_tokens,
+            provider_usage=provider_usage,
+        )
+
+    @classmethod
+    def from_openai_agent_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        provider_usage = openai_agent_usage.OpenAIAgentUsage.from_original_usage_dict(
+            usage
+        )
+
+        return cls(
+            completion_tokens=provider_usage.output_tokens,
+            prompt_tokens=provider_usage.input_tokens,
+            total_tokens=provider_usage.total_tokens,
             provider_usage=provider_usage,
         )
