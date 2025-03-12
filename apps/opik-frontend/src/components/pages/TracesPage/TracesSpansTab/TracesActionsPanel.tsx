@@ -52,11 +52,12 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         const keyPrefix = first(keys) as string;
 
         if (keyPrefix === "feedback_scores") {
-          acc[key] = get(
-            row.feedback_scores?.find((f) => f.name === key),
-            "value",
-            "-",
-          );
+          const scoreObject = row.feedback_scores?.find((f) => f.name === key);
+          acc[key] = get(scoreObject, "value", "-");
+
+          if (scoreObject && scoreObject.reason) {
+            acc[`${key}_reason`] = scoreObject.reason;
+          }
         } else {
           acc[key] = get(row, keys, "");
         }
