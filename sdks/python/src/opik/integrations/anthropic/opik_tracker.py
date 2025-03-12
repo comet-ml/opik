@@ -5,6 +5,7 @@ import anthropic
 from . import messages_create_decorator
 from . import messages_batch_decorator
 from typing import TypeVar, Dict, Any
+from opik.types import LLMProvider
 
 AnthropicClient = TypeVar(
     "AnthropicClient",
@@ -51,7 +52,12 @@ def track_anthropic(
         return anthropic_client
 
     anthropic_client.opik_tracked = True
-    decorator_factory = messages_create_decorator.AnthropicMessagesCreateDecorator()
+    provider = (
+        LLMProvider.ANTHROPIC
+    )  # TODO: implement a proper support for vertex and bedrock
+    decorator_factory = messages_create_decorator.AnthropicMessagesCreateDecorator(
+        provider=provider
+    )
 
     metadata = _extract_metadata_from_client(anthropic_client)
 
