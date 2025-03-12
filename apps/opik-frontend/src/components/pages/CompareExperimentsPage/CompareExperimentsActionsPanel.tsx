@@ -35,13 +35,14 @@ const CompareExperimentsActionsPanel: React.FC<
         const keyPrefix = first(keys) as string;
 
         if (keyPrefix === "feedback_scores") {
-          acc[`feedback_scores.${key}`] = get(
-            row.experiment_items?.[0].feedback_scores?.find(
-              (f) => f.name === key,
-            ),
-            "value",
-            "-",
+          const scoreObject = row.experiment_items?.[0].feedback_scores?.find(
+            (f) => f.name === key,
           );
+          acc[`feedback_scores.${key}`] = get(scoreObject, "value", "-");
+
+          if (scoreObject && scoreObject.reason) {
+            acc[`feedback_scores.${key}_reason`] = scoreObject.reason;
+          }
         } else if (keyPrefix === "output") {
           acc[`dataset.${key}`] = get(
             row.experiment_items?.[0] ?? {},

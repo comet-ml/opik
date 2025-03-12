@@ -13,6 +13,7 @@ import VerticallySplitCellWrapper, {
   CustomMeta,
 } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/VerticallySplitCellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { Button } from "@/components/ui/button";
 
 const CompareExperimentsOutputCell: React.FunctionComponent<
@@ -25,10 +26,13 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const renderCodeContent = (data: object) => {
+    const parsedData = JSON.stringify(data, null, 2);
     return isSmall ? (
-      <div className="comet-code flex size-full items-center truncate">
-        {JSON.stringify(data, null, 2)}
-      </div>
+      <CellTooltipWrapper content={parsedData}>
+        <div className="comet-code flex size-full items-center truncate">
+          {parsedData}
+        </div>
+      </CellTooltipWrapper>
     ) : (
       <div className="size-full overflow-y-auto whitespace-normal">
         {data && (
@@ -44,7 +48,9 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
 
   const renderTextContent = (data: string) => {
     return isSmall ? (
-      <span className="truncate">{data}</span>
+      <CellTooltipWrapper content={data}>
+        <span className="truncate">{data}</span>
+      </CellTooltipWrapper>
     ) : (
       <div className="size-full overflow-y-auto">{data}</div>
     );
