@@ -1,9 +1,13 @@
-from dataclasses import dataclass
-from typing import Any, Dict
+import dataclasses
+from typing import Any, Dict, Optional
+import logging
 
 from agents import tracing
 
 from opik.types import SpanType
+from opik import dict_utils, llm_usage
+
+LOGGER = logging.getLogger(__name__)
 
 
 def span_type(openai_span_data: tracing.SpanData) -> SpanType:
@@ -33,13 +37,14 @@ def _span_name(openai_span_data: tracing.SpanData) -> str:
         return "Unknown"
 
 
-@dataclass
+@dataclasses.dataclass
 class ParsedSpanData:
     name: str
     type: SpanType
     input: Dict[str, Any]
     output: Dict[str, Any]
     metadata: Dict[str, Any]
+    usage: Optional[llm_usage.OpikUsage] = None
 
 
 def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
@@ -49,7 +54,9 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
     :param spandata: An instance of SpanData or its subclass.
     :return: A ParsedSpanData dataclass containing input, output, and metadata
     """
-    metadata = openai_span_data.export()
+    content = openai_span_data.export()
+
+    metadata = None
     input_data = None
     output_data = None
     name = _span_name(openai_span_data)
@@ -58,17 +65,15 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
     if openai_span_data.type == "function":
         input_data = openai_span_data.input
         output_data = openai_span_data.output
-        del metadata["input"], metadata["output"]
+        del content["input"], content["output"]
 
     elif openai_span_data.type == "generation":
         input_data = openai_span_data.input
         output_data = openai_span_data.output
-        del metadata["input"], metadata["output"]
+        del content["input"], content["output"]
 
     elif openai_span_data.type == "response":
-        input_data = openai_span_data.input
-        output_data = openai_span_data.response
-        del metadata["response_id"]  # Keep only relevant metadata
+        return _parse_response_span_content(openai_span_data)
 
     elif openai_span_data.type == "agent":
         output_data = openai_span_data.output_type
@@ -79,7 +84,7 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
     elif openai_span_data.type == "custom":
         input_data = openai_span_data.data.get("input")
         output_data = openai_span_data.data.get("output")
-        del metadata["data"]
+        del content["data"]
 
     elif openai_span_data.type == "guardrail":
         pass  # No explicit input or output
@@ -90,10 +95,43 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
     if output_data is not None and not isinstance(output_data, dict):
         output_data = {"output": output_data}
 
+    metadata = content
+
     return ParsedSpanData(
         input=input_data,
         output=output_data,
         metadata=metadata,
         name=name,
         type=type,
+    )
+
+
+def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedSpanData:
+    response = span_data.response
+    response_dict = span_data.response.model_dump()
+    input = {"input": span_data.input}
+    output = {"output": response.output}
+
+    _, metadata = dict_utils.split_dict_by_keys(
+        input_dict=response_dict,
+        keys=["input", "output"],
+    )
+
+    if response.usage is not None:
+        opik_usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider="_openai_agent",
+            usage=response.usage.model_dump(),
+            logger=LOGGER,
+            error_message="Failed to log usage in openai agent run",
+        )
+    else:
+        opik_usage = None
+
+    return ParsedSpanData(
+        name="Response",
+        input=input,
+        output=output,
+        usage=opik_usage,
+        type="llm",
+        metadata=metadata,
     )

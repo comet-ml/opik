@@ -39,12 +39,10 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         parent_opik_span = self._span_data_map.get(span.parent_id)
         parent_opik_span_id = parent_opik_span.id if parent_opik_span else None
         opik_trace_id = self._created_traces_data_map[span.trace_id].id
-        parsed_span_data = span_data_parsers.parse_spandata(span.span_data)
 
         opik_span_data = span_data.SpanData(
             parent_span_id=parent_opik_span_id,
             trace_id=opik_trace_id,
-            **parsed_span_data.__dict__,
         )
         self._span_data_map[span.span_id] = opik_span_data
 
