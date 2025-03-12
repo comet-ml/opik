@@ -68,9 +68,16 @@ jobs:
 
             DOCKER_IMAGE_NAME=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
             echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
+            if [[ "${{inputs.push_latest}}" == "true" ]]; then
+              DOCKER_IMAGE_NAME_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
+              LATEST_TAG=" -t ${DOCKER_IMAGE_NAME_LATEST}"
+            else
+              LATEST_TAG=""
+            fi
+            echo "LATEST_TAG=${LATEST_TAG}"
             docker buildx build --platform linux/amd64,linux/arm64 --push \
             --build-arg OPIK_VERSION=${{inputs.version}} \
-            -t ${DOCKER_IMAGE_NAME} .
+            -t ${DOCKER_IMAGE_NAME} ${LATEST_TAG} .
             echo "Docker image pushed: ${DOCKER_IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
 
         - name: Build and Push Docker Image for Comet integration
@@ -78,28 +85,17 @@ jobs:
           run: |
             DOCKER_IMAGE_NAME_COMET=${{env.DOCKER_REGISTRY}}/${{inputs.image}}-comet:${{inputs.version}}
             echo "DOCKER_IMAGE_NAME_COMET=${DOCKER_IMAGE_NAME_COMET}" | tee -a $GITHUB_ENV
+            if [[ "${{inputs.push_latest}}" == "true" ]]; then
+              DOCKER_IMAGE_NAME_COMET_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest
+              LATEST_TAG=" -t ${DOCKER_IMAGE_NAME_COMET_LATEST}"
+            else
+              LATEST_TAG=""
+            fi
             docker buildx build --platform linux/amd64,linux/arm64 --push \
             --build-arg ${{inputs.comet_build_args}}  \
             --build-arg OPIK_VERSION=${{inputs.version}} \
             --build-arg SENTRY_ENABLED=true \
             --build-arg SENTRY_DSN="${{secrets.OPIK_FE_SENTRY_DSN}}" \
-            -t ${DOCKER_IMAGE_NAME_COMET} .
+            -t ${DOCKER_IMAGE_NAME_COMET} ${LATEST_TAG} .
             echo "Docker image pushed: ${DOCKER_IMAGE_NAME_COMET}" >> $GITHUB_STEP_SUMMARY
-
-        - name: Push Docker Image with latest tag
-          if: inputs.push_latest == 'true'
-          run: |
-            DOCKER_IMAGE_NAME_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
-            docker tag ${{env.DOCKER_IMAGE_NAME}} ${DOCKER_IMAGE_NAME_LATEST}
-            docker push ${DOCKER_IMAGE_NAME_LATEST}
-            echo "Docker image pushed: ${DOCKER_IMAGE_NAME_LATEST}" >> $GITHUB_STEP_SUMMARY
-
-        - name: Push Docker Image for Comet integration with latest tag
-          if: inputs.build_comet_image && inputs.push_latest == 'true'
-          run: |
-            DOCKER_IMAGE_NAME_COMET_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest
-            docker tag ${{env.DOCKER_IMAGE_NAME_COMET}} ${DOCKER_IMAGE_NAME_COMET_LATEST}
-            docker push ${DOCKER_IMAGE_NAME_COMET_LATEST}
-            echo "Docker image pushed: ${DOCKER_IMAGE_NAME_COMET_LATEST}" >> $GITHUB_STEP_SUMMARY
-
         
