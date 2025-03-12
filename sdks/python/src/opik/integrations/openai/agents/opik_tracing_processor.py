@@ -31,7 +31,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
 
     def on_trace_start(self, trace: tracing.Trace) -> None:
         try:
-            opik_trace_data = trace_data.TraceData(name=trace.name)
+            opik_trace_data = trace_data.TraceData(name=trace.name, project_name=self._project_name)
             self._created_traces_data_map[trace.trace_id] = opik_trace_data
         except Exception:
             LOGGER.debug("on_trace_start failed", exc_info=True)
@@ -54,6 +54,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             opik_span_data = span_data.SpanData(
                 parent_span_id=parent_opik_span_id,
                 trace_id=opik_trace_id,
+                project_name=self._project_name,
             )
             self._span_data_map[span.span_id] = opik_span_data
         except Exception:
