@@ -106,6 +106,7 @@ services:
     environment:
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
       OPIK_VERSION: ${OPIK_VERSION:-latest}
+      OPIK_BACKEND_URL: "http://frontend:5173/api"
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}

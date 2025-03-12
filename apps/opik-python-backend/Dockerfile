@@ -1,6 +1,6 @@
 FROM docker:27.5.1
 
-RUN apk add --no-cache tini python3 py3-pip
+RUN apk add --no-cache tini python3 py3-pip rust cargo build-base
 
 WORKDIR /opt/opik-python-backend
 

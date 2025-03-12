@@ -103,6 +103,7 @@ component:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      OPIK_BACKEND_URL: "http://opik-fronted:5173"
 
     securityContext:
       privileged: true
@@ -132,6 +133,7 @@ component:
     
   frontend:
     enabled: true
+    fullnameOverride: opik-fronted
     serviceAccount: 
       create: true
     image:
