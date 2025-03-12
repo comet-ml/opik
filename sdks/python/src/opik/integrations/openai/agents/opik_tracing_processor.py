@@ -11,6 +11,7 @@ from . import span_data_parsers
 
 LOGGER = logging.Logger(__name__)
 
+
 class OpikTracingProcessor(tracing.TracingProcessor):
     def __init__(
         self,

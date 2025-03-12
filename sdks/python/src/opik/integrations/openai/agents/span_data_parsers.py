@@ -136,5 +136,5 @@ def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedS
         usage=opik_usage,
         type="llm",
         metadata=metadata,
-        model=response.model
+        model=response.model,
     )
