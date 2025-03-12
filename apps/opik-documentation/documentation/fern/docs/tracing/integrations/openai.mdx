@@ -68,7 +68,7 @@ The `track_openai` will automatically track and log the API call, including the 
 
 The OpenAI integration also supports Azure OpenAI Services. To use Azure OpenAI, initialize your client with Azure configuration and use it with `track_openai` just like the standard OpenAI client:
 
-```python
+```python {pytest_codeblocks_skip=true}
 from opik.integrations.openai import track_openai
 from openai import AzureOpenAI
 
