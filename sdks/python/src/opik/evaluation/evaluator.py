@@ -138,6 +138,7 @@ def evaluate_experiment(
     scoring_threads: int = 16,
     verbose: int = 1,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
+    experiment_id: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """Update existing experiment with new evaluation metrics.
 
@@ -163,14 +164,18 @@ def evaluate_experiment(
 
     client = opik_client.get_client_cached()
 
-    experiment_public = rest_operations.get_experiment_by_name(
-        client=client, experiment_name=experiment_name
-    )
+    if experiment_id:
+        LOGGER.info("Getting experiment by id. Experiment name is ignored.")
+        experiment = client.get_experiment_by_id(id=experiment_id)
+    else:
+        experiment = rest_operations.get_experiment_with_unique_name(
+            client=client, experiment_name=experiment_name
+        )
 
     test_cases = rest_operations.get_experiment_test_cases(
         client=client,
-        experiment_id=experiment_public.id,
-        dataset_id=experiment_public.dataset_id,
+        experiment_id=experiment.id,
+        dataset_id=experiment.dataset_id,
         scoring_key_mapping=scoring_key_mapping,
     )
     first_trace_id = test_cases[0].trace_id
@@ -182,7 +187,7 @@ def evaluate_experiment(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            experiment_=experiment_public,
+            experiment_=experiment,
             scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
@@ -196,18 +201,18 @@ def evaluate_experiment(
 
     if verbose == 1:
         report.display_experiment_results(
-            experiment_public.dataset_name, total_time, test_results
+            experiment.dataset_name, total_time, test_results
         )
 
     report.display_experiment_link(
-        dataset_id=experiment_public.dataset_id,
-        experiment_id=experiment_public.id,
+        dataset_id=experiment.dataset_id,
+        experiment_id=experiment.id,
         url_override=client.config.url_override,
     )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
-        experiment_id=experiment_public.id,
-        experiment_name=experiment_public.name,
+        experiment_id=experiment.id,
+        experiment_name=experiment.name,
         test_results=test_results,
     )
 

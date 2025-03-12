@@ -1,26 +1,26 @@
 from typing import List, Optional
 
+from opik.api_objects import experiment, opik_client
 from opik.types import FeedbackScoreDict
-from .types import ScoringKeyMappingType
-
-from ..api_objects import opik_client
-from ..rest_api.experiments.client import ExperimentPublic
 from . import test_case, test_result
 from .metrics import arguments_helpers
+from .types import ScoringKeyMappingType
 
 
-def get_experiment_by_name(
+def get_experiment_with_unique_name(
     client: opik_client.Opik, experiment_name: str
-) -> ExperimentPublic:
-    experiments = client._rest_client.experiments.find_experiments(name=experiment_name)
+) -> experiment.Experiment:
+    experiments = client.get_experiments_by_name(name=experiment_name)
 
-    if len(experiments.content) == 0:
+    if len(experiments) == 0:
         raise ValueError(f"Experiment with name {experiment_name} not found")
-    elif len(experiments.content) > 1:
-        raise ValueError(f"Found multiple experiments with name {experiment_name}")
+    elif len(experiments) > 1:
+        raise ValueError(
+            f"Found multiple experiments with name {experiment_name}. Try to use `experiment_id` instead"
+        )
 
-    experiment = experiments.content[0]
-    return experiment
+    experiment_ = experiments[0]
+    return experiment_
 
 
 def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:

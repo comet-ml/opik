@@ -37,6 +37,10 @@ class Experiment:
             dataset_name=self._dataset_name
         ).id
 
+    @property
+    def dataset_name(self) -> str:
+        return self._dataset_name
+
     @functools.cached_property
     def name(self) -> str:
         if self._name is not None:
