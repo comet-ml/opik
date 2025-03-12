@@ -22,6 +22,22 @@ from ...testlib import (
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
+MODEL_FOR_TESTS = "gpt-4o-mini"
+EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens": ANY_BUT_NONE,
+    "original_usage.total_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
+}
+
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
@@ -58,7 +74,7 @@ def test_openai_client_chat_completions_create__happyflow(
     ]
 
     _ = wrapped_client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
     )
@@ -84,16 +100,12 @@ def test_openai_client_chat_completions_create__happyflow(
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -196,7 +208,7 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
         )
 
         _ = wrapped_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
         )
@@ -233,16 +245,12 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
                         output={"choices": ANY_BUT_NONE},
                         tags=["openai"],
                         metadata=ANY_DICT,
-                        usage={
-                            "prompt_tokens": ANY_BUT_NONE,
-                            "completion_tokens": ANY_BUT_NONE,
-                            "total_tokens": ANY_BUT_NONE,
-                        },
+                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
                         spans=[],
-                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                         provider="openai",
                     )
                 ],
@@ -273,7 +281,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
         client = openai.AsyncOpenAI()
         wrapped_client = track_openai(client)
         _ = await wrapped_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
         )
@@ -310,16 +318,12 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         output={"choices": ANY_BUT_NONE},
                         tags=["openai"],
                         metadata=ANY_DICT,
-                        usage={
-                            "prompt_tokens": ANY_BUT_NONE,
-                            "completion_tokens": ANY_BUT_NONE,
-                            "total_tokens": ANY_BUT_NONE,
-                        },
+                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=ANY_BUT_NONE,
                         spans=[],
-                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                         provider="openai",
                     )
                 ],
@@ -347,7 +351,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
     ]
 
     stream = wrapped_client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
         stream=True,
@@ -378,16 +382,12 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -415,7 +415,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
         client = openai.AsyncOpenAI()
         wrapped_client = track_openai(client)
         stream = await wrapped_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
             stream=True,
@@ -456,16 +456,12 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         output={"choices": ANY_BUT_NONE},
                         tags=["openai"],
                         metadata=ANY_DICT,
-                        usage={
-                            "prompt_tokens": ANY_BUT_NONE,
-                            "completion_tokens": ANY_BUT_NONE,
-                            "total_tokens": ANY_BUT_NONE,
-                        },
+                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=ANY_BUT_NONE,
                         spans=[],
-                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                         provider="openai",
                     )
                 ],
@@ -536,11 +532,7 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
@@ -606,11 +598,7 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -646,7 +634,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
     ]
 
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
-        model="gpt-4o-mini",
+        model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
         stream_options={"include_usage": True},
@@ -675,15 +663,11 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -714,7 +698,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
     ]
 
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
-        model="gpt-4o-mini",
+        model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
     )
@@ -746,7 +730,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -765,7 +749,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
 ):
     def run_stream(messages):
         chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
-            model="gpt-4o-mini",
+            model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
             stream_options={"include_usage": True},
@@ -812,15 +796,11 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -843,15 +823,11 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -886,7 +862,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
     ]
 
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
-        model="gpt-4o-mini",
+        model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
         stream_options={"include_usage": True},
@@ -916,13 +892,9 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -952,7 +924,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
     ]
 
     chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
-        model="gpt-4o-mini",
+        model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
         stream_options={"include_usage": True},
@@ -984,13 +956,9 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -1021,7 +989,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
 
     async def async_f():
         chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
-            model="gpt-4o-mini",
+            model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
             stream_options={"include_usage": True},
@@ -1054,13 +1022,9 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -1091,7 +1055,7 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
 
     async def async_f():
         chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
-            model="gpt-4o-mini",
+            model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
             stream_options={"include_usage": True},
@@ -1124,13 +1088,9 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage={
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "completion_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
