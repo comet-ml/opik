@@ -4,7 +4,7 @@ import logging
 
 from agents import tracing
 
-from opik.types import SpanType
+from opik.types import SpanType, LLMProvider
 from opik import dict_utils, llm_usage
 
 LOGGER = logging.getLogger(__name__)
@@ -45,6 +45,8 @@ class ParsedSpanData:
     output: Dict[str, Any]
     metadata: Dict[str, Any]
     usage: Optional[llm_usage.OpikUsage] = None
+    model: Optional[str] = None
+    provider: str = LLMProvider.OPENAI
 
 
 def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
@@ -134,4 +136,5 @@ def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedS
         usage=opik_usage,
         type="llm",
         metadata=metadata,
+        model=response.model
     )
