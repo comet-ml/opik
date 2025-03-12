@@ -1,17 +1,18 @@
 from typing import List
 
+from opik import exceptions
 from opik.rest_api import OpikApi
 from opik.rest_api.types import experiment_public
-from opik import exceptions
 
 
 def get_experiment_data_by_name(
     rest_client: OpikApi, name: str
 ) -> experiment_public.ExperimentPublic:
-    page = 0
+    # TODO: this method is deprecated and should be removed after
+    #  deprecated Opik.get_experiment_by_name() will be removed.
+    #  This function should not be used anywhere else except for deprecated logic as it is confusing and misleading
 
     while True:
-        page += 1
         experiment_page_public = rest_client.experiments.find_experiments(name=name)
         if len(experiment_page_public.content) == 0:
             raise exceptions.ExperimentNotFound(
