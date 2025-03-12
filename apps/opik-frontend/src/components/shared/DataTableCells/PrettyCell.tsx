@@ -3,6 +3,7 @@ import isObject from "lodash/isObject";
 import { CellContext } from "@tanstack/react-table";
 import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { prettifyMessage } from "@/lib/traces";
 
 type CustomMeta = {
@@ -27,10 +28,16 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     context.table.options.meta?.rowHeight ??
     ROW_HEIGHT.small;
 
+  const isSmall = rowHeight === ROW_HEIGHT.small;
+
   let content;
 
-  if (rowHeight === ROW_HEIGHT.small) {
-    content = <span className="comet-code truncate">{message}</span>;
+  if (isSmall) {
+    content = (
+      <CellTooltipWrapper content={message}>
+        <span className="comet-code truncate">{message}</span>
+      </CellTooltipWrapper>
+    );
   } else {
     content = (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
