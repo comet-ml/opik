@@ -168,7 +168,7 @@ def evaluate_experiment(
         LOGGER.info("Getting experiment by id. Experiment name is ignored.")
         experiment = client.get_experiment_by_id(id=experiment_id)
     else:
-        experiment = rest_operations.get_experiment_by_name(
+        experiment = rest_operations.get_experiment_with_unique_name(
             client=client, experiment_name=experiment_name
         )
 

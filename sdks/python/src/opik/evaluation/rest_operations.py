@@ -7,7 +7,7 @@ from .metrics import arguments_helpers
 from .types import ScoringKeyMappingType
 
 
-def get_experiment_by_name(
+def get_experiment_with_unique_name(
     client: opik_client.Opik, experiment_name: str
 ) -> experiment.Experiment:
     experiments = client.get_experiments_by_name(name=experiment_name)
