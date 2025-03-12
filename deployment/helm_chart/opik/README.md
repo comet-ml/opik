@@ -156,6 +156,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
 | component.frontend.enabled | bool | `true` |  |
+| component.frontend.fullnameOverride | string | `"opik-fronted"` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.image.tag | string | `"latest"` |  |
@@ -180,6 +181,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
 | component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |
+| component.python-backend.env.OPIK_BACKEND_URL | string | `"http://opik-fronted:5173"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG | string | `"latest"` |  |
