@@ -111,6 +111,9 @@ navigation:
               - page: OpenAI
                 path: docs/tracing/integrations/openai.mdx
                 slug: openai
+              - page: OpenAI Agents
+                path: docs/tracing/integrations/openai_agents.mdx
+                slug: openai_agents
               - page: OpenRouter
                 path: docs/tracing/integrations/openrouter.mdx
                 slug: openrouter

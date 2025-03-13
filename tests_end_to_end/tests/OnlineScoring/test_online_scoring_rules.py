@@ -45,7 +45,7 @@ class TestOnlineScoringRules:
 
         # Navigate to rules tab
         logger.info("Navigating to rules tab")
-        traces_page.page.get_by_role("tab", name="Rules").click()
+        traces_page.page.get_by_role("tab", name="Online evaluation").click()
 
         # Create new rule
         logger.info("Creating new moderation rule")

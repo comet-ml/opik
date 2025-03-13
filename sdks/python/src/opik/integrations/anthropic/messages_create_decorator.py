@@ -1,12 +1,13 @@
 import logging
 from typing import List, Any, Dict, Optional, Callable, Tuple, Union
 from opik.decorator import base_track_decorator, arguments_helpers
-from opik import dict_utils
+from opik import dict_utils, llm_usage
 
 import anthropic
 from anthropic.types import Message as AnthropicMessage
 
 from . import stream_patchers
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,6 +20,9 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
     An implementation of BaseTrackDecorator designed specifically for tracking
     calls of `[Anthropic.AsyncAnthropic].messages.create` method.
     """
+
+    def __init__(self, provider: str) -> None:
+        self.provider: str = provider
 
     def _start_span_inputs_preprocessor(
         self,
@@ -47,6 +51,7 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
+            provider=self.provider,
         )
 
         return result
@@ -60,19 +65,21 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
 
             return result
 
-        usage = {
-            "prompt_tokens": output.usage.input_tokens,
-            "completion_tokens": output.usage.output_tokens,
-            "total_tokens": output.usage.input_tokens + output.usage.output_tokens,
-        }
+        opik_usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=self.provider,
+            usage=output.usage.model_dump(),
+            logger=LOGGER,
+            error_message="Failed to log token usage from anthropic call",
+        )
 
         output_dict = output.model_dump()
         span_output, metadata = dict_utils.split_dict_by_keys(
             output_dict, RESPONSE_KEYS_TO_LOG_AS_OUTPUT
         )
+        model = metadata.get("model")
 
         result = arguments_helpers.EndSpanParameters(
-            output=span_output, usage=usage, metadata=metadata
+            output=span_output, usage=opik_usage, metadata=metadata, model=model
         )
 
         return result

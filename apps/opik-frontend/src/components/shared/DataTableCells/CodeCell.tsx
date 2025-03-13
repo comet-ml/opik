@@ -3,6 +3,7 @@ import { ROW_HEIGHT } from "@/types/shared";
 import JsonView from "react18-json-view";
 import { safelyParseJSON } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 
 const CodeCell = (context: CellContext<unknown, unknown>) => {
   const value = context.getValue() as string;
@@ -13,10 +14,16 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
     context.table.options.meta?.rowHeight ??
     ROW_HEIGHT.small;
 
+  const isSmall = rowHeight === ROW_HEIGHT.small;
+
   let content;
 
-  if (rowHeight === ROW_HEIGHT.small) {
-    content = <code className="comet-code w-full truncate">{value}</code>;
+  if (isSmall) {
+    content = (
+      <CellTooltipWrapper content={value}>
+        <code className="comet-code w-full truncate">{value}</code>
+      </CellTooltipWrapper>
+    );
   } else {
     content = (
       <div className="size-full overflow-y-auto overflow-x-hidden whitespace-normal">

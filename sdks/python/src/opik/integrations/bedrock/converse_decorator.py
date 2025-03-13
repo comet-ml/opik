@@ -1,8 +1,9 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
-from opik import dict_utils
+from opik import dict_utils, llm_usage
 from opik.decorator import arguments_helpers, base_track_decorator
+
 from . import helpers, stream_wrappers
 
 LOGGER = logging.getLogger(__name__)
@@ -53,11 +54,12 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         self, output: Any, capture_output: bool
     ) -> arguments_helpers.EndSpanParameters:
         usage = output["usage"]
-        usage_in_openai_format = {
-            "prompt_tokens": usage["inputTokens"],
-            "completion_tokens": usage["outputTokens"],
-            "total_tokens": usage["inputTokens"] + usage["outputTokens"],
-        }
+        usage_in_openai_format = llm_usage.try_build_opik_usage_or_log_error(
+            provider="_bedrock",
+            usage=usage,
+            logger=LOGGER,
+            error_message="Failed to log token usage from bedrock LLM call",
+        )
 
         output, metadata = dict_utils.split_dict_by_keys(
             output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
