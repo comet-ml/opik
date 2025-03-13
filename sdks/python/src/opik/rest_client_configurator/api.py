@@ -1,5 +1,5 @@
 from .. import rest_api
-from . import public_methods_patcher, retry_decorators
+from . import public_methods_patcher, retry_decorator
 
 
 def configure(rest_client: rest_api.OpikApi) -> None:
@@ -17,5 +17,5 @@ def _configure_retries(rest_client: rest_api.OpikApi) -> None:
     ]
     for domain_client_name in domain_client_names:
         public_methods_patcher.patch(
-            getattr(rest_client, domain_client_name), retry_decorators.connection_retry
+            getattr(rest_client, domain_client_name), retry_decorator.opik_rest_retry
         )

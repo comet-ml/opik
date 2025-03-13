@@ -120,7 +120,9 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
-        self._rest_client._client_wrapper._timeout = httpx.USE_CLIENT_DEFAULT  # See https://github.com/fern-api/fern/issues/5321
+        self._rest_client._client_wrapper._timeout = (
+            httpx.USE_CLIENT_DEFAULT
+        )  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,

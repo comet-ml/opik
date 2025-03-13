@@ -13,6 +13,7 @@ READ_TIMEOUT_SECONDS = 100
 WRITE_TIMEOUT_SECONDS = 100
 POOL_TIMEOUT_SECONDS = 20
 
+
 def get(
     workspace: Optional[str], api_key: Optional[str], check_tls_certificate: bool
 ) -> httpx.Client:
