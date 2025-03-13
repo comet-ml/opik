@@ -1,8 +1,8 @@
 import importlib.metadata
 import logging
+import warnings
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
-
 
 if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse
@@ -13,9 +13,6 @@ from .. import base_model
 from . import opik_monitor, warning_filters
 
 LOGGER = logging.getLogger(__name__)
-
-# todo disable?
-warning_filters.add_warning_filters()
 
 
 class LiteLLMChatModel(base_model.OpikBaseModel):
@@ -51,7 +48,15 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             self._remove_unnecessary_not_supported_params(completion_kwargs)
         )
 
-        import litellm
+        with warnings.catch_warnings():
+            # This is the first time litellm is imported when opik is imported.
+            # It filters out pydantic warning.
+            # Litellm has already fixed that, but it is not released yet, so this filter
+            # should be removed from here soon.
+            warnings.simplefilter("ignore")
+            import litellm
+
+        warning_filters.add_warning_filters()
 
         self._engine = litellm
 
