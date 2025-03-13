@@ -1,7 +1,10 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { cn } from "@/lib/utils";
+import remarkBreaks from "remark-breaks";
+import isNull from "lodash/isNull";
+
+import { cn, isStringMarkdown } from "@/lib/utils";
 
 type MarkdownPreviewProps = {
   children?: string | null;
@@ -12,14 +15,24 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   children,
   className,
 }) => {
-  return (
-    <ReactMarkdown
-      className={cn("prose comet-markdown", className)}
-      remarkPlugins={[remarkGfm]}
-    >
-      {children}
-    </ReactMarkdown>
-  );
+  if (isNull(children)) return "";
+
+  if (isStringMarkdown(children)) {
+    return (
+      <ReactMarkdown
+        className={cn("prose comet-markdown", className)}
+        remarkPlugins={[remarkBreaks, remarkGfm]}
+      >
+        {children}
+      </ReactMarkdown>
+    );
+  } else {
+    return (
+      <div className={cn("comet-markdown whitespace-pre-wrap", className)}>
+        {children}
+      </div>
+    );
+  }
 };
 
 export default MarkdownPreview;

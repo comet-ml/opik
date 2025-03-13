@@ -77,18 +77,8 @@ export const isStringMarkdown = (string: unknown): boolean => {
     /^\[\^.+?]:/m, // footnote definitions
   ];
 
-  // Check if the string contains URLs - common in markdown content
-  const urlPattern = /https?:\/\/\S+/.test(string);
-
-  // Check if we have multiple paragraphs (a strong indicator of structured text)
-  const multipleParagraphs = /\n\s*\n/.test(string);
-
   // Check for markdown patterns
-  const hasMarkdownSyntax = markdownPatterns.some((pattern) =>
-    pattern.test(string),
-  );
-
-  return hasMarkdownSyntax || urlPattern || multipleParagraphs;
+  return markdownPatterns.some((pattern) => pattern.test(string));
 };
 
 export const isValidJsonObject = (string: string) => {
