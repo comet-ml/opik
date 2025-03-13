@@ -1,21 +1,20 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect } from "react";
 import sortBy from "lodash/sortBy";
-import uniq from "lodash/uniq";
-import isUndefined from "lodash/isUndefined";
 import { BooleanParam, useQueryParam } from "use-query-params";
 import { FlaskConical, Maximize2, Minimize2, PenLine } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { Experiment } from "@/types/datasets";
-import { TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
 import DateTag from "@/components/shared/DateTag/DateTag";
-
+import useCompareExperimentsChartsData from "./hooks/useCompareExperimentsChartsData";
+import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
+import ExperimentsBarChart from "@/components/pages-shared/experiments/ExperimentsBarChart/ExperimentsBarChart";
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
   experiments: Experiment[];
@@ -47,30 +46,11 @@ const CompareExperimentsDetails: React.FunctionComponent<
     return () => setBreadcrumbParam("compare", "compare", "");
   }, [title, setBreadcrumbParam]);
 
-  const scoreMap = useMemo(() => {
-    return !isCompare
-      ? {}
-      : experiments.reduce<Record<string, Record<string, number>>>((acc, e) => {
-          acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-            (a, f) => {
-              a[f.name] = f.value;
-              return a;
-            },
-            {},
-          );
-
-          return acc;
-        }, {});
-  }, [isCompare, experiments]);
-
-  const scoreColumns = useMemo(() => {
-    return uniq(
-      Object.values(scoreMap).reduce<string[]>(
-        (acc, m) => acc.concat(Object.keys(m)),
-        [],
-      ),
-    ).sort();
-  }, [scoreMap]);
+  const { radarChartData, radarChartNames, barChartData, barChartNames } =
+    useCompareExperimentsChartsData({
+      isCompare,
+      experiments,
+    });
 
   const renderCompareFeedbackScoresButton = () => {
     if (!isCompare) return null;
@@ -143,49 +123,34 @@ const CompareExperimentsDetails: React.FunctionComponent<
     if (!isCompare || !showCharts) return null;
 
     return (
-      <div className="mb-2 mt-4 max-h-[227px] overflow-auto rounded-md border">
+      <div className="mb-2 mt-4 overflow-auto">
         {experiments.length ? (
-          <table className="min-w-full table-fixed caption-bottom text-sm">
-            <TableBody>
-              {experiments.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell>
-                    <div
-                      className="flex h-14 min-w-20 items-center truncate p-2"
-                      data-cell-wrapper="true"
-                    >
-                      {e.name}
-                    </div>
-                  </TableCell>
-                  {scoreColumns.map((id) => {
-                    const value = scoreMap[e.id]?.[id];
-
-                    return (
-                      <TableCell key={id}>
-                        <div
-                          className="flex h-14 min-w-20 items-center truncate p-2"
-                          data-cell-wrapper="true"
-                        >
-                          {isUndefined(value) ? (
-                            "–"
-                          ) : (
-                            <FeedbackScoreTag
-                              key={id + value}
-                              label={id}
-                              value={value}
-                            />
-                          )}
-                        </div>
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </table>
+          <div
+            className="flex flex-row gap-4"
+            style={{ "--chart-height": "230px" } as React.CSSProperties}
+          >
+            <div className="max-w-[402px]">
+              <ExperimentsRadarChart
+                name="Feedback scores"
+                description="Average scores"
+                chartId="feedback-scores-radar-chart"
+                data={radarChartData}
+                names={radarChartNames}
+              />
+            </div>
+            <div className="w-full">
+              <ExperimentsBarChart
+                name="Feedback scores distribution"
+                description="Average scores"
+                chartId="feedback-scores-bar-chart"
+                data={barChartData}
+                names={barChartNames}
+              />
+            </div>
+          </div>
         ) : (
           <div className="flex h-28 items-center justify-center text-muted-slate">
-            No feedback scores for selected experiments
+            No chart data for selected experiments
           </div>
         )}
       </div>

@@ -17,3 +17,7 @@ export const getDefaultHashedColorsChartConfig = (
     return acc;
   }, {});
 };
+
+export const truncateChartLabel = (value: string, maxLength: number = 14) => {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+};

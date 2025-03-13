@@ -26,10 +26,10 @@ const MetricChartLegendContent = React.forwardRef<
   return (
     <div
       ref={ref}
-      className="-mt-2.5 max-h-full w-full pt-6 text-center"
+      className="-mt-2.5 w-full max-w-full pt-6 text-center"
       onMouseLeave={handleMouseLeave}
     >
-      <div className="group inline-flex flex-wrap items-center justify-center gap-3">
+      <div className="group inline-flex max-w-full flex-wrap items-center justify-center space-x-3">
         {payload.map((item) => {
           const key = `${item.value || "value"}`;
           const indicatorColor = color || item.color;
@@ -37,7 +37,7 @@ const MetricChartLegendContent = React.forwardRef<
           return (
             <div
               key={key}
-              className="relative cursor-pointer pb-1 pl-3 duration-200 group-hover-except-self:opacity-60"
+              className="relative min-w-0 cursor-pointer pl-3 duration-200 group-hover-except-self:opacity-60"
               onMouseEnter={() => handleMouseEnter(item.value)}
             >
               <TooltipWrapper content={item.value}>

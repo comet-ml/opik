@@ -3,7 +3,6 @@ import isUndefined from "lodash/isUndefined";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails";
 import ExperimentItemsTab from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 import ConfigurationTab from "@/components/pages/CompareExperimentsPage/ConfigurationTab/ConfigurationTab";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
@@ -12,6 +11,7 @@ import ExperimentFeedbackScoresTab from "@/components/pages/CompareExperimentsPa
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
+import CompareExperimentsDetails from "../CompareExperimentsDetails/CompareExperimentsDetails";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
