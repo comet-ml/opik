@@ -67,6 +67,10 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
           value: formatNumericData(score.value),
         })),
       cell: FeedbackScoreListCell as never,
+      customMeta: {
+        getHoverCardName: (row: Experiment) => row.name,
+        isAverageScores: true,
+      },
     },
     {
       id: "created_at",
