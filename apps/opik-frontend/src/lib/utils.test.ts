@@ -103,22 +103,6 @@ describe("isStringMarkdown", () => {
     ).toBe(true);
   });
 
-  // Test URLs
-  it("should identify text with URLs as markdown", () => {
-    expect(isStringMarkdown("Visit https://example.com for more info")).toBe(
-      true,
-    );
-    expect(isStringMarkdown("Visit http://example.com for more info")).toBe(
-      true,
-    );
-  });
-
-  // Test multiple paragraphs
-  it("should identify text with multiple paragraphs as markdown", () => {
-    const paragraphs = "This is paragraph 1.\n\nThis is paragraph 2.";
-    expect(isStringMarkdown(paragraphs)).toBe(true);
-  });
-
   // Test complex markdown
   it("should identify complex markdown", () => {
     const complex = `# Markdown Example
@@ -153,6 +137,15 @@ For more info, see [this link](https://example.com).`;
     expect(
       isStringMarkdown("This contains a hash # but is not markdown."),
     ).toBe(false);
+    expect(
+      isStringMarkdown("This is paragraph 1.\n\nThis is paragraph 2."),
+    ).toBe(false);
+    expect(isStringMarkdown("Visit https://example.com for more info")).toBe(
+      false,
+    );
+    expect(isStringMarkdown("Visit http://example.com for more info")).toBe(
+      false,
+    );
     // The following test might pass (true) due to the URL detection logic in the function
     // expect(isStringMarkdown('The URL example.com is not formatted as a markdown link')).toBe(false);
   });
