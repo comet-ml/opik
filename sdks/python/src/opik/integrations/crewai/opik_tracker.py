@@ -1,7 +1,6 @@
 from typing import Optional
 
 import crewai
-import litellm
 
 from . import crewai_decorator
 
@@ -33,6 +32,8 @@ def track_crewai(
     crewai_wrapper = decorator_factory.track(
         project_name=project_name,
     )
+
+    import litellm
 
     crewai.Crew.kickoff = crewai_wrapper(crewai.Crew.kickoff)
     crewai.Crew.kickoff_for_each = crewai_wrapper(crewai.Crew.kickoff_for_each)

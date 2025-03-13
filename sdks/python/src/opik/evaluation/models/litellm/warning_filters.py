@@ -2,8 +2,6 @@ import logging
 import warnings
 from typing import Any
 
-import litellm
-
 
 def add_warning_filters() -> None:
     # TODO: This should be removed when we have fixed the error messages in the LiteLLM library
@@ -23,5 +21,7 @@ def add_warning_filters() -> None:
     # Add filter to multiple possible loggers
     filter = NoEventLoopFilterLiteLLM()
     logging.getLogger("LiteLLM").addFilter(filter)
+
+    import litellm
 
     litellm.suppress_debug_info = True  # to disable colorized prints with links to litellm whenever an LLM provider raises an error

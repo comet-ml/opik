@@ -1,21 +1,26 @@
 import functools
-from typing import Any, Dict
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
-import litellm
+from opik import config, opik_context
 
-try:
-    from litellm.integrations.opik import opik as litellm_opik_logger
-except ImportError:
-    litellm_opik_logger = None
+if TYPE_CHECKING:
+    import litellm
 
 
-from opik import opik_context
-from opik import config
+def lazy_import_opik_logger() -> Optional["litellm.integrations.opik.opik.OpikLogger"]:
+    try:
+        from litellm.integrations.opik.opik import OpikLogger as litellm_opik_logger
+    except ImportError:
+        litellm_opik_logger = None
+
+    return litellm_opik_logger
 
 
 def try_add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
-    if litellm_opik_logger is None:
+    if lazy_import_opik_logger() is None:
         return params
+
+    import litellm
 
     already_decorated = hasattr(litellm.completion, "opik_tracked")
     if already_decorated:
@@ -61,15 +66,20 @@ def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
-    has_global_opik_logger = any(
-        isinstance(callback, litellm_opik_logger.OpikLogger)
-        for callback in litellm.callbacks
-    )
+    import litellm
 
-    has_local_opik_logger = any(
-        isinstance(callback, litellm_opik_logger.OpikLogger)
-        for callback in params.get("success_callback", [])
-    )
+    has_global_opik_logger = False
+    has_local_opik_logger = False
+
+    if opik_logger := lazy_import_opik_logger():
+        has_global_opik_logger = any(
+            isinstance(callback, opik_logger) for callback in litellm.callbacks
+        )
+
+        has_local_opik_logger = any(
+            isinstance(callback, opik_logger)
+            for callback in params.get("success_callback", [])
+        )
 
     if has_global_opik_logger or has_local_opik_logger:
         return params
@@ -84,5 +94,5 @@ def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @functools.lru_cache
-def _callback_instance() -> "litellm_opik_logger.OpikLogger":  # type: ignore
-    return litellm_opik_logger.OpikLogger()
+def _callback_instance() -> "litellm.integrations.opik.opik.OpikLogger":  # type: ignore
+    return lazy_import_opik_logger()

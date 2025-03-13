@@ -2,17 +2,10 @@ import importlib.metadata
 import logging
 import warnings
 from functools import cached_property
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 
-with warnings.catch_warnings():
-    # This is the first time litellm is imported when opik is imported.
-    # It filters out pydantic warning.
-    # Litellm has already fixed that, but it is not released yet, so this filter
-    # should be removed from here soon.
-    warnings.simplefilter("ignore")
-    import litellm
-
-from litellm.types.utils import ModelResponse
+if TYPE_CHECKING:
+    from litellm.types.utils import ModelResponse
 
 from opik import semantic_version
 
@@ -20,8 +13,6 @@ from .. import base_model
 from . import opik_monitor, warning_filters
 
 LOGGER = logging.getLogger(__name__)
-
-warning_filters.add_warning_filters()
 
 
 class LiteLLMChatModel(base_model.OpikBaseModel):
@@ -57,10 +48,22 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             self._remove_unnecessary_not_supported_params(completion_kwargs)
         )
 
+        with warnings.catch_warnings():
+            # This is the first time litellm is imported when opik is imported.
+            # It filters out pydantic warning.
+            # Litellm has already fixed that, but it is not released yet, so this filter
+            # should be removed from here soon.
+            warnings.simplefilter("ignore")
+            import litellm
+
+        warning_filters.add_warning_filters()
+
         self._engine = litellm
 
     @cached_property
     def supported_params(self) -> Set[str]:
+        import litellm
+
         supported_params = set(
             litellm.get_supported_openai_params(model=self.model_name)
         )
@@ -73,6 +76,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         LiteLLM may have broken support for some parameters. If we detect it, we
         can add custom filtering to ensure that model call will not fail.
         """
+        import litellm
+
         provider = litellm.get_llm_provider(self.model_name)[1]
 
         if provider not in ["groq", "ollama"]:
@@ -88,6 +93,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             )
 
     def _check_model_name(self) -> None:
+        import litellm
+
         try:
             _ = litellm.get_llm_provider(self.model_name)
         except litellm.exceptions.BadRequestError:
@@ -147,7 +154,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
     def generate_provider_response(
         self,
         **kwargs: Any,
-    ) -> ModelResponse:
+    ) -> "ModelResponse":
         """
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
@@ -205,7 +212,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         )
         return response.choices[0].message.content
 
-    async def agenerate_provider_response(self, **kwargs: Any) -> ModelResponse:
+    async def agenerate_provider_response(self, **kwargs: Any) -> "ModelResponse":
         """
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output. Async version.

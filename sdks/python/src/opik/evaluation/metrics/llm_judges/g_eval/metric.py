@@ -1,10 +1,11 @@
 import math
 from functools import cached_property
-from typing import Any, Optional, Union
+from typing import Any, Optional, TYPE_CHECKING, Union
 import pydantic
 import json
 
-from litellm.types.utils import ModelResponse
+if TYPE_CHECKING:
+    from litellm.types.utils import ModelResponse
 
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
@@ -145,7 +146,7 @@ class GEval(base_metric.BaseMetric):
 
         return self._parse_model_output(model_output)
 
-    def _parse_model_output(self, content: ModelResponse) -> score_result.ScoreResult:
+    def _parse_model_output(self, content: "ModelResponse") -> score_result.ScoreResult:
         """
         This method computes the final score based on the model's response. The model's response is a dictionary
         with a `score` key and a `reason` key. The prompt template also specifies that the score should be an integer

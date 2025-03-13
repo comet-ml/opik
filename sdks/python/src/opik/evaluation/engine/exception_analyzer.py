@@ -1,8 +1,9 @@
 import openai
-import litellm.exceptions
 
 
 def is_llm_provider_rate_limit_error(exception: Exception) -> bool:
+    import litellm.exceptions
+
     rate_limit_error_known_types = (
         openai.RateLimitError,
         litellm.exceptions.RateLimitError,
