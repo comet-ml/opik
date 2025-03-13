@@ -105,6 +105,11 @@ class OpikTracer(BaseTracer):
 
         if span_data.trace_id not in self._externally_created_traces_ids:
             trace_data = self._created_traces_data_map[run.id]
+
+            # workaround for `.astream()` method usage
+            if trace_data.input == {"input": ""}:
+                trace_data.input = run_dict["inputs"]
+
             trace_data.init_end_time().update(output=output, error_info=error_info)
             trace_ = self._opik_client.trace(**trace_data.__dict__)
             self._created_traces.append(trace_)
@@ -277,6 +282,10 @@ class OpikTracer(BaseTracer):
             usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
         elif google_run_helpers.is_google_run(run):
             usage_info = google_run_helpers.get_llm_usage_info(run_dict)
+
+        # workaround for `.astream()` method usage
+        if span_data.input == {"input": ""}:
+            span_data.input = run_dict["inputs"]
 
         span_data.init_end_time().update(
             output=run_dict["outputs"],
