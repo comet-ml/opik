@@ -1,4 +1,4 @@
-from . import _logging, error_tracking, package_version, environment
+from . import _logging, environment, error_tracking, package_version
 from .api_objects.dataset import Dataset
 from .api_objects.experiment.experiment_item import (
     ExperimentItemContent,
@@ -13,6 +13,7 @@ from .decorator.tracker import flush_tracker, track
 from .evaluation import evaluate, evaluate_experiment, evaluate_prompt
 from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
+from .types import LLMProvider
 
 _logging.setup()
 
@@ -33,6 +34,7 @@ __all__ = [
     "llm_unit",
     "configure",
     "Prompt",
+    "LLMProvider",
 ]
 
 sagemaker_auth.setup_aws_sagemaker_session_hook()

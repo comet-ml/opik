@@ -28,9 +28,20 @@ Opik platform, we recommend using the [Kubernetes deployment](/self-host/overvie
 
 ### Are there are rate limits on Opik Cloud?
 
-Yes, in order to ensure all users have a good experience we have implemented rate limits. Each user is limited to `10,000`
-events per minute, an event is a trace, span, feedback score, dataset item, experiment item, etc. If you need to increase
-this limit please reach out to us on [Slack](https://chat.comet.com).
+Yes, in order to ensure all users have a good experience we have implemented rate limits.
+
+There's a global rate limit of `2,000` request/minute per user across all REST API endpoints, with an extra burst of
+`100` requests.
+
+Afterward, there's a data ingestion limit of `10,000` events/minute per user. An event is any trace, span,
+feedback score, dataset item, experiment item, etc. which is ingested, stored and persisted by Opik.
+
+Additionally, there's another data ingestion limit of `5,000` events/minute per workspace and per user.
+
+Finally, there's a rate limit of `250` requests/minute per user for the `Get span by id` endpoint:
+`GET /api/v1/private/spans/:id`.
+
+If you need to increase this limit please reach out to us on [Slack](https://chat.comet.com).
 
 ## Integrations
 

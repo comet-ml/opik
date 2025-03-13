@@ -1,3 +1,8 @@
+<Tip>
+  If you are using OpenAI's Agents framework, we recommend using the [OpenAI Agents
+  integration](/tracing/integrations/openai_agents) instead.
+</Tip>
+
 This guide explains how to integrate Opik with the OpenAI Python SDK. By using the `track_openai` method provided by opik, you can easily track and evaluate your OpenAI API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
 <div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
@@ -63,7 +68,7 @@ The `track_openai` will automatically track and log the API call, including the 
 
 The OpenAI integration also supports Azure OpenAI Services. To use Azure OpenAI, initialize your client with Azure configuration and use it with `track_openai` just like the standard OpenAI client:
 
-```python
+```python {pytest_codeblocks_skip=true}
 from opik.integrations.openai import track_openai
 from openai import AzureOpenAI
 
