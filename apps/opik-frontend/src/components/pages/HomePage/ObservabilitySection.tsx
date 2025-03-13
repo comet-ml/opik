@@ -59,6 +59,10 @@ export const COLUMNS = convertColumnDataToColumn<
           value: formatNumericData(score.value),
         })),
       cell: FeedbackScoreListCell as never,
+      customMeta: {
+        getHoverCardName: (row: ProjectWithStatistic) => row.name,
+        isAverageScores: true,
+      },
     },
     {
       id: "trace_count",

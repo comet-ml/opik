@@ -129,6 +129,10 @@ export const DEFAULT_COLUMNS: ColumnData<ProjectWithStatistic>[] = [
         value: formatNumericData(score.value),
       })),
     cell: FeedbackScoreListCell as never,
+    customMeta: {
+      getHoverCardName: (row: ProjectWithStatistic) => row.name,
+      isAverageScores: true,
+    },
   },
   {
     id: "last_updated_at",
