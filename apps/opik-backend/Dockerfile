@@ -8,13 +8,16 @@ COPY src ./src
 ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
 
 ARG OPIK_VERSION
-RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
+ARG MAVEN_CACHE_MOUNT=/root/.m2
+RUN --mount=type=cache,target=${MAVEN_CACHE_MOUNT} mvn dependency:go-offline -B
+RUN --mount=type=cache,target=${MAVEN_CACHE_MOUNT} mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -DskipTests
 
 ###############################
 FROM amazoncorretto:21.0.6-al2023
 
-RUN yum update -y && yum install -y shadow ca-certificates openssl perl \
+ARG YUM_CACHE_MOUNT=/var/cache/yum
+RUN --mount=type=cache,target=${YUM_CACHE_MOUNT} yum update -y && yum install -y shadow ca-certificates openssl perl \
     && yum clean all
 VOLUME /tmp
 # Add bundle URL from https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html

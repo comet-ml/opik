@@ -5,7 +5,9 @@ WORKDIR /opt/frontend
 
 COPY package*.json ./
 COPY patches ./patches
-RUN npm install
+
+ARG NPM_CACHE_MOUNT=/root/.npm
+RUN --mount=type=cache,target=${NPM_CACHE_MOUNT} npm install
 
 # Copy and build the application
 COPY . .
@@ -21,7 +23,7 @@ ENV VITE_SENTRY_DSN=${SENTRY_DSN}
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 ARG BUILD_MODE=production
-RUN npm run build -- --mode $BUILD_MODE
+RUN --mount=type=cache,target=${NPM_CACHE_MOUNT} npm run build -- --mode $BUILD_MODE
 
 # Production stage
 FROM nginx:1.27.4-alpine3.21

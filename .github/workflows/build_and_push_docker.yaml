@@ -68,15 +68,15 @@ jobs:
           uses: actions/cache@v3
           with:
             path: /tmp/.buildx-cache
-            key: ${{ runner.os }}-buildx-${{ github.sha }}
+            key: ${{ runner.os }}-buildx-${{ inputs.image }}-${{ github.sha }}
             restore-keys: |
+              ${{ runner.os }}-buildx-${{ inputs.image }}-
               ${{ runner.os }}-buildx-
 
-        - name: Create cache directory if it doesn't exist
+        - name: Set up cache directories
           run: |
-            mkdir -p /tmp/.buildx-cache
-            pwd
-            ls
+            mkdir -p /tmp/.buildx-cache /tmp/.buildx-cache-new /tmp/.npm-cache /tmp/.maven-cache /tmp/.yum-cache
+            chmod -R 777 /tmp/.buildx-cache /tmp/.buildx-cache-new /tmp/.npm-cache /tmp/.maven-cache /tmp/.yum-cache
         
         - name: Build and push
           uses: docker/build-push-action@v4
@@ -91,6 +91,9 @@ jobs:
             cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
             build-args: |
               OPIK_VERSION=${{inputs.version}}
+              NPM_CACHE_MOUNT=/tmp/.npm-cache
+              MAVEN_CACHE_MOUNT=/tmp/.maven-cache
+              YUM_CACHE_MOUNT=/tmp/.yum-cache
 
         - name: Write to summary
           run: |
