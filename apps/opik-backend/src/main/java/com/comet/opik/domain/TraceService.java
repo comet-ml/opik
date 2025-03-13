@@ -329,12 +329,10 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<Void> delete(@NonNull UUID id) {
         log.info("Deleting trace by id '{}'", id);
-        return lockService.executeWithLock(
-                new LockService.Lock(id, TRACE_KEY),
-                Mono.defer(() -> feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id))
-                        .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
-                        .then(Mono.defer(() -> spanService.deleteByTraceIds(Set.of(id))))
-                        .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection)))));
+        return feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id)
+                .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
+                .then(Mono.defer(() -> spanService.deleteByTraceIds(Set.of(id))))
+                .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection))));
     }
 
     @Override
