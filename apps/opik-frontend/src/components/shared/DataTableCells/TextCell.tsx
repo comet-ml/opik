@@ -1,5 +1,6 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
 
 const TextCell = <TData,>(context: CellContext<TData, string>) => {
@@ -18,7 +19,9 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
       tableMetadata={context.table.options.meta}
     >
       {isSmall ? (
-        <span className="truncate">{value}</span>
+        <CellTooltipWrapper content={value}>
+          <span className="truncate">{value}</span>
+        </CellTooltipWrapper>
       ) : (
         <div className="size-full overflow-y-auto">{value}</div>
       )}

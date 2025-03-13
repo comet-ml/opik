@@ -17,8 +17,6 @@ export type TooltipWrapperProps = {
   hotkeys?: React.ReactNode[];
   delayDuration?: number;
   defaultOpen?: TooltipProps["defaultOpen"];
-  className?: string;
-  showArrow?: boolean;
 };
 
 const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
@@ -28,8 +26,6 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
   hotkeys = null,
   delayDuration = 500,
   defaultOpen,
-  className,
-  showArrow = true,
 }) => {
   return (
     <TooltipProvider delayDuration={delayDuration}>
@@ -39,7 +35,8 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
           <TooltipContent
             side={side}
             variant={hotkeys?.length ? "hotkey" : "default"}
-            className={className}
+            className="max-h-[calc(var(--radix-popper-available-height))] overflow-y-auto"
+            collisionPadding={16}
           >
             {content}
 
@@ -57,7 +54,7 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
                 ))}
               </div>
             )}
-            {showArrow && <TooltipArrow />}
+            {hotkeys?.length && <TooltipArrow />}
           </TooltipContent>
         </TooltipPortal>
       </Tooltip>
