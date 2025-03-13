@@ -4,11 +4,12 @@ import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreTag from "../FeedbackScoreTag/FeedbackScoreTag";
-import FeedbackScoreTagMeasurer from "../FeedbackScoreTag/FeedbackScoreTagMeasurer";
 import FeedbackScoreHoverCard from "../FeedbackScoreTag/FeedbackScoreHoverCard";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import ChildrenWidthMeasurer from "../ChildrenWidthMeasurer/ChildrenWidthMeasurer";
 
 const TAG_GAP = 6;
+const COUNTER_WIDTH = 30;
 
 type CustomMeta<TData> = {
   getHoverCardName: (row: TData) => string;
@@ -19,19 +20,16 @@ const calculateVisibleCount = (
   cellWidth: number,
   tagWidths: number[],
   sortedListLength: number,
-  setVisibleCount: React.Dispatch<React.SetStateAction<number>>,
-) => {
+): number => {
   const tagListWidth = tagWidths.reduce((acc, w) => acc + w + TAG_GAP, 0);
-  const containerWidth = cellWidth - 8;
+  const containerWidth = cellWidth - 12;
 
   if (containerWidth > tagListWidth) {
-    setVisibleCount(sortedListLength);
-    return;
+    return sortedListLength;
   }
 
   const lastIdx = tagWidths.length - 1;
-  const remainingWidth = 30;
-  const counterWidth = remainingWidth + TAG_GAP;
+  const counterWidth = COUNTER_WIDTH + TAG_GAP;
   const minFirstTagWidth = Math.max(tagWidths[0] / 2, 70) + counterWidth;
 
   const isSingleTag = tagWidths.length === 1;
@@ -41,8 +39,7 @@ const calculateVisibleCount = (
 
   if (isSingleTag || isNarrowContainer) {
     if (containerWidth >= minFirstTagWidth) {
-      setVisibleCount(1);
-      return;
+      return 1;
     }
   }
 
@@ -55,10 +52,11 @@ const calculateVisibleCount = (
     availableWidth -= nextItemWidth;
 
     if (availableWidth < 0) {
-      setVisibleCount(idx);
-      break;
+      return idx;
     }
   }
+
+  return sortedListLength;
 };
 
 const FeedbackScoreListCell = <TData,>(
@@ -75,12 +73,12 @@ const FeedbackScoreListCell = <TData,>(
   const remainingCount = feedbackScoreList.length - visibleCount;
 
   const { ref: cellRef } = useObserveResizeNode<HTMLDivElement>((node) => {
-    calculateVisibleCount(
+    const visibleCount = calculateVisibleCount(
       node.clientWidth,
       widthList.current,
       sortedList.length,
-      setVisibleCount,
     );
+    setVisibleCount(visibleCount);
   });
 
   const sortedList = feedbackScoreList.sort((c1, c2) =>
@@ -108,10 +106,17 @@ const FeedbackScoreListCell = <TData,>(
             hidden={!remainingCount}
           >
             <div className="flex size-full items-center justify-start gap-1.5 overflow-hidden p-0 py-1 pr-2">
-              <FeedbackScoreTagMeasurer
-                onMeasure={onMeasure}
-                tagList={sortedList}
-              />
+              <ChildrenWidthMeasurer onMeasure={onMeasure}>
+                {sortedList.map<React.ReactNode>((item) => (
+                  <div key={item.name}>
+                    <FeedbackScoreTag
+                      label={item.name}
+                      value={item.value}
+                      reason={item.reason}
+                    />
+                  </div>
+                ))}
+              </ChildrenWidthMeasurer>
               {sortedList
                 .slice(0, visibleCount)
                 .map<React.ReactNode>((item) => (

@@ -55,7 +55,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
                   <ColoredTagNew
                     label={tag.name}
                     className="min-w-0 flex-1"
-                    labelClassName="comet-body-xs "
+                    size="sm"
                   />
 
                   <div className="comet-body-xs-accented pr-2 text-foreground">
