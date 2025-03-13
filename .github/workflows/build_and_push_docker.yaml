@@ -81,8 +81,9 @@ jobs:
         - name: Build and push
           uses: docker/build-push-action@v4
           with:
-            context: .
+            context: apps/${{ inputs.image }}/.
             platforms: linux/amd64,linux/arm64
+            file: apps/${{ inputs.image }}/Dockerfile
             push: true
             tags: |
               ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
