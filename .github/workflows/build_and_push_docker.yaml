@@ -71,6 +71,12 @@ jobs:
             key: ${{ runner.os }}-buildx-${{ github.sha }}
             restore-keys: |
               ${{ runner.os }}-buildx-
+
+        - name: Create cache directory if it doesn't exist
+          run: |
+            mkdir -p /tmp/.buildx-cache
+            pwd
+            ls
         
         - name: Build and push
           uses: docker/build-push-action@v4
