@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
 import httpx
@@ -10,12 +11,11 @@ from opik.config import (
     OpikConfig,
 )
 from opik.configurator.configure import (
-    OpikConfigurator,
     OPIK_BASE_URL_CLOUD,
     OPIK_BASE_URL_LOCAL,
+    OpikConfigurator,
 )
 from opik.exceptions import ConfigurationError
-from types import SimpleNamespace
 
 
 @pytest.fixture(autouse=True)
@@ -226,6 +226,20 @@ class TestAskForUrl:
         config._ask_for_url()
         assert config.base_url == "http://valid-url.com/"
         mock_is_instance_active.assert_called_once_with("http://valid-url.com/")
+
+    @patch("builtins.input", side_effect=[""])
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
+    def test_ask_for_url_(self, mock_is_instance_active, mock_input):
+        """
+        Test if user didn't type any URL while configuration.
+        """
+        config = OpikConfigurator()
+        with pytest.raises(ConfigurationError, match="Please enter a valid URL."):
+            config._ask_for_url()
+        mock_is_instance_active.assert_not_called()
 
     @patch("builtins.input", side_effect=["http://invalid-url.com"] * 3)
     @patch(
