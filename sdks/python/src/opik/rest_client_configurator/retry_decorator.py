@@ -27,6 +27,6 @@ def _allowed_to_retry(exception: Exception) -> bool:
 
 opik_rest_retry = tenacity.retry(
     stop=tenacity.stop_after_attempt(3),
-    wait=tenacity.wait_exponential(multiplier=2, min=5, max=15),
+    wait=tenacity.wait_exponential(multiplier=3, min=5, max=15),  # 5, 6, 12
     retry=tenacity.retry_if_exception(_allowed_to_retry),
 )
