@@ -7,11 +7,17 @@ import platform
 
 CABundlePath = str
 
+KEEPALIVE_EXPIRY_SECONDS = 10
+CONNECT_TIMEOUT_SECONDS = 20
+READ_TIMEOUT_SECONDS = 100
+WRITE_TIMEOUT_SECONDS = 100
+POOL_TIMEOUT_SECONDS = 20
+
 
 def get(
     workspace: Optional[str], api_key: Optional[str], check_tls_certificate: bool
 ) -> httpx.Client:
-    limits = httpx.Limits(keepalive_expiry=30)
+    limits = httpx.Limits(keepalive_expiry=KEEPALIVE_EXPIRY_SECONDS)
 
     verify: Union[bool, CABundlePath] = (
         os.environ["SSL_CERT_FILE"]
@@ -19,7 +25,14 @@ def get(
         else check_tls_certificate
     )
 
-    client = httpx.Client(limits=limits, verify=verify)
+    timeout = httpx.Timeout(
+        connect=CONNECT_TIMEOUT_SECONDS,
+        read=READ_TIMEOUT_SECONDS,
+        write=WRITE_TIMEOUT_SECONDS,
+        pool=POOL_TIMEOUT_SECONDS,
+    )
+
+    client = httpx.Client(limits=limits, verify=verify, timeout=timeout)
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)
