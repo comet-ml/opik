@@ -10,9 +10,12 @@ import uuid6
 import json
 import urllib.request
 import uuid6
+import logging
 
 import opik.rest_api
 from opik_backend.demo_data import evaluation_traces, evaluation_spans, demo_traces, demo_spans
+
+logger = logging.getLogger(__name__)
 
 UUID_MAP = {}
 
@@ -35,9 +38,9 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
 
         with urllib.request.urlopen(req) as response:
             status_code = response.getcode()
-            print(status_code, message["method"], url)
+            logger.info(status_code, message["method"], url)
     except Exception as e:
-        print(e)
+        logger.error(e)
 
 def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
     request = {
@@ -200,12 +203,6 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
 
     create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
 
+    # Close the client
     client.flush()
     client.end()
-
-if __name__ == "__main__":
-    base_url = "http://localhost:5173/api"
-    workspace_name = "default"
-    comet_api_key = None
-
-    create_demo_data(base_url, workspace_name, comet_api_key)

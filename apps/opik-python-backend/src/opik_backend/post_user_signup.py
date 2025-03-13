@@ -5,22 +5,23 @@ from flask import request, abort, jsonify, Blueprint
 from werkzeug.exceptions import HTTPException
 
 from opik_backend.demo_data_generator import create_demo_data
+from opik_backend.http_utils import build_error_response
 
-OPIK_BACKEND_URL = os.getenv("OPIK_BACKEND_URL", "http://localhost:5173/api")
+OPIK_REVERSE_PROXY_URL = os.getenv("OPIK_REVERSE_PROXY_URL", "http://localhost:5173/api")
 
-postUserSignup = Blueprint('post_user_signup', __name__, url_prefix='/v1/internal/post_user_signup')
+post_user_signup = Blueprint('post_user_signup', __name__, url_prefix='/v1/private/post_user_signup')
 
-@postUserSignup.errorhandler(400)
+@post_user_signup.errorhandler(400)
 def bad_request(exception: HTTPException):
-    return jsonify(error=str(exception)), 400
+    return build_error_response(exception, 400)
 
 
-@postUserSignup.errorhandler(500)
+@post_user_signup.errorhandler(500)
 def internal_server_error(exception: HTTPException):
-    return jsonify(error=str(exception)), 500
+    return build_error_response(exception, 500)
 
 
-@postUserSignup.route(rule="", methods=["POST"])
+@post_user_signup.route(rule="", methods=["POST"])
 def execute():
     if request.method != "POST":
         return
@@ -35,7 +36,7 @@ def execute():
     if apiKey is None:
         abort(400, "Field 'comet_api_key' is missing in the request")
 
-    create_demo_data(OPIK_BACKEND_URL, code, apiKey)
+    create_demo_data(OPIK_REVERSE_PROXY_URL, code, apiKey)
 
     return jsonify({"message": "Demo data created"}), 200
 

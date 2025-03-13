@@ -7,6 +7,8 @@ from unittest.mock import patch
 from opik_backend.demo_data_generator import create_demo_data
 
 def test_create_experiment_items_structure(httpserver):
+
+    ## Mocking the HTTP server to simulate the API calls to Opik Backend
     baseUrl = httpserver.url_for("/")
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/spans/batch", method="POST").respond_with_data(status=204)
@@ -64,6 +66,8 @@ def test_create_experiment_items_structure(httpserver):
     httpserver.expect_request("/v1/private/prompts/versions/retrieve", method="POST").respond_with_json(prompt)
     httpserver.expect_request("/v1/private/prompts/versions", method="POST").respond_with_json(prompt)
 
+    # Call the function to create the demo data
     create_demo_data(baseUrl, "workspace_name", "comet_api_key")
 
+    # Check that all expected requests were made
     httpserver.check_assertions()
