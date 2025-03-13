@@ -121,7 +121,6 @@ class SpanDAO {
      * 1. When the span does not exist in the database.
      * 2. When the span exists in the database but the provided span has different values for the fields such as end_time, input, output, metadata and tags.
      **/
-    //TODO: refactor to implement proper conflict resolution
     private static final String INSERT = """
             INSERT INTO spans(
                 id,
@@ -154,11 +153,7 @@ class SpanDAO {
                     LENGTH(CAST(old_span.project_id AS Nullable(String))) > 0, old_span.project_id,
                     new_span.project_id
                 ) as project_id,
-                multiIf(
-                    LENGTH(old_span.workspace_id) > 0 AND notEquals(old_span.workspace_id, new_span.workspace_id), CAST(leftPad(new_span.workspace_id, 40, '*') AS FixedString(19)),
-                    LENGTH(old_span.workspace_id) > 0, old_span.workspace_id,
-                    new_span.workspace_id
-                ) as workspace_id,
+                new_span.workspace_id as workspace_id,
                 multiIf(
                     LENGTH(CAST(old_span.trace_id AS Nullable(String))) > 0 AND notEquals(old_span.trace_id, new_span.trace_id), leftPad('', 40, '*'),
                     LENGTH(CAST(old_span.trace_id AS Nullable(String))) > 0, old_span.trace_id,
@@ -263,7 +258,8 @@ class SpanDAO {
                 SELECT
                     *
                 FROM spans
-                WHERE id = :id
+                WHERE workspace_id = :workspace_id
+                AND id = :id
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
@@ -496,7 +492,7 @@ class SpanDAO {
                 WHERE id = :id
                 AND workspace_id = :workspace_id
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                LIMIT 1
             ) AS s
             LEFT JOIN (
                 SELECT
@@ -515,6 +511,19 @@ class SpanDAO {
             ) AS c ON s.id = c.entity_id
             GROUP BY
                 s.*
+            ;
+            """;
+
+    private static final String SELECT_PARTIAL_BY_ID = """
+            SELECT
+                name,
+                type,
+                start_time
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND id = :id
+            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            LIMIT 1
             ;
             """;
 
@@ -1119,6 +1128,22 @@ class SpanDAO {
     }
 
     @WithSpan
+    public Mono<Span> getPartialById(@NonNull UUID id) {
+        log.info("Getting partial span by id '{}'", id);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> getPartialById(id, connection))
+                .flatMap(this::mapToPartialDto)
+                .singleOrEmpty();
+    }
+
+    private Publisher<? extends Result> getPartialById(UUID id, Connection connection) {
+        var statement = connection.createStatement(SELECT_PARTIAL_BY_ID).bind("id", id);
+        var segment = startSegment("spans", "Clickhouse", "get_partial_by_id");
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> endSegment(segment));
+    }
+
+    @WithSpan
     public Mono<Long> deleteByTraceIds(Set<UUID> traceIds) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
@@ -1171,7 +1196,7 @@ class SpanDAO {
                             ? null
                             : row.get("provider", String.class))
                     .totalEstimatedCost(
-                            row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
+                            BigDecimal.ZERO.compareTo(row.get("total_estimated_cost", BigDecimal.class)) == 0
                                     ? null
                                     : row.get("total_estimated_cost", BigDecimal.class))
                     .totalEstimatedCostVersion(row.getMetadata().contains("total_estimated_cost_version")
@@ -1193,6 +1218,14 @@ class SpanDAO {
                     .duration(row.get("duration", Double.class))
                     .build();
         });
+    }
+
+    private Publisher<Span> mapToPartialDto(Result result) {
+        return result.map((row, rowMetadata) -> Span.builder()
+                .name(row.get("name", String.class))
+                .type(SpanType.fromString(row.get("type", String.class)))
+                .startTime(row.get("start_time", Instant.class))
+                .build());
     }
 
     @WithSpan
