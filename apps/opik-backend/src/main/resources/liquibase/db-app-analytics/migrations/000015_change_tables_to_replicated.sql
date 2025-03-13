@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluat
     `message` String,
     `markers` Map(String, String)
 )
-ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/opik_dev/automation_rule_evaluator_logs', '{replica}')
+ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/automation_rule_evaluator_logs', '{replica}')
 ORDER BY (workspace_id, rule_id, timestamp)
 TTL toDateTime(timestamp + toIntervalMonth(6))
 SETTINGS index_granularity = 8192;
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.comments1
     `created_by` String DEFAULT '',
     `last_updated_by` String DEFAULT ''
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/comments','{replica}',last_updated_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/comments','{replica}',last_updated_at)
 ORDER BY (workspace_id, project_id, entity_id, id)
 SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1;
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1
     `last_updated_by` String DEFAULT '',
     `data` Map(String, String) DEFAULT map()
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/dataset_items', '{replica}',last_updated_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/dataset_items', '{replica}',last_updated_at)
 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id)
 SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1;
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1
     `created_by` String DEFAULT '',
     `last_updated_by` String DEFAULT ''
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/experiment_items', '{replica}', last_updated_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/experiment_items', '{replica}', last_updated_at)
 ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id)
 SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1;
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiments1
     `prompt_id` Nullable(FixedString(36)) DEFAULT NULL,
     `prompt_versions` Map(FixedString(36), Array(FixedString(36)))
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/experiments', '{replica}', last_updated_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/experiments', '{replica}', last_updated_at)
 ORDER BY (workspace_id, dataset_id, id)
 SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1;
@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1
     `created_by` String DEFAULT '',
     `last_updated_by` String DEFAULT ''
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/feedback_scores', '{replica}', last_updated_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/feedback_scores', '{replica}', last_updated_at)
 ORDER BY (workspace_id, project_id, entity_type, entity_id, name)
 SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1;
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans1
     `total_estimated_cost_version` String DEFAULT '',
     `error_info` String DEFAULT ''
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/spans', '{replica}', last_updated_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/spans', '{replica}', last_updated_at)
 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id)
 SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1;
@@ -213,7 +213,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces1
     `error_info` String DEFAULT '',
     `thread_id` String
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/opik_dev/traces', '{replica}',last_updated_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/traces', '{replica}',last_updated_at)
 ORDER BY (workspace_id, project_id, id)
 SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1;
