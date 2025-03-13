@@ -13,6 +13,7 @@ import {
   TABLE_ROW_Z_INDEX,
 } from "@/constants/shared";
 import {
+  CELL_VERTICAL_ALIGNMENT,
   COLUMN_ACTIONS_ID,
   COLUMN_SELECT_ID,
   ROW_HEIGHT,
@@ -114,7 +115,9 @@ export const shiftCheckboxClickHandler = <TData,>(
   }
 };
 
-export const generateSelectColumDef = <TData,>() => {
+export const generateSelectColumDef = <TData,>(meta?: {
+  verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+}) => {
   let previousSelectedRowID = "";
 
   return {
@@ -157,6 +160,7 @@ export const generateSelectColumDef = <TData,>() => {
         />
       </CellWrapper>
     ),
+    meta,
     size: 50,
     enableResizing: false,
     enableSorting: false,
