@@ -74,135 +74,140 @@ def get_new_uuid(old_id):
     return new_id
 
 def create_demo_data(base_url: str, workspace_name, comet_api_key):
+    client: opik.Opik = None
 
-    client = opik.Opik(
-        project_name="Demo evaluation",
-        workspace=workspace_name,
-        host=base_url,
-        api_key=comet_api_key,
-    )
+    try:
+        client = opik.Opik(
+            project_name="Demo evaluation",
+            workspace=workspace_name,
+            host=base_url,
+            api_key=comet_api_key,
+        )
 
-    for trace in sorted(evaluation_traces, key=lambda x: x["start_time"]):
-        new_id = get_new_uuid(trace["id"])
-        trace["id"] = new_id
-        client.trace(**trace)
+        for trace in sorted(evaluation_traces, key=lambda x: x["start_time"]):
+            new_id = get_new_uuid(trace["id"])
+            trace["id"] = new_id
+            client.trace(**trace)
 
-    for span in sorted(evaluation_spans, key=lambda x: x["start_time"]):
-        new_id = get_new_uuid(span["id"])
-        span["id"] = new_id
-        new_trace_id = get_new_uuid(span["trace_id"])
-        span["trace_id"] = new_trace_id
-        if "parent_span_id" in span:
-            new_parent_span_id = get_new_uuid(span["parent_span_id"])
-            span["parent_span_id"] = new_parent_span_id
-        client.span(**span)
+        for span in sorted(evaluation_spans, key=lambda x: x["start_time"]):
+            new_id = get_new_uuid(span["id"])
+            span["id"] = new_id
+            new_trace_id = get_new_uuid(span["trace_id"])
+            span["trace_id"] = new_trace_id
+            if "parent_span_id" in span:
+                new_parent_span_id = get_new_uuid(span["parent_span_id"])
+                span["parent_span_id"] = new_parent_span_id
+            client.span(**span)
 
-    # Demo traces and spans
-    # We have a simple chatbot application built using llama-index.
-    # We gave it the content of Opik documentation as context, and then asked it a few questions.
+        # Demo traces and spans
+        # We have a simple chatbot application built using llama-index.
+        # We gave it the content of Opik documentation as context, and then asked it a few questions.
 
-    client = opik.Opik(
-        project_name="Demo chatbot 🤖",
-        workspace=workspace_name,
-        host=base_url,
-        api_key=comet_api_key,
-    )
+        client = opik.Opik(
+            project_name="Demo chatbot 🤖",
+            workspace=workspace_name,
+            host=base_url,
+            api_key=comet_api_key,
+        )
 
-    for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
-        new_id = get_new_uuid(trace["id"])
-        trace["id"] = new_id
-        client.trace(**trace)
+        for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
+            new_id = get_new_uuid(trace["id"])
+            trace["id"] = new_id
+            client.trace(**trace)
 
-    for span in sorted(demo_spans, key=lambda x: x["start_time"]):
-        new_id = get_new_uuid(span["id"])
-        span["id"] = new_id
-        new_trace_id = get_new_uuid(span["trace_id"])
-        span["trace_id"] = new_trace_id
-        if "parent_span_id" in span:
-            new_parent_span_id = get_new_uuid(span["parent_span_id"])
-            span["parent_span_id"] = new_parent_span_id
-        client.span(**span)
+        for span in sorted(demo_spans, key=lambda x: x["start_time"]):
+            new_id = get_new_uuid(span["id"])
+            span["id"] = new_id
+            new_trace_id = get_new_uuid(span["trace_id"])
+            span["trace_id"] = new_trace_id
+            if "parent_span_id" in span:
+                new_parent_span_id = get_new_uuid(span["parent_span_id"])
+                span["parent_span_id"] = new_parent_span_id
+            client.span(**span)
 
-    # Prompts
-    # We now create 3 versions of a Q&A prompt. The final version is from llama-index.
+        # Prompts
+        # We now create 3 versions of a Q&A prompt. The final version is from llama-index.
 
-    client.create_prompt(
-        name="Q&A Prompt",
-        prompt="""Answer the query using your prior knowledge.
-    Query: {{query_str}}
-    Answer:
-    """,
-    )
+        client.create_prompt(
+            name="Q&A Prompt",
+            prompt="""Answer the query using your prior knowledge.
+        Query: {{query_str}}
+        Answer:
+        """,
+        )
 
-    client.create_prompt(
-        name="Q&A Prompt",
-        prompt="""Here is the context information.
-    -----------------
-    {{context_str}}
-    -----------------
-    Answer the query using the given context and not prior knowledge.
+        client.create_prompt(
+            name="Q&A Prompt",
+            prompt="""Here is the context information.
+        -----------------
+        {{context_str}}
+        -----------------
+        Answer the query using the given context and not prior knowledge.
 
-    Query: {{query_str}}
-    Answer:
-    """,
-    )
+        Query: {{query_str}}
+        Answer:
+        """,
+        )
 
-    client.create_prompt(
-        name="Q&A Prompt",
-        prompt="""You are an expert Q&A system that is trusted around the world.
-    Always answer the query using the provided context information, and not prior knowledge.
-    Some rules to follow:
-    1. Never directly reference the given context in your answer.
-    2. Avoid statements like 'Based on the context, ...' or 'The context information ...' or anything along those lines.
+        client.create_prompt(
+            name="Q&A Prompt",
+            prompt="""You are an expert Q&A system that is trusted around the world.
+        Always answer the query using the provided context information, and not prior knowledge.
+        Some rules to follow:
+        1. Never directly reference the given context in your answer.
+        2. Avoid statements like 'Based on the context, ...' or 'The context information ...' or anything along those lines.
 
-    Context information is below.
-    ---------------------
-    {{context_str}}
-    ---------------------
-    Given the context information and not prior knowledge, answer the query.
-    Query: {{query_str}}
-    Answer:
-    """,
-    )
+        Context information is below.
+        ---------------------
+        {{context_str}}
+        ---------------------
+        Given the context information and not prior knowledge, answer the query.
+        Query: {{query_str}}
+        Answer:
+        """,
+        )
 
-    # Dataset
+        # Dataset
 
-    dataset = client.get_or_create_dataset(name="Demo dataset")
-    dataset.insert(
-        [
-            {"input": "What is the best LLM evaluation tool?"},
-            {"input": "What is the easiest way to start with Opik?"},
-            {"input": "Is Opik open source?"},
-        ]
-    )
+        dataset = client.get_or_create_dataset(name="Demo dataset")
+        dataset.insert(
+            [
+                {"input": "What is the best LLM evaluation tool?"},
+                {"input": "What is the easiest way to start with Opik?"},
+                {"input": "Is Opik open source?"},
+            ]
+        )
 
-    # In addition to creating the dataset, we also create a mapping from the dataset items to the traces. This will be handy for creating the experiment.
+        # In addition to creating the dataset, we also create a mapping from the dataset items to the traces. This will be handy for creating the experiment.
 
-    items = dataset.get_items()
-    dataset_id_map = {item["input"]: item["id"] for item in items}
+        items = dataset.get_items()
+        dataset_id_map = {item["input"]: item["id"] for item in items}
 
-    # Experiment
-    # The experiment is constructed by joining the traces with the dataset items.
+        # Experiment
+        # The experiment is constructed by joining the traces with the dataset items.
 
-    experiment = client.create_experiment(
-        name="Demo experiment", dataset_name="Demo dataset"
-    )
-    experiment_items = []
+        experiment = client.create_experiment(
+            name="Demo experiment", dataset_name="Demo dataset"
+        )
+        experiment_items = []
 
-    for trace in evaluation_traces:
-        trace_id = trace["id"]
-        dataset_item_id = dataset_id_map.get(trace.get("input", {}).get("input", " "))
-        if dataset_item_id is not None:
-            experiment_items.append(
-                opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
-                    dataset_item_id=dataset_item_id, trace_id=trace_id
+        for trace in evaluation_traces:
+            trace_id = trace["id"]
+            dataset_item_id = dataset_id_map.get(trace.get("input", {}).get("input", " "))
+            if dataset_item_id is not None:
+                experiment_items.append(
+                    opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
+                        dataset_item_id=dataset_item_id, trace_id=trace_id
+                    )
                 )
-            )
 
-    experiment.insert(experiment_items)
+        experiment.insert(experiment_items)
 
-    create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
-
-    # Close the client
-    client.flush()
-    client.end()
+        create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
+    except Exception as e:
+        logger.error(e)
+    finally:
+        # Close the client
+        if client:
+            client.flush()
+            client.end()

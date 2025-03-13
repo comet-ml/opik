@@ -104,7 +104,10 @@ component:
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
-
+    envFrom:
+      - configMapRef:
+          name: opik-python-backend
+          
     securityContext:
       privileged: true
     networkPolicy:
@@ -133,7 +136,6 @@ component:
     
   frontend:
     enabled: true
-    fullnameOverride: opik-frontend
     serviceAccount: 
       create: true
     image:
