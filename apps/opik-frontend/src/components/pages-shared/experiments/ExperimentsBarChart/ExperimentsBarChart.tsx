@@ -1,3 +1,4 @@
+import MetricChartLegendContent from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartLegendContent";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
@@ -9,29 +10,37 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartTooltip,
+} from "@/components/ui/chart";
 import {
   getDefaultHashedColorsChartConfig,
   truncateChartLabel,
 } from "@/lib/charts";
-import React, { useCallback, useMemo } from "react";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis } from "recharts";
+import React, { useCallback, useMemo, useState } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
-export type RadarDataPoint = Record<string, string | number>;
+export type BarDataPoint = Record<string, string | number>;
 
-interface ExperimentsRadarChartProps {
+interface ExperimentsBarChartProps {
   name: string;
   description: string;
-  data: RadarDataPoint[];
+  chartId: string;
+  data: BarDataPoint[];
   names: string[];
 }
 
-const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
+const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   name,
   description,
+  chartId,
   data,
   names,
 }) => {
+  const [activeBar, setActiveBar] = useState<string | null>(null);
+
   const config = useMemo(() => {
     return getDefaultHashedColorsChartConfig(names);
   }, [names]);
@@ -53,26 +62,35 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
     return (
       <ChartContainer
         config={config}
-        className="min-h-[var(--chart-height)] w-full"
+        className="h-[var(--chart-height)] w-full"
       >
-        <RadarChart
+        <BarChart
           data={data}
           margin={{
-            top: -10,
+            top: 5,
             right: 5,
             left: 5,
-            bottom: -10,
+            bottom: 0,
           }}
         >
-          <PolarGrid />
-          <PolarAngleAxis
+          <CartesianGrid vertical={false} />
+
+          <XAxis
             dataKey="name"
-            tick={{
-              ...DEFAULT_CHART_TICK,
-              fontSize: "12px",
-            }}
-            dy={3}
+            axisLine={false}
+            tickLine={false}
+            dy={10}
+            tick={DEFAULT_CHART_TICK}
             tickFormatter={(value) => truncateChartLabel(value)}
+          />
+          <YAxis tick={DEFAULT_CHART_TICK} axisLine={false} tickLine={false} />
+          <ChartLegend
+            content={
+              <MetricChartLegendContent
+                setActiveLine={setActiveBar}
+                chartId={chartId}
+              />
+            }
           />
           <ChartTooltip
             isAnimationActive={false}
@@ -81,28 +99,26 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
             }
           />
           {names.map((name) => {
-            // const isActive = name === activeLine;
-            // let strokeOpacity = 1;
+            const isActive = name === activeBar;
+            let fillOpacity = 1;
 
-            // if (activeLine) {
-            //   strokeOpacity = isActive ? 1 : 0.4;
-            // }
+            if (activeBar) {
+              fillOpacity = isActive ? 1 : 0.4;
+            }
 
             return (
-              <Radar
+              <Bar
                 key={name}
                 name={name}
                 dataKey={name}
-                stroke={config[name].color || ""}
                 fill={config[name].color || ""}
-                fillOpacity={0.05}
-                strokeWidth={1.5}
-                animationDuration={600}
-                strokeOpacity={1}
+                fillOpacity={fillOpacity}
+                stackId="a"
+                maxBarSize={52}
               />
             );
           })}
-        </RadarChart>
+        </BarChart>
       </ChartContainer>
     );
   };
@@ -120,4 +136,4 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
   );
 };
 
-export default ExperimentsRadarChart;
+export default ExperimentsBarChart;
