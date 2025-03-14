@@ -280,7 +280,7 @@ const DataTable = <TData, TValue>({
       </TableCell>
     );
   };
-  // TODO lala
+  // TODO lala top-14
   return (
     <TableWrapper>
       <Table
@@ -294,7 +294,7 @@ const DataTable = <TData, TValue>({
           ))}
         </colgroup>
         <TableHeader
-          className={cn(stickyHeader && "sticky z-10 top-0")}
+          className={cn(stickyHeader && "sticky z-10 top-14")}
           {...(stickyHeader && {
             ...{ [STICKY_ATTRIBUTE_NAME]: STICKY_DIRECTION.vertical },
           })}

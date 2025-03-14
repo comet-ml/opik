@@ -62,6 +62,7 @@ import TraceDetailsPanel, {
   LastSectionValue,
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { formatDate, formatDuration } from "@/lib/date";
@@ -580,7 +581,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }
 
   return (
-    <div>
+    <>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
@@ -656,6 +657,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        TableWrapper={PageBodyStickyTableWrapper}
+        stickyHeader
         meta={meta}
       />
       <PageBodyStickyContainer
@@ -691,7 +694,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         open={Boolean(threadId)}
         onClose={handleClose}
       />
-    </div>
+    </>
   );
 };
 
