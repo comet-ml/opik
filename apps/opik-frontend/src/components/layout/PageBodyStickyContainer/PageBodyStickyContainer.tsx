@@ -9,14 +9,14 @@ export enum STICKY_DIRECTION {
 
 export const STICKY_ATTRIBUTE_NAME = "data-sticky-attribute";
 
-type PageStickyScrollContainerProps = {
+type PageBodyStickyContainerProps = {
   children: React.ReactNode;
   className?: string;
   direction?: "horizontal" | "vertical" | "bidirectional";
   limitWidth?: boolean;
 };
 
-const PageBodyStickyContainer: React.FC<PageStickyScrollContainerProps> = ({
+const PageBodyStickyContainer: React.FC<PageBodyStickyContainerProps> = ({
   children,
   className,
   direction = STICKY_DIRECTION.vertical,
