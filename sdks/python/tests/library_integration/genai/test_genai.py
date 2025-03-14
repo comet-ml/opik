@@ -542,7 +542,9 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name=ANY_STRING(startswith=f"async_generate_content_stream: {MODEL}"),
+                        name=ANY_STRING(
+                            startswith=f"async_generate_content_stream: {MODEL}"
+                        ),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
                         tags=["genai"],

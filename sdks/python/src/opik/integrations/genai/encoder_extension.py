@@ -1,12 +1,10 @@
 import base64
-import functools
 from typing import Any, Dict, Union
 
 from google.genai import types as genai_types
 from opik import jsonable_encoder
 
 
-@functools.lru_cache
 def register() -> None:
     def encoder_extension(obj: genai_types.Blob) -> Union[str, Dict[str, Any]]:
         if (
@@ -14,7 +12,10 @@ def register() -> None:
             and obj.data is not None
             and obj.mime_type.startswith("image")
         ):
-            return base64.b64encode(obj.data).decode("utf-8")
+            return {
+                "data": base64.b64encode(obj.data).decode("utf-8"),
+                "mime_type": obj.mime_type,
+            }
 
         return obj.model_dump()
 

@@ -3,7 +3,7 @@ import logging
 from typing import Callable, Dict, Type, List
 from opik import logging_messages
 from . import messages
-from ..jsonable_encoder import jsonable_encoder
+from ..jsonable_encoder import encode
 from .. import dict_utils
 from ..rest_api.types import feedback_score_batch_item, trace_write
 from ..rest_api.types import span_write
@@ -75,7 +75,7 @@ class MessageSender(BaseMessageProcessor):
         cleaned_create_span_kwargs = dict_utils.remove_none_from_dict(
             create_span_kwargs
         )
-        cleaned_create_span_kwargs = jsonable_encoder(cleaned_create_span_kwargs)
+        cleaned_create_span_kwargs = encode(cleaned_create_span_kwargs)
         LOGGER.debug("Create span request: %s", cleaned_create_span_kwargs)
         self._rest_client.spans.create_span(**cleaned_create_span_kwargs)
 
@@ -86,7 +86,7 @@ class MessageSender(BaseMessageProcessor):
         cleaned_create_trace_kwargs = dict_utils.remove_none_from_dict(
             create_trace_kwargs
         )
-        cleaned_create_trace_kwargs = jsonable_encoder(cleaned_create_trace_kwargs)
+        cleaned_create_trace_kwargs = encode(cleaned_create_trace_kwargs)
         LOGGER.debug("Create trace request: %s", cleaned_create_trace_kwargs)
         self._rest_client.traces.create_trace(**cleaned_create_trace_kwargs)
 
@@ -96,7 +96,7 @@ class MessageSender(BaseMessageProcessor):
         cleaned_update_span_kwargs = dict_utils.remove_none_from_dict(
             update_span_kwargs
         )
-        cleaned_update_span_kwargs = jsonable_encoder(cleaned_update_span_kwargs)
+        cleaned_update_span_kwargs = encode(cleaned_update_span_kwargs)
         LOGGER.debug("Update span request: %s", cleaned_update_span_kwargs)
         self._rest_client.spans.update_span(**cleaned_update_span_kwargs)
 
@@ -108,7 +108,7 @@ class MessageSender(BaseMessageProcessor):
         cleaned_update_trace_kwargs = dict_utils.remove_none_from_dict(
             update_trace_kwargs
         )
-        cleaned_update_trace_kwargs = jsonable_encoder(cleaned_update_trace_kwargs)
+        cleaned_update_trace_kwargs = encode(cleaned_update_trace_kwargs)
         LOGGER.debug("Update trace request: %s", cleaned_update_trace_kwargs)
         self._rest_client.traces.update_trace(**cleaned_update_trace_kwargs)
         LOGGER.debug("Sent trace %s", message.trace_id)
@@ -153,7 +153,7 @@ class MessageSender(BaseMessageProcessor):
             cleaned_span_write_kwargs = dict_utils.remove_none_from_dict(
                 span_write_kwargs
             )
-            cleaned_span_write_kwargs = jsonable_encoder(cleaned_span_write_kwargs)
+            cleaned_span_write_kwargs = encode(cleaned_span_write_kwargs)
             rest_spans.append(span_write.SpanWrite(**cleaned_span_write_kwargs))
 
         memory_limited_batches = sequence_splitter.split_into_batches(
@@ -176,7 +176,7 @@ class MessageSender(BaseMessageProcessor):
             cleaned_trace_write_kwargs = dict_utils.remove_none_from_dict(
                 trace_write_kwargs
             )
-            cleaned_trace_write_kwargs = jsonable_encoder(cleaned_trace_write_kwargs)
+            cleaned_trace_write_kwargs = encode(cleaned_trace_write_kwargs)
             rest_traces.append(trace_write.TraceWrite(**cleaned_trace_write_kwargs))
 
         memory_limited_batches = sequence_splitter.split_into_batches(
