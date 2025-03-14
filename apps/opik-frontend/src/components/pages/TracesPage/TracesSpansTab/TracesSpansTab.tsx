@@ -581,7 +581,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }
 
   return (
-    <div>
+    <>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
@@ -694,7 +694,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         open={Boolean(threadId)}
         onClose={handleClose}
       />
-    </div>
+    </>
   );
 };
 

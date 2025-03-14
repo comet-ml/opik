@@ -320,7 +320,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   }
 
   return (
-    <div>
+    <>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
@@ -422,7 +422,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         hasNextRow={hasNext}
         onRowChange={handleRowChange}
       />
-    </div>
+    </>
   );
 };
 
