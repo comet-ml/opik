@@ -9,7 +9,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @UtilityClass
-class AsyncContextUtils {
+public class AsyncContextUtils {
 
     static ContextAwareStream<Result> bindWorkspaceIdToFlux(Statement statement) {
         return (userName, workspaceId) -> {
@@ -25,7 +25,7 @@ class AsyncContextUtils {
         };
     }
 
-    static ContextAwareAction<Result> bindUserNameAndWorkspaceContext(Statement statement) {
+    public static ContextAwareAction<Result> bindUserNameAndWorkspaceContext(Statement statement) {
         return (userName, workspaceId) -> {
             statement.bind("user_name", userName);
             statement.bind("workspace_id", workspaceId);

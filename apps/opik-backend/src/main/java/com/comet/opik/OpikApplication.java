@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
+import com.comet.opik.infrastructure.aws.AwsModule;
 import com.comet.opik.infrastructure.bi.BiModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
@@ -80,7 +81,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new BiModule(), new CacheModule(), new AnthropicModule(),
-                        new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule())
+                        new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
+                        new AwsModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener())
                 .enableAutoConfig()
