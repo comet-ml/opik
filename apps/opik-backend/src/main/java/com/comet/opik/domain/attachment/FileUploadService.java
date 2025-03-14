@@ -1,4 +1,4 @@
-package com.comet.opik.domain.aws;
+package com.comet.opik.domain.attachment;
 
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.infrastructure.S3Config;
