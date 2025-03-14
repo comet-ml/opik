@@ -30,7 +30,7 @@ MarkupSafe==3.0.2
 mdurl==0.1.2
 multidict==6.1.0
 openai==1.59.9
-opik==1.4.2
+opik==1.6.1
 packaging==24.2
 pluggy==1.5.0
 propcache==0.2.1

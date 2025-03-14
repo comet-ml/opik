@@ -12,6 +12,8 @@ def create_app(test_config=None):
         app.config.from_mapping(test_config)
 
     from opik_backend.evaluator import evaluator
+    from opik_backend.post_user_signup import post_user_signup
     app.register_blueprint(evaluator)
+    app.register_blueprint(post_user_signup)
 
     return app
