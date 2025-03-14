@@ -21,6 +21,10 @@ import {
 } from "@/lib/charts";
 import React, { useCallback, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+
+const SHOW_STACKED_BARS_LIMIT = 4;
 
 export type BarDataPoint = Record<string, string | number>;
 
@@ -40,6 +44,10 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   names,
 }) => {
   const [activeBar, setActiveBar] = useState<string | null>(null);
+  const [width, setWidth] = useState<number>(0);
+  const { ref } = useObserveResizeNode<HTMLDivElement>((node) =>
+    setWidth(node.clientWidth),
+  );
 
   const config = useMemo(() => {
     return getDefaultHashedColorsChartConfig(names);
@@ -57,6 +65,38 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
     },
     [],
   );
+
+  const values = useMemo(() => {
+    return data.reduce<number[]>((acc, data) => {
+      const valuesByScore = names.map((name) => data[name] as number);
+      return [...acc, ...valuesByScore];
+    }, []);
+  }, [data, names]);
+
+  const {
+    width: tickWidth,
+    ticks,
+    domain,
+    yTickFormatter,
+    interval: tickInterval,
+  } = useChartTickDefaultConfig(values, {
+    tickPrecision: 2,
+  });
+
+  const truncateXAxisLabel = useCallback(
+    (label: string) => {
+      const labelsCount = names.length;
+      const xAxisWidth = width - 100;
+      const maxLabelWidth = xAxisWidth / labelsCount;
+
+      const maxTruncateLength = Math.floor(maxLabelWidth / 7);
+
+      return truncateChartLabel(label, maxTruncateLength);
+    },
+    [names.length, width],
+  );
+
+  const isStackedBars = data.length > SHOW_STACKED_BARS_LIMIT;
 
   const renderContent = () => {
     return (
@@ -81,9 +121,18 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
             tickLine={false}
             dy={10}
             tick={DEFAULT_CHART_TICK}
-            tickFormatter={(value) => truncateChartLabel(value)}
+            tickFormatter={truncateXAxisLabel}
           />
-          <YAxis tick={DEFAULT_CHART_TICK} axisLine={false} tickLine={false} />
+          <YAxis
+            width={tickWidth}
+            axisLine={false}
+            tickLine={false}
+            tick={DEFAULT_CHART_TICK}
+            interval={tickInterval}
+            ticks={ticks}
+            tickFormatter={yTickFormatter}
+            domain={domain}
+          />
           <ChartLegend
             content={
               <MetricChartLegendContent
@@ -113,7 +162,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
                 dataKey={name}
                 fill={config[name].color || ""}
                 fillOpacity={fillOpacity}
-                stackId="a"
+                stackId={isStackedBars ? "a" : undefined}
                 maxBarSize={52}
               />
             );
@@ -124,7 +173,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   };
 
   return (
-    <Card>
+    <Card ref={ref}>
       <CardHeader className="space-y-0.5 px-5 pb-1.5 pt-4">
         <CardTitle className="comet-body-s-accented">{name}</CardTitle>
         <CardDescription className="comet-body-xs text-xs">

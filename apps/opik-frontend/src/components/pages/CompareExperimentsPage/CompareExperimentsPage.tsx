@@ -45,6 +45,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
         <CompareExperimentsDetails
           experimentsIds={experimentsIds}
           experiments={memorizedExperiments}
+          isPending={isPending}
         />
       </PageBodyStickyContainer>
       <Tabs
