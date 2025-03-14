@@ -15,6 +15,7 @@ import aisuite.framework as aisuite_chat_completion
 from openai.types.chat import chat_completion as openai_chat_completion
 
 from opik import dict_utils, llm_usage
+from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import LLMProvider
 
@@ -94,7 +95,10 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         return model, provider
 
     def _end_span_inputs_preprocessor(
-        self, output: Any, capture_output: bool
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,

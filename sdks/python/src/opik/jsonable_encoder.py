@@ -41,6 +41,10 @@ def jsonable_encoder(obj: Any, seen: Optional[Set[int]] = None) -> Any:
         seen.add(obj_id)
 
     try:
+        for type_, encoder in _ENCODER_EXTENSIONS:
+            if isinstance(obj, type_):
+                return jsonable_encoder(encoder(obj), seen)
+
         if dataclasses.is_dataclass(obj) or isinstance(obj, pydantic.BaseModel):
             obj_dict = obj.__dict__
             return jsonable_encoder(obj_dict, seen)
@@ -69,10 +73,6 @@ def jsonable_encoder(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             for item in obj:
                 encoded_list.append(jsonable_encoder(item, seen))
             return encoded_list
-
-        for type_, encoder in _ENCODER_EXTENSIONS:
-            if isinstance(obj, type_):
-                return jsonable_encoder(encoder(obj), seen)
 
         if np is not None and isinstance(obj, np.ndarray):
             return jsonable_encoder(obj.tolist(), seen)
