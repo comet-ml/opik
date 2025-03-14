@@ -1,47 +1,45 @@
-import functools
 import atexit
 import datetime
+import functools
 import logging
+from typing import Any, Dict, List, Optional, Union
 
-from typing import Optional, Any, Dict, List, Union
+import httpx
 
-from .prompt import Prompt
-from .prompt.client import PromptClient
-
-from ..types import SpanType, FeedbackScoreDict, ErrorInfoDict, LLMProvider
+from .. import (
+    config,
+    datetime_helpers,
+    exceptions,
+    httpx_client,
+    id_helpers,
+    llm_usage,
+    rest_client_configurator,
+    url_helpers,
+)
+from ..message_processing import messages, streamer_constructors
+from ..message_processing.batching import sequence_splitter
+from ..rest_api import client as rest_api_client
+from ..rest_api.core.api_error import ApiError
+from ..rest_api.types import dataset_public, project_public, span_public, trace_public
+from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
 from . import (
+    constants,
+    dataset,
+    experiment,
+    helpers,
     opik_query_language,
     span,
     trace,
-    dataset,
-    experiment,
-    constants,
     validation_helpers,
-    helpers,
 )
-from .trace import migration as trace_migration
+from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
-from .dataset import rest_operations as dataset_rest_operations
-from ..message_processing import streamer_constructors, messages
-from ..message_processing.batching import sequence_splitter
-
-from ..rest_api import client as rest_api_client
-from ..rest_api.types import dataset_public, trace_public, span_public, project_public
-from ..rest_api.core.api_error import ApiError
-from .. import (
-    exceptions,
-    datetime_helpers,
-    config,
-    httpx_client,
-    url_helpers,
-    rest_client_configurator,
-    id_helpers,
-    llm_usage,
-)
+from .prompt import Prompt
+from .prompt.client import PromptClient
+from .trace import migration as trace_migration
 
 LOGGER = logging.getLogger(__name__)
-OPIK_API_REQUESTS_TIMEOUT_SECONDS = 30.0
 
 
 class Opik:
@@ -122,7 +120,9 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
-        self._rest_client._client_wrapper._timeout = OPIK_API_REQUESTS_TIMEOUT_SECONDS  # See https://github.com/fern-api/fern/issues/5321
+        self._rest_client._client_wrapper._timeout = (
+            httpx.USE_CLIENT_DEFAULT
+        )  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
@@ -732,6 +732,9 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
+        LOGGER.warning(
+            "Deprecated, use `get_experiments_by_name` or `get_experiment_by_id` instead."
+        )
         experiment_public = experiment_rest_operations.get_experiment_data_by_name(
             rest_client=self._rest_client, name=name
         )
@@ -743,6 +746,32 @@ class Opik:
             rest_client=self._rest_client,
             # TODO: add prompt if exists
         )
+
+    def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
+        """
+        Returns an existing experiments by its name.
+
+        Args:
+            name: The name of the experiment(s).
+
+        Returns:
+            List[experiment.Experiment]: List of existing experiments.
+        """
+        experiments_public = experiment_rest_operations.get_experiments_data_by_name(
+            rest_client=self._rest_client, name=name
+        )
+        result = []
+
+        for public_experiment in experiments_public:
+            experiment_ = experiment.Experiment(
+                id=public_experiment.id,
+                dataset_name=public_experiment.dataset_name,
+                name=name,
+                rest_client=self._rest_client,
+            )
+            result.append(experiment_)
+
+        return result
 
     def get_experiment_by_id(self, id: str) -> experiment.Experiment:
         """
