@@ -16,7 +16,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(AttachmentDAOImpl.class)
 public interface AttachmentDAO {
 
-    Mono<Long> addAttachment(CompleteMultipartUploadRequest completeUploadRequest, String filePath);
+    Mono<Long> addAttachment(CompleteMultipartUploadRequest completeUploadRequest);
 }
 
 @Singleton
@@ -30,7 +30,6 @@ class AttachmentDAOImpl implements AttachmentDAO {
                 entity_type,
                 container_id,
                 workspace_id,
-                file_path,
                 file_name,
                 mime_type,
                 file_size,
@@ -44,7 +43,6 @@ class AttachmentDAOImpl implements AttachmentDAO {
                  :entity_type,
                  :container_id,
                  :workspace_id,
-                 :file_path,
                  :file_name,
                  :mime_type,
                  :file_size,
@@ -58,8 +56,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
-    public Mono<Long> addAttachment(@NonNull CompleteMultipartUploadRequest completeUploadRequest,
-            @NonNull String filePath) {
+    public Mono<Long> addAttachment(@NonNull CompleteMultipartUploadRequest completeUploadRequest) {
         return asyncTemplate.nonTransaction(connection -> {
 
             var statement = connection.createStatement(INSERT_ATTACHMENT);
@@ -67,7 +64,6 @@ class AttachmentDAOImpl implements AttachmentDAO {
             statement.bind("entity_id", completeUploadRequest.entityId())
                     .bind("entity_type", completeUploadRequest.entityType().getValue())
                     .bind("container_id", completeUploadRequest.containerId())
-                    .bind("file_path", filePath)
                     .bind("file_name", completeUploadRequest.fileName())
                     .bind("mime_type", completeUploadRequest.mimeType())
                     .bind("file_size", completeUploadRequest.fileSize());

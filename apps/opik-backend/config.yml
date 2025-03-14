@@ -347,7 +347,7 @@ s3Config:
   # Description: AWS region for S3
   s3Region: ${S3_REGION:-'us-east-1'}
   # Description: AWS S3 bucket for Opik
-  s3BucketName: ${S3_BUCKET:-'comet.ml'}
+  s3BucketName: ${S3_BUCKET:-'public'}
   # Description: AWS S3 presign url timeout
   preSignUrlTimeoutSec: ${S3_PRESIGN_URL_TIMEOUT:-3600}
   # Description: Url for local MinIO or Aws

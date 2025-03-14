@@ -181,6 +181,8 @@ class AttachmentResourceTest {
 
         log.info("Completed attachment upload for workspaceId {}, projectId {}, traceId {}", workspaceId, projectId,
                 traceId);
+
+        // TODO: proper verification that the file was uploaded will be done once we prepare corresponding endpoint in OPIK-728
     }
 
     private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data)

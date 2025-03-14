@@ -12,7 +12,6 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
 import java.util.List;
@@ -56,10 +55,10 @@ class AttachmentServiceImpl implements AttachmentService {
     public void completeMultiPartUpload(CompleteMultipartUploadRequest completeUploadRequest, String workspaceId,
             String userName) {
         String key = prepareKey(completeUploadRequest, workspaceId);
-        CompleteMultipartUploadResponse completeResponse = s3Service.completeMultipartUpload(key,
+        s3Service.completeMultipartUpload(key,
                 completeUploadRequest.uploadId(), completeUploadRequest.uploadedFileParts());
 
-        attachmentDAO.addAttachment(completeUploadRequest, completeResponse.location())
+        attachmentDAO.addAttachment(completeUploadRequest)
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .block();
     }

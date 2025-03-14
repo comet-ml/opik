@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.attachments
     container_id    FixedString(36),
     entity_id       FixedString(36),
     entity_type     ENUM('trace', 'span'),
-    file_path       String,
     file_name       String,
     mime_type       String,
     file_size       Int64,
