@@ -71,9 +71,19 @@ databaseAnalytics:
   #   - compress=1
   #   - auto_discovery=true
   #   - failover=3
-  #   - custom_http_params=max_query_size=100000000
+  #   - custom_http_params:
+  #     - max_query_size=100000000
+  #     - async_insert=1
+  #     - wait_for_async_insert=1
+  #     - async_insert_max_data_size=25485760
+  #     - async_insert_max_query_number=10000
+  #     - async_insert_deduplicate=1
+  #     - async_insert_poll_timeout_ms=200
+  #     - async_insert_busy_timeout_min_ms=200
+  #     - async_insert_busy_timeout_max_ms=2000
+  #     - async_insert_use_adaptive_busy_timeout=1
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&wait_for_async_insert=1&custom_http_params=wait_for_async_insert=1,max_query_size=100000000,async_insert=1,async_insert_max_data_size=25485760,async_insert_max_query_number=10000,async_insert_deduplicate=1,async_insert_busy_timeout_min_ms=200,async_insert_busy_timeout_max_ms=2000,async_insert_poll_timeout_ms=200,async_insert_use_adaptive_busy_timeout=1}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
