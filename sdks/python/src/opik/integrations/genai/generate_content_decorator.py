@@ -103,7 +103,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         result = arguments_helpers.EndSpanParameters(
-            name=f"{current_span_data.name}:{model}",  # Add model to the name for better viewing UX
+            name=f"{current_span_data.name}: {model}",  # Add model to the name for better viewing UX
             output=output,
             usage=usage,
             metadata=metadata,

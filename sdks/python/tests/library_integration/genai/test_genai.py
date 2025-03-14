@@ -86,7 +86,7 @@ def test_genai_client__generate_content__happyflow(
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="genai_generate_content",
+        name=ANY_STRING(startswith=f"generate_content: {MODEL}"),
         input={"contents": "What is the capital of Belarus?", "config": ANY_BUT_NONE},
         output={"candidates": ANY_LIST},
         tags=["genai"],
@@ -98,7 +98,7 @@ def test_genai_client__generate_content__happyflow(
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="genai_generate_content",
+                name=ANY_STRING(startswith=f"generate_content: {MODEL}"),
                 input={
                     "contents": "What is the capital of Belarus?",
                     "config": ANY_BUT_NONE,
@@ -144,7 +144,7 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="genai_async_generate_content",
+        name=ANY_STRING(startswith=f"async_generate_content: {MODEL}"),
         input={"contents": "What is the capital of Belarus?"},
         output={"candidates": ANY_LIST},
         tags=["genai"],
@@ -155,7 +155,7 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="genai_async_generate_content",
+                name=ANY_STRING(startswith=f"async_generate_content: {MODEL}"),
                 input={"contents": "What is the capital of Belarus?"},
                 output={"candidates": ANY_LIST},
                 tags=["genai"],
@@ -225,7 +225,7 @@ def test_genai_client__generate_content_called_inside_another_tracked_function__
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name="genai_generate_content",
+                        name=ANY_STRING(startswith=f"generate_content: {MODEL}"),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
                         tags=["genai"],
@@ -289,7 +289,7 @@ def test_genai_client__async_generate_content_called_inside_another_tracked_func
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name="genai_async_generate_content",
+                        name=ANY_STRING(startswith=f"async_generate_content: {MODEL}"),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
                         tags=["genai"],
@@ -334,7 +334,7 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="genai_generate_content_stream",
+        name=ANY_STRING(startswith=f"generate_content_stream: {MODEL}"),
         input={"contents": "What is the capital of Belarus?"},
         output={"candidates": ANY_LIST},
         tags=["genai"],
@@ -346,7 +346,7 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="genai_generate_content_stream",
+                name=ANY_STRING(startswith=f"generate_content_stream: {MODEL}"),
                 input={"contents": "What is the capital of Belarus?"},
                 output={"candidates": ANY_LIST},
                 tags=["genai"],
@@ -392,7 +392,7 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name="genai_async_generate_content_stream",
+        name=ANY_STRING(startswith=f"async_generate_content_stream: {MODEL}"),
         input={"contents": "What is the capital of Belarus?"},
         output={"candidates": ANY_LIST},
         tags=["genai"],
@@ -403,7 +403,7 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="genai_async_generate_content_stream",
+                name=ANY_STRING(startswith=f"async_generate_content_stream: {MODEL}"),
                 input={"contents": "What is the capital of Belarus?"},
                 output={"candidates": ANY_LIST},
                 tags=["genai"],
@@ -470,7 +470,7 @@ def test_genai_client__generate_content_stream_called_inside_another_tracked_fun
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name="genai_generate_content_stream",
+                        name=ANY_STRING(startswith=f"generate_content_stream: {MODEL}"),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
                         tags=["genai"],
@@ -542,7 +542,7 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name="genai_async_generate_content_stream",
+                        name=ANY_STRING(startswith=f"async_generate_content_stream: {MODEL}"),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
                         tags=["genai"],
