@@ -42,6 +42,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
       <CompareExperimentsDetails
         experimentsIds={experimentsIds}
         experiments={memorizedExperiments}
+        isPending={isPending}
       />
       <Tabs defaultValue="input" value={tab as string} onValueChange={setTab}>
         <TabsList variant="underline">

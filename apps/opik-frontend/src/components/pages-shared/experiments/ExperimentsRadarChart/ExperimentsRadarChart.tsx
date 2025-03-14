@@ -9,19 +9,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import {
-  getDefaultHashedColorsChartConfig,
-  truncateChartLabel,
-} from "@/lib/charts";
-import React, { useCallback, useMemo } from "react";
+  ChartContainer,
+  ChartLegend,
+  ChartTooltip,
+} from "@/components/ui/chart";
+import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
+import React, { useCallback, useMemo, useState } from "react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis } from "recharts";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ExperimentRadarChartLegendContent from "./ExperimentRadarChartLegendContent";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 
 export type RadarDataPoint = Record<string, string | number>;
 
 interface ExperimentsRadarChartProps {
   name: string;
   description: string;
+  chartId: string;
   data: RadarDataPoint[];
   names: string[];
 }
@@ -29,9 +34,16 @@ interface ExperimentsRadarChartProps {
 const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
   name,
   description,
+  chartId,
   data,
   names,
 }) => {
+  const [width, setWidth] = useState<number>(0);
+  const { ref } = useObserveResizeNode<HTMLDivElement>((node) =>
+    setWidth(node.clientWidth),
+  );
+  const [activeLine, setActiveLine] = useState<string | null>(null);
+
   const config = useMemo(() => {
     return getDefaultHashedColorsChartConfig(names);
   }, [names]);
@@ -49,31 +61,47 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
     [],
   );
 
+  const renderPolarAngleAxis = useCallback(
+    ({
+      ...props
+    }: React.SVGProps<SVGTextElement> & {
+      payload: {
+        value: string;
+      };
+    }) => {
+      const getTruncateLength = () => {
+        const baseLength = 14;
+        const additionalLength = Math.floor((width - 400) / 20) * 2;
+
+        return width <= 400 ? baseLength : baseLength + additionalLength;
+      };
+
+      const truncateLength = getTruncateLength();
+      const truncatedLabel =
+        props.payload.value.length > truncateLength
+          ? `${props.payload.value.slice(0, truncateLength)}...`
+          : props.payload.value;
+
+      return (
+        <TooltipWrapper content={props.payload.value}>
+          <text {...props} {...DEFAULT_CHART_TICK}>
+            {truncatedLabel}
+          </text>
+        </TooltipWrapper>
+      );
+    },
+    [width],
+  );
+
   const renderContent = () => {
     return (
       <ChartContainer
         config={config}
-        className="min-h-[var(--chart-height)] w-full"
+        className="size-full h-[var(--chart-height)]"
       >
-        <RadarChart
-          data={data}
-          margin={{
-            top: -10,
-            right: 5,
-            left: 5,
-            bottom: -10,
-          }}
-        >
+        <RadarChart data={data} cy="45%" margin={{ top: 0, bottom: 0 }}>
           <PolarGrid />
-          <PolarAngleAxis
-            dataKey="name"
-            tick={{
-              ...DEFAULT_CHART_TICK,
-              fontSize: "12px",
-            }}
-            dy={3}
-            tickFormatter={(value) => truncateChartLabel(value)}
-          />
+          <PolarAngleAxis dataKey="name" tick={renderPolarAngleAxis} dy={3} />
           <ChartTooltip
             isAnimationActive={false}
             content={
@@ -81,12 +109,12 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
             }
           />
           {names.map((name) => {
-            // const isActive = name === activeLine;
-            // let strokeOpacity = 1;
+            const isActive = name === activeLine;
+            let strokeOpacity = 1;
 
-            // if (activeLine) {
-            //   strokeOpacity = isActive ? 1 : 0.4;
-            // }
+            if (activeLine) {
+              strokeOpacity = isActive ? 1 : 0.4;
+            }
 
             return (
               <Radar
@@ -98,17 +126,25 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
                 fillOpacity={0.05}
                 strokeWidth={1.5}
                 animationDuration={600}
-                strokeOpacity={1}
+                strokeOpacity={strokeOpacity}
               />
             );
           })}
+          <ChartLegend
+            content={
+              <ExperimentRadarChartLegendContent
+                setActiveLine={setActiveLine}
+                chartId={chartId}
+              />
+            }
+          />
         </RadarChart>
       </ChartContainer>
     );
   };
 
   return (
-    <Card>
+    <Card ref={ref}>
       <CardHeader className="space-y-0.5 px-5 pb-1.5 pt-4">
         <CardTitle className="comet-body-s-accented">{name}</CardTitle>
         <CardDescription className="comet-body-xs text-xs">

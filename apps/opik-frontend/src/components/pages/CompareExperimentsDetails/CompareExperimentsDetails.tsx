@@ -15,14 +15,16 @@ import DateTag from "@/components/shared/DateTag/DateTag";
 import useCompareExperimentsChartsData from "./hooks/useCompareExperimentsChartsData";
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
 import ExperimentsBarChart from "@/components/pages-shared/experiments/ExperimentsBarChart/ExperimentsBarChart";
+
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
   experiments: Experiment[];
+  isPending: boolean;
 };
 
 const CompareExperimentsDetails: React.FunctionComponent<
   CompareExperimentsDetailsProps
-> = ({ experiments, experimentsIds }) => {
+> = ({ experiments, experimentsIds, isPending }) => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
   const isCompare = experimentsIds.length > 1;
@@ -33,7 +35,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
     ? experiment?.name
     : `Compare (${experimentsIds.length})`;
 
-  const [showCharts = false, setShowCharts] = useQueryParam(
+  const [showCharts = true, setShowCharts] = useQueryParam(
     "chartsExpanded",
     BooleanParam,
     {
@@ -120,28 +122,30 @@ const CompareExperimentsDetails: React.FunctionComponent<
   };
 
   const renderCharts = () => {
-    if (!isCompare || !showCharts) return null;
+    if (!isCompare || !showCharts || isPending) return null;
 
     return (
       <div className="mb-2 mt-4 overflow-auto">
         {experiments.length ? (
           <div
             className="flex flex-row gap-4"
-            style={{ "--chart-height": "230px" } as React.CSSProperties}
+            style={{ "--chart-height": "240px" } as React.CSSProperties}
           >
-            <div className="max-w-[402px]">
-              <ExperimentsRadarChart
-                name="Feedback scores"
-                description="Average scores"
-                chartId="feedback-scores-radar-chart"
-                data={radarChartData}
-                names={radarChartNames}
-              />
-            </div>
-            <div className="w-full">
+            {radarChartData.length > 1 && (
+              <div className="w-1/3 min-w-[400px]">
+                <ExperimentsRadarChart
+                  name="Feedback scores"
+                  description="Top 10 metrics"
+                  chartId="feedback-scores-radar-chart"
+                  data={radarChartData}
+                  names={radarChartNames}
+                />
+              </div>
+            )}
+            <div className="min-w-[400px] flex-1">
               <ExperimentsBarChart
                 name="Feedback scores distribution"
-                description="Average scores"
+                description="Last 10 experiments"
                 chartId="feedback-scores-bar-chart"
                 data={barChartData}
                 names={barChartNames}

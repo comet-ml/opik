@@ -16,7 +16,7 @@ type CompareExperimentsChartsData = {
   barChartNames: string[];
 };
 
-const MAX_VISIBLE_ENTITIES = 6;
+const MAX_VISIBLE_ENTITIES = 10;
 
 const useCompareExperimentsChartsData = ({
   isCompare,
