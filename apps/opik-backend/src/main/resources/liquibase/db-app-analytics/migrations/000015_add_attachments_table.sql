@@ -16,6 +16,6 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.attachments
     created_by      String DEFAULT '',
     last_updated_by String DEFAULT ''
     ) ENGINE = ReplacingMergeTree(last_updated_at)
-    ORDER BY (workspace_id, container_id, entity_id, file_name);
+    ORDER BY (workspace_id, container_id, entity_type, entity_id, file_name);
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.attachments;
