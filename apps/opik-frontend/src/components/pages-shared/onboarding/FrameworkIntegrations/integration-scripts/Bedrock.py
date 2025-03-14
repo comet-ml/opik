@@ -1,5 +1,6 @@
 import boto3
 from opik.integrations.bedrock import track_bedrock # HIGHLIGHTED_LINE
+import os
 
 # INJECT_OPIK_CONFIGURATION
 
