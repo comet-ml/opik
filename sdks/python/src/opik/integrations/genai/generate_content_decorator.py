@@ -52,7 +52,10 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             kwargs is not None
         ), "Expected kwargs to be not None in client.models.generate_content(**kwargs), client.aio.models.generate_content(**kwargs)"
 
+        model = kwargs.get("model")
+
         name = track_options.name if track_options.name is not None else func.__name__
+        name = f"{name}: {model}"  # Add model to the name for better viewing UX
 
         metadata = track_options.metadata if track_options.metadata is not None else {}
 
@@ -71,7 +74,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
-            model=kwargs.get("model", None),
+            model=model,
             provider=self.provider,
         )
 
@@ -101,9 +104,9 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             logger=LOGGER,
             error_message="Failed to log token usage from genai generate_response call",
         )
-
+        span_name_without_model = current_span_data.name.split(":")[0]
         result = arguments_helpers.EndSpanParameters(
-            name=f"{current_span_data.name}: {model}",  # Add model to the name for better viewing UX
+            name=f"{span_name_without_model}: {model}",
             output=output,
             usage=usage,
             metadata=metadata,
