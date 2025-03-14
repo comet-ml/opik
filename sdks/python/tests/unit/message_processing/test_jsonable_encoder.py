@@ -25,7 +25,7 @@ def test_jsonable_encoder__cyclic_reference():
     node_a.child = node_b
     node_b.child = node_a
 
-    encoded = jsonable_encoder.jsonable_encoder(node_a)
+    encoded = jsonable_encoder.encode(node_a)
     # The exact format of the cycle marker can vary; we check that:
     # 1. We get some structure for node_a (like a dict).
     # 2. Inside node_a, there's a reference to node_b (a dict).
@@ -63,7 +63,7 @@ def test_jsonable_encoder__repeated_objects_in_list():
     # Put the same node object in a list multiple times
     repeated_list = [node, node, node]
 
-    encoded = jsonable_encoder.jsonable_encoder(repeated_list)
+    encoded = jsonable_encoder.encode(repeated_list)
     # We expect a list of three items, each being a dict with `value` = 42, `child` = None
     assert isinstance(encoded, list)
     assert len(encoded) == 3
@@ -97,7 +97,7 @@ def test_jsonable_encoder__repeated_objects_in_list():
     ],
 )
 def test_jsonable_encoder__common_types(obj):
-    assert obj == jsonable_encoder.jsonable_encoder(obj)
+    assert obj == jsonable_encoder.encode(obj)
 
 
 @pytest.mark.parametrize(
@@ -109,7 +109,7 @@ def test_jsonable_encoder__common_types(obj):
     ],
 )
 def test_jsonable_encoder__converted_to_list(obj):
-    assert list(obj) == jsonable_encoder.jsonable_encoder(obj)
+    assert list(obj) == jsonable_encoder.encode(obj)
 
 
 @pytest.mark.parametrize(
@@ -123,7 +123,7 @@ def test_jsonable_encoder__converted_to_list(obj):
     ],
 )
 def test_jsonable_encoder__datetime_to_text(obj, expected):
-    assert expected == jsonable_encoder.jsonable_encoder(obj)
+    assert expected == jsonable_encoder.encode(obj)
 
 
 def test_jsonable_encoder__non_serializable_to_text__class():
@@ -133,13 +133,13 @@ def test_jsonable_encoder__non_serializable_to_text__class():
 
     data = SomeClass()
 
-    assert "SomeClass object at 0x" in jsonable_encoder.jsonable_encoder(data)
+    assert "SomeClass object at 0x" in jsonable_encoder.encode(data)
 
 
 def test_jsonable_encoder__non_serializable_to_text__lock():
     data = Lock()
 
-    assert jsonable_encoder.jsonable_encoder(data).startswith(
+    assert jsonable_encoder.encode(data).startswith(
         "<unlocked _thread.lock object at 0x"
     )
 
@@ -152,7 +152,7 @@ def test_jsonable_encoder__non_serializable_lock_inside_dataclass__lock_converte
 
     data = SomeClass(a=1, b=Lock())
 
-    encoded = jsonable_encoder.jsonable_encoder(data)
+    encoded = jsonable_encoder.encode(data)
     assert isinstance(encoded, dict)
     assert encoded["a"] == 1
     assert encoded["b"].startswith("<unlocked _thread.lock object at 0x")
@@ -161,4 +161,4 @@ def test_jsonable_encoder__non_serializable_lock_inside_dataclass__lock_converte
 def test_jsonable_encoder__non_serializable_to_text__bytes():
     data = b"deadbeef"
 
-    assert str(data) == jsonable_encoder.jsonable_encoder(data)
+    assert str(data) == jsonable_encoder.encode(data)

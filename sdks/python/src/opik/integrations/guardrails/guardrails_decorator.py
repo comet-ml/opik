@@ -13,6 +13,7 @@ from typing import (
 
 from guardrails import validators
 
+from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator, inspect_helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -59,7 +60,10 @@ class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorat
         return result
 
     def _end_span_inputs_preprocessor(
-        self, output: Any, capture_output: bool
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,

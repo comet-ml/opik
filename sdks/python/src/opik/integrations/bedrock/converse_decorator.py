@@ -2,6 +2,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from opik import dict_utils, llm_usage
+from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
 from . import helpers, stream_wrappers
@@ -51,7 +52,10 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         return result
 
     def _end_span_inputs_preprocessor(
-        self, output: Any, capture_output: bool
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         usage = output["usage"]
         usage_in_openai_format = llm_usage.try_build_opik_usage_or_log_error(

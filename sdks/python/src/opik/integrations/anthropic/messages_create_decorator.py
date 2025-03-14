@@ -1,13 +1,14 @@
 import logging
-from typing import List, Any, Dict, Optional, Callable, Tuple, Union
-from opik.decorator import base_track_decorator, arguments_helpers
-from opik import dict_utils, llm_usage
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import anthropic
 from anthropic.types import Message as AnthropicMessage
 
-from . import stream_patchers
+from opik import dict_utils, llm_usage
+from opik.api_objects import span
+from opik.decorator import arguments_helpers, base_track_decorator
 
+from . import stream_patchers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,7 +58,10 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
         return result
 
     def _end_span_inputs_preprocessor(
-        self, output: Union[str, AnthropicMessage], capture_output: bool
+        self,
+        output: Union[str, AnthropicMessage],
+        capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         if isinstance(output, str):
             output = {"error": output}

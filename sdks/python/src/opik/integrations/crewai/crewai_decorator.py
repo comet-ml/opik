@@ -11,9 +11,10 @@ from typing import (
     Union,
 )
 
-from opik import opik_context, llm_usage
+from opik import llm_usage
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import SpanType, LLMProvider
+from opik.api_objects import span
 
 LOGGER = logging.getLogger(__name__)
 
@@ -146,13 +147,13 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         object_type = None
         metadata = {}
 
-        current_span = opik_context.get_current_span_data()
-        if current_span and current_span.metadata:
-            metadata = current_span.metadata
+        if current_span_data and current_span_data.metadata:
+            metadata = current_span_data.metadata
             object_type = metadata.pop("object_type")
 
         model, provider, output_dict, usage = self._parse_outputs(object_type, output)

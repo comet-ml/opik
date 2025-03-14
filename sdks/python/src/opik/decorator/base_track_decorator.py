@@ -1,29 +1,28 @@
-import functools
-import logging
-import inspect
 import abc
-
+import functools
+import inspect
+import logging
 from typing import (
-    List,
     Any,
-    Dict,
-    Set,
-    Optional,
     Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
     Tuple,
     Union,
 )
 
-from ..types import SpanType, DistributedTraceHeadersDict, ErrorInfoDict
+from .. import config, context_storage, logging_messages
+from ..api_objects import opik_client, span, trace
+from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType
 from . import (
     arguments_helpers,
+    error_info_collector,
     generator_wrappers,
     inspect_helpers,
-    error_info_collector,
+    span_creation_handler,
 )
-from ..api_objects import opik_client, span, trace
-from .. import context_storage, logging_messages, config
-from . import span_creation_handler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -420,22 +419,23 @@ class BaseTrackDecorator(abc.ABC):
             return
 
         try:
-            if output is not None:
-                end_arguments = self._end_span_inputs_preprocessor(
-                    output=output,
-                    capture_output=capture_output,
-                )
-            else:
-                end_arguments = arguments_helpers.EndSpanParameters(
-                    error_info=error_info
-                )
-
             if generators_span_to_end is None:
                 span_data_to_end, trace_data_to_end = pop_end_candidates()
             else:
                 span_data_to_end, trace_data_to_end = (
                     generators_span_to_end,
                     generators_trace_to_end,
+                )
+
+            if output is not None:
+                end_arguments = self._end_span_inputs_preprocessor(
+                    output=output,
+                    capture_output=capture_output,
+                    current_span_data=span_data_to_end,
+                )
+            else:
+                end_arguments = arguments_helpers.EndSpanParameters(
+                    error_info=error_info
                 )
 
             client = opik_client.get_client_cached()
@@ -505,6 +505,7 @@ class BaseTrackDecorator(abc.ABC):
         self,
         output: Optional[Any],
         capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         """
         Subclasses must override this method to customize generating
