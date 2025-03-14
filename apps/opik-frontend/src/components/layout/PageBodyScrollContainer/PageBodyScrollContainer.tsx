@@ -15,14 +15,8 @@ const PageBodyScrollContainer: React.FC<PageBodyScrollContainerProps> = ({
   const [style, setStyle] = useState<React.CSSProperties>({});
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
-    const computedStyle = getComputedStyle(node);
     setStyle({
       "--scroll-body-client-width": `${node.clientWidth}px`,
-      "--scroll-body-client-padding-box": `${
-        node.clientWidth -
-        parseInt(computedStyle.paddingLeft, 10) -
-        parseInt(computedStyle.paddingRight, 10)
-      }px`,
     } as React.CSSProperties);
   });
 
@@ -31,7 +25,7 @@ const PageBodyScrollContainer: React.FC<PageBodyScrollContainerProps> = ({
       ref={ref}
       style={style}
       className={cn(
-        "relative h-[calc(100vh-var(--header-height))] overflow-auto -mx-6 px-6",
+        "relative h-[calc(100vh-var(--header-height))] overflow-auto -mx-6",
         className,
       )}
     >
