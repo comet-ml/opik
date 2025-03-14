@@ -9,8 +9,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
@@ -19,7 +17,6 @@ import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -41,21 +38,9 @@ class FileUploadServiceImpl implements FileUploadService {
 
     @Inject
     public FileUploadServiceImpl(@NonNull @Config("s3Config") S3Config s3Config,
-            @NonNull AwsCredentialsProvider credentialsProvider) {
+            @NonNull S3Client s3Client) {
         this.s3Config = s3Config;
-
-        Region region = Region.of(s3Config.getS3Region());
-
-        var builder = S3Client.builder()
-                .region(region)
-                .credentialsProvider(credentialsProvider);
-
-        if (s3Config.isMinIO()) {
-            builder.forcePathStyle(true)
-                    .endpointOverride(URI.create(s3Config.getS3Url()));
-        }
-
-        this.s3Client = builder.build();
+        this.s3Client = s3Client;
     }
 
     @Override

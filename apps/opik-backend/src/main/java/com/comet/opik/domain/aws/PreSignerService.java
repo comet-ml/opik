@@ -7,14 +7,10 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.UploadPartRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
-import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -34,24 +30,9 @@ class PreSignerServiceImpl implements PreSignerService {
 
     @Inject
     public PreSignerServiceImpl(@NonNull @Config("s3Config") S3Config s3Config,
-            @NonNull AwsCredentialsProvider credentialsProvider) {
+            @NonNull S3Presigner preSigner) {
         this.s3Config = s3Config;
-
-        Region region = Region.of(s3Config.getS3Region());
-        S3Configuration s3Configuration = S3Configuration.builder()
-                .pathStyleAccessEnabled(true)
-                .build();
-
-        var builder = S3Presigner.builder()
-                .credentialsProvider(credentialsProvider)
-                .region(region)
-                .serviceConfiguration(s3Configuration);
-
-        if (s3Config.isMinIO()) {
-            builder.endpointOverride(URI.create(s3Config.getS3Url()));
-        }
-
-        this.preSigner = builder.build();
+        this.preSigner = preSigner;
     }
 
     @Override
