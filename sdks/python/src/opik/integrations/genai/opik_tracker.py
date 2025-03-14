@@ -2,7 +2,12 @@ from typing import Optional
 
 from google import genai
 
-from . import generate_content_decorator, generations_aggregators, stream_wrappers
+from . import (
+    generate_content_decorator,
+    generations_aggregators,
+    stream_wrappers,
+    encoder_extension,
+)
 
 
 def track_genai(
@@ -28,6 +33,7 @@ def track_genai(
     """
     if hasattr(client, "opik_tracked"):
         return client
+    encoder_extension.register()
 
     client.opik_tracked = True
 
@@ -38,7 +44,7 @@ def track_genai(
     )
 
     client.models.generate_content = decorator_factory.track(
-        name="genai_generate_content",
+        name="generate_content",
         type="llm",
         project_name=project_name,
     )(client.models.generate_content)
@@ -52,14 +58,14 @@ def track_genai(
         )
     )
     client.models.generate_content_stream = decorator_factory.track(
-        name="genai_generate_content_stream",
+        name="generate_content_stream",
         type="llm",
         project_name=project_name,
         generations_aggregator=generations_aggregators.aggregate_response_content_items,
     )(client.models.generate_content_stream)
 
     client.aio.models.generate_content = decorator_factory.track(
-        name="genai_async_generate_content",
+        name="async_generate_content",
         type="llm",
         project_name=project_name,
     )(client.aio.models.generate_content)
@@ -67,7 +73,7 @@ def track_genai(
     # No need to perform a similar conversion as for the synchronous method, because async version of generate_content_stream
     # is already a wrapper around generator function that works similarly to our helper function
     client.aio.models.generate_content_stream = decorator_factory.track(
-        name="genai_async_generate_content_stream",
+        name="async_generate_content_stream",
         type="llm",
         project_name=project_name,
         generations_aggregator=generations_aggregators.aggregate_response_content_items,

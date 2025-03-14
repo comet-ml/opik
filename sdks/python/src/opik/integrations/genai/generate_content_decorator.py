@@ -13,10 +13,11 @@ from typing import (
 
 from google.genai import types as genai_types
 
-from opik import dict_utils
+from opik import dict_utils, llm_usage
+from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
-from opik import llm_usage
 from opik.types import LLMProvider
+
 from . import stream_wrappers
 
 LOGGER = logging.getLogger(__name__)
@@ -77,7 +78,10 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         return result
 
     def _end_span_inputs_preprocessor(
-        self, output: Any, capture_output: bool
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,
@@ -97,7 +101,9 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             logger=LOGGER,
             error_message="Failed to log token usage from genai generate_response call",
         )
+
         result = arguments_helpers.EndSpanParameters(
+            name=f"{current_span_data.name}: {model}",  # Add model to the name for better viewing UX
             output=output,
             usage=usage,
             metadata=metadata,
