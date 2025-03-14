@@ -7,14 +7,6 @@ import lombok.Data;
 
 @Data
 public class S3Config {
-    @Valid @JsonProperty
-    private boolean isEKSPod;
-
-    @Valid @JsonProperty
-    @NotNull private String s3Key;
-
-    @Valid @JsonProperty
-    @NotNull private String s3Secret;
 
     @Valid @JsonProperty
     @NotNull private String s3Region;

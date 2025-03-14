@@ -28,7 +28,7 @@ public class MinIOContainerUtils {
                 .withReuse(true);
     }
 
-    public static void createTestBucket(String minioUrl) {
+    public static void setupBucketAndCredentials(String minioUrl) {
         try (S3Client s3 = S3Client.builder()
                 .endpointOverride(URI.create(minioUrl))
                 .forcePathStyle(true)
@@ -40,6 +40,8 @@ public class MinIOContainerUtils {
                 s3.createBucket(CreateBucketRequest.builder().bucket(MINIO_BUCKET).build());
             }
         }
+        System.setProperty("aws.accessKeyId", MINIO_USER);
+        System.setProperty("aws.secretAccessKey", MINIO_PASSWORD);
     }
 
     private static boolean doesBucketExist(S3Client s3Client, String bucketName) {

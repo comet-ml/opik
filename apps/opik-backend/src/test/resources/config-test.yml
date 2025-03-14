@@ -255,13 +255,6 @@ clickHouseLogAppender:
 
 # Configuration AWS S3
 s3Config:
-  # Description: Whether this installation is for AWS Sagemaker integration
-  isEKSPod: false
-  # Description: AWS Access key Id for S3
-  s3Key: 'miniouser'
-  # Description: AWS Secret access key for S3
-  s3Secret: 'miniopassword'
-  # Description: AWS region for S3
   s3Region: 'us-east-1'
   # Description: AWS S3 bucket for Opik
   s3BucketName: 'test-bucket'

@@ -7,10 +7,8 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
@@ -23,11 +21,7 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
     @Provides
     @Singleton
     public AwsCredentialsProvider credentialsProvider(@Config("s3Config") S3Config config) {
-        if (config.isEKSPod()) {
-            return ContainerCredentialsProvider.builder().build();
-        }
-
-        return StaticCredentialsProvider.create(AwsBasicCredentials.create(config.getS3Key(), config.getS3Secret()));
+        return DefaultCredentialsProvider.create();
     }
 
     @Provides

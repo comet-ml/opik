@@ -81,7 +81,7 @@ class AttachmentResourceTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
-        MinIOContainerUtils.createTestBucket(minioUrl);
+        MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 TestDropwizardAppExtensionUtils.AppContextConfig.builder()

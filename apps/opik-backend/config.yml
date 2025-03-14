@@ -338,13 +338,6 @@ workspaceSettings:
 
 # Configuration AWS S3
 s3Config:
-  # Description: Whether this installation is for AWS Sagemaker integration
-  isEKSPod: ${AWS_EKS_POD_IDENTITIES:-false}
-  # Description: AWS Access key Id for S3
-  s3Key: ${S3_KEY:-'THAAIOSFODNN7EXAMPLE'}
-  # Description: AWS Secret access key for S3
-  s3Secret: ${S3_SECRET:-'LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'}
-  # Description: AWS region for S3
   s3Region: ${S3_REGION:-'us-east-1'}
   # Description: AWS S3 bucket for Opik
   s3BucketName: ${S3_BUCKET:-'public'}
