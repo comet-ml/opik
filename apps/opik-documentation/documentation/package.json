@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "fern": "^0.0.19",
+    "fern-api": "^0.56.20",
     "nodemon": "^3.1.9"
   },
   "scripts": {
