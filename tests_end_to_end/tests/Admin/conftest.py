@@ -27,7 +27,6 @@ def temp_user_with_api_key(page: Page, browser_context, env_config: EnvConfig):
     password = f"Password123_{random_suffix}"
     email = f"{username}@test.com"
     base_url = re.sub(r"/opik$", "", env_config.base_url)
-    auth_url = f"{base_url}/api/auth/login"
 
     # Create user
     send_request_to_create_user(page, base_url, username, password, env_config)
