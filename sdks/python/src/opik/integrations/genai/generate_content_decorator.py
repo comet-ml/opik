@@ -104,7 +104,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             logger=LOGGER,
             error_message="Failed to log token usage from genai generate_response call",
         )
-        span_name_without_model = current_span_data.name.split(":")[0]
+        span_name_without_model = current_span_data.name.split(":")[0]  # type: ignore
         result = arguments_helpers.EndSpanParameters(
             name=f"{span_name_without_model}: {model}",
             output=output,
