@@ -7,8 +7,8 @@ ENDPOINT = "/v1/private/post_user_signup"
 
 def test_successful_signup(client):
     payload = {
-        "workspace_name": "demo-workspace",
-        "comet_api_key": "fake-api-key"
+        "workspace": "demo-workspace",
+        "apiKey": "fake-api-key"
     }
     with patch("opik_backend.post_user_signup.create_demo_data") as mock_create:
         response = client.post(ENDPOINT, json=payload)
@@ -19,17 +19,17 @@ def test_successful_signup(client):
 
 def test_missing_workspace_name(client):
     payload = {
-        "comet_api_key": "fake-api-key"
+        "apiKey": "fake-api-key"
     }
     response = client.post(ENDPOINT, json=payload)
     assert response.status_code == 400
-    assert "workspace_name" in response.json["error"]
+    assert "workspace" in response.json["error"]
 
 
 def test_missing_api_key(client):
     payload = {
-        "workspace_name": "demo-workspace"
+        "workspace": "demo-workspace"
     }
     response = client.post(ENDPOINT, json=payload)
     assert response.status_code == 400
-    assert "comet_api_key" in response.json["error"]
+    assert "apiKey" in response.json["error"]
