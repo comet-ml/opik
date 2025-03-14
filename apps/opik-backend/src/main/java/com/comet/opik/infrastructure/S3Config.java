@@ -24,4 +24,10 @@ public class S3Config {
 
     @Valid @JsonProperty
     private long preSignUrlTimeoutSec;
+
+    @Valid @JsonProperty
+    private String s3Url;
+
+    @Valid @JsonProperty
+    private boolean isMinIO;
 }

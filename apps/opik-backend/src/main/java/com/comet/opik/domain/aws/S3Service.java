@@ -19,6 +19,7 @@ import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -42,15 +43,20 @@ class S3ServiceImpl implements S3Service {
     public S3ServiceImpl(@NonNull @Config("s3Config") S3Config s3Config) {
         this.s3Config = s3Config;
 
-        AwsCredentialsProvider credentialsProvider = AWSCredentialsUtils.getAWSCredentials(s3Config.getS3Key(),
+        AwsCredentialsProvider credentialsProvider = AWSUtils.getAWSCredentials(s3Config.getS3Key(),
                 s3Config.getS3Secret());
         Region region = Region.of(s3Config.getS3Region());
 
-        this.s3Client = S3Client.builder()
+        var builder = S3Client.builder()
                 .region(region)
-                .credentialsProvider(credentialsProvider)
-                .forcePathStyle(true)
-                .build();
+                .credentialsProvider(credentialsProvider);
+
+        if (s3Config.isMinIO()) {
+            builder.forcePathStyle(true)
+                    .endpointOverride(URI.create(s3Config.getS3Url()));
+        }
+
+        this.s3Client = builder.build();
     }
 
     @Override

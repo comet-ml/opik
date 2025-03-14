@@ -9,14 +9,14 @@ import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 
 @UtilityClass
-public class AWSCredentialsUtils {
-    private boolean isEKSPod;
+public class AWSUtils {
+    private static boolean isEKSPod;
 
-    public void setConfig(@NonNull OpikConfiguration config) {
+    public static void setConfig(@NonNull OpikConfiguration config) {
         isEKSPod = config.getS3Config().isEKSPod();
     }
 
-    public AwsCredentialsProvider getAWSCredentials(String awsKey, String awsSecret) {
+    public static AwsCredentialsProvider getAWSCredentials(String awsKey, String awsSecret) {
         if (isEKSPod) {
             return ContainerCredentialsProvider.builder().build();
         }

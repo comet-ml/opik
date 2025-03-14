@@ -335,3 +335,22 @@ workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
     maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+
+# Configuration AWS S3
+s3Config:
+  # Description: Whether this installation is for AWS Sagemaker integration
+  isEKSPod: ${AWS_EKS_POD_IDENTITIES:-false}
+  # Description: AWS Access key Id for S3
+  s3Key: ${S3_KEY:-'THAAIOSFODNN7EXAMPLE'}
+  # Description: AWS Secret access key for S3
+  s3Secret: ${S3_SECRET:-'LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'}
+  # Description: AWS region for S3
+  s3Region: ${S3_REGION:-'us-east-1'}
+  # Description: AWS S3 bucket for Opik
+  s3BucketName: ${S3_BUCKET:-'comet.ml'}
+  # Description: AWS S3 presign url timeout
+  preSignUrlTimeoutSec: ${S3_PRESIGN_URL_TIMEOUT:-3600}
+  # Description: Url for local MinIO or Aws
+  s3Url: ${S3_URL:-http://localhost:9000}
+  # Description: Whether installation uses MinIO or AWS S3
+  isMinIO: ${IS_MINIO:-true}

@@ -252,3 +252,22 @@ clickHouseLogAppender:
   # Default: PT0.500S or 500ms
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: PT0.500S
+
+# Configuration AWS S3
+s3Config:
+  # Description: Whether this installation is for AWS Sagemaker integration
+  isEKSPod: false
+  # Description: AWS Access key Id for S3
+  s3Key: 'miniouser'
+  # Description: AWS Secret access key for S3
+  s3Secret: 'miniopassword'
+  # Description: AWS region for S3
+  s3Region: 'us-east-1'
+  # Description: AWS S3 bucket for Opik
+  s3BucketName: 'test-bucket'
+  # Description: AWS S3 presign url timeout
+  preSignUrlTimeoutSec: 60
+  # Description: Url for local MinIO or Aws
+  s3Url: http://localhost:9000
+  # Description: Whether installation uses MinIO or AWS S3
+  isMinIO: true

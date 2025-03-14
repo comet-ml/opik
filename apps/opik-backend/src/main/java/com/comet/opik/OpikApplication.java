@@ -1,7 +1,7 @@
 package com.comet.opik;
 
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
-import com.comet.opik.domain.aws.AWSCredentialsUtils;
+import com.comet.opik.domain.aws.AWSUtils;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -91,7 +91,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
     @Override
     public void run(OpikConfiguration configuration, Environment environment) {
         EncryptionUtils.setConfig(configuration);
-        AWSCredentialsUtils.setConfig(configuration);
+        AWSUtils.setConfig(configuration);
 
         // Resources
         var jersey = environment.jersey();
