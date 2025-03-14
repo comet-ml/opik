@@ -124,7 +124,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If it's not set - there is no timeout.
     """
 
-    background_workers: int = 1
+    background_workers: int = 4
     """
     The amount of background threads that submit data to the backend.
     """
