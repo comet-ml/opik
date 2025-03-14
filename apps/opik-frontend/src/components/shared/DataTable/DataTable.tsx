@@ -29,6 +29,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import DataTableColumnResizer from "@/components/shared/DataTable/DataTableColumnResizer";
+import DataTableWrapper, {
+  DataTableWrapperProps,
+} from "@/components/shared/DataTable/DataTableWrapper";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
@@ -43,6 +46,10 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { TABLE_HEADER_Z_INDEX } from "@/constants/shared";
 import { cn } from "@/lib/utils";
+import {
+  STICKY_ATTRIBUTE_NAME,
+  STICKY_DIRECTION,
+} from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -114,6 +121,8 @@ interface DataTableProps<TData, TValue> {
   columnPinning?: ColumnPinningState;
   noData?: ReactNode;
   autoWidth?: boolean;
+  stickyHeader?: boolean;
+  TableWrapper?: React.FC<DataTableWrapperProps>;
   meta?: Omit<
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
@@ -138,6 +147,8 @@ const DataTable = <TData, TValue>({
   columnPinning,
   noData,
   autoWidth = false,
+  TableWrapper = DataTableWrapper,
+  stickyHeader = false,
   meta,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
@@ -269,9 +280,9 @@ const DataTable = <TData, TValue>({
       </TableCell>
     );
   };
-
+  // TODO lala
   return (
-    <div className="overflow-x-auto overflow-y-hidden rounded-md border">
+    <TableWrapper>
       <Table
         style={{
           ...(!autoWidth && { minWidth: table.getTotalSize() }),
@@ -282,7 +293,12 @@ const DataTable = <TData, TValue>({
             <col key={i.id} style={{ width: `${i.size}px` }} />
           ))}
         </colgroup>
-        <TableHeader>
+        <TableHeader
+          className={cn(stickyHeader && "sticky z-10 top-0")}
+          {...(stickyHeader && {
+            ...{ [STICKY_ATTRIBUTE_NAME]: STICKY_DIRECTION.vertical },
+          })}
+        >
           {table.getHeaderGroups().map((headerGroup, index, groups) => {
             const isLastRow = index === groups.length - 1;
 
@@ -340,7 +356,7 @@ const DataTable = <TData, TValue>({
           )}
         </TableBody>
       </Table>
-    </div>
+    </TableWrapper>
   );
 };
 
