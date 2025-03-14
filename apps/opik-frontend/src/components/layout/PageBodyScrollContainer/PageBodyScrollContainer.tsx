@@ -3,6 +3,9 @@ import React, { useState } from "react";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { cn } from "@/lib/utils";
 
+// TODO lala dynamic sticky block height
+// TODO lala table body borders
+
 type PageBodyScrollContainerProps = {
   children: React.ReactNode;
   className?: string;
