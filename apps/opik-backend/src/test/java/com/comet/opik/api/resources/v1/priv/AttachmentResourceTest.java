@@ -94,9 +94,6 @@ class AttachmentResourceTest {
                         .build());
     }
 
-    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-
-    private TransactionTemplate mySqlTemplate;
     private AttachmentResourceClient attachmentResourceClient;
     private HttpClient httpClient;
 
@@ -111,7 +108,6 @@ class AttachmentResourceTest {
                     ClickHouseContainerUtils.migrationParameters());
         }
 
-        this.mySqlTemplate = mySqlTemplate;
         this.attachmentResourceClient = new AttachmentResourceClient(client);
         this.httpClient = HttpClient.newHttpClient();
 
