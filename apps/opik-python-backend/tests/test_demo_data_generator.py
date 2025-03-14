@@ -12,8 +12,6 @@ def test_create_experiment_items_structure(httpserver):
     baseUrl = httpserver.url_for("/")
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/spans/batch", method="POST").respond_with_data(status=204)
-    httpserver.expect_request("/v1/private/traces", method="POST").respond_with_data(status=201)
-    httpserver.expect_request("/v1/private/spans", method="POST").respond_with_data(status=201)
     httpserver.expect_request("/v1/private/traces/feedback-scores", method="PUT").respond_with_data(status=204)
 
     httpserver.expect_request("/v1/private/feedback-definitions", method="POST").respond_with_data(status=201)

@@ -82,6 +82,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
             workspace=workspace_name,
             host=base_url,
             api_key=comet_api_key,
+            _use_batching=True,
         )
 
         for trace in sorted(evaluation_traces, key=lambda x: x["start_time"]):
@@ -99,6 +100,9 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
                 span["parent_span_id"] = new_parent_span_id
             client.span(**span)
 
+        client.flush()
+        client.end()
+
         # Demo traces and spans
         # We have a simple chatbot application built using llama-index.
         # We gave it the content of Opik documentation as context, and then asked it a few questions.
@@ -108,6 +112,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
             workspace=workspace_name,
             host=base_url,
             api_key=comet_api_key,
+            _use_batching=True,
         )
 
         for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
@@ -204,6 +209,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
         experiment.insert(experiment_items)
 
         create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
+
     except Exception as e:
         logger.error(e)
     finally:
