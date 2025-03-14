@@ -24,8 +24,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-@ImplementedBy(S3ServiceImpl.class)
-public interface S3Service {
+@ImplementedBy(FileUploadServiceImpl.class)
+public interface FileUploadService {
     CreateMultipartUploadResponse createMultipartUpload(String key, String contentType);
 
     CompleteMultipartUploadResponse completeMultipartUpload(String key, String uploadId,
@@ -34,13 +34,13 @@ public interface S3Service {
 
 @Slf4j
 @Singleton
-class S3ServiceImpl implements S3Service {
+class FileUploadServiceImpl implements FileUploadService {
 
     private final S3Client s3Client;
     private final S3Config s3Config;
 
     @Inject
-    public S3ServiceImpl(@NonNull @Config("s3Config") S3Config s3Config) {
+    public FileUploadServiceImpl(@NonNull @Config("s3Config") S3Config s3Config) {
         this.s3Config = s3Config;
 
         AwsCredentialsProvider credentialsProvider = AWSUtils.getAWSCredentials(s3Config.getS3Key(),

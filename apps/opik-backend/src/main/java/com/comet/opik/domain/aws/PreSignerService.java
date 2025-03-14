@@ -20,20 +20,20 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-@ImplementedBy(S3PreSignerServiceImpl.class)
-public interface S3PreSignerService {
+@ImplementedBy(PreSignerServiceImpl.class)
+public interface PreSignerService {
     List<String> generatePresignedUrls(String key, Integer totalParts, String uploadId);
 }
 
 @Slf4j
 @Singleton
-class S3PreSignerServiceImpl implements S3PreSignerService {
+class PreSignerServiceImpl implements PreSignerService {
 
     private final S3Presigner preSigner;
     private final S3Config s3Config;
 
     @Inject
-    public S3PreSignerServiceImpl(@NonNull @Config("s3Config") S3Config s3Config) {
+    public PreSignerServiceImpl(@NonNull @Config("s3Config") S3Config s3Config) {
         this.s3Config = s3Config;
 
         AwsCredentialsProvider credentialsProvider = AWSUtils.getAWSCredentials(s3Config.getS3Key(),

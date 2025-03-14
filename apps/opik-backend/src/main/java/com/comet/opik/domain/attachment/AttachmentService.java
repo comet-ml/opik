@@ -4,8 +4,8 @@ import com.comet.opik.api.attachment.AttachmentInfoHolder;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
-import com.comet.opik.domain.aws.S3PreSignerService;
-import com.comet.opik.domain.aws.S3Service;
+import com.comet.opik.domain.aws.PreSignerService;
+import com.comet.opik.domain.aws.FileUploadService;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
@@ -31,8 +31,8 @@ public interface AttachmentService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class AttachmentServiceImpl implements AttachmentService {
 
-    private final @NonNull S3Service s3Service;
-    private final @NonNull S3PreSignerService preSignerService;
+    private final @NonNull FileUploadService fileUploadService;
+    private final @NonNull PreSignerService preSignerService;
     private final @NonNull AttachmentDAO attachmentDAO;
 
     @Override
@@ -40,7 +40,7 @@ class AttachmentServiceImpl implements AttachmentService {
             String workspaceId) {
         String key = prepareKey(startUploadRequest, workspaceId);
 
-        CreateMultipartUploadResponse createResponse = s3Service.createMultipartUpload(key,
+        CreateMultipartUploadResponse createResponse = fileUploadService.createMultipartUpload(key,
                 startUploadRequest.mimeType());
         List<String> presignedUrls = preSignerService.generatePresignedUrls(key, startUploadRequest.numOfFileParts(),
                 createResponse.uploadId());
@@ -55,7 +55,7 @@ class AttachmentServiceImpl implements AttachmentService {
     public void completeMultiPartUpload(CompleteMultipartUploadRequest completeUploadRequest, String workspaceId,
             String userName) {
         String key = prepareKey(completeUploadRequest, workspaceId);
-        s3Service.completeMultipartUpload(key,
+        fileUploadService.completeMultipartUpload(key,
                 completeUploadRequest.uploadId(), completeUploadRequest.uploadedFileParts());
 
         attachmentDAO.addAttachment(completeUploadRequest)
