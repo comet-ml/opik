@@ -23,6 +23,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import { uniq } from "lodash";
 
 const SHOW_STACKED_BARS_LIMIT = 4;
 
@@ -67,10 +68,16 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   );
 
   const values = useMemo(() => {
-    return data.reduce<number[]>((acc, data) => {
+    const valuesList = data.reduce<number[]>((acc, data) => {
       const valuesByScore = names.map((name) => data[name] as number);
-      return [...acc, ...valuesByScore];
+      return uniq([...acc, ...valuesByScore]);
     }, []);
+
+    if (valuesList.every((v) => v === 0)) {
+      return [];
+    }
+
+    return valuesList;
   }, [data, names]);
 
   const {
