@@ -7,6 +7,6 @@ type PageBodyStickyTableWrapperProps = {
 const PageBodyStickyTableWrapper: React.FC<PageBodyStickyTableWrapperProps> = ({
   children,
 }) => {
-  return <div className="bg-red-500">{children}</div>;
+  return <div>{children}</div>;
 };
 export default PageBodyStickyTableWrapper;
