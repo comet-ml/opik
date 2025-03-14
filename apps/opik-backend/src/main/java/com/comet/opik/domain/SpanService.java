@@ -23,6 +23,7 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -93,7 +94,6 @@ public class SpanService {
     public Mono<UUID> create(@NonNull Span span) {
         var id = span.id() == null ? idGenerator.generateId() : span.id();
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
-
         return IdGenerator
                 .validateVersionAsync(id, SPAN_KEY)
                 .then(getOrCreateProject(projectName))
@@ -103,56 +103,37 @@ public class SpanService {
     }
 
     private Mono<Project> getOrCreateProject(String projectName) {
-        return makeMonoContextAware((userName, workspaceId) -> {
-            return Mono.fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
-                    .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
-                    .subscribeOn(Schedulers.boundedElastic());
-        });
-
+        return makeMonoContextAware((userName, workspaceId) -> Mono
+                .fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
+                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     private Mono<UUID> insertSpan(Span span, Project project, UUID id) {
-        //TODO: refactor to implement proper conflict resolution
-        return spanDAO.getById(id)
-                .flatMap(existingSpan -> insertSpan(span, project, id, existingSpan))
+        return spanDAO.getPartialById(id)
+                .flatMap(partialExistingSpan -> insertSpan(span, project, id, partialExistingSpan))
                 .switchIfEmpty(Mono.defer(() -> create(span, project, id)))
                 .onErrorResume(this::handleSpanDBError);
     }
 
-    private Mono<UUID> insertSpan(Span span, Project project, UUID id, Span existingSpan) {
+    private Mono<UUID> insertSpan(Span span, Project project, UUID id, Span partialExistingSpan) {
         return Mono.defer(() -> {
-            // check if a partial span exists caused by a patch request
-            if (existingSpan.name().isBlank()
-                    && existingSpan.startTime().equals(Instant.EPOCH)
-                    && existingSpan.type() == null
-                    && existingSpan.projectId().equals(project.id())) {
+            // Check if a partial span exists caused by a patch request, if so, proceed to insert.
+            if (StringUtils.isBlank(partialExistingSpan.name())
+                    && Instant.EPOCH.equals(partialExistingSpan.startTime())
+                    && partialExistingSpan.type() == null) {
                 return create(span, project, id);
             }
-
-            if (!project.id().equals(existingSpan.projectId())) {
-                return failWithConflict(PROJECT_AND_WORKSPACE_NAME_MISMATCH);
-            }
-
-            if (!Objects.equals(span.parentSpanId(), existingSpan.parentSpanId())) {
-                return failWithConflict(PARENT_SPAN_IS_MISMATCH);
-            }
-
-            if (!span.traceId().equals(existingSpan.traceId())) {
-                return failWithConflict(TRACE_ID_MISMATCH);
-            }
-
-            // otherwise, reject the span creation
-            return Mono
-                    .error(new EntityAlreadyExistsException(new ErrorMessage(List.of("Span already exists"))));
+            // Otherwise, a non-partial span already exists, so we ignore the insertion and just return the id.
+            return Mono.just(id);
         });
     }
 
     private Mono<UUID> create(Span span, Project project, UUID id) {
-        var newSpan = span.toBuilder().id(id).projectId(project.id()).build();
-        log.info("Inserting span with id '{}', traceId '{}', parentSpanId '{}'",
-                span.id(), span.traceId(), span.parentSpanId());
-
-        return spanDAO.insert(newSpan).thenReturn(newSpan.id());
+        span = span.toBuilder().id(id).projectId(project.id()).build();
+        log.info("Inserting span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}'",
+                span.id(), span.projectId(), span.traceId(), span.parentSpanId());
+        return spanDAO.insert(span).thenReturn(span.id());
     }
 
     private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
@@ -208,7 +189,6 @@ public class SpanService {
                 && (ex.getMessage().contains("project_id") || ex.getMessage().contains("workspace_id"))) {
             return failWithConflict(PROJECT_AND_WORKSPACE_NAME_MISMATCH);
         }
-
         if (ex instanceof ClickHouseException
                 && ex.getMessage().contains("TOO_LARGE_STRING_SIZE")
                 && (ex.getMessage().contains("CAST(leftPad(") && ex.getMessage().contains(".parent_span_id, 40_UInt8")
@@ -216,14 +196,12 @@ public class SpanService {
 
             return failWithConflict(PARENT_SPAN_IS_MISMATCH);
         }
-
         if (ex instanceof ClickHouseException
                 && ex.getMessage().contains("TOO_LARGE_STRING_SIZE")
                 && ex.getMessage().contains("_CAST(trace_id, FixedString(36))")) {
 
             return failWithConflict(TRACE_ID_MISMATCH);
         }
-
         return Mono.error(ex);
     }
 
