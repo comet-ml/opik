@@ -33,11 +33,10 @@ class PreSignerServiceImpl implements PreSignerService {
     private final S3Config s3Config;
 
     @Inject
-    public PreSignerServiceImpl(@NonNull @Config("s3Config") S3Config s3Config) {
+    public PreSignerServiceImpl(@NonNull @Config("s3Config") S3Config s3Config,
+            @NonNull AwsCredentialsProvider credentialsProvider) {
         this.s3Config = s3Config;
 
-        AwsCredentialsProvider credentialsProvider = AWSUtils.getAWSCredentials(s3Config.getS3Key(),
-                s3Config.getS3Secret());
         Region region = Region.of(s3Config.getS3Region());
         S3Configuration s3Configuration = S3Configuration.builder()
                 .pathStyleAccessEnabled(true)

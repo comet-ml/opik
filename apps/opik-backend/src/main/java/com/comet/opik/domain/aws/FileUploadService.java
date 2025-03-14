@@ -40,11 +40,10 @@ class FileUploadServiceImpl implements FileUploadService {
     private final S3Config s3Config;
 
     @Inject
-    public FileUploadServiceImpl(@NonNull @Config("s3Config") S3Config s3Config) {
+    public FileUploadServiceImpl(@NonNull @Config("s3Config") S3Config s3Config,
+            @NonNull AwsCredentialsProvider credentialsProvider) {
         this.s3Config = s3Config;
 
-        AwsCredentialsProvider credentialsProvider = AWSUtils.getAWSCredentials(s3Config.getS3Key(),
-                s3Config.getS3Secret());
         Region region = Region.of(s3Config.getS3Region());
 
         var builder = S3Client.builder()
