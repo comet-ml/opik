@@ -61,6 +61,7 @@ import TraceDetailsPanel, {
   LastSectionParam,
   LastSectionValue,
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { formatDate, formatDuration } from "@/lib/date";
@@ -580,7 +581,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+      <PageBodyStickyContainer
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search as string}
@@ -635,7 +640,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             sections={columnSections}
           ></ColumnsButton>
         </div>
-      </div>
+      </PageBodyStickyContainer>
+
       <DataTable
         columns={columns}
         columnsStatistic={columnsStatistic}
@@ -652,7 +658,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         meta={meta}
       />
-      <div className="py-4">
+      <PageBodyStickyContainer
+        className="py-4"
+        direction="horizontal"
+        limitWidth
+      >
         <DataTablePagination
           page={page as number}
           pageChange={setPage}
@@ -660,7 +670,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           sizeChange={setSize}
           total={data?.total ?? 0}
         ></DataTablePagination>
-      </div>
+      </PageBodyStickyContainer>
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}
