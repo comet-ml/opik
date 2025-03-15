@@ -19,6 +19,10 @@ spec:
           containers:
           - name: clickhouse-backup-job
             image: {{ .Values.clickhouse.image }}
+            {{- with .Values.clickhouse.imagePullSecrets }}
+            imagePullSecrets:
+              {{- toYaml . | nindent 8 }}
+            {{- end }}
             command:
               - "/bin/bash"
               - "-c"

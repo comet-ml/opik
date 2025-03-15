@@ -36,7 +36,7 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "opik.name" $ }}-{{ $key | lower }}
-      {{- with $value.imagePullSecrets }}
+      {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
