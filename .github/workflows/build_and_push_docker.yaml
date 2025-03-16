@@ -36,201 +36,66 @@ env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik" 
 
 jobs:
-  build-amd64:
-    name: Build AMD64 Image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-        with:
-          ref: ${{inputs.build_from}}
 
-      - name: Save opik-sandbox-executor-python
-        if: inputs.image == 'opik-python-backend'
-        run: |
-          docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
-          docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > opik-sandbox-executor-python.tar.gz
-          
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{env.DOCKER_REGISTRY}}
-          username: "github-actions"
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        
-      - name: Build and push AMD64 image
-        uses: docker/build-push-action@v4
-        with:
-          context: apps/${{ inputs.image }}/.
-          platforms: linux/amd64
-          file: apps/${{ inputs.image }}/Dockerfile
-          push: true
-          tags: ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-amd64
-          build-args: |
-            OPIK_VERSION=${{ inputs.version }}
-
-      - name: Write to summary
-        run: |
-          echo "### AMD64 Build Complete ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-amd64" >> $GITHUB_STEP_SUMMARY
-
-  build-arm64:
-    name: Build ARM64 Image
+  build-n-push-image:
     runs-on: ubuntu-24.04-arm
+    defaults:
+        run:
+          working-directory: apps/${{ inputs.image }}/
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-        with:
-          ref: ${{inputs.build_from}}
+        - name: Checkout
+          uses: actions/checkout@v4.1.1
+          with:
+            ref: ${{inputs.build_from}}
 
-      - name: Save opik-sandbox-executor-python
-        if: inputs.image == 'opik-python-backend'
-        run: |
-          docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
-          docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > opik-sandbox-executor-python.tar.gz
-          
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{env.DOCKER_REGISTRY}}
-          username: "github-actions"
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        
-      - name: Build and push ARM64 image
-        uses: docker/build-push-action@v4
-        with:
-          context: apps/${{ inputs.image }}/.
-          platforms: linux/arm64
-          file: apps/${{ inputs.image }}/Dockerfile
-          push: true
-          tags: ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-arm64
-          build-args: |
-            OPIK_VERSION=${{ inputs.version }}
-
-      - name: Write to summary
-        run: |
-          echo "### ARM64 Build Complete ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-arm64" >> $GITHUB_STEP_SUMMARY
-
-  create-manifest:
-    name: Create Multi-Architecture Manifest
-    needs: [build-amd64, build-arm64]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{env.DOCKER_REGISTRY}}
-          username: "github-actions"
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Docker CLI Plugins for Manifest
-        run: |
-          mkdir -p ~/.docker/cli-plugins/
-          curl -SL https://github.com/docker/cli/releases/download/v20.10.16/docker-cli-plugins-linux-amd64.tar.gz | tar xz
-          install docker-compose ~/.docker/cli-plugins/
-          curl -SL https://github.com/docker/buildx/releases/download/v0.10.4/buildx-v0.10.4.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx
-          chmod +x ~/.docker/cli-plugins/docker-buildx
-          docker version
-
-      - name: Create and Push Version Tag
-        run: |
-          docker manifest create ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }} \
-            ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-amd64 \
-            ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-arm64
-          docker manifest push ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}
-
-      - name: Create and Push Latest Tag
-        if: inputs.push_latest == 'true' 
-        run: |
-          docker manifest create ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest \
-            ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-amd64 \
-            ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-arm64
-          docker manifest push ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
-
-      - name: Cleanup Temporary Tags
-        if: always()
-        continue-on-error: true
-        run: |
-          # In some registries, you may want to clean up the temporary architecture-specific tags
-          # Commented out as it might not work with all registries
-          docker manifest rm ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-amd64
-          docker manifest rm ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-arm64
-          echo "Note: Consider manually deleting temporary architecture-specific tags if needed"
-
-      - name: Write to summary
-        run: |
-          echo "### Multi-Architecture Image Created ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ inputs.push_latest }}" == "true" ]]; then
-            echo "- Latest Tag: ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest" >> $GITHUB_STEP_SUMMARY
-          fi
-
-  # build-n-push-image:
-  #   runs-on: ubuntu-latest
-  #   defaults:
-  #       run:
-  #         working-directory: apps/${{ inputs.image }}/
-  #   steps:
-  #       - name: Checkout
-  #         uses: actions/checkout@v4.1.1
-  #         with:
-  #           ref: ${{inputs.build_from}}
-
-  #       - name: Save opik-sandbox-executor-python
-  #         if: inputs.image == 'opik-python-backend'
-  #         run: |
-  #           docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
-  #           docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > opik-sandbox-executor-python.tar.gz
+        - name: Save opik-sandbox-executor-python
+          if: inputs.image == 'opik-python-backend'
+          run: |
+            docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
+            docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > opik-sandbox-executor-python.tar.gz
             
-  #       - name: Login to GHCR
-  #         uses: docker/login-action@v3
-  #         with:
-  #           registry: ${{env.DOCKER_REGISTRY}}
-  #           username: "github-actions"
-  #           password: ${{ secrets.GITHUB_TOKEN }}
+        - name: Login to GHCR
+          uses: docker/login-action@v3
+          with:
+            registry: ${{env.DOCKER_REGISTRY}}
+            username: "github-actions"
+            password: ${{ secrets.GITHUB_TOKEN }}
 
-  #       - name: Build and Push Docker Image
-  #         run: |
-  #           # Create a new builder instance with docker-container driver
-  #           docker buildx create --name multiarch-builder --driver docker-container --use
+        - name: Build and Push Docker Image
+          run: |
+            # Create a new builder instance with docker-container driver
+            docker buildx create --name multiarch-builder --driver docker-container --use
 
-  #           DOCKER_IMAGE_NAME=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
-  #           echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
-  #           if [[ "${{inputs.push_latest}}" == "true" ]]; then
-  #             DOCKER_IMAGE_NAME_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
-  #             LATEST_TAG=" -t ${DOCKER_IMAGE_NAME_LATEST}"
-  #           else
-  #             LATEST_TAG=""
-  #           fi
-  #           echo "LATEST_TAG=${LATEST_TAG}"
-  #           docker buildx build --platform linux/amd64,linux/arm64 --push \
-  #           --build-arg OPIK_VERSION=${{inputs.version}} \
-  #           -t ${DOCKER_IMAGE_NAME} ${LATEST_TAG} .
-  #           echo "Docker image pushed: ${DOCKER_IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
+            DOCKER_IMAGE_NAME=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
+            echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
+            if [[ "${{inputs.push_latest}}" == "true" ]]; then
+              DOCKER_IMAGE_NAME_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
+              LATEST_TAG=" -t ${DOCKER_IMAGE_NAME_LATEST}"
+            else
+              LATEST_TAG=""
+            fi
+            echo "LATEST_TAG=${LATEST_TAG}"
+            docker buildx build --platform linux/amd64,linux/arm64 --push \
+            --build-arg OPIK_VERSION=${{inputs.version}} \
+            -t ${DOCKER_IMAGE_NAME} ${LATEST_TAG} .
+            echo "Docker image pushed: ${DOCKER_IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
 
-  #       - name: Build and Push Docker Image for Comet integration
-  #         if: inputs.build_comet_image 
-  #         run: |
-  #           DOCKER_IMAGE_NAME_COMET=${{env.DOCKER_REGISTRY}}/${{inputs.image}}-comet:${{inputs.version}}
-  #           echo "DOCKER_IMAGE_NAME_COMET=${DOCKER_IMAGE_NAME_COMET}" | tee -a $GITHUB_ENV
-  #           if [[ "${{inputs.push_latest}}" == "true" ]]; then
-  #             DOCKER_IMAGE_NAME_COMET_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest
-  #             LATEST_TAG=" -t ${DOCKER_IMAGE_NAME_COMET_LATEST}"
-  #           else
-  #             LATEST_TAG=""
-  #           fi
-  #           docker buildx build --platform linux/amd64,linux/arm64 --push \
-  #           --build-arg ${{inputs.comet_build_args}}  \
-  #           --build-arg OPIK_VERSION=${{inputs.version}} \
-  #           --build-arg SENTRY_ENABLED=true \
-  #           --build-arg SENTRY_DSN="${{secrets.OPIK_FE_SENTRY_DSN}}" \
-  #           -t ${DOCKER_IMAGE_NAME_COMET} ${LATEST_TAG} .
-  #           echo "Docker image pushed: ${DOCKER_IMAGE_NAME_COMET}" >> $GITHUB_STEP_SUMMARY
+        - name: Build and Push Docker Image for Comet integration
+          if: inputs.build_comet_image 
+          run: |
+            DOCKER_IMAGE_NAME_COMET=${{env.DOCKER_REGISTRY}}/${{inputs.image}}-comet:${{inputs.version}}
+            echo "DOCKER_IMAGE_NAME_COMET=${DOCKER_IMAGE_NAME_COMET}" | tee -a $GITHUB_ENV
+            if [[ "${{inputs.push_latest}}" == "true" ]]; then
+              DOCKER_IMAGE_NAME_COMET_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest
+              LATEST_TAG=" -t ${DOCKER_IMAGE_NAME_COMET_LATEST}"
+            else
+              LATEST_TAG=""
+            fi
+            docker buildx build --platform linux/amd64,linux/arm64 --push \
+            --build-arg ${{inputs.comet_build_args}}  \
+            --build-arg OPIK_VERSION=${{inputs.version}} \
+            --build-arg SENTRY_ENABLED=true \
+            --build-arg SENTRY_DSN="${{secrets.OPIK_FE_SENTRY_DSN}}" \
+            -t ${DOCKER_IMAGE_NAME_COMET} ${LATEST_TAG} .
+            echo "Docker image pushed: ${DOCKER_IMAGE_NAME_COMET}" >> $GITHUB_STEP_SUMMARY
         
