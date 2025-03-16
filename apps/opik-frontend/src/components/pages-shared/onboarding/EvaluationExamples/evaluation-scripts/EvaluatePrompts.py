@@ -1,6 +1,7 @@
 import opik
 from opik.evaluation import evaluate_prompt
 from opik.evaluation.metrics import Hallucination
+import os
 
 # INJECT_OPIK_CONFIGURATION
 

@@ -1,5 +1,6 @@
 import dspy
 from opik.integrations.dspy.callback import OpikCallback # HIGHLIGHTED_LINE
+import os
 
 # INJECT_OPIK_CONFIGURATION
 

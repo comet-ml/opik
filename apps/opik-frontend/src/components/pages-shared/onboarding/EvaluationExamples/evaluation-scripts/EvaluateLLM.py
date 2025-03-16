@@ -1,6 +1,7 @@
 import opik
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import ContextPrecision, ContextRecall
+import os
 
 # INJECT_OPIK_CONFIGURATION
 
@@ -24,7 +25,7 @@ dataset.insert([
 def evaluation_task(dataset_item):
     # Simulate RAG pipeline, replace this with your LLM application
     output = "<LLM response placeholder>"
-    
+
     return {
         "output": output
     }
