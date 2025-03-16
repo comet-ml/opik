@@ -123,6 +123,9 @@ jobs:
     needs: [build-amd64, build-arm64]
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -141,18 +144,16 @@ jobs:
 
       - name: Create and Push Version Tag
         run: |
-          docker manifest create ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }} \
+          docker buildx imagetools create -t ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }} \
             ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-amd64 \
             ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-arm64
-          docker manifest push ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}
 
       - name: Create and Push Latest Tag
         if: inputs.push_latest == 'true' 
         run: |
-          docker manifest create ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest \
+          docker manifest create -t ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest \
             ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-amd64 \
             ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{ inputs.version }}-arm64
-          docker manifest push ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
 
       - name: Cleanup Temporary Tags
         if: always()
