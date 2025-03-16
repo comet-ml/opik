@@ -129,16 +129,17 @@ jobs:
           
           # Loop through architectures
           for ARCH in "amd64" "arm64"; do
-            TAG="${VERSION}-${ARCH}"
-            echo "Deleting tag: $TAG"
+            # Get the version tag with architecture
+            VERSION_TAG="${VERSION}-${ARCH}"
             
             # Delete tag using GitHub CLI
+            echo "Deleting tag: ${VERSION_TAG}"
             gh api \
               --method DELETE \
-              "/orgs/comet-ml/packages/container/opik%2F${PACKAGE_NAME}/versions/${TAG}" \
+              "/packages/container/comet-ml%2Fopik%2F${PACKAGE_NAME}/versions/${VERSION_TAG}" \
               -H "Accept: application/vnd.github+json" \
-              && echo "✅ Successfully deleted $TAG" \
-              || echo "⚠️ Failed to delete $TAG - it may not exist or you may not have permission"
+              && echo "✅ Successfully deleted ${VERSION_TAG}" \
+              || echo "⚠️ Failed to delete ${VERSION_TAG} - it may not exist or you may not have permission"
           done
 
       - name: Write to summary
