@@ -37,9 +37,18 @@ env:
   DOCKER_IMAGE: "ghcr.io/comet-ml/opik/${{ inputs.image }}:${{ inputs.version }}"
 
 jobs:
-  build-amd64:
-    name: Build AMD64 Image
-    runs-on: ubuntu-latest
+  build-and-push:
+    name: Build ${{ matrix.platform }} Image
+    strategy:
+      matrix:
+        include:
+          - platform: AMD64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: ARM64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
@@ -62,66 +71,25 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         
-      - name: Build and push AMD64 image
+      - name: Build and push image
         uses: docker/build-push-action@v4
         with:
-          context: apps/${{ inputs.image }}/.
-          platforms: linux/amd64
+          context: apps/${{ inputs.image }}/.          
+          platforms: linux/${{ matrix.arch }}
           file: apps/${{ inputs.image }}/Dockerfile
           push: true
-          tags: ${{env.DOCKER_IMAGE }}-amd64
+          tags: ${{env.DOCKER_IMAGE }}-${{ matrix.arch }}
           build-args: |
             OPIK_VERSION=${{ inputs.version }}
 
       - name: Write to summary
         run: |
-          echo "### AMD64 Build Complete ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: ${{env.DOCKER_IMAGE }}-amd64" >> $GITHUB_STEP_SUMMARY
-
-  build-arm64:
-    name: Build ARM64 Image
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-        with:
-          ref: ${{inputs.build_from}}
-
-      - name: Save opik-sandbox-executor-python
-        if: inputs.image == 'opik-python-backend'
-        run: |
-          docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
-          docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > opik-sandbox-executor-python.tar.gz
-          
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{env.DOCKER_REGISTRY}}
-          username: "github-actions"
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        
-      - name: Build and push ARM64 image
-        uses: docker/build-push-action@v4
-        with:
-          context: apps/${{ inputs.image }}/.
-          platforms: linux/arm64
-          file: apps/${{ inputs.image }}/Dockerfile
-          push: true
-          tags: ${{env.DOCKER_IMAGE }}-arm64
-          build-args: |
-            OPIK_VERSION=${{ inputs.version }}
-
-      - name: Write to summary
-        run: |
-          echo "### ARM64 Build Complete ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: ${{env.DOCKER_IMAGE }}-arm64" >> $GITHUB_STEP_SUMMARY
+          echo "### ${{ matrix.platform }} Build Complete ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: ${{env.DOCKER_IMAGE }}-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
 
   create-manifest:
     name: Create Multi-Architecture Manifest
-    needs: [build-amd64, build-arm64]
+    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Set up Docker Buildx
@@ -153,21 +121,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.OPIK_MANAGE_PACKAGES_TOKEN }}
         continue-on-error: true
         run: |
-          FULL_PATH="${{env.DOCKER_REGISTRY}}/${{ inputs.image }}"
-          PACKAGE_PATH="${FULL_PATH#ghcr.io/}"
+          # Get package name without registry prefix
+          PACKAGE_NAME="${{ inputs.image }}"
           VERSION="${{ inputs.version }}"
           
-          echo "Removing architecture-specific tags for: $PACKAGE_PATH"
+          echo "Removing architecture-specific tags for: $PACKAGE_NAME"
           
           # Loop through architectures
           for ARCH in "amd64" "arm64"; do
-            TAG="${{ inputs.image }}-${ARCH}"
+            TAG="${VERSION}-${ARCH}"
             echo "Deleting tag: $TAG"
             
             # Delete tag using GitHub CLI
             gh api \
               --method DELETE \
-              "/packages/container/$PACKAGE_PATH/versions/$TAG" \
+              "/orgs/comet-ml/packages/container/opik%2F${PACKAGE_NAME}/versions/${TAG}" \
+              -H "Accept: application/vnd.github+json" \
               && echo "✅ Successfully deleted $TAG" \
               || echo "⚠️ Failed to delete $TAG - it may not exist or you may not have permission"
           done
