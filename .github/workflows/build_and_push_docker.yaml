@@ -149,6 +149,8 @@ jobs:
 
       - name: Cleanup Temporary Tags
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
         run: |
           FULL_PATH="${{env.DOCKER_REGISTRY}}/${{ inputs.image }}"
