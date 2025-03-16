@@ -36,6 +36,10 @@ env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik" 
   DOCKER_IMAGE: "ghcr.io/comet-ml/opik/${{ inputs.image }}:${{ inputs.version }}"
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-and-push:
     name: Build ${{ matrix.platform }} Image
@@ -118,28 +122,37 @@ jobs:
       - name: Cleanup Temporary Tags
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.OPIK_MANAGE_PACKAGES_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         continue-on-error: true
         run: |
-          # Get package name without registry prefix
+          # Get the full version ID and package name from the build step
+          VERSION_ID="${{ inputs.version }}"
           PACKAGE_NAME="${{ inputs.image }}"
-          VERSION="${{ inputs.version }}"
-          
-          echo "Removing architecture-specific tags for: $PACKAGE_NAME"
           
           # Loop through architectures
           for ARCH in "amd64" "arm64"; do
             # Get the version tag with architecture
-            VERSION_TAG="${VERSION}-${ARCH}"
+            VERSION_TAG="${VERSION_ID}-${ARCH}"
             
-            # Delete tag using GitHub CLI
-            echo "Deleting tag: ${VERSION_TAG}"
-            gh api \
-              --method DELETE \
-              "/packages/container/comet-ml%2Fopik%2F${PACKAGE_NAME}/versions/${VERSION_TAG}" \
-              -H "Accept: application/vnd.github+json" \
-              && echo "✅ Successfully deleted ${VERSION_TAG}" \
-              || echo "⚠️ Failed to delete ${VERSION_TAG} - it may not exist or you may not have permission"
+            # First, get the package version ID
+            echo "Finding version ID for tag: ${VERSION_TAG}"
+            VERSION_INFO=$(gh api \
+              -H "Accept: application/vnd.github.v3+json" \
+              "/orgs/comet-ml/packages/container/versions?package_type=container&package_name=opik/${PACKAGE_NAME}" \
+              --jq ".[] | select(.metadata.container.tags[] | contains(\"${VERSION_TAG}\")) | .id")
+            
+            if [ -n "$VERSION_INFO" ]; then
+              # Delete tag using GitHub CLI
+              echo "Deleting version ID: $VERSION_INFO"
+              gh api \
+                --method DELETE \
+                "/orgs/comet-ml/packages/container/versions/${VERSION_INFO}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                && echo "✅ Successfully deleted ${VERSION_TAG}" \
+                || echo "⚠️ Failed to delete ${VERSION_TAG} - it may not exist or you may not have permission"
+            else
+              echo "⚠️ Could not find version ID for tag: ${VERSION_TAG}"
+            fi
           done
 
       - name: Write to summary
