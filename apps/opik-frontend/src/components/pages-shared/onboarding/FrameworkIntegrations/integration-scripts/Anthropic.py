@@ -1,5 +1,6 @@
 import anthropic
 from opik.integrations.anthropic import track_anthropic # HIGHLIGHTED_LINE
+import os
 
 # INJECT_OPIK_CONFIGURATION
 
