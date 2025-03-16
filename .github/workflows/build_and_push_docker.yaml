@@ -98,7 +98,7 @@ jobs:
           registry: ${{env.DOCKER_REGISTRY}}
           username: "github-actions"
           password: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         
@@ -123,12 +123,12 @@ jobs:
     needs: [build-amd64, build-arm64]
     runs-on: ubuntu-latest
     steps:
-      - name: Login to Docker Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{env.DOCKER_REGISTRY}}
           username: "github-actions"
-          password: ${{ secrets.REGISTRY_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker CLI Plugins for Manifest
         run: |
