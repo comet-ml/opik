@@ -636,22 +636,29 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           ></ColumnsButton>
         </div>
       </div>
-      <DataTable
-        columns={columns}
-        columnsStatistic={columnsStatistic}
-        data={rows}
-        activeRowId={activeRowId ?? ""}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        meta={meta}
-      />
+      
+      <div className="h-[calc(100vh-300px)] flex flex-col min-h-0 overflow-hidden">
+        <DataTable
+          columns={columns}
+          columnsStatistic={columnsStatistic}
+          data={rows}
+          activeRowId={activeRowId ?? ""}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          meta={meta}
+          className="h-full flex flex-col"
+          wrapperClassName="flex-1 min-h-0 overflow-auto"
+          theadClassName="sticky top-0 z-10 bg-background shadow-sm"
+        />
+      </div>
+      
       <div className="py-4">
         <DataTablePagination
           page={page as number}
@@ -661,6 +668,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           total={data?.total ?? 0}
         ></DataTablePagination>
       </div>
+      
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}

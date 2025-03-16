@@ -5,6 +5,9 @@ import useProjectById from "@/api/projects/useProjectById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 
+// Add a CSS module or global styles to handle the scrolling behavior
+// This will ensure child routes inherit the proper layout
+
 const ProjectPage = () => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
   const projectId = useProjectIdFromURL();
@@ -27,6 +30,7 @@ const ProjectPage = () => {
     return <Navigate to={pathname + "/traces"} />;
   }
 
+  // The key is to not add overflow-hidden here, as it might be causing the bottom content to be cut off
   return <Outlet />;
 };
 

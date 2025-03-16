@@ -274,8 +274,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Experiments</h1>
       </div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
@@ -323,31 +323,36 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </div>
       </div>
       <ExperimentsChartsWrapper experiments={experiments} />
-      <DataTable
-        columns={columns}
-        data={experiments}
-        renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsCustomRow}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        expandingConfig={expandingConfig}
-        groupingConfig={GROUPING_CONFIG}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick}>
-                Create new experiment
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-      />
-      <div className="py-4">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <DataTable
+          columns={columns}
+          data={experiments}
+          renderCustomRow={renderCustomRowCallback}
+          getIsCustomRow={getIsCustomRow}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          expandingConfig={expandingConfig}
+          groupingConfig={GROUPING_CONFIG}
+          getRowId={getRowId}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={
+            <DataTableNoData title={noDataText}>
+              {noData && (
+                <Button variant="link" onClick={handleNewExperimentClick}>
+                  Create new experiment
+                </Button>
+              )}
+            </DataTableNoData>
+          }
+          className="h-full flex flex-col"
+          wrapperClassName="flex-1 min-h-0 overflow-auto"
+          theadClassName="sticky top-0 z-10 bg-background shadow-sm"
+        />
+      </div>
+      <div className="mt-4">
         <DataTablePagination
           page={page!}
           pageChange={setPage}

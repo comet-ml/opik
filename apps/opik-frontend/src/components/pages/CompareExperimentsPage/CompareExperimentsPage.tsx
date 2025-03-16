@@ -38,12 +38,17 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
   }, [experiments]);
 
   return (
-    <div>
+    <div className="h-full flex flex-col overflow-hidden">
       <CompareExperimentsDetails
         experimentsIds={experimentsIds}
         experiments={memorizedExperiments}
       />
-      <Tabs defaultValue="input" value={tab as string} onValueChange={setTab}>
+      <Tabs 
+        defaultValue="input" 
+        value={tab as string} 
+        onValueChange={setTab}
+        className="flex-1 flex flex-col min-h-0 overflow-hidden"
+      >
         <TabsList variant="underline">
           <TabsTrigger variant="underline" value="items">
             Experiment items
@@ -55,7 +60,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             Feedback scores
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="items">
+        <TabsContent value="items" className="h-full flex flex-col min-h-0 overflow-hidden">
           <ExperimentItemsTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}

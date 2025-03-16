@@ -307,59 +307,64 @@ const ProjectsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Projects</h1>
       </div>
-      <div className="mb-4 flex items-center justify-between gap-8">
-        <SearchInput
-          searchText={search!}
-          setSearchText={setSearch}
-          placeholder="Search by name"
-          className="w-[320px]"
-          dimension="sm"
-        ></SearchInput>
-        <div className="flex items-center gap-2">
-          <ProjectsActionsPanel projects={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewProjectClick}>
-            Create new project
-          </Button>
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="mb-4 flex items-center justify-between gap-8">
+          <SearchInput
+            searchText={search!}
+            setSearchText={setSearch}
+            placeholder="Search by name"
+            className="w-[320px]"
+            dimension="sm"
+          ></SearchInput>
+          <div className="flex items-center gap-2">
+            <ProjectsActionsPanel projects={selectedRows} />
+            <Separator orientation="vertical" className="mx-1 h-4" />
+            <ColumnsButton
+              columns={DEFAULT_COLUMNS}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+            ></ColumnsButton>
+            <Button variant="default" size="sm" onClick={handleNewProjectClick}>
+              Create new project
+            </Button>
+          </div>
         </div>
+        <DataTable
+          columns={columns}
+          data={projects}
+          sortConfig={{
+            enabled: true,
+            sorting: sortedColumns,
+            setSorting: setSortedColumns,
+          }}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={
+            <DataTableNoData title={noDataText}>
+              {noData && (
+                <Button variant="link" onClick={handleNewProjectClick}>
+                  Create new project
+                </Button>
+              )}
+            </DataTableNoData>
+          }
+          className="h-full flex flex-col"
+          wrapperClassName="flex-1 min-h-0 overflow-auto"
+          theadClassName="sticky top-0 z-10 bg-background shadow-sm"
+        />
       </div>
-      <DataTable
-        columns={columns}
-        data={projects}
-        sortConfig={{
-          enabled: true,
-          sorting: sortedColumns,
-          setSorting: setSortedColumns,
-        }}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewProjectClick}>
-                Create new project
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-      />
-      <div className="py-4">
+      <div className="mt-4">
         <DataTablePagination
           page={page!}
           pageChange={setPage}

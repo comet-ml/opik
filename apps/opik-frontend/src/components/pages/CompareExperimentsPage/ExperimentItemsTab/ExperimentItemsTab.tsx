@@ -624,8 +624,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   }
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between gap-8">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between gap-8 mb-6">
         <div className="flex items-center gap-2">
           <FiltersButton
             columns={filterColumns}
@@ -655,23 +655,28 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           ></ColumnsButton>
         </div>
       </div>
-      <DataTable
-        columns={columns}
-        data={rows}
-        activeRowId={activeRowId ?? ""}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        getRowHeightStyle={getRowHeightStyle}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        meta={meta}
-      />
-      <div className="py-4">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <DataTable
+          columns={columns}
+          data={rows}
+          activeRowId={activeRowId ?? ""}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          getRowHeightStyle={getRowHeightStyle}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          meta={meta}
+          className="h-full flex flex-col"
+          wrapperClassName="flex-1 min-h-0 overflow-auto"
+          theadClassName="sticky top-0 z-10 bg-background shadow-sm"
+        />
+      </div>
+      <div className="mt-4">
         <DataTablePagination
           page={page as number}
           pageChange={setPage}

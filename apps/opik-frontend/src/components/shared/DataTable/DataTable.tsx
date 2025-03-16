@@ -118,6 +118,9 @@ interface DataTableProps<TData, TValue> {
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
   >;
+  className?: string;
+  wrapperClassName?: string;
+  theadClassName?: string;
 }
 
 const DataTable = <TData, TValue>({
@@ -139,6 +142,9 @@ const DataTable = <TData, TValue>({
   noData,
   autoWidth = false,
   meta,
+  className,
+  wrapperClassName,
+  theadClassName,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
 
@@ -271,75 +277,93 @@ const DataTable = <TData, TValue>({
   };
 
   return (
-    <div className="overflow-x-auto overflow-y-hidden rounded-md border">
-      <Table
-        style={{
-          ...(!autoWidth && { minWidth: table.getTotalSize() }),
-        }}
-      >
-        <colgroup>
-          {cols.map((i) => (
-            <col key={i.id} style={{ width: `${i.size}px` }} />
-          ))}
-        </colgroup>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup, index, groups) => {
-            const isLastRow = index === groups.length - 1;
+    <div className={cn("h-full flex flex-col", className)}>
+      <div className="w-full">
+        <Table
+          style={{
+            ...(!autoWidth && { minWidth: table.getTotalSize() }),
+            tableLayout: "fixed",
+          }}
+        >
+          <colgroup>
+            {cols.map((i) => (
+              <col key={i.id} style={{ width: `${i.size}px` }} />
+            ))}
+          </colgroup>
+          <TableHeader className={cn("[&_tr]:border-b", theadClassName)}>
+            {table.getHeaderGroups().map((headerGroup, index, groups) => {
+              const isLastRow = index === groups.length - 1;
 
-            return (
-              <TableRow
-                key={headerGroup.id}
-                className={cn(
-                  "bg-soft-background",
-                  !isLastRow && "border-b-transparent",
-                )}
-              >
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      data-header-id={header.id}
-                      style={{
-                        zIndex: TABLE_HEADER_Z_INDEX,
-                        ...getCommonPinningStyles(header.column, true),
-                      }}
-                      className={getCommonPinningClasses(header.column, true)}
-                      colSpan={header.colSpan}
-                    >
-                      {header.isPlaceholder
-                        ? ""
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                      {isResizable ? (
-                        <DataTableColumnResizer header={header} />
-                      ) : null}
-                    </TableHead>
-                  );
-                })}
+              return (
+                <TableRow
+                  key={headerGroup.id}
+                  className={cn(
+                    "bg-soft-background",
+                    !isLastRow && "border-b-transparent",
+                  )}
+                >
+                  {headerGroup.headers.map((header) => {
+                    return (
+                      <TableHead
+                        key={header.id}
+                        data-header-id={header.id}
+                        style={{
+                          zIndex: TABLE_HEADER_Z_INDEX,
+                          ...getCommonPinningStyles(header.column, true),
+                        }}
+                        className={getCommonPinningClasses(header.column, true)}
+                        colSpan={header.colSpan}
+                      >
+                        {header.isPlaceholder
+                          ? ""
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                        {isResizable ? (
+                          <DataTableColumnResizer header={header} />
+                        ) : null}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              );
+            })}
+          </TableHeader>
+        </Table>
+      </div>
+      
+      <div className={cn("flex-1 min-h-0 overflow-auto relative w-full", wrapperClassName)}>
+        <Table
+          style={{
+            ...(!autoWidth && { minWidth: table.getTotalSize() }),
+            tableLayout: "fixed",
+          }}
+        >
+          <colgroup>
+            {cols.map((i) => (
+              <col key={i.id} style={{ width: `${i.size}px` }} />
+            ))}
+          </colgroup>
+          <TableBody className="[&_tr:last-child]:border-0">
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map(renderRow)
+            ) : (
+              <TableRow data-testid="no-data-row">
+                <TableCell colSpan={columns.length}>
+                  {noData ? (
+                    noData
+                  ) : (
+                    <div className="flex h-28 items-center justify-center text-muted-slate">
+                      No results
+                    </div>
+                  )}
+                </TableCell>
               </TableRow>
-            );
-          })}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map(renderRow)
-          ) : (
-            <TableRow data-testid="no-data-row">
-              <TableCell colSpan={columns.length}>
-                {noData ? (
-                  noData
-                ) : (
-                  <div className="flex h-28 items-center justify-center text-muted-slate">
-                    No results
-                  </div>
-                )}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 };

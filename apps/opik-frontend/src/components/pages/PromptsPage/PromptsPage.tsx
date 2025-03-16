@@ -176,8 +176,8 @@ const PromptsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Prompt library</h1>
       </div>
       <div className="mb-4 flex items-center justify-between gap-8">
@@ -203,27 +203,32 @@ const PromptsPage: React.FunctionComponent = () => {
           </Button>
         </div>
       </div>
-      <DataTable
-        columns={columns}
-        data={prompts}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewPromptClick}>
-                Create new prompt
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-      />
-      <div className="py-4">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <DataTable
+          columns={columns}
+          data={prompts}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={
+            <DataTableNoData title={noDataText}>
+              {noData && (
+                <Button variant="link" onClick={handleNewPromptClick}>
+                  Create new prompt
+                </Button>
+              )}
+            </DataTableNoData>
+          }
+          className="h-full flex flex-col"
+          wrapperClassName="flex-1 min-h-0 overflow-auto"
+          theadClassName="sticky top-0 z-10 bg-background shadow-sm"
+        />
+      </div>
+      <div className="mt-4">
         <DataTablePagination
           page={page}
           pageChange={setPage}
