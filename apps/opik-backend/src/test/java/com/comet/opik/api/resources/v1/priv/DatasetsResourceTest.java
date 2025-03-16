@@ -4318,11 +4318,13 @@ class DatasetsResourceTest {
             UUID experimentId = GENERATOR.generate();
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
-            createScores(traces, projectName, scores);
+            createScores(traces.subList(0, traces.size() - 1), projectName, scores);
             createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
-            createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
+            createExperimentItems(datasetItems, traces, Stream.concat(scores.stream(),
+                    Stream.of((FeedbackScoreBatchItem) null)).collect(Collectors.toList()),
+                    experimentId, experimentItems);
 
             createAndAssert(
                     ExperimentItemsBatch.builder()
