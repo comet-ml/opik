@@ -79,7 +79,7 @@ jobs:
 
   build-arm64:
     name: Build ARM64 Image
-    runs-on: arm64-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
