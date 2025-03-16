@@ -134,25 +134,15 @@ jobs:
             # Get the version tag with architecture
             VERSION_TAG="${VERSION_ID}-${ARCH}"
             
-            # Get the version ID for the tag
-            echo "Finding version ID for tag: ${VERSION_TAG}"
-            VERSION_ID=$(gh api \
-              -H "Accept: application/vnd.github.v3+json" \
-              "/orgs/comet-ml/packages/container/opik%2F${PACKAGE_NAME}/versions" \
-              -q ".[] | select(.metadata.container.tags[] | contains(\"${VERSION_TAG}\")) | .id")
-            
-            if [ -n "$VERSION_ID" ]; then
-              # Delete the version
-              echo "Found version ID: $VERSION_ID"
-              gh api \
-                --method DELETE \
-                "/orgs/comet-ml/packages/container/opik%2F${PACKAGE_NAME}/versions/${VERSION_ID}" \
-                -H "Accept: application/vnd.github.package.container-version-deletion-preview+json" \
-                && echo "✅ Successfully deleted ${VERSION_TAG}" \
-                || echo "⚠️ Failed to delete ${VERSION_TAG} - it may not exist or you may not have permission"
-            else
-              echo "⚠️ Could not find version ID for tag: ${VERSION_TAG}"
-            fi
+            # Delete the version
+            echo "Deleting version: ${VERSION_TAG}"
+            gh api \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/orgs/comet-ml/packages/container/opik/versions/${VERSION_TAG}" \
+              && echo "✅ Successfully deleted version: ${VERSION_TAG}" \
+              || echo "⚠️ Failed to delete version: ${VERSION_TAG}"
           done
 
       - name: Write to summary
