@@ -42,15 +42,20 @@ def pytest_configure(config):
     """This runs before any tests or fixtures are executed"""
     config.addinivalue_line("markers", "sanity: mark test as a sanity test")
 
+    # Configure root logger only if it doesn't already have handlers
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%H:%M:%S",
+        )
+
+    # Set levels for specific loggers
     logging.getLogger("opik").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
 
     loggers_to_configure = [
         "opik",

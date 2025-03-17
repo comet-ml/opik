@@ -172,22 +172,20 @@ public class SpansResource {
     @POST
     @Operation(operationId = "createSpan", summary = "Create span", description = "Create span", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}", schema = @Schema(implementation = String.class))})})
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class)))})
     @RateLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(Span.View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Creating span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}'",
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Creating span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
                 span.id(), span.projectName(), span.traceId(), span.parentSpanId(), workspaceId);
-
         var id = spanService.create(span)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
-        log.info("Created span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}' on workspaceId '{}'",
+        log.info("Created span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
                 id, span.projectName(), span.traceId(), span.parentSpanId(), workspaceId);
         return Response.created(uri).build();
     }

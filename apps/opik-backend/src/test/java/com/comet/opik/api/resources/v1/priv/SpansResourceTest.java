@@ -131,7 +131,9 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
+import static com.comet.opik.domain.SpanService.PARENT_SPAN_IS_MISMATCH;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
+import static com.comet.opik.domain.SpanService.TRACE_ID_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
@@ -157,10 +159,10 @@ class SpansResourceTest {
     public static final String[] IGNORED_FIELDS = SpanAssertions.IGNORED_FIELDS;
     public static final String[] IGNORED_FIELDS_SCORES = SpanAssertions.IGNORED_FIELDS_SCORES;
 
-    public static final String API_KEY = UUID.randomUUID().toString();
-    public static final String USER = UUID.randomUUID().toString();
-    public static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    public static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+    private static final String API_KEY = UUID.randomUUID().toString();
+    private static final String USER = UUID.randomUUID().toString();
+    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -608,8 +610,8 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .method(HttpMethod.PATCH, Entity.json(update))) {
 
-                assertExpectedResponseWithoutBody(expected, actualResponse, HttpStatus.SC_NO_CONTENT,
-                        UNAUTHORIZED_RESPONSE);
+                assertExpectedResponseWithoutBody(
+                        expected, actualResponse, HttpStatus.SC_NO_CONTENT, UNAUTHORIZED_RESPONSE);
             }
         }
 
@@ -4139,7 +4141,7 @@ class SpansResourceTest {
         void whenSortingByInvalidField__thenReturn400() {
             var field = RandomStringUtils.secure().nextAlphanumeric(10);
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
-                    400,
+                    HttpStatus.SC_BAD_REQUEST,
                     "Invalid sorting fields '%s'".formatted(field));
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
@@ -4264,289 +4266,261 @@ class SpansResourceTest {
     private void createAndAssertErrorMessage(Span span, String apiKey, String workspaceName, int status,
             String errorMessage) {
         try (var response = spanResourceClient.createSpan(span, apiKey, workspaceName, status)) {
+            assertThat(response.hasEntity()).isTrue();
             assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
         }
     }
 
-    @Test
-    void createAndGetById() {
-        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .projectId(null)
-                .parentSpanId(null)
-                .build();
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CreateSpan {
 
-        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+        @Test
+        void createAndGetById() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class);
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-        getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-    }
-
-    @Test
-    void createSpanWithNonNumericNumbers() throws JsonProcessingException {
-
-        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .projectId(null)
-                .parentSpanId(null)
-                .build();
-
-        ObjectNode span = (ObjectNode) JsonUtils.readTree(expectedSpan);
-
-        ObjectNode input = JsonUtils.MAPPER.createObjectNode();
-        input.put("value", Double.POSITIVE_INFINITY);
-        span.replace("input", input);
-
-        ObjectMapper customObjectMapper = new ObjectMapper()
-                .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature())
-                .disable(JsonWriteFeature.WRITE_NAN_AS_STRINGS.mappedFeature());
-
-        String spanStr = customObjectMapper.writeValueAsString(span);
-
-        spanResourceClient.createSpan(spanStr, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
-        getAndAssert(
-                expectedSpan.toBuilder().input(JsonUtils.getJsonNodeFromString("{\"value\": \"Infinity\"}")).build(),
-                API_KEY, TEST_WORKSPACE);
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    void createAndGetCost(Map<String, Integer> usage, String model, String provider, JsonNode metadata,
-            BigDecimal manualCost) {
-        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .model(model)
-                .provider(provider)
-                .metadata(metadata)
-                .usage(usage)
-                .totalEstimatedCost(manualCost)
-                .build();
-
-        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-
-        BigDecimal expectedCost = manualCost != null
-                ? manualCost
-                : CostService.calculateCost(
-                        StringUtils.isNotBlank(model)
-                                ? model
-                                : Optional.ofNullable(metadata)
-                                        .map(md -> md.get("model"))
-                                        .map(JsonNode::asText).orElse(""),
-                        provider,
-                        usage);
-
-        if (MapUtils.isNotEmpty(usage)) {
-            assertThat(expectedCost.compareTo(BigDecimal.ZERO) > 0).isTrue();
+            getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
         }
 
-        Span span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+        @Test
+        void createSpanWithNonNumericNumbers() throws JsonProcessingException {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class);
+            var span = (ObjectNode) JsonUtils.readTree(expectedSpan);
+            var input = JsonUtils.MAPPER.createObjectNode();
+            input.put("value", Double.POSITIVE_INFINITY);
+            span.replace("input", input);
+            var customObjectMapper = new ObjectMapper()
+                    .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature())
+                    .disable(JsonWriteFeature.WRITE_NAN_AS_STRINGS.mappedFeature());
+            var spanStr = customObjectMapper.writeValueAsString(span);
+            spanResourceClient.createSpan(spanStr, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
-        assertThat(span.totalEstimatedCost())
-                .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                        .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                        .build())
-                .isEqualTo(expectedCost.compareTo(BigDecimal.ZERO) == 0 ? null : expectedCost);
-    }
-
-    Stream<Arguments> createAndGetCost() {
-        JsonNode metadata = JsonUtils
-                .getJsonNodeFromString(
-                        "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
-
-        return Stream.of(
-                Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "gpt-3.5-turbo-1106", "openai",
-                        null, null),
-                Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "gemini-1.5-pro-preview-0514", "google_vertexai",
-                        null, null),
-                Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "claude-3-sonnet-20240229", "anthropic",
-                        null, null),
-                Arguments.of(
-                        Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                                "original_usage.output_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                                "original_usage.cache_read_input_tokens",
-                                Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                                "original_usage.cache_creation_input_tokens",
-                                Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "claude-3-5-sonnet-latest", "anthropic",
-                        null, null),
-                Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "gpt-3.5-turbo-1106", "openai",
-                        metadata,
-                        null),
-                Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        null, "openai",
-                        metadata,
-                        null),
-                Arguments.of(null, "gpt-3.5-turbo-1106", "openai", null, null),
-                Arguments.of(null, "unknown-model", "openai", null, null),
-                Arguments.of(null, null, null, null, null),
-                Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                        "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                        "gpt-3.5-turbo-1106", "openai",
-                        null,
-                        podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)),
-                Arguments.of(null, null, null, null,
-                        podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)));
-    }
-
-    @Test
-    void createSpanFaiWithNegativeManualCost() {
-        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .totalEstimatedCost(
-                        podamFactory.manufacturePojo(BigDecimal.class).abs().negate().setScale(8, RoundingMode.DOWN))
-                .build();
-
-        try (var response = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE, 422)) {
-            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst())
-                    .isEqualTo("totalEstimatedCost must be greater than or equal to 0.0");
+            getAndAssert(
+                    expectedSpan.toBuilder().input(JsonUtils.getJsonNodeFromString("{\"value\": \"Infinity\"}"))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
         }
-    }
 
-    @Test
-    void createAndGet__whenSpanInputIsBig__thenReturnSpan() {
+        @ParameterizedTest
+        @MethodSource
+        void createAndGetCost(
+                Map<String, Integer> usage, String model, String provider, JsonNode metadata, BigDecimal manualCost) {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .model(model)
+                    .provider(provider)
+                    .metadata(metadata)
+                    .usage(usage)
+                    .totalEstimatedCost(manualCost)
+                    .build();
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-        int size = 1000;
-
-        Map<String, String> jsonMap = IntStream.range(0, size)
-                .mapToObj(i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .projectId(null)
-                .parentSpanId(null)
-                .input(JsonUtils.readTree(jsonMap))
-                .output(JsonUtils.readTree(jsonMap))
-                .build();
-
-        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-
-        getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-    }
-
-    @Test
-    void createOnlyRequiredFieldsAndGetById() {
-        var expectedSpan = podamFactory.manufacturePojo(Span.class)
-                .toBuilder()
-                .projectName(null)
-                .id(null)
-                .parentSpanId(null)
-                .endTime(null)
-                .input(null)
-                .output(null)
-                .metadata(null)
-                .tags(null)
-                .usage(null)
-                .build();
-        var expectedSpanId = createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-        getAndAssert(expectedSpan.toBuilder().id(expectedSpanId).build(), API_KEY, TEST_WORKSPACE);
-    }
-
-    @Test
-    void createSpansWithDifferentWorkspaces() {
-
-        var expectedSpan1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .projectId(null)
-                .parentSpanId(null)
-                .build();
-
-        var expectedSpan2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .projectId(null)
-                .parentSpanId(null)
-                .projectName(UUID.randomUUID().toString())
-                .build();
-
-        createAndAssert(expectedSpan1, API_KEY, TEST_WORKSPACE);
-        createAndAssert(expectedSpan2, API_KEY, TEST_WORKSPACE);
-
-        getAndAssert(expectedSpan1, API_KEY, TEST_WORKSPACE);
-        getAndAssert(expectedSpan2, API_KEY, TEST_WORKSPACE);
-    }
-
-    @Test
-    void createSpansWithSameIdForDifferentWorkspacesReturnsConflict() {
-
-        var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .projectId(null)
-                .parentSpanId(null)
-                .build();
-
-        createAndAssert(span1, API_KEY, TEST_WORKSPACE);
-
-        String apiKey = UUID.randomUUID().toString();
-        String workspaceName = UUID.randomUUID().toString();
-        String workspaceId = UUID.randomUUID().toString();
-
-        var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .id(span1.id())
-                .projectId(null)
-                .parentSpanId(null)
-                .projectName(UUID.randomUUID().toString())
-                .build();
-
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-        createAndAssertErrorMessage(span2, apiKey, workspaceName, HttpStatus.SC_CONFLICT,
-                PROJECT_AND_WORKSPACE_NAME_MISMATCH);
-    }
-
-    @Test
-    void createWhenTryingToCreateSpanTwice() {
-        var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .projectId(null)
-                .parentSpanId(null)
-                .build();
-
-        createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
-
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .post(Entity.json(expectedSpan))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
-            assertThat(actualResponse.hasEntity()).isTrue();
-
-            var errorMessage = actualResponse.readEntity(ErrorMessage.class);
-            assertThat(errorMessage.errors()).contains("Span already exists");
+            var expectedCost = manualCost != null
+                    ? manualCost
+                    : CostService.calculateCost(
+                            StringUtils.isNotBlank(model)
+                                    ? model
+                                    : Optional.ofNullable(metadata)
+                                            .map(md -> md.get("model"))
+                                            .map(JsonNode::asText).orElse(""),
+                            provider,
+                            usage);
+            if (MapUtils.isNotEmpty(usage)) {
+                assertThat(expectedCost.compareTo(BigDecimal.ZERO) > 0).isTrue();
+            }
+            var span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+            assertThat(span.totalEstimatedCost())
+                    .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .build())
+                    .isEqualTo(expectedCost.compareTo(BigDecimal.ZERO) == 0 ? null : expectedCost);
         }
-    }
 
-    @Test
-    void testDeserializationErrorOnSpanCreate() {
-        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-        var traceId = generator.generate();
+        Stream<Arguments> createAndGetCost() {
+            var metadata = JsonUtils
+                    .getJsonNodeFromString(
+                            "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
+            return Stream.of(
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-3.5-turbo-1106", "openai",
+                            null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gemini-1.5-pro-preview-0514", "google_vertexai",
+                            null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "claude-3-sonnet-20240229", "anthropic",
+                            null, null),
+                    Arguments.of(
+                            Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.output_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.cache_read_input_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.cache_creation_input_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "claude-3-5-sonnet-latest", "anthropic",
+                            null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-3.5-turbo-1106", "openai",
+                            metadata,
+                            null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            null, "openai",
+                            metadata,
+                            null),
+                    Arguments.of(null, "gpt-3.5-turbo-1106", "openai", null, null),
+                    Arguments.of(null, "unknown-model", "openai", null, null),
+                    Arguments.of(null, null, null, null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-3.5-turbo-1106", "openai",
+                            null,
+                            podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)),
+                    Arguments.of(null, null, null, null,
+                            podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)));
+        }
 
-        String workspaceName = UUID.randomUUID().toString();
-        String workspaceId = UUID.randomUUID().toString();
-        String apiKey = UUID.randomUUID().toString();
+        @Test
+        void createSpanFaiWithNegativeManualCost() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .totalEstimatedCost(
+                            podamFactory.manufacturePojo(BigDecimal.class).abs().negate().setScale(8,
+                                    RoundingMode.DOWN))
+                    .build();
+            createAndAssertErrorMessage(expectedSpan, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                    "totalEstimatedCost must be greater than or equal to 0.0");
+        }
 
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+        @Test
+        void createAndGet__whenSpanInputIsBig__thenReturnSpan() {
+            int size = 1000;
+            var jsonMap = IntStream.range(0, size)
+                    .mapToObj(i -> Map.entry(RandomStringUtils.secure().nextAlphabetic(10),
+                            RandomStringUtils.secure().nextAscii(size)))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(JsonUtils.readTree(jsonMap))
+                    .output(JsonUtils.readTree(jsonMap))
+                    .build();
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-        var span = podamFactory.manufacturePojo(Span.class).toBuilder()
-                .projectId(null)
-                .projectName(projectName)
-                .traceId(traceId)
-                .feedbackScores(null)
-                .build();
+            getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+        }
 
-        String spanStr = JsonUtils.writeValueAsString(span);
-        // Make timestamps invalid
-        String invalidSpanStr = spanStr.replaceAll("Z\"", "\"");
+        @Test
+        void createOnlyRequiredFieldsAndGetById() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .id(null)
+                    .parentSpanId(null)
+                    .endTime(null)
+                    .input(null)
+                    .output(null)
+                    .metadata(null)
+                    .tags(null)
+                    .usage(null)
+                    .build();
+            var expectedSpanId = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(JsonUtils.getJsonNodeFromString(invalidSpanStr)))) {
+            getAndAssert(expectedSpan.toBuilder().id(expectedSpanId).build(), API_KEY, TEST_WORKSPACE);
+        }
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
-            assertThat(actualResponse.hasEntity()).isTrue();
-            var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(errorMessage.getMessage()).contains("Cannot deserialize value of type");
+        @Test
+        void createSpansWithSameIdIdempotent() {
+            var span1 = podamFactory.manufacturePojo(Span.class);
+            spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
+
+            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(span1.id())
+                    .build();
+            spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(span1, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void createThrowsDeserializationError() {
+            var span = podamFactory.manufacturePojo(Span.class);
+            var spanStr = JsonUtils.writeValueAsString(span);
+            // Make timestamps invalid
+            var invalidSpanStr = spanStr.replaceAll("Z\"", "\"");
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(JsonUtils.getJsonNodeFromString(invalidSpanStr)))) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorMessage.getMessage()).contains("Cannot deserialize value of type");
+            }
+        }
+
+        @Test
+        void createAfterUpdateAndGetById() {
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(spanUpdate.projectName())
+                    .traceId(spanUpdate.traceId())
+                    .parentSpanId(spanUpdate.parentSpanId())
+                    .build();
+            spanResourceClient.updateSpan(span.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpanBuilder = span.toBuilder();
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
+            getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        void createAfterUpdateThrowsProjectConflict() {
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(spanUpdate.traceId())
+                    .parentSpanId(spanUpdate.parentSpanId())
+                    .build();
+            spanResourceClient.updateSpan(span.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            createAndAssertErrorMessage(
+                    span, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CONFLICT, PROJECT_AND_WORKSPACE_NAME_MISMATCH);
+        }
+
+        @Test
+        void createAfterUpdateThrowsParentSpanIdConflict() {
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(spanUpdate.projectName())
+                    .traceId(spanUpdate.traceId())
+                    .build();
+            spanResourceClient.updateSpan(span.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            createAndAssertErrorMessage(span, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CONFLICT, PARENT_SPAN_IS_MISMATCH);
+        }
+
+        @Test
+        void createAfterUpdateThrowsTraceIdConflict() {
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .build();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(spanUpdate.projectName())
+                    .parentSpanId(spanUpdate.parentSpanId())
+                    .build();
+            spanResourceClient.updateSpan(span.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            createAndAssertErrorMessage(span, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CONFLICT, TRACE_ID_MISMATCH);
         }
     }
 
@@ -4747,50 +4721,46 @@ class SpansResourceTest {
     }
 
     private Span getAndAssert(Span expectedSpan, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path(expectedSpan.id().toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-            var actualSpan = actualResponse.readEntity(Span.class);
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-            assertThat(actualSpan)
-                    .usingRecursiveComparison()
-                    .ignoringFields(IGNORED_FIELDS)
-                    .ignoringCollectionOrderInFields("tags")
-                    .isEqualTo(expectedSpan);
-            assertThat(actualSpan.projectId()).isNotNull();
-            assertThat(actualSpan.projectName()).isNull();
-            assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-            assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-            assertThat(actualSpan.createdBy()).isEqualTo(USER);
-            assertThat(actualSpan.lastUpdatedBy()).isEqualTo(USER);
-            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                    expectedSpan.startTime(), expectedSpan.endTime());
-            if (actualSpan.duration() == null || expected == null) {
-                assertThat(actualSpan.duration()).isEqualTo(expected);
-            } else {
-                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
-            }
-            return actualSpan;
+        var actualSpan = spanResourceClient.getById(expectedSpan.id(), workspaceName, apiKey);
+        assertThat(actualSpan)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS)
+                .ignoringCollectionOrderInFields("tags")
+                .isEqualTo(expectedSpan);
+        assertThat(actualSpan.projectId()).isNotNull();
+        assertThat(actualSpan.projectName()).isNull();
+        assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
+        assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+        assertThat(actualSpan.createdBy()).isEqualTo(USER);
+        assertThat(actualSpan.lastUpdatedBy()).isEqualTo(USER);
+        var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                expectedSpan.startTime(), expectedSpan.endTime());
+        if (actualSpan.duration() == null || expected == null) {
+            assertThat(actualSpan.duration()).isEqualTo(expected);
+        } else {
+            assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
         }
+        return actualSpan;
     }
 
-    @Test
-    void delete() {
-        UUID id = generator.generate();
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteSpan {
 
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .delete()) {
+        @Test
+        void delete() {
+            UUID id = generator.generate();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(501);
-            assertThat(actualResponse.hasEntity()).isFalse();
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .delete()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(501);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
         }
     }
 
@@ -4834,26 +4804,16 @@ class SpansResourceTest {
             var expectedSpanUpdate = podamFactory.manufacturePojo(SpanUpdate.class);
             createAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            var spanUpdateBuilder = expectedSpanUpdate.toBuilder()
+            var spanUpdate = expectedSpanUpdate.toBuilder()
                     .projectId(null)
                     .projectName(expectedSpan.projectName())
                     .traceId(expectedSpan.traceId())
-                    .parentSpanId(expectedSpan.parentSpanId());
+                    .parentSpanId(expectedSpan.parentSpanId())
+                    .build();
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(expectedSpan.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method(HttpMethod.PATCH, Entity.json(spanUpdateBuilder.build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
-
-            var expectedSpanBuilder = expectedSpan
-                    .toBuilder();
-            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdateBuilder.build());
+            var expectedSpanBuilder = expectedSpan.toBuilder();
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
             getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
         }
 
@@ -4895,7 +4855,7 @@ class SpansResourceTest {
                     .projectName(expectedSpan.projectName())
                     .build();
 
-            runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             var expectedSpanBuilder = expectedSpan.toBuilder();
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
@@ -4925,7 +4885,7 @@ class SpansResourceTest {
                     .projectName(expectedSpan.projectName())
                     .build();
 
-            runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             var expectedSpanBuilder = expectedSpan.toBuilder();
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
@@ -4991,15 +4951,8 @@ class SpansResourceTest {
         void updateWhenSpanDoesNotExistButSpanIdIsInvalid__thenRejectUpdate() {
             var id = UUID.randomUUID();
             var expectedSpanUpdate = podamFactory.manufacturePojo(SpanUpdate.class);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method(HttpMethod.PATCH, Entity.json(expectedSpanUpdate))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+            try (var actualResponse = spanResourceClient.updateSpan(
+                    id, expectedSpanUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
                         .contains("Span id must be a version 7 UUID");
@@ -5012,16 +4965,7 @@ class SpansResourceTest {
             var expectedSpanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
                     .projectId(null)
                     .build();
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method(HttpMethod.PATCH, Entity.json(expectedSpanUpdate))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            }
+            spanResourceClient.updateSpan(id, expectedSpanUpdate, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -5033,7 +4977,7 @@ class SpansResourceTest {
                     .projectId(null)
                     .build();
 
-            runPatchAndAssertStatus(id, spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
 
             var actualResponse = getById(id, TEST_WORKSPACE, API_KEY);
 
@@ -5067,7 +5011,7 @@ class SpansResourceTest {
                     .build();
 
             var startCreation = Instant.now();
-            runPatchAndAssertStatus(id, spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
             var created = Instant.now();
 
             var newSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
@@ -5117,7 +5061,7 @@ class SpansResourceTest {
                     .projectId(null)
                     .build();
 
-            runPatchAndAssertStatus(id, spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
 
             var newSpan = mapper.apply(spanUpdate, id);
 
@@ -5181,18 +5125,12 @@ class SpansResourceTest {
                     .projectId(null)
                     .build();
 
-            runPatchAndAssertStatus(id, spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
 
             SpanUpdate newSpan = mapper.apply(spanUpdate, id);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .method(HttpMethod.PATCH, Entity.json(newSpan))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
+            try (var actualResponse = spanResourceClient.updateSpan(
+                    id, newSpan, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CONFLICT)) {
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
                         .contains(errorMessage);
@@ -5275,10 +5213,13 @@ class SpansResourceTest {
                     .id(id)
                     .build();
 
-            var update1 = Mono.fromRunnable(() -> runPatchAndAssertStatus(id, spanUpdate3, API_KEY, TEST_WORKSPACE));
+            var update1 = Mono
+                    .fromRunnable(() -> spanResourceClient.updateSpan(id, spanUpdate3, API_KEY, TEST_WORKSPACE));
             var create = Mono.fromRunnable(() -> createAndAssert(newSpan, API_KEY, TEST_WORKSPACE));
-            var update2 = Mono.fromRunnable(() -> runPatchAndAssertStatus(id, spanUpdate2, API_KEY, TEST_WORKSPACE));
-            var update3 = Mono.fromRunnable(() -> runPatchAndAssertStatus(id, spanUpdate1, API_KEY, TEST_WORKSPACE));
+            var update2 = Mono
+                    .fromRunnable(() -> spanResourceClient.updateSpan(id, spanUpdate2, API_KEY, TEST_WORKSPACE));
+            var update3 = Mono
+                    .fromRunnable(() -> spanResourceClient.updateSpan(id, spanUpdate1, API_KEY, TEST_WORKSPACE));
 
             Flux.merge(update1, update2, update3, create).blockLast();
 
@@ -5326,7 +5267,7 @@ class SpansResourceTest {
                     .tags(Set.of())
                     .build();
 
-            runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             UUID projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
@@ -5359,7 +5300,7 @@ class SpansResourceTest {
                     .metadata(metadata)
                     .build();
 
-            runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             UUID projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
@@ -5392,7 +5333,7 @@ class SpansResourceTest {
                     .input(input)
                     .build();
 
-            runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             UUID projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
@@ -5424,7 +5365,7 @@ class SpansResourceTest {
                     .output(output)
                     .build();
 
-            runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             UUID projectId = getProjectId(spanUpdate.projectName(), TEST_WORKSPACE, API_KEY);
 
@@ -5456,7 +5397,7 @@ class SpansResourceTest {
                     .projectId(projectId)
                     .build();
 
-            runPatchAndAssertStatus(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             Span updatedSpan = expectedSpan.toBuilder()
                     .projectId(projectId)
@@ -5472,19 +5413,6 @@ class SpansResourceTest {
                     .build();
 
             getAndAssert(updatedSpan, API_KEY, TEST_WORKSPACE);
-        }
-
-        private void runPatchAndAssertStatus(UUID id, SpanUpdate spanUpdate, String apiKey, String workspaceName) {
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .method(HttpMethod.PATCH, Entity.json(spanUpdate))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
         }
     }
 
@@ -5502,7 +5430,7 @@ class SpansResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SpanFeedback {
 
-        public Stream<Arguments> invalidRequestBodyParams() {
+        Stream<Arguments> invalidRequestBodyParams() {
             return Stream.of(
                     arguments(
                             podamFactory.manufacturePojo(FeedbackScore.class).toBuilder().name(null).build(),
@@ -5709,7 +5637,7 @@ class SpansResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BatchSpansFeedback {
 
-        public Stream<Arguments> invalidRequestBodyParams() {
+        Stream<Arguments> invalidRequestBodyParams() {
             return Stream.of(
                     arguments(FeedbackScoreBatch.builder().build(), "scores must not be null"),
                     arguments(FeedbackScoreBatch.builder().scores(List.of()).build(),
@@ -6057,7 +5985,7 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
                         .contains("span id must be a version 7 UUID");
