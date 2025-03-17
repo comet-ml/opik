@@ -51,7 +51,8 @@ public class TestDropwizardAppExtensionUtils {
             boolean corsEnabled,
             List<CustomConfig> customConfigs,
             List<Class<? extends Module>> disableModules,
-            List<AbstractModule> modules) {
+            List<AbstractModule> modules,
+            String minioUrl) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -127,6 +128,10 @@ public class TestDropwizardAppExtensionUtils {
                 configs.add(
                         "authentication.apiKeyResolutionCacheTTLInSec: " + appContextConfig.authCacheTtlInSeconds());
             }
+        }
+
+        if (appContextConfig.minioUrl() != null) {
+            configs.add("s3Config.s3Url: " + appContextConfig.minioUrl());
         }
 
         GuiceyConfigurationHook hook = injector -> {

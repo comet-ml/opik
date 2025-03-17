@@ -6,12 +6,14 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchStreamRequest;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -56,13 +58,13 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
     public UUID createSpan(Span span, String apiKey, String workspaceName) {
         try (var response = createSpan(span, apiKey, workspaceName, HttpStatus.SC_CREATED)) {
-
+            assertThat(response.hasEntity()).isFalse();
             var actualId = TestUtils.getIdFromLocation(response.getLocation());
-
             if (span.id() != null) {
                 assertThat(actualId).isEqualTo(span.id());
+            } else {
+                assertThat(actualId).isNotNull();
             }
-
             return actualId;
         }
     }
@@ -92,6 +94,24 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
             return TestUtils.getIdFromLocation(response.getLocation());
         }
+    }
+
+    public void updateSpan(UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName) {
+        try (var response = updateSpan(spanId, spanUpdate, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT)) {
+            assertThat(response.hasEntity()).isFalse();
+        }
+    }
+
+    public Response updateSpan(
+            UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName, int expectedStatus) {
+        var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(spanId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(spanUpdate));
+        assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        return response;
     }
 
     public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
@@ -136,8 +156,8 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
     public Span getById(UUID id, String workspaceName, String apiKey) {
         try (var response = callGetSpanIdApi(id, workspaceName, apiKey)) {
-
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
             return response.readEntity(Span.class);
         }
     }
@@ -168,19 +188,6 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
         assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
         return response.readEntity(Span.SpanPage.class);
-    }
-
-    public void deleteSpan(UUID id, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .delete()) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
     }
 
     public OpenaiModelName randomModel() {
