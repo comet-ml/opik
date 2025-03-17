@@ -155,7 +155,9 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
 
     callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
 
-    for chunk in synopsis_chain.stream(input=test_prompts, config={"callbacks": [callback]}):
+    for chunk in synopsis_chain.stream(
+        input=test_prompts, config={"callbacks": [callback]}
+    ):
         pass
 
     callback.flush()
