@@ -84,7 +84,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
       disabled={deleted}
     >
       {asTag ? (
-        <TooltipWrapper content={text}>
+        <TooltipWrapper content={text} stopClickPropagation>
           <Tag
             size="lg"
             variant="gray"
