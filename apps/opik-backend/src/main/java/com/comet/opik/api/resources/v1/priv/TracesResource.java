@@ -30,6 +30,7 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.quota.QuotaService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -69,8 +70,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
+import org.apache.hc.core5.http.HttpStatus;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -93,6 +96,7 @@ public class TracesResource {
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull TraceSortingFactory traceSortingFactory;
+    private final @NonNull QuotaService quotaService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull Streamer streamer;
 
@@ -203,6 +207,12 @@ public class TracesResource {
     @RateLimited
     public Response createTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
+
+        // TODO: implement a module and annotation similar to @RateLimited
+        Optional<String> quotaMessage = quotaService.isQuotaExceeded(requestContext.get());
+        if (quotaMessage.isPresent()) {
+            throw new ClientErrorException(quotaMessage.get(), HttpStatus.SC_PAYMENT_REQUIRED);
+        }
 
         traces.traces()
                 .stream()
