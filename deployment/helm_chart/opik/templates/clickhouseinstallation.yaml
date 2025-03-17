@@ -78,6 +78,10 @@ spec:
           containers:
           - name: clickhouse
             image: {{ .Values.clickhouse.image }}
+            {{- with .Values.clickhouse.imagePullSecrets }}
+            imagePullSecrets:
+              {{- toYaml . | nindent 8 }}
+            {{- end }}
             {{- with .Values.clickhouse.resources }}
             resources:
               {{- toYaml . | nindent 14 }}
