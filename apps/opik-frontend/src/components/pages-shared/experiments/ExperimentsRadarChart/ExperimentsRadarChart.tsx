@@ -1,13 +1,7 @@
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import {
   ChartContainer,
@@ -25,7 +19,6 @@ export type RadarDataPoint = Record<string, string | number>;
 
 interface ExperimentsRadarChartProps {
   name: string;
-  description: string;
   chartId: string;
   data: RadarDataPoint[];
   names: string[];
@@ -33,7 +26,6 @@ interface ExperimentsRadarChartProps {
 
 const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
   name,
-  description,
   chartId,
   data,
   names,
@@ -93,65 +85,58 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
     [width],
   );
 
-  const renderContent = () => {
-    return (
-      <ChartContainer
-        config={config}
-        className="size-full h-[var(--chart-height)]"
-      >
-        <RadarChart data={data} cy="45%" margin={{ top: 0, bottom: 0 }}>
-          <PolarGrid />
-          <PolarAngleAxis dataKey="name" tick={renderPolarAngleAxis} dy={3} />
-          <ChartTooltip
-            isAnimationActive={false}
-            content={
-              <ChartTooltipContent renderHeader={renderChartTooltipHeader} />
-            }
-          />
-          {names.map((name) => {
-            const isActive = name === activeLine;
-            let strokeOpacity = 1;
-
-            if (activeLine) {
-              strokeOpacity = isActive ? 1 : 0.4;
-            }
-
-            return (
-              <Radar
-                key={name}
-                name={name}
-                dataKey={name}
-                stroke={config[name].color || ""}
-                fill={config[name].color || ""}
-                fillOpacity={0.05}
-                strokeWidth={1.5}
-                animationDuration={600}
-                strokeOpacity={strokeOpacity}
-              />
-            );
-          })}
-          <ChartLegend
-            content={
-              <ExperimentRadarChartLegendContent
-                setActiveLine={setActiveLine}
-                chartId={chartId}
-              />
-            }
-          />
-        </RadarChart>
-      </ChartContainer>
-    );
-  };
-
   return (
     <Card ref={ref}>
-      <CardHeader className="space-y-0.5 px-5 pb-1.5 pt-4">
+      <CardHeader className="space-y-0.5 px-5 py-4">
         <CardTitle className="comet-body-s-accented">{name}</CardTitle>
-        <CardDescription className="comet-body-xs text-xs">
-          {description}
-        </CardDescription>
       </CardHeader>
-      <CardContent className="px-5 pb-3">{renderContent()}</CardContent>
+      <CardContent className="px-5 pb-3">
+        <ChartContainer
+          config={config}
+          className="size-full h-[var(--chart-height)]"
+        >
+          <RadarChart data={data} cy="45%" margin={{ top: 0, bottom: 0 }}>
+            <PolarGrid />
+            <PolarAngleAxis dataKey="name" tick={renderPolarAngleAxis} dy={3} />
+            <ChartTooltip
+              isAnimationActive={false}
+              content={
+                <ChartTooltipContent renderHeader={renderChartTooltipHeader} />
+              }
+            />
+            {names.map((name) => {
+              const isActive = name === activeLine;
+              let strokeOpacity = 1;
+
+              if (activeLine) {
+                strokeOpacity = isActive ? 1 : 0.4;
+              }
+
+              return (
+                <Radar
+                  key={name}
+                  name={name}
+                  dataKey={name}
+                  stroke={config[name].color || ""}
+                  fill={config[name].color || ""}
+                  fillOpacity={0.05}
+                  strokeWidth={1.5}
+                  animationDuration={600}
+                  strokeOpacity={strokeOpacity}
+                />
+              );
+            })}
+            <ChartLegend
+              content={
+                <ExperimentRadarChartLegendContent
+                  setActiveLine={setActiveLine}
+                  chartId={chartId}
+                />
+              }
+            />
+          </RadarChart>
+        </ChartContainer>
+      </CardContent>
     </Card>
   );
 };

@@ -2,13 +2,7 @@ import MetricChartLegendContent from "@/components/pages/TracesPage/MetricsTab/M
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import {
   ChartContainer,
@@ -25,13 +19,10 @@ import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig"
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { uniq } from "lodash";
 
-const SHOW_STACKED_BARS_LIMIT = 4;
-
 export type BarDataPoint = Record<string, string | number>;
 
 interface ExperimentsBarChartProps {
   name: string;
-  description: string;
   chartId: string;
   data: BarDataPoint[];
   names: string[];
@@ -39,7 +30,6 @@ interface ExperimentsBarChartProps {
 
 const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   name,
-  description,
   chartId,
   data,
   names,
@@ -103,91 +93,84 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
     [names.length, width],
   );
 
-  const isStackedBars = data.length > SHOW_STACKED_BARS_LIMIT;
-
-  const renderContent = () => {
-    return (
-      <ChartContainer
-        config={config}
-        className="h-[var(--chart-height)] w-full"
-      >
-        <BarChart
-          data={data}
-          margin={{
-            top: 5,
-            right: 5,
-            left: 5,
-            bottom: 0,
-          }}
-        >
-          <CartesianGrid vertical={false} />
-
-          <XAxis
-            dataKey="name"
-            axisLine={false}
-            tickLine={false}
-            dy={10}
-            tick={DEFAULT_CHART_TICK}
-            tickFormatter={truncateXAxisLabel}
-          />
-          <YAxis
-            width={tickWidth}
-            axisLine={false}
-            tickLine={false}
-            tick={DEFAULT_CHART_TICK}
-            interval={tickInterval}
-            ticks={ticks}
-            tickFormatter={yTickFormatter}
-            domain={domain}
-          />
-          <ChartLegend
-            content={
-              <MetricChartLegendContent
-                setActiveLine={setActiveBar}
-                chartId={chartId}
-              />
-            }
-          />
-          <ChartTooltip
-            isAnimationActive={false}
-            content={
-              <ChartTooltipContent renderHeader={renderChartTooltipHeader} />
-            }
-          />
-          {names.map((name) => {
-            const isActive = name === activeBar;
-            let fillOpacity = 1;
-
-            if (activeBar) {
-              fillOpacity = isActive ? 1 : 0.4;
-            }
-
-            return (
-              <Bar
-                key={name}
-                name={name}
-                dataKey={name}
-                fill={config[name].color || ""}
-                fillOpacity={fillOpacity}
-                stackId={isStackedBars ? "a" : undefined}
-                maxBarSize={52}
-              />
-            );
-          })}
-        </BarChart>
-      </ChartContainer>
-    );
-  };
-
   return (
     <Card ref={ref}>
-      <CardHeader className="space-y-0.5 px-5 pb-1.5 pt-4">
+      <CardHeader className="space-y-0.5 px-5 py-4">
         <CardTitle className="comet-body-s-accented">{name}</CardTitle>
-        <CardDescription className="comet-body-xs text-xs">
-          {description}
-        </CardDescription>
       </CardHeader>
-      <CardContent className="px-5 pb-3">{renderContent()}</CardContent>
+      <CardContent className="px-5 pb-3">
+        <ChartContainer
+          config={config}
+          className="h-[var(--chart-height)] w-full"
+        >
+          <BarChart
+            data={data}
+            margin={{
+              top: 5,
+              right: 5,
+              left: 5,
+              bottom: 0,
+            }}
+          >
+            <CartesianGrid vertical={false} />
+
+            <XAxis
+              dataKey="name"
+              axisLine={false}
+              tickLine={false}
+              dy={10}
+              tick={DEFAULT_CHART_TICK}
+              tickFormatter={truncateXAxisLabel}
+            />
+            <YAxis
+              width={tickWidth}
+              axisLine={false}
+              tickLine={false}
+              tick={DEFAULT_CHART_TICK}
+              interval={tickInterval}
+              ticks={ticks}
+              tickFormatter={yTickFormatter}
+              domain={domain}
+            />
+            <ChartLegend
+              content={
+                <MetricChartLegendContent
+                  setActiveLine={setActiveBar}
+                  chartId={chartId}
+                />
+              }
+            />
+            <ChartTooltip
+              isAnimationActive={false}
+              content={
+                <ChartTooltipContent
+                  rootClassName="bg-background/80"
+                  renderHeader={renderChartTooltipHeader}
+                />
+              }
+            />
+            {names.map((name) => {
+              const isActive = name === activeBar;
+              let fillOpacity = 1;
+
+              if (activeBar) {
+                fillOpacity = isActive ? 1 : 0.4;
+              }
+
+              return (
+                <Bar
+                  key={name}
+                  name={name}
+                  dataKey={name}
+                  fill={config[name].color || ""}
+                  fillOpacity={fillOpacity}
+                  maxBarSize={52}
+                />
+              );
+            })}
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
     </Card>
   );
 };
