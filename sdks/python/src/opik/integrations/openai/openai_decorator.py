@@ -16,10 +16,12 @@ from openai import _types as _openai_types
 from openai.types.chat import chat_completion, chat_completion_chunk
 
 from opik import dict_utils, llm_usage
+from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.integrations.openai import chat_completion_chunks_aggregator
-from . import stream_patchers
 from opik.types import LLMProvider
+
+from . import stream_patchers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -88,7 +90,10 @@ class OpenaiTrackDecorator(base_track_decorator.BaseTrackDecorator):
         return result
 
     def _end_span_inputs_preprocessor(
-        self, output: Any, capture_output: bool
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,

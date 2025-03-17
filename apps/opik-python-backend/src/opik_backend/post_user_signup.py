@@ -28,15 +28,15 @@ def execute():
 
     payload: Any = request.get_json(force=True)
 
-    code: str = payload.get("workspace_name")
-    if code is None:
-        abort(400, "Field 'workspace_name' is missing in the request")
+    workspace_name: str = payload.get("workspace")
+    if workspace_name is None:
+        abort(400, "Field 'workspace' is missing in the request")
 
-    apiKey: str = payload.get("comet_api_key")
-    if apiKey is None:
-        abort(400, "Field 'comet_api_key' is missing in the request")
+    comet_api_key: str = payload.get("apiKey")
+    if comet_api_key is None:
+        abort(400, "Field 'apiKey' is missing in the request")
 
-    create_demo_data(OPIK_REVERSE_PROXY_URL, code, apiKey)
+    create_demo_data(OPIK_REVERSE_PROXY_URL, workspace_name, comet_api_key)
 
     return jsonify({"message": "Demo data created"}), 200
 

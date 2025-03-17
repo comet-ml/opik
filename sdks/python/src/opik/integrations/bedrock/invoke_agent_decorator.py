@@ -2,7 +2,9 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from opik import dict_utils
+from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
+
 from . import helpers, stream_wrappers
 
 LOGGER = logging.getLogger(__name__)
@@ -50,7 +52,10 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
         return result
 
     def _end_span_inputs_preprocessor(
-        self, output: Any, capture_output: bool
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         output, metadata = dict_utils.split_dict_by_keys(
             output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS

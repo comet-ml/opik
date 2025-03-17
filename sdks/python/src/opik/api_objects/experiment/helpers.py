@@ -44,7 +44,7 @@ def build_metadata_and_prompt_versions(
     if experiment_config == {}:
         return None, None
 
-    metadata = jsonable_encoder.jsonable_encoder(experiment_config)
+    metadata = jsonable_encoder.encode(experiment_config)
 
     return metadata, prompt_versions
 

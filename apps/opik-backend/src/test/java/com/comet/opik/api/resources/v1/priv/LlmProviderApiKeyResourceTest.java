@@ -57,7 +57,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @DisplayName("Proxy Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class LlmProviderApiKeyResourceTest {
-    public static final String URL_TEMPLATE = "%s/v1/private/llm-provider-key";
     private static final String USER = UUID.randomUUID().toString();
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt"};
 

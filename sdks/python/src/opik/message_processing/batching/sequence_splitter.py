@@ -6,7 +6,7 @@ T = TypeVar("T")
 
 
 def _get_expected_payload_size_MB(item: T) -> float:
-    encoded_for_json = jsonable_encoder.jsonable_encoder(item)
+    encoded_for_json = jsonable_encoder.encode(item)
     json_str = json.dumps(encoded_for_json)
     return len(json_str.encode("utf-8")) / (1024 * 1024)
 

@@ -25,6 +25,7 @@ class EndSpanParameters(BaseArguments):
     tracked function is ended.
     """
 
+    name: Optional[str] = None
     metadata: Optional[Any] = None
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
