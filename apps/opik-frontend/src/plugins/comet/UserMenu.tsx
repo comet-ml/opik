@@ -43,7 +43,7 @@ import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
 import { buildUrl } from "./utils";
-import useUserWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
+import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 
 const UserMenu = () => {
   const navigate = useNavigate();
@@ -54,7 +54,7 @@ const UserMenu = () => {
   const { data: organizations, isLoading } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
-  const { data: userWorkspaces } = useUserWorkspaces({
+  const { data: userWorkspaces } = useUserInvitedWorkspaces({
     enabled: !!user?.loggedIn,
   });
   const { data: allUserWorkspaces } = useAllUserWorkspaces({
