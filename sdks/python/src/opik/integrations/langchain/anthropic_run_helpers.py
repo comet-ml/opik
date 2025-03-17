@@ -1,7 +1,7 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, Union
 
-from opik import llm_usage, logging_messages
+from opik import llm_usage
 from opik.types import LLMProvider
 
 if TYPE_CHECKING:
@@ -46,7 +46,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
         return opik_usage
     except Exception:
         LOGGER.warning(
-            logging_messages.FAILED_TO_EXTRACT_TOKEN_USAGE_FROM_PRESUMABLY_LANGCHAIN_ANTHROPIC_LLM_RUN,
+            "Failed to extract token usage from presumably Anthropic LLM langchain run.",
             exc_info=True,
         )
         return None
