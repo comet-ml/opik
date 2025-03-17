@@ -54,7 +54,7 @@ const UserMenu = () => {
   const { data: organizations, isLoading } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
-  const { data: userWorkspaces } = useUserInvitedWorkspaces({
+  const { data: userInvitedWorkspaces } = useUserInvitedWorkspaces({
     enabled: !!user?.loggedIn,
   });
   const { data: allUserWorkspaces } = useAllUserWorkspaces({
@@ -80,7 +80,7 @@ const UserMenu = () => {
     !organizations ||
     !userPermissions ||
     !allUserWorkspaces ||
-    !userWorkspaces
+    !userInvitedWorkspaces
   ) {
     return null;
   }
@@ -97,7 +97,7 @@ const UserMenu = () => {
     return org.id === workspace?.organizationId;
   });
 
-  const organizationUserWorkspaces = userWorkspaces.filter(
+  const organizationUserWorkspaces = userInvitedWorkspaces.filter(
     (workspace) => workspace.organizationId === organization?.id,
   );
 

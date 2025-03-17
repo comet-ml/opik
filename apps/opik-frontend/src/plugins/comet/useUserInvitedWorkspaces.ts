@@ -16,7 +16,7 @@ export default function useUserInvitedWorkspaces(
   options?: QueryConfig<Workspace[]>,
 ) {
   return useQuery({
-    queryKey: ["user-workspaces"],
+    queryKey: ["user-invited-workspaces"],
     queryFn: (context) => getUserInvitedWorkspaces(context),
     ...options,
     enabled: Boolean(options?.enabled),
