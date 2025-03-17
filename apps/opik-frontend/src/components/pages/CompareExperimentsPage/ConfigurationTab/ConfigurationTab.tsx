@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { BooleanParam, StringParam, useQueryParam } from "use-query-params";
+import { ColumnPinningState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import isObject from "lodash/isObject";
 import uniq from "lodash/uniq";
@@ -7,12 +8,14 @@ import toLower from "lodash/toLower";
 import find from "lodash/find";
 import { flattie } from "flattie";
 
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { CELL_BORDER, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
 import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import CompareConfigCell from "@/components/pages/CompareExperimentsPage/ConfigurationTab/CompareConfigCell";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -22,6 +25,11 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
+
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: ["name"],
+  right: [],
+};
 
 type FiledValue = string | number | undefined | null;
 
@@ -79,6 +87,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         header: CompareExperimentsHeader as never,
         cell: CompareConfigCell as never,
         meta: {
+          border: CELL_BORDER.left,
           custom: {
             onlyDiff,
             experiment: find(experiments, (e) => e.id === id),
@@ -162,8 +171,12 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   }
 
   return (
-    <div className="pb-6">
-      <div className="mb-6 flex items-center justify-between gap-8">
+    <>
+      <PageBodyStickyContainer
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search as string}
@@ -189,14 +202,22 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             </>
           )}
         </div>
-      </div>
+      </PageBodyStickyContainer>
       <DataTable
         columns={columns}
         data={filteredRows}
         resizeConfig={resizeConfig}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        TableWrapper={PageBodyStickyTableWrapper}
+        stickyHeader
       />
-    </div>
+      <PageBodyStickyContainer
+        className="pb-6"
+        direction="horizontal"
+        limitWidth
+      />
+    </>
   );
 };
 

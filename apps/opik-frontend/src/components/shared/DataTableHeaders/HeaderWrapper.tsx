@@ -3,7 +3,10 @@ import find from "lodash/find";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import HeaderStatistic from "@/components/shared/DataTableHeaders/HeaderStatistic";
 import { cn } from "@/lib/utils";
-import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
+import {
+  CELL_BORDER_MAP,
+  CELL_HORIZONTAL_ALIGNMENT_MAP,
+} from "@/constants/shared";
 
 type HeaderWrapperProps<TData> = {
   children?: React.ReactNode;
@@ -22,11 +25,12 @@ const HeaderWrapper = <TData,>({
   onClick,
   supportStatistic = true,
 }: HeaderWrapperProps<TData>) => {
-  const { type, statisticKey, statisticDataFormater } = metadata || {};
+  const { type, statisticKey, statisticDataFormater, border } = metadata || {};
   const { columnsStatistic } = tableMetadata || {};
 
   const horizontalAlignClass =
     CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
+  const borderClass = border ? CELL_BORDER_MAP[border] : "";
 
   const heightClass = columnsStatistic ? "h-14" : "h-11";
 
@@ -38,7 +42,12 @@ const HeaderWrapper = <TData,>({
 
     return (
       <div
-        className={cn("flex flex-col py-2 px-3", heightClass, className)}
+        className={cn(
+          "flex flex-col py-2 px-3",
+          heightClass,
+          borderClass,
+          className,
+        )}
         onClick={onClick}
         data-header-wrapper="true"
       >
@@ -70,6 +79,7 @@ const HeaderWrapper = <TData,>({
       className={cn(
         "flex size-full items-center gap-1 px-3",
         heightClass,
+        borderClass,
         horizontalAlignClass,
         className,
       )}

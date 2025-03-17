@@ -10,7 +10,7 @@ export enum STICKY_DIRECTION {
 export const STICKY_ATTRIBUTE_VERTICAL = "data-sticky-vertical";
 
 type PageBodyStickyContainerProps = {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
   direction?: "horizontal" | "vertical" | "bidirectional";
   limitWidth?: boolean;
