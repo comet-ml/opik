@@ -3,7 +3,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import find from "lodash/find";
 
-import { CELL_BORDER, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
@@ -67,7 +67,6 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
         cell: TextCell as never,
         meta: {
           type: COLUMN_TYPE.number,
-          border: CELL_BORDER.left,
           custom: {
             experiment: find(experiments, (e) => e.id === id),
           },

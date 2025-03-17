@@ -8,7 +8,7 @@ import toLower from "lodash/toLower";
 import find from "lodash/find";
 import { flattie } from "flattie";
 
-import { CELL_BORDER, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
@@ -87,7 +87,6 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         header: CompareExperimentsHeader as never,
         cell: CompareConfigCell as never,
         meta: {
-          border: CELL_BORDER.left,
           custom: {
             onlyDiff,
             experiment: find(experiments, (e) => e.id === id),

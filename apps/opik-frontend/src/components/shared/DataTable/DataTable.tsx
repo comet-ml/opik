@@ -33,7 +33,6 @@ import DataTableWrapper, {
   DataTableWrapperProps,
 } from "@/components/shared/DataTable/DataTableWrapper";
 import {
-  CELL_BORDER,
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   ColumnsStatistic,
@@ -69,7 +68,6 @@ declare module "@tanstack/react-table" {
     iconType?: COLUMN_TYPE;
     verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
     overrideRowHeight?: ROW_HEIGHT;
-    border?: CELL_BORDER;
     statisticKey?: string;
     statisticDataFormater?: (value: number) => string;
     custom?: object;
