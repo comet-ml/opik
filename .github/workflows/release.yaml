@@ -43,6 +43,7 @@ jobs:
     secrets: inherit
     with:
       version: ${{needs.set-version.outputs.version}}
+      is_release: true
 
   release-sdk:
     needs:
