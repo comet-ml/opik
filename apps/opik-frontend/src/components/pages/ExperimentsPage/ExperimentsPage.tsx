@@ -6,6 +6,7 @@ import {
   Row,
   RowSelectionState,
 } from "@tanstack/react-table";
+import { useNavigate } from "@tanstack/react-router";
 import {
   JsonParam,
   NumberParam,
@@ -140,6 +141,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 
 const ExperimentsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
@@ -253,6 +255,22 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleRowClick = useCallback(
+    (row: GroupedExperiment) => {
+      navigate({
+        to: "/$workspaceName/experiments/$datasetId/compare",
+        params: {
+          datasetId: row.dataset_id,
+          workspaceName,
+        },
+        search: {
+          experiments: [row.id],
+        },
+      });
+    },
+    [navigate, workspaceName],
+  );
+
   const expandingConfig = useExpandingConfig({
     groupIds,
   });
@@ -326,6 +344,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
       <DataTable
         columns={columns}
         data={experiments}
+        onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
         getIsCustomRow={getIsCustomRow}
         resizeConfig={resizeConfig}
