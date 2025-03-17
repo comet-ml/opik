@@ -228,6 +228,12 @@ navigation:
           - page: Evaluate agents
             path: docs/evaluation/evaluate_agents.mdx
             slug: evaluate_agents
+          - page: Prompt optimization
+            path: docs/evaluation/prompt_optimization.mdx
+            slug: prompt_optimization
+          - page: Agent optimization
+            path: docs/evaluation/agent_optimization.mdx
+            slug: agent_optimization
           - page: Update existing experiment
             path: docs/evaluation/update_existing_experiment.mdx
             slug: update_existing_experiment

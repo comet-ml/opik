@@ -1,0 +1,37 @@
+Improving the performance of your LLM application and agent often requires improving the quality
+of the prompts you are using.
+
+While you can make changes and review them one by one, we recommend taking a more structured approach.
+
+## Techniques for prompt optimization
+
+Before we cover techniques to improve prompts, it's worth considering how we will know that a prompt
+is better than another. For this we recommend using an [LLM evaluation framework](/evaluation/evaluate_prompt),
+by defining a dataset and a set of metrics to evaluate the prompts you will be able to know when you've
+improved a prompt.
+
+Once you have an evaluation framework in place, you can start improving your prompt. There are three main
+ways to optimize a prompt:
+
+1. Following prompt best practices
+2. Utilizing response schemas
+3. Automated improvements with Meta-prompts
+4. Advanced techniques like displayed
+
+### Prompt best-practices
+
+Writing prompts is a bit of an art-form and is something that is ever evolving as new models are released.
+There are however a few best practices that are worth following:
+
+1. Providing a "persona" or "voice" to the prompt. For example:
+
+> You are an expert developer with 10 years of experience in building real-time observability tools.
+
+> You are a product manager for an open-source platform and have a deep understanding of what it
+> takes to build LLM products.
+
+2. Be specific about your task. For example:
+
+> Review this React component and identify any performance issues or anti-patterns that could lead to memory leaks.
+
+> Analyze this dataset and create a visualization that highlights the correlation between customer age and purchase frequency.
