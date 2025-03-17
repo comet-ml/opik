@@ -1,6 +1,7 @@
 import React from "react";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import {
+  CELL_BORDER_MAP,
   CELL_HORIZONTAL_ALIGNMENT_MAP,
   CELL_VERTICAL_ALIGNMENT_MAP,
 } from "@/constants/shared";
@@ -22,7 +23,7 @@ const CellWrapper = <TData,>({
   className,
   dataCellWrapper = true,
 }: CellWrapperProps<TData>) => {
-  const { type } = metadata || {};
+  const { type, border } = metadata || {};
   const { rowHeight, rowHeightStyle } = tableMetadata || {};
 
   const verticalAlignment =
@@ -34,6 +35,7 @@ const CellWrapper = <TData,>({
   const verticalAlignClass = CELL_VERTICAL_ALIGNMENT_MAP[verticalAlignment];
   const horizontalAlignClass =
     CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
+  const borderClass = border ? CELL_BORDER_MAP[border] : "";
 
   return (
     <div
@@ -41,6 +43,7 @@ const CellWrapper = <TData,>({
         "flex size-full py-2 px-3",
         verticalAlignClass,
         horizontalAlignClass,
+        borderClass,
         className,
       )}
       style={rowHeightStyle}

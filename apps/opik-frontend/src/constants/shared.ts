@@ -1,4 +1,5 @@
 import {
+  CELL_BORDER,
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   ROW_HEIGHT,
@@ -21,6 +22,12 @@ export const CELL_VERTICAL_ALIGNMENT_MAP = {
   [CELL_VERTICAL_ALIGNMENT.start]: "items-start",
   [CELL_VERTICAL_ALIGNMENT.center]: "items-center",
   [CELL_VERTICAL_ALIGNMENT.end]: "items-end",
+};
+
+export const CELL_BORDER_MAP = {
+  [CELL_BORDER.left]: "border-l",
+  [CELL_BORDER.right]: "border-r",
+  [CELL_BORDER.x]: "border-x",
 };
 
 export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
