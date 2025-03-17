@@ -1,8 +1,11 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.infrastructure.quota.Quota;
 import com.google.inject.servlet.RequestScoped;
 import jakarta.ws.rs.core.MultivaluedMap;
 import lombok.Data;
+
+import java.util.List;
 
 @RequestScoped
 @Data
@@ -25,4 +28,5 @@ public class RequestContext {
     private String workspaceName;
     private String apiKey;
     private MultivaluedMap<String, String> headers;
+    private List<Quota> quotas;
 }

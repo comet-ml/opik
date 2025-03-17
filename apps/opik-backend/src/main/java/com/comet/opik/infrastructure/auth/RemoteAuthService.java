@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.auth;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.quota.Quota;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -19,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Optional;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
@@ -41,12 +44,14 @@ class RemoteAuthService implements AuthService {
     record AuthRequest(String workspaceName, String path) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder(toBuilder = true)
-    record AuthResponse(String user, String workspaceId, String workspaceName) {
+    record AuthResponse(String user, String workspaceId, String workspaceName, List<Quota> quotas) {
     }
 
     @Builder(toBuilder = true)
-    record ValidatedAuthCredentials(boolean shouldCache, String userName, String workspaceId, String workspaceName) {
+    record ValidatedAuthCredentials(
+            boolean shouldCache, String userName, String workspaceId, String workspaceName, List<Quota> quotas) {
     }
 
     @Override
@@ -85,7 +90,7 @@ class RemoteAuthService implements AuthService {
                 .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).path(path).build()))) {
             var credentials = verifyResponse(response);
             setCredentialIntoContext(credentials.user(), credentials.workspaceId(),
-                    Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName));
+                    Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName), credentials.quotas());
             requestContext.get().setApiKey(sessionToken.getValue());
         }
     }
@@ -103,7 +108,7 @@ class RemoteAuthService implements AuthService {
                     credentials.workspaceName());
         }
         setCredentialIntoContext(credentials.userName(), credentials.workspaceId(),
-                Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName));
+                Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName), credentials.quotas);
         requestContext.get().setApiKey(apiKey);
     }
 
@@ -158,9 +163,11 @@ class RemoteAuthService implements AuthService {
         throw new InternalServerErrorException();
     }
 
-    private void setCredentialIntoContext(String userName, String workspaceId, String workspaceName) {
+    private void setCredentialIntoContext(
+            String userName, String workspaceId, String workspaceName, List<Quota> quotas) {
         requestContext.get().setUserName(userName);
         requestContext.get().setWorkspaceId(workspaceId);
         requestContext.get().setWorkspaceName(workspaceName);
+        requestContext.get().setQuotas(quotas);
     }
 }
