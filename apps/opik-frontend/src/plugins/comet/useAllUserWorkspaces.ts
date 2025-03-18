@@ -1,5 +1,4 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import uniqBy from "lodash/uniqBy";
 import api, { QueryConfig } from "./api";
 import { ORGANIZATION_ROLE_TYPE, Workspace } from "./types";
 import useOrganizations from "./useOrganizations";
@@ -8,13 +7,6 @@ const getAllUserWorkspaces = async (
   { signal }: QueryFunctionContext,
   { organizationIds }: { organizationIds?: string[] } = {},
 ) => {
-  const allWorkspacesPromise = api
-    .get<Workspace[]>(`/workspaces`, {
-      signal,
-      params: { withoutExtendedData: true },
-    })
-    .then(({ data }) => data);
-
   const workspacesPromises = organizationIds?.map((organizationId) => {
     return api
       .get<Workspace[]>(`/workspaces`, {
@@ -24,14 +16,10 @@ const getAllUserWorkspaces = async (
       .then(({ data }) => data);
   });
 
-  const workspaces = await Promise.all([
-    allWorkspacesPromise,
-    ...(workspacesPromises || []),
-  ]);
-
-  return uniqBy(workspaces.flat(), "workspaceId");
+  return (await Promise.all(workspacesPromises || [])).flat();
 };
 
+// the workspaces of all organizations that a user has access to
 export default function useAllUserWorkspaces(
   options?: QueryConfig<Workspace[]>,
 ) {
@@ -45,7 +33,7 @@ export default function useAllUserWorkspaces(
     .map((organization) => organization.id);
 
   return useQuery({
-    queryKey: ["workspaces", { organizationIds }],
+    queryKey: ["all-user-workspaces", { organizationIds }],
     queryFn: (context) => getAllUserWorkspaces(context, { organizationIds }),
     ...options,
     enabled: options?.enabled && !!organizations,
