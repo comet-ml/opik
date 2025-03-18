@@ -1,5 +1,4 @@
 import pytest
-import os
 import asyncio
 
 import opik
@@ -46,13 +45,7 @@ EXPECTED_ANTHROPIC_USAGE_DICT = {
 MODEL_FOR_TESTS_FULL = "claude-3-5-haiku-latest"
 MODEL_FOR_TESTS_SHORT = "claude-3-5-haiku"
 
-
-@pytest.fixture(autouse=True)
-def ensure_anthropic_configured():
-    # don't use assertion here to prevent printing os.environ with all env variables
-
-    if "ANTHROPIC_API_KEY" not in os.environ:
-        raise Exception("Anthropic not configured!")
+pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")
 
 
 @pytest.mark.parametrize(

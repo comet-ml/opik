@@ -1,3 +1,6 @@
+# Storing all the messages in this module is considered a deprecated practice.
+# Do it only if your message is used in more than one place.
+
 METADATA_KEY_COLLISION_DURING_DEEPMERGE = (
     "Trace or span metadata value for the sub-key '%s' was overwritten from '%s' to '%s' during the deep merge",
 )
@@ -58,3 +61,6 @@ PARSE_API_KEY_TOO_MANY_PARTS = "Too many parts (%d) found in the Opik API key: %
 LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION = "LLM provider rate limit error detected. We recommend reducing the amount of parallel requests by setting `task_threads` evaluation parameter to a smaller number"
 
 WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream_usage`=True during LLM initialization. Token usage data is not available for .stream() or .astream() methods."
+
+# Storing all the messages in this module is considered a deprecated practice.
+# Do it only if your message is used in more than one place.
