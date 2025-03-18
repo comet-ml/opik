@@ -3524,8 +3524,9 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(traces.size() - 1, traces.getLast().toBuilder().feedbackScores(null).build());
             traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
-            traces.forEach(trace -> trace.feedbackScores()
+            traces.subList(0, traces.size() - 1).forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = getExpectedTraces.apply(traces);
             var unexpectedTraces = getUnexpectedTraces.apply(traces);

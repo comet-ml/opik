@@ -3938,9 +3938,9 @@ class SpansResourceTest {
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
 
+            spans.set(spans.size() - 1, spans.getLast().toBuilder().feedbackScores(null).build());
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-            spans.forEach(span -> span.feedbackScores()
+            spans.subList(0, spans.size() - 1).forEach(span -> span.feedbackScores()
                     .forEach(feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
 
             var expectedSpans = getExpectedSpans.apply(spans);
