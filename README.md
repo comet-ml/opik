@@ -90,9 +90,9 @@ docker compose pull
 
 # Start the Opik platform
 docker compose up --detach
-
-# You can now visit http://localhost:5173 on your browser!
 ```
+
+You can now visit [localhost:5173](http://localhost:5173) on your browser!
 
 For more information about the different deployment options, please see our deployment guides:
 
