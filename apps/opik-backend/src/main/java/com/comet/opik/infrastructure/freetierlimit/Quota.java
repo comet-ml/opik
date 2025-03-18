@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.quota;
+package com.comet.opik.infrastructure.freetierlimit;
 
 import jakarta.validation.constraints.NotNull;
 
