@@ -135,7 +135,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
               <div className="w-1/3 min-w-[400px]">
                 <ExperimentsRadarChart
                   name="Feedback scores"
-                  description="Top 10 metrics"
                   chartId="feedback-scores-radar-chart"
                   data={radarChartData}
                   names={radarChartNames}
@@ -145,7 +144,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
             <div className="min-w-[400px] flex-1">
               <ExperimentsBarChart
                 name="Feedback scores distribution"
-                description="Last 10 experiments"
                 chartId="feedback-scores-bar-chart"
                 data={barChartData}
                 names={barChartNames}
