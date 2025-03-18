@@ -56,6 +56,7 @@ public class FilterQueryBuilder {
     private static final String CREATED_AT_ANALYTICS_DB = "created_at";
     private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
+    private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -113,7 +114,7 @@ public class FilterQueryBuilder {
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
-                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 1")))
+                            "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 0")))
@@ -259,7 +260,7 @@ public class FilterQueryBuilder {
         stringJoiner.setEmptyValue("");
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
-            if (FILTER_STRATEGY_MAP.getOrDefault(filterStrategy, Set.of()).contains(filter.field())
+            if (getFieldsByStrategy(filterStrategy, filter).orElse(Set.of()).contains(filter.field())
                     || filter.field().isDynamic(filterStrategy)) {
                 stringJoiner.add(toAnalyticsDbFilter(filter, i, filterStrategy));
             }
@@ -270,6 +271,17 @@ public class FilterQueryBuilder {
                 : Optional.of("(%s)".formatted(analyticsDbFilters));
     }
 
+    private Optional<Set<? extends Field>> getFieldsByStrategy(FilterStrategy filterStrategy, Filter filter) {
+        // we want to apply the is empty filter only in the case below
+        if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
+        } else if (filter.operator() == Operator.IS_EMPTY) {
+            return Optional.empty();
+        }
+
+        return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
+    }
+
     private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter);
         var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field(), filterStrategy, i), i);
@@ -277,6 +289,10 @@ public class FilterQueryBuilder {
     }
 
     private String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
+        // this is a special case where the DB field is determined by the filter strategy rather than the filter field
+        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
+            return FEEDBACK_SCORE_COUNT_DB;
+        }
 
         return switch (field) {
             case TraceField traceField -> TRACE_FIELDS_MAP.get(traceField);
@@ -302,7 +318,7 @@ public class FilterQueryBuilder {
             @NonNull FilterStrategy filterStrategy) {
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
-            if (FILTER_STRATEGY_MAP.getOrDefault(filterStrategy, Set.of()).contains(filter.field())
+            if (getFieldsByStrategy(filterStrategy, filter).orElse(Set.of()).contains(filter.field())
                     || filter.field().isDynamic(filterStrategy)) {
 
                 if (filter.field().isDynamic(filterStrategy)) {
