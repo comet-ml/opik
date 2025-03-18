@@ -15,6 +15,7 @@ const NoThreadsPage = () => {
       description="Threads allow you to group traces together to help you evaluate your LLM model outputs in their specific context."
       imageUrl={noDataThreadsImageUrl}
       height={188}
+      className="px-6"
       buttons={
         <>
           <Button variant="secondary" asChild>

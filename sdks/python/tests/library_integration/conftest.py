@@ -22,6 +22,14 @@ def ensure_google_project_and_location_configured():
         )
 
 
+@pytest.fixture()
+def ensure_anthropic_configured():
+    # don't use assertion here to prevent printing os.environ with all env variables
+
+    if "ANTHROPIC_API_KEY" not in os.environ:
+        raise Exception("Anthropic not configured!")
+
+
 @pytest.fixture
 def ensure_vertexai_configured(ensure_google_project_and_location_configured):
     GOOGLE_APPLICATION_CREDENTIALS_PATH = "gcp_credentials.json"

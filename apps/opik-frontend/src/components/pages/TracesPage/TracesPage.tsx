@@ -4,6 +4,8 @@ import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
+import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesSpansTab";
 import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
@@ -32,37 +34,43 @@ const TracesPage = () => {
   const projectName = project?.name || projectId;
 
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+    <PageBodyScrollContainer>
+      <PageBodyStickyContainer
+        className="mb-4 mt-6 flex items-center justify-between"
+        direction="horizontal"
+      >
         <h1
           data-testid="traces-page-title"
           className="comet-title-l truncate break-words"
         >
           {projectName}
         </h1>
-      </div>
+      </PageBodyStickyContainer>
       <Tabs
         defaultValue="traces"
         value={type as string}
         onValueChange={setType}
+        className="min-w-min"
       >
-        <TabsList variant="underline">
-          <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.traces}>
-            Traces
-          </TabsTrigger>
-          <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.llm}>
-            LLM calls
-          </TabsTrigger>
-          <TabsTrigger variant="underline" value="threads">
-            Threads
-          </TabsTrigger>
-          <TabsTrigger variant="underline" value="metrics">
-            Metrics
-          </TabsTrigger>
-          <TabsTrigger variant="underline" value="rules">
-            Online evaluation
-          </TabsTrigger>
-        </TabsList>
+        <PageBodyStickyContainer direction="horizontal" limitWidth>
+          <TabsList variant="underline">
+            <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.traces}>
+              Traces
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.llm}>
+              LLM calls
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="threads">
+              Threads
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="metrics">
+              Metrics
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="rules">
+              Online evaluation
+            </TabsTrigger>
+          </TabsList>
+        </PageBodyStickyContainer>
         <TabsContent value={TRACE_DATA_TYPE.traces}>
           <TracesSpansTab
             type={TRACE_DATA_TYPE.traces}
@@ -87,7 +95,7 @@ const TracesPage = () => {
           <RulesTab projectId={projectId} />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageBodyScrollContainer>
   );
 };
 

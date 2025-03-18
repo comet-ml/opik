@@ -1,10 +1,12 @@
 import React from "react";
+import { cn } from "@/lib/utils";
 
 type NoDataPageProps = {
   title: string;
   description: string;
   imageUrl: string;
   buttons: React.ReactNode;
+  className?: string;
   height?: number;
 };
 
@@ -13,6 +15,7 @@ const NoDataPage: React.FC<NoDataPageProps> = ({
   description,
   imageUrl,
   buttons,
+  className,
   height = 60,
 }) => {
   return (
@@ -22,7 +25,10 @@ const NoDataPage: React.FC<NoDataPageProps> = ({
           "--page-difference": `${height}px`,
         } as React.CSSProperties
       }
-      className="flex h-[calc(100vh-var(--page-difference))] min-h-[500px] w-full min-w-72 items-center justify-stretch py-6"
+      className={cn(
+        "flex h-[calc(100vh-var(--page-difference))] min-h-[500px] w-full min-w-72 items-center justify-stretch py-6",
+        className,
+      )}
     >
       <div className="flex size-full flex-col items-center rounded-md border bg-white px-6 py-14">
         <h2 className="comet-title-m">{title}</h2>
