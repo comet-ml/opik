@@ -20,12 +20,13 @@ const getAllUserWorkspaces = async (
 };
 
 // the workspaces of all organizations that a user has access to
-export default function useAllUserWorkspaces(
+export default function useAdminOrganizationWorkspaces(
   options?: QueryConfig<Workspace[]>,
 ) {
   const { data: organizations } = useOrganizations({
     enabled: options?.enabled,
   });
+
   const organizationIds = organizations
     ?.filter((organization) => {
       return organization.role === ORGANIZATION_ROLE_TYPE.admin;
@@ -34,7 +35,10 @@ export default function useAllUserWorkspaces(
 
   return useQuery({
     queryKey: ["all-user-workspaces", { organizationIds }],
-    queryFn: (context) => getAllUserWorkspaces(context, { organizationIds }),
+    queryFn: (context) =>
+      getAllUserWorkspaces(context, {
+        organizationIds,
+      }),
     ...options,
     enabled: options?.enabled && !!organizations,
   });
