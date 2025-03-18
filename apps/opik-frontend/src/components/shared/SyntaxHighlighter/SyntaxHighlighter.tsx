@@ -12,6 +12,7 @@ import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import { prettifyMessage } from "@/lib/traces";
+import { yamlFoldService } from "@/lib/codemirror";
 
 enum MODE_TYPE {
   yaml = "yaml",
@@ -146,6 +147,7 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
               EditorView.lineWrapping,
               EditorState.readOnly.of(true),
               EditorView.editable.of(false),
+              yamlFoldService,
             ]}
           />
         )}
