@@ -16,5 +16,5 @@ public record TraceToScoreLlmAsJudge(
         String ruleName,
         LlmAsJudgeCode llmAsJudgeCode,
         String workspaceId,
-        String userName) implements ScoringMessage {
+        String userName) {
 }

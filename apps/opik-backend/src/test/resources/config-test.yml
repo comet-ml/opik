@@ -202,6 +202,9 @@ onlineScoring:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
       codec: java
+    - scorer: user_defined_metric_python
+      streamName: stream_scoring_user_defined_metric_python
+      codec: java
 
 # LLM providers client configuration
 llmProviderClient:
@@ -264,3 +267,9 @@ s3Config:
   s3Url: http://localhost:9000
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: true
+
+# Python evaluator configuration
+pythonEvaluator:
+  # Default: http://localhost:8000
+  # Description: URL of the Python evaluator service, generally the opik-python-backend service
+  url: http://localhost:8000
