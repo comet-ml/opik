@@ -17,6 +17,7 @@ import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -34,6 +35,7 @@ import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,10 +44,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.api.attachment.EntityType.TRACE;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 
@@ -57,8 +59,7 @@ class AttachmentResourceTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
-    public static final String FILE_NAME = "test.jpg";
-    public static final String MIME_TYPE = "image/jpeg";
+    public static final String FILE_NAME = "large.txt";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
@@ -92,8 +93,10 @@ class AttachmentResourceTest {
                         .build());
     }
 
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
     private HttpClient httpClient;
+    public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576;//6M
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi,
@@ -130,23 +133,13 @@ class AttachmentResourceTest {
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
 
-        UUID traceId = UUID.randomUUID();
-        UUID projectId = UUID.randomUUID();
-
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        log.info("Start attachment upload for workspaceId {}, projectId {}, traceId {}", workspaceId, projectId,
-                traceId);
-
         // Initiate upload
-        StartMultipartUploadRequest startUploadRequest = StartMultipartUploadRequest.builder()
-                .fileName(FILE_NAME)
-                .mimeType(MIME_TYPE)
-                .numOfFileParts(1)
-                .entityType(TRACE)
-                .entityId(traceId)
-                .containerId(projectId)
-                .build();
+        StartMultipartUploadRequest startUploadRequest = factory.manufacturePojo(StartMultipartUploadRequest.class);
+
+        log.info("Start attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId, startUploadRequest.projectName(),
+                startUploadRequest.entityId());
 
         StartMultipartUploadResponse startUploadResponse = attachmentResourceClient
                 .startMultiPartUpload(startUploadRequest, apiKey, workspaceName, 200);
@@ -156,42 +149,59 @@ class AttachmentResourceTest {
         byte[] fileData = IOUtils.toByteArray(is);
         List<String> eTags = uploadParts(startUploadResponse, fileData);
 
-        // Complete upload
-        CompleteMultipartUploadRequest completeUploadRequest = CompleteMultipartUploadRequest.builder()
-                .fileName(FILE_NAME)
-                .mimeType(MIME_TYPE)
-                .entityType(TRACE)
-                .entityId(traceId)
-                .containerId(projectId)
-                .fileSize((long) fileData.length)
-                .uploadId(startUploadResponse.uploadId())
-                .uploadedFileParts(List.of(MultipartUploadPart.builder()
-                        .eTag(eTags.getFirst())
-                        .partNumber(1)
-                        .build()))
-                .build();
+        CompleteMultipartUploadRequest completeUploadRequest = prepareCompleteUploadRequest(startUploadRequest,
+                fileData.length, startUploadResponse.uploadId(), eTags);
 
         attachmentResourceClient.completeMultiPartUpload(completeUploadRequest, apiKey, workspaceName, 204);
 
-        log.info("Completed attachment upload for workspaceId {}, projectId {}, traceId {}", workspaceId, projectId,
-                traceId);
+        log.info("Complete attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId, startUploadRequest.projectName(),
+                startUploadRequest.entityId());
 
         // TODO: proper verification that the file was uploaded will be done once we prepare corresponding endpoint in OPIK-728
     }
 
     private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data)
             throws IOException, InterruptedException {
-        String url = startUploadResponse.preSignUrls().getFirst();
+        List<String> eTags = new ArrayList<>();
+        for (int i = 0; i < startUploadResponse.preSignUrls().size(); i++) {
+            int chunkToUpload = i == startUploadResponse.preSignUrls().size() - 1
+                    ? data.length - i * MULTI_UPLOAD_CHUNK_SIZE
+                    : MULTI_UPLOAD_CHUNK_SIZE;
+            byte[] partData = new byte[chunkToUpload];
+            System.arraycopy(data, i * MULTI_UPLOAD_CHUNK_SIZE, partData, 0, chunkToUpload);
 
-        var request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .PUT(HttpRequest.BodyPublishers.ofByteArray(data))
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create(startUploadResponse.preSignUrls().get(i)))
+                    .PUT(HttpRequest.BodyPublishers.ofByteArray(data))
+                    .build();
+
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            String eTag = response.headers().firstValue("ETag").orElseThrow();
+            eTags.add(eTag);
+        }
+
+        return eTags;
+    }
+
+    private CompleteMultipartUploadRequest prepareCompleteUploadRequest(StartMultipartUploadRequest startUploadRequest,
+            long fileSize, String uploadId, List<String> eTags) {
+        List<MultipartUploadPart> uploadedFileParts = new ArrayList<>();
+        for (int i = 1; i <= eTags.size(); i++) {
+            uploadedFileParts.add(MultipartUploadPart.builder()
+                    .eTag(eTags.get(i - 1))
+                    .partNumber(i)
+                    .build());
+        }
+
+        return CompleteMultipartUploadRequest.builder()
+                .fileName(startUploadRequest.fileName())
+                .entityType(startUploadRequest.entityType())
+                .entityId(startUploadRequest.entityId())
+                .projectName(startUploadRequest.projectName())
+                .fileSize(fileSize)
+                .uploadId(uploadId)
+                .uploadedFileParts(uploadedFileParts)
                 .build();
-
-        var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        String eTag = response.headers().firstValue("ETag").orElseThrow();
-
-        return List.of(eTag);
     }
 }

@@ -48,9 +48,12 @@ public class AttachmentResource {
     public Response startMultiPartUpload(
             @RequestBody(content = @Content(schema = @Schema(implementation = StartMultipartUploadRequest.class))) @Valid StartMultipartUploadRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Start MultiPart Upload for file '{}', on workspace_id '{}'", request.fileName(), workspaceId);
-        StartMultipartUploadResponse response = attachmentService.startMultiPartUpload(request, workspaceId);
-        log.info("Start MultiPart Upload for file '{}', on workspace_id '{}' done", request.fileName(), workspaceId);
+        String userName = requestContext.get().getUserName();
+        log.info("Start MultiPart Upload for file '{}', on workspace_id '{}' for user '{}'", request.fileName(),
+                workspaceId, userName);
+        StartMultipartUploadResponse response = attachmentService.startMultiPartUpload(request, workspaceId, userName);
+        log.info("Start MultiPart Upload for file '{}', on workspace_id '{}' for user '{}' done", request.fileName(),
+                workspaceId, userName);
 
         return Response.ok(response).build();
     }

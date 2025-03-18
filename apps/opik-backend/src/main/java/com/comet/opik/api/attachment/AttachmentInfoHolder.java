@@ -3,7 +3,7 @@ package com.comet.opik.api.attachment;
 import java.util.UUID;
 
 public interface AttachmentInfoHolder {
-    UUID containerId();
+    String projectName();
     EntityType entityType();
     UUID entityId();
     String fileName();

@@ -10,13 +10,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.util.UUID;
+
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(AttachmentDAOImpl.class)
 public interface AttachmentDAO {
 
-    Mono<Long> addAttachment(CompleteMultipartUploadRequest completeUploadRequest);
+    Mono<Long> addAttachment(CompleteMultipartUploadRequest completeUploadRequest, UUID containerId, String mimeType);
 }
 
 @Singleton
@@ -56,16 +58,17 @@ class AttachmentDAOImpl implements AttachmentDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
-    public Mono<Long> addAttachment(@NonNull CompleteMultipartUploadRequest completeUploadRequest) {
+    public Mono<Long> addAttachment(@NonNull CompleteMultipartUploadRequest completeUploadRequest, UUID containerId,
+            String mimeType) {
         return asyncTemplate.nonTransaction(connection -> {
 
             var statement = connection.createStatement(INSERT_ATTACHMENT);
 
             statement.bind("entity_id", completeUploadRequest.entityId())
                     .bind("entity_type", completeUploadRequest.entityType().getValue())
-                    .bind("container_id", completeUploadRequest.containerId())
+                    .bind("container_id", containerId)
                     .bind("file_name", completeUploadRequest.fileName())
-                    .bind("mime_type", completeUploadRequest.mimeType())
+                    .bind("mime_type", mimeType)
                     .bind("file_size", completeUploadRequest.fileSize());
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))

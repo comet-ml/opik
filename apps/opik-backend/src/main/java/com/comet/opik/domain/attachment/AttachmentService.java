@@ -4,22 +4,27 @@ import com.comet.opik.api.attachment.AttachmentInfoHolder;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import com.comet.opik.domain.ProjectService;
+import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.tika.Tika;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
 import java.util.List;
+import java.util.UUID;
 
 import static com.comet.opik.domain.attachment.AttachmentUtils.KEY_TEMPLATE;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @ImplementedBy(AttachmentServiceImpl.class)
 public interface AttachmentService {
-    StartMultipartUploadResponse startMultiPartUpload(StartMultipartUploadRequest request, String workspaceId);
+    StartMultipartUploadResponse startMultiPartUpload(StartMultipartUploadRequest request, String workspaceId,
+            String userName);
 
     void completeMultiPartUpload(CompleteMultipartUploadRequest request, String workspaceId, String userName);
 }
@@ -32,14 +37,17 @@ class AttachmentServiceImpl implements AttachmentService {
     private final @NonNull FileUploadService fileUploadService;
     private final @NonNull PreSignerService preSignerService;
     private final @NonNull AttachmentDAO attachmentDAO;
+    private final @NonNull ProjectService projectService;
+    private static final Tika tika = new Tika();
 
     @Override
     public StartMultipartUploadResponse startMultiPartUpload(StartMultipartUploadRequest startUploadRequest,
-            String workspaceId) {
-        String key = prepareKey(startUploadRequest, workspaceId);
+            String workspaceId, String userName) {
+        UUID projectId = getProjectIdByName(startUploadRequest.projectName(), workspaceId, userName);
+        String key = prepareKey(startUploadRequest, workspaceId, projectId);
+        String mimeType = tika.detect(startUploadRequest.fileName());
 
-        CreateMultipartUploadResponse createResponse = fileUploadService.createMultipartUpload(key,
-                startUploadRequest.mimeType());
+        CreateMultipartUploadResponse createResponse = fileUploadService.createMultipartUpload(key, mimeType);
         List<String> presignedUrls = preSignerService.generatePresignedUrls(key, startUploadRequest.numOfFileParts(),
                 createResponse.uploadId());
 
@@ -52,20 +60,26 @@ class AttachmentServiceImpl implements AttachmentService {
     @Override
     public void completeMultiPartUpload(CompleteMultipartUploadRequest completeUploadRequest, String workspaceId,
             String userName) {
-        String key = prepareKey(completeUploadRequest, workspaceId);
+        UUID projectId = getProjectIdByName(completeUploadRequest.projectName(), workspaceId, userName);
+        String key = prepareKey(completeUploadRequest, workspaceId, projectId);
         fileUploadService.completeMultipartUpload(key,
                 completeUploadRequest.uploadId(), completeUploadRequest.uploadedFileParts());
 
-        attachmentDAO.addAttachment(completeUploadRequest)
+        attachmentDAO.addAttachment(completeUploadRequest, projectId, tika.detect(completeUploadRequest.fileName()))
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .block();
     }
 
-    String prepareKey(AttachmentInfoHolder infoHolder, String workspaceId) {
+    String prepareKey(AttachmentInfoHolder infoHolder, String workspaceId, UUID projectId) {
         return KEY_TEMPLATE.replace("{workspaceId}", workspaceId)
-                .replace("{projectId}", infoHolder.containerId().toString())
+                .replace("{projectId}", projectId.toString())
                 .replace("{entity_type}", infoHolder.entityType().getValue())
                 .replace("{entity_id}", infoHolder.entityId().toString())
                 .replace("{file_name}", infoHolder.fileName());
+    }
+
+    private UUID getProjectIdByName(String inputProjectName, String workspaceId, String userName) {
+        String projectName = WorkspaceUtils.getProjectName(inputProjectName);
+        return projectService.getOrCreate(workspaceId, projectName, userName).id();
     }
 }
