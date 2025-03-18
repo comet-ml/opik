@@ -957,8 +957,8 @@ class Opik:
         Returns:
             str: URL
         """
-
         project_name = project_name or self._project_name
+        # if self._workspace != config.OPIK_WORKSPACE_DEFAULT_NAME:
         return url_helpers.get_project_url_by_workspace(
             workspace=self._workspace, project_name=project_name
         )
