@@ -15,7 +15,6 @@ const CompareExperimentsHeader: React.FunctionComponent<
   const { custom } = context.column.columnDef.meta ?? {};
   const { experiment } = (custom ?? {}) as CustomMeta;
   const experimentId = context.header?.id;
-  const hasData = context.table.getRowCount() > 0;
 
   const name = experiment?.name || experimentId;
 
@@ -24,9 +23,6 @@ const CompareExperimentsHeader: React.FunctionComponent<
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {hasData && (
-        <div className="absolute left-0 top-0 h-[10000px] w-px bg-border" />
-      )}
       <FlaskConical className="size-3.5 shrink-0 text-slate-300" />
       <div className="comet-body-s-accented truncate">{name}</div>
     </HeaderWrapper>

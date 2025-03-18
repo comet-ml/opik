@@ -9,6 +9,7 @@ type NoDataWrapperProps = {
   description: string;
   imageUrl: string;
   buttons: React.ReactNode;
+  className?: string;
   height?: number;
 };
 
@@ -16,12 +17,14 @@ type NoRulesPageProps = {
   openModal: () => void;
   height?: number;
   Wrapper: React.FC<NoDataWrapperProps>;
+  className?: string;
 };
 
 const NoRulesPage: React.FC<NoRulesPageProps> = ({
   openModal,
   Wrapper,
   height,
+  className,
 }) => {
   return (
     <Wrapper
@@ -29,6 +32,7 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({
       description="An automated rule is a predefined logic that scores LLM outputs in real-time based on set criteria, ensuring efficient and consistent performance assessment."
       imageUrl={noDataRulesImageUrl}
       height={height}
+      className={className}
       buttons={
         <>
           <Button variant="secondary" asChild>

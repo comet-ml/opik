@@ -38,6 +38,8 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -208,6 +210,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           openModal={handleNewRuleClick}
           Wrapper={NoDataPage}
           height={188}
+          className="px-6"
         />
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
@@ -220,8 +223,12 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   }
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+    <>
+      <PageBodyStickyContainer
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search as string}
@@ -245,7 +252,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             Create new rule
           </Button>
         </div>
-      </div>
+      </PageBodyStickyContainer>
       <DataTable
         columns={columns}
         data={rows}
@@ -257,8 +264,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        TableWrapper={PageBodyStickyTableWrapper}
+        stickyHeader
       />
-      <div className="py-4">
+      <PageBodyStickyContainer
+        className="py-4"
+        direction="horizontal"
+        limitWidth
+      >
         <DataTablePagination
           page={page as number}
           pageChange={setPage}
@@ -266,14 +279,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           sizeChange={setSize}
           total={data?.total ?? 0}
         ></DataTablePagination>
-      </div>
+      </PageBodyStickyContainer>
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         projectId={projectId}
         setOpen={setOpenDialog}
       />
-    </div>
+    </>
   );
 };
 

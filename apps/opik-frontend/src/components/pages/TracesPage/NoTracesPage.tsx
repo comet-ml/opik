@@ -33,6 +33,7 @@ const NoTracesPage = () => {
       description="Logging traces helps you understand the flow of your application and identify specific points in your application that may be causing issues."
       imageUrl={imageUrl}
       height={188}
+      className="px-6"
       buttons={
         <>
           <Button variant="secondary" asChild>

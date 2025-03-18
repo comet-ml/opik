@@ -1,4 +1,4 @@
-import React, { ReactNode, useMemo } from "react";
+import React, { ReactNode, useMemo, useState } from "react";
 import {
   Cell,
   ColumnDef,
@@ -29,6 +29,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import DataTableColumnResizer from "@/components/shared/DataTable/DataTableColumnResizer";
+import DataTableWrapper, {
+  DataTableWrapperProps,
+} from "@/components/shared/DataTable/DataTableWrapper";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
@@ -43,6 +46,11 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { TABLE_HEADER_Z_INDEX } from "@/constants/shared";
 import { cn } from "@/lib/utils";
+import {
+  STICKY_ATTRIBUTE_VERTICAL,
+  STICKY_DIRECTION,
+} from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -114,6 +122,8 @@ interface DataTableProps<TData, TValue> {
   columnPinning?: ColumnPinningState;
   noData?: ReactNode;
   autoWidth?: boolean;
+  stickyHeader?: boolean;
+  TableWrapper?: React.FC<DataTableWrapperProps>;
   meta?: Omit<
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
@@ -138,6 +148,8 @@ const DataTable = <TData, TValue>({
   columnPinning,
   noData,
   autoWidth = false,
+  TableWrapper = DataTableWrapper,
+  stickyHeader = false,
   meta,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
@@ -210,6 +222,11 @@ const DataTable = <TData, TValue>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers, columnSizing]);
 
+  const [tableHeight, setTableHeight] = useState(0);
+  const { ref: tableRef } = useObserveResizeNode<HTMLTableElement>((node) => {
+    setTableHeight(node.clientHeight);
+  });
+
   const renderRow = (row: Row<TData>) => {
     if (isFunction(renderCustomRow) && getIsCustomRow(row)) {
       return renderCustomRow(row);
@@ -271,10 +288,12 @@ const DataTable = <TData, TValue>({
   };
 
   return (
-    <div className="overflow-x-auto overflow-y-hidden rounded-md border">
+    <TableWrapper>
       <Table
+        ref={tableRef}
         style={{
           ...(!autoWidth && { minWidth: table.getTotalSize() }),
+          ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
         }}
       >
         <colgroup>
@@ -282,7 +301,12 @@ const DataTable = <TData, TValue>({
             <col key={i.id} style={{ width: `${i.size}px` }} />
           ))}
         </colgroup>
-        <TableHeader>
+        <TableHeader
+          className={cn(stickyHeader && "sticky z-10")}
+          {...(stickyHeader && {
+            ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
+          })}
+        >
           {table.getHeaderGroups().map((headerGroup, index, groups) => {
             const isLastRow = index === groups.length - 1;
 
@@ -291,7 +315,7 @@ const DataTable = <TData, TValue>({
                 key={headerGroup.id}
                 className={cn(
                   "bg-soft-background",
-                  !isLastRow && "border-b-transparent",
+                  !isLastRow && "!border-b-0",
                 )}
               >
                 {headerGroup.headers.map((header) => {
@@ -340,7 +364,7 @@ const DataTable = <TData, TValue>({
           )}
         </TableBody>
       </Table>
-    </div>
+    </TableWrapper>
   );
 };
 
