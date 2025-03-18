@@ -44,11 +44,11 @@ export interface BaseTraceData {
   tags: string[];
   usage?: UsageData;
   total_estimated_cost?: number;
-  span_count: number;
   error_info?: BaseTraceDataErrorInfo;
 }
 
 export interface Trace extends BaseTraceData {
+  span_count?: number;
   thread_id?: string;
   project_id: string;
   workspace_name?: string;
