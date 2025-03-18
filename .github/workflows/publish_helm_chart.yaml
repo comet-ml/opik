@@ -70,8 +70,7 @@ jobs:
           shell: bash
           working-directory: dest
           run: |
-              # helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/
-              helm repo index . --url https://raw.githubusercontent.com/comet-ml/comet-llm-eval-opik/gh-pages/
+              helm repo index . --url https://raw.githubusercontent.com/comet-ml/opik/gh-pages/
               git config user.name "Helm Updater"
               git config user.email "actions@users.noreply.github.com"
               git add $(git ls-files -o --exclude-standard)
