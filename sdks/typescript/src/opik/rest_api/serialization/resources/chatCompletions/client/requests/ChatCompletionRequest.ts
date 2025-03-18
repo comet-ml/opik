@@ -5,7 +5,6 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
-import { Message } from "../../../../types/Message";
 import { StreamOptions } from "../../../../types/StreamOptions";
 import { ResponseFormat } from "../../../../types/ResponseFormat";
 import { Tool } from "../../../../types/Tool";
@@ -17,7 +16,7 @@ export const ChatCompletionRequest: core.serialization.Schema<
     OpikApi.ChatCompletionRequest
 > = core.serialization.object({
     model: core.serialization.string().optional(),
-    messages: core.serialization.list(Message).optional(),
+    messages: core.serialization.list(core.serialization.lazyObject(() => serializers.Message)).optional(),
     temperature: core.serialization.number().optional(),
     topP: core.serialization.property("top_p", core.serialization.number().optional()),
     n: core.serialization.number().optional(),
@@ -48,7 +47,7 @@ export const ChatCompletionRequest: core.serialization.Schema<
 export declare namespace ChatCompletionRequest {
     export interface Raw {
         model?: string | null;
-        messages?: Message.Raw[] | null;
+        messages?: serializers.Message.Raw[] | null;
         temperature?: number | null;
         top_p?: number | null;
         n?: number | null;
