@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.infrastructure.quota.Quota;
+import com.comet.opik.infrastructure.freetierlimit.Quota;
 import com.google.inject.servlet.RequestScoped;
 import jakarta.ws.rs.core.MultivaluedMap;
 import lombok.Data;
