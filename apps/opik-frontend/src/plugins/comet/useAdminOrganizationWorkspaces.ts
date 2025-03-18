@@ -35,7 +35,7 @@ export default function useAdminOrganizationWorkspaces(
     .map((organization) => organization.id);
 
   return useQuery({
-    queryKey: ["all-user-workspaces", { organizationIds }],
+    queryKey: ["user-admin-organization-workspaces", { organizationIds }],
     queryFn: (context) =>
       getAllUserWorkspaces(context, {
         organizationIds,

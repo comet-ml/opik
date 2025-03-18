@@ -11,7 +11,7 @@ export default function useAllWorkspaces(options?: QueryConfig<Workspace[]>) {
   const { data: allUserWorkspaces } = useAdminOrganizationWorkspaces(options);
 
   return useQuery({
-    queryKey: ["user-workspaces", { enabled: true }],
+    queryKey: ["all-user-workspaces", { enabled: true }],
     queryFn: async () => {
       return !allUserWorkspaces || !userInvitedWorkspaces
         ? undefined

@@ -100,12 +100,8 @@ const UserMenu = () => {
     return org.id === workspace?.organizationId;
   });
 
-  const organizationUserWorkspaces = allWorkspaces.filter(
-    (workspace) =>
-      workspace.organizationId === organization?.id &&
-      !!userInvitedWorkspaces.find(
-        (w) => w.workspaceId === workspace?.workspaceId,
-      ),
+  const organizationUserWorkspaces = userInvitedWorkspaces.filter(
+    (workspace) => workspace.organizationId === organization?.id,
   );
 
   const isOrganizationAdmin =
