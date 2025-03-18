@@ -24,8 +24,8 @@ _SESSION_CACHE_DICT: Dict[str, Any] = {}
 
 MAX_BATCH_SIZE_MB = 5
 
-OPIK_URL_CLOUD: Final[str] = "https://www.comet.com/opik/api"
-OPIK_URL_LOCAL: Final[str] = "http://localhost:5173/api"
+OPIK_URL_CLOUD: Final[str] = "https://www.comet.com/opik/api/"
+OPIK_URL_LOCAL: Final[str] = "http://localhost:5173/api/"
 
 OPIK_PROJECT_DEFAULT_NAME: Final[str] = "Default Project"
 OPIK_WORKSPACE_DEFAULT_NAME: Final[str] = "default"

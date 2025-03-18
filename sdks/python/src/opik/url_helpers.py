@@ -16,6 +16,10 @@ HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 
 
+def ensure_ending_slash(url: str) -> str:
+    return url.rstrip("/") + "/"
+
+
 def get_ui_url() -> str:
     config = opik.config.OpikConfig()
     opik_url_override = config.url_override
@@ -32,7 +36,7 @@ def get_experiment_url_by_id(
         f"v1/session/redirect/experiments/?experiment_id={experiment_id}&dataset_id={dataset_id}&path={encoded_opik_url}",
         safe=ALLOWED_URL_CHARACTERS,
     )
-    return urllib.parse.urljoin(url_override, project_path)
+    return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
 
 
 def get_project_url_by_workspace(
@@ -53,7 +57,7 @@ def get_project_url_by_trace_id(trace_id: str, url_override: str) -> str:
         f"v1/session/redirect/projects/?trace_id={trace_id}&path={encoded_opik_url}",
         safe=ALLOWED_URL_CHARACTERS,
     )
-    return urllib.parse.urljoin(url_override, project_path)
+    return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
 
 
 def get_dataset_url_by_id(dataset_id: str, url_override: str) -> str:
@@ -63,7 +67,7 @@ def get_dataset_url_by_id(dataset_id: str, url_override: str) -> str:
         f"v1/session/redirect/datasets/?dataset_id={dataset_id}&path={encoded_opik_url}",
         safe=ALLOWED_URL_CHARACTERS,
     )
-    return urllib.parse.urljoin(url_override, project_path)
+    return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
 
 
 def get_base_url(url: str) -> str:
