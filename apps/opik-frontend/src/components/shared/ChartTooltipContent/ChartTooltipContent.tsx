@@ -13,7 +13,6 @@ import {
   ValueType,
 } from "recharts/types/component/DefaultTooltipContent";
 import isFunction from "lodash/isFunction";
-import { cn } from "@/lib/utils";
 
 export type ChartTooltipRenderHeaderArguments = {
   payload: Payload<ValueType, NameType>[];
@@ -31,8 +30,6 @@ type ChartTooltipContentProps = {
   renderValue?: ({
     value,
   }: ChartTooltipRenderValueArguments) => React.ReactNode;
-
-  rootClassName?: string;
 } & React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
   React.ComponentProps<"div">;
 
@@ -41,14 +38,7 @@ const ChartTooltipContent = React.forwardRef<
   ChartTooltipContentProps
 >(
   (
-    {
-      active,
-      payload,
-      color,
-      renderHeader,
-      renderValue: parentRenderValue,
-      rootClassName,
-    },
+    { active, payload, color, renderHeader, renderValue: parentRenderValue },
     ref,
   ) => {
     const { config } = useChart();
@@ -75,13 +65,7 @@ const ChartTooltipContent = React.forwardRef<
           className="min-w-32 max-w-72 px-1 py-1.5 will-change-transform"
           asChild
         >
-          <div
-            ref={ref}
-            className={cn(
-              "grid items-start gap-1.5 bg-background",
-              rootClassName,
-            )}
-          >
+          <div ref={ref} className={"grid items-start gap-1.5 bg-background"}>
             {isFunction(renderHeader) && (
               <div className="mb-1 max-w-full overflow-hidden border-b px-2 pt-0.5">
                 {renderHeader({ payload })}

@@ -53,6 +53,25 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
     [],
   );
 
+  const calculateTruncateLength = useCallback((width: number) => {
+    const minWidth = 400;
+    const minLength = 14;
+    const charsPerWidth = 0.35; // Increased to ~1 char per 3px for more text
+
+    if (width <= minWidth) {
+      return minLength;
+    }
+
+    const extraWidth = width - minWidth;
+    const extraChars = Math.floor(extraWidth * charsPerWidth);
+
+    return minLength + extraChars;
+  }, []);
+
+  const truncateText = useCallback((text: string, maxLength: number) => {
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+  }, []);
+
   const renderPolarAngleAxis = useCallback(
     ({
       ...props
@@ -61,18 +80,8 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
         value: string;
       };
     }) => {
-      const getTruncateLength = () => {
-        const baseLength = 14;
-        const additionalLength = Math.floor((width - 400) / 20) * 2;
-
-        return width <= 400 ? baseLength : baseLength + additionalLength;
-      };
-
-      const truncateLength = getTruncateLength();
-      const truncatedLabel =
-        props.payload.value.length > truncateLength
-          ? `${props.payload.value.slice(0, truncateLength)}...`
-          : props.payload.value;
+      const truncateLength = calculateTruncateLength(width);
+      const truncatedLabel = truncateText(props.payload.value, truncateLength);
 
       return (
         <TooltipWrapper content={props.payload.value}>
@@ -82,7 +91,7 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
         </TooltipWrapper>
       );
     },
-    [width],
+    [width, calculateTruncateLength, truncateText],
   );
 
   return (

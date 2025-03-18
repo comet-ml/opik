@@ -18,6 +18,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { uniq } from "lodash";
+import NoData from "@/components/shared/NoData/NoData";
 
 export type BarDataPoint = Record<string, string | number>;
 
@@ -56,6 +57,8 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
     },
     [],
   );
+
+  const noData = !names.length;
 
   const values = useMemo(() => {
     const valuesList = data.reduce<number[]>((acc, data) => {
@@ -99,77 +102,84 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
         <CardTitle className="comet-body-s-accented">{name}</CardTitle>
       </CardHeader>
       <CardContent className="px-5 pb-3">
-        <ChartContainer
-          config={config}
-          className="h-[var(--chart-height)] w-full"
-        >
-          <BarChart
-            data={data}
-            margin={{
-              top: 5,
-              right: 5,
-              left: 5,
-              bottom: 0,
-            }}
+        {noData ? (
+          <NoData
+            className="min-h-32 text-light-slate"
+            message="No data to show"
+          />
+        ) : (
+          <ChartContainer
+            config={config}
+            className="h-[var(--chart-height)] w-full"
           >
-            <CartesianGrid vertical={false} />
+            <BarChart
+              data={data}
+              margin={{
+                top: 5,
+                right: 5,
+                left: 5,
+                bottom: 0,
+              }}
+            >
+              <CartesianGrid vertical={false} />
 
-            <XAxis
-              dataKey="name"
-              axisLine={false}
-              tickLine={false}
-              dy={10}
-              tick={DEFAULT_CHART_TICK}
-              tickFormatter={truncateXAxisLabel}
-            />
-            <YAxis
-              width={tickWidth}
-              axisLine={false}
-              tickLine={false}
-              tick={DEFAULT_CHART_TICK}
-              interval={tickInterval}
-              ticks={ticks}
-              tickFormatter={yTickFormatter}
-              domain={domain}
-            />
-            <ChartLegend
-              content={
-                <MetricChartLegendContent
-                  setActiveLine={setActiveBar}
-                  chartId={chartId}
-                />
-              }
-            />
-            <ChartTooltip
-              isAnimationActive={false}
-              content={
-                <ChartTooltipContent
-                  rootClassName="bg-background/80"
-                  renderHeader={renderChartTooltipHeader}
-                />
-              }
-            />
-            {names.map((name) => {
-              const isActive = name === activeBar;
-              let fillOpacity = 1;
+              <XAxis
+                dataKey="name"
+                axisLine={false}
+                tickLine={false}
+                dy={10}
+                tick={DEFAULT_CHART_TICK}
+                tickFormatter={truncateXAxisLabel}
+              />
+              <YAxis
+                width={tickWidth}
+                axisLine={false}
+                tickLine={false}
+                tick={DEFAULT_CHART_TICK}
+                interval={tickInterval}
+                ticks={ticks}
+                tickFormatter={yTickFormatter}
+                domain={domain}
+              />
+              <ChartLegend
+                content={
+                  <MetricChartLegendContent
+                    setActiveLine={setActiveBar}
+                    chartId={chartId}
+                  />
+                }
+              />
+              <ChartTooltip
+                isAnimationActive={false}
+                cursor={{ fillOpacity: 0.6 }}
+                content={
+                  <ChartTooltipContent
+                    renderHeader={renderChartTooltipHeader}
+                  />
+                }
+              />
+              {names.map((name) => {
+                const isActive = name === activeBar;
+                let fillOpacity = 1;
 
-              if (activeBar) {
-                fillOpacity = isActive ? 1 : 0.4;
-              }
+                if (activeBar) {
+                  fillOpacity = isActive ? 1 : 0.4;
+                }
 
-              return (
-                <Bar
-                  key={name}
-                  name={name}
-                  dataKey={name}
-                  fill={config[name].color || ""}
-                  fillOpacity={fillOpacity}
-                  maxBarSize={52}
-                />
-              );
-            })}
-          </BarChart>
-        </ChartContainer>
+                return (
+                  <Bar
+                    key={name}
+                    name={name}
+                    dataKey={name}
+                    fill={config[name].color || ""}
+                    fillOpacity={fillOpacity}
+                    maxBarSize={52}
+                  />
+                );
+              })}
+            </BarChart>
+          </ChartContainer>
+        )}
       </CardContent>
     </Card>
   );
