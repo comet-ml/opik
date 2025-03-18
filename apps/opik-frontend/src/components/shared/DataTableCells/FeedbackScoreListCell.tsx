@@ -93,7 +93,7 @@ const FeedbackScoreListCell = <TData,>(
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="p-0 py-1"
+      className="py-1 pr-1"
     >
       {isEmpty ? (
         "-"
