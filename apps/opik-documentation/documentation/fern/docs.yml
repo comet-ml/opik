@@ -291,7 +291,7 @@ navigation:
           - page: Opik's MCP server
             path: docs/prompt_engineering/mcp_server.mdx
             slug: mcp_server
-          - page: Playground
+          - page: Prompt Playground
             path: docs/prompt_engineering/playground.mdx
             slug: playground
       - section: Testing
