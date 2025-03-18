@@ -3,15 +3,14 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
+import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.events.ScoringMessage;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.UserLog;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
-import com.comet.opik.infrastructure.OnlineScoringConfig.StreamConfiguration;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
@@ -27,17 +26,12 @@ import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static com.comet.opik.api.AutomationRuleEvaluatorType.LLM_AS_JUDGE;
-import static com.comet.opik.api.AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;
 
 /**
  * This service listens for Traces creation server in-memory event (via EventBus). When it happens, it fetches
@@ -51,20 +45,20 @@ public class OnlineScoringSampler {
 
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final RedissonReactiveClient redisClient;
-    private final Random random = new Random(Instant.now().toEpochMilli());
-    private final Logger userFacingLogger;
 
-    private final Map<AutomationRuleEvaluatorType, StreamConfiguration> streamConfigurations;
+    private final Random random = new Random();
+    private final Logger userFacingLogger;
+    private final Map<AutomationRuleEvaluatorType, OnlineScoringConfig.StreamConfiguration> streamConfigurations;
 
     @Inject
     public OnlineScoringSampler(@Config("onlineScoring") @NonNull OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull EventBus eventBus, @NonNull AutomationRuleEvaluatorService ruleEvaluatorService) {
+            @NonNull EventBus eventBus,
+            @NonNull AutomationRuleEvaluatorService ruleEvaluatorService) {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.redisClient = redisClient;
         eventBus.register(this);
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
-
         streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {
                     var evaluatorType = AutomationRuleEvaluatorType.fromString(streamConfiguration.getScorer());
@@ -88,25 +82,25 @@ public class OnlineScoringSampler {
      */
     @Subscribe
     public void onTracesCreated(TracesCreated tracesBatch) {
-        Map<UUID, List<Trace>> tracesByProject = tracesBatch.traces().stream()
-                .collect(Collectors.groupingBy(Trace::projectId));
+        var tracesByProject = tracesBatch.traces().stream().collect(Collectors.groupingBy(Trace::projectId));
 
-        Map<String, Integer> countMap = tracesByProject.entrySet().stream()
+        var countMap = tracesByProject.entrySet().stream()
                 .collect(Collectors.toMap(entry -> "projectId: " + entry.getKey(),
                         entry -> entry.getValue().size()));
 
-        log.debug("Received {} traces for workspace '{}': {}", tracesBatch.traces().size(), tracesBatch.workspaceId(),
-                countMap);
+        log.info("Received '{}' traces for workspace '{}': '{}'",
+                tracesBatch.traces().size(), tracesBatch.workspaceId(), countMap);
 
         // fetch automation rules per project
         tracesByProject.forEach((projectId, traces) -> {
-            log.debug("Fetching evaluators for {} traces, project '{}' on workspace '{}'",
+            log.info("Fetching evaluators for '{}' traces, project '{}' on workspace '{}'",
                     traces.size(), projectId, tracesBatch.workspaceId());
 
-            List<? extends AutomationRuleEvaluator<?>> evaluatorsLlmAsJudge = ruleEvaluatorService.findAll(projectId,
-                    tracesBatch.workspaceId(), LLM_AS_JUDGE);
-            List<? extends AutomationRuleEvaluator<?>> evaluatorsUserDefinedMetricPython = ruleEvaluatorService
-                    .findAll(projectId, tracesBatch.workspaceId(), USER_DEFINED_METRIC_PYTHON);
+            List<AutomationRuleEvaluatorLlmAsJudge> evaluatorsLlmAsJudge = ruleEvaluatorService.findAll(projectId,
+                    tracesBatch.workspaceId(), AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            List<AutomationRuleEvaluatorUserDefinedMetricPython> evaluatorsUserDefinedMetricPython = ruleEvaluatorService
+                    .findAll(projectId, tracesBatch.workspaceId(),
+                            AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
 
             // Important to set the workspaceId for logging purposes
             try (MDC.MDCCloseable logScope = MDC.putCloseable(UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name());
@@ -116,31 +110,22 @@ public class OnlineScoringSampler {
                         .forEach(evaluator -> {
                             // samples traces for this rule
                             var samples = traces.stream().filter(trace -> shouldSampleTrace(evaluator, trace));
-
                             switch (evaluator.getType()) {
                                 case LLM_AS_JUDGE -> {
                                     var messages = samples
                                             .map(trace -> toLlmAsJudgeMessage(tracesBatch,
                                                     (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                             .toList();
-
-                                    log.info("[AutomationRule '{}' Sampled {}/{} from trace batch (expected rate: {})",
-                                            evaluator.getName(), messages.size(), tracesBatch.traces().size(),
-                                            evaluator.getSamplingRate());
-
-                                    enqueueInRedis(messages, LLM_AS_JUDGE);
+                                    logSampledTrace(tracesBatch, evaluator, messages);
+                                    enqueueInRedis(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                                 }
                                 case USER_DEFINED_METRIC_PYTHON -> {
                                     var messages = samples
                                             .map(trace -> toScoreUserDefinedMetricPython(tracesBatch,
-                                                    (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
+                                                    (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                             .toList();
-
-                                    log.info("[AutomationRule '{}' Sampled {}/{} from trace batch (expected rate: {})",
-                                            evaluator.getName(), messages.size(), tracesBatch.traces().size(),
-                                            evaluator.getSamplingRate());
-
-                                    enqueueInRedis(messages, USER_DEFINED_METRIC_PYTHON);
+                                    logSampledTrace(tracesBatch, evaluator, messages);
+                                    enqueueInRedis(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
                                 }
                                 default -> log.warn("No process defined for evaluator type '{}'", evaluator.getType());
                             }
@@ -151,7 +136,6 @@ public class OnlineScoringSampler {
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?> evaluator, Trace trace) {
         var shouldBeSampled = random.nextFloat() < evaluator.getSamplingRate();
-
         if (!shouldBeSampled) {
             try (var ruleScope = MDC.putCloseable("rule_id", evaluator.getId().toString());
                     var traceScope = MDC.putCloseable("trace_id", trace.id().toString())) {
@@ -160,11 +144,10 @@ public class OnlineScoringSampler {
                         trace.id(), evaluator.getName(), evaluator.getSamplingRate());
             }
         }
-
         return shouldBeSampled;
     }
 
-    private ScoringMessage toLlmAsJudgeMessage(TracesCreated tracesBatch,
+    private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(TracesCreated tracesBatch,
             AutomationRuleEvaluatorLlmAsJudge evaluator,
             Trace trace) {
         return TraceToScoreLlmAsJudge.builder()
@@ -177,24 +160,32 @@ public class OnlineScoringSampler {
                 .build();
     }
 
-    private ScoringMessage toScoreUserDefinedMetricPython(TracesCreated tracesBatch,
-            AutomationRuleEvaluatorLlmAsJudge evaluator,
+    private TraceToScoreUserDefinedMetricPython toScoreUserDefinedMetricPython(TracesCreated tracesBatch,
+            AutomationRuleEvaluatorUserDefinedMetricPython evaluator,
             Trace trace) {
         return TraceToScoreUserDefinedMetricPython.builder()
                 .trace(trace)
                 .ruleId(evaluator.getId())
                 .ruleName(evaluator.getName())
-                .llmAsJudgeCode(evaluator.getCode())
+                .code(evaluator.getCode())
                 .workspaceId(tracesBatch.workspaceId())
                 .userName(tracesBatch.userName())
                 .build();
     }
 
-    private void enqueueInRedis(List<ScoringMessage> messages, AutomationRuleEvaluatorType type) {
+    private void logSampledTrace(TracesCreated tracesBatch, AutomationRuleEvaluator<?> evaluator, List<?> messages) {
+        log.info("[AutomationRule '{}', type '{}'] Sampled '{}/{}' from trace batch (expected rate: '{}')",
+                evaluator.getName(),
+                evaluator.getType(),
+                messages.size(),
+                tracesBatch.traces().size(),
+                evaluator.getSamplingRate());
+    }
+
+    private void enqueueInRedis(List<?> messages, AutomationRuleEvaluatorType type) {
         var config = streamConfigurations.get(type);
         var codec = OnlineScoringCodecs.fromString(config.getCodec()).getCodec();
         var llmAsJudgeStream = redisClient.getStream(config.getStreamName(), codec);
-
         Flux.fromIterable(messages)
                 .flatMap(message -> llmAsJudgeStream
                         .add(StreamAddArgs.entry(OnlineScoringConfig.PAYLOAD_FIELD, message))
@@ -207,16 +198,15 @@ public class OnlineScoringSampler {
         // no-op
     }
 
-    private void logFluxCompletionError(Throwable error) {
-        log.error("Unexpected error when enqueueing messages into redis: ", error);
+    private void logFluxCompletionError(Throwable throwable) {
+        log.error("Unexpected error when enqueueing messages into redis", throwable);
     }
 
-    private void errorLog(Throwable err) {
-        log.error("Error sending message: {}", err.getMessage());
+    private void errorLog(Throwable throwable) {
+        log.error("Error sending message", throwable);
     }
 
-    private void successLog(StreamMessageId id, StreamConfiguration config) {
-        log.debug("Message sent with ID: {} into stream '{}'", id, config.getStreamName());
+    private void successLog(StreamMessageId id, OnlineScoringConfig.StreamConfiguration config) {
+        log.debug("Message sent with ID: '{}' into stream '{}'", id, config.getStreamName());
     }
-
 }

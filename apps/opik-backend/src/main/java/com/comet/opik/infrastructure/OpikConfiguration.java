@@ -68,4 +68,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private S3Config s3Config = new S3Config();
+
+    @Valid @NotNull @JsonProperty
+    private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 }
