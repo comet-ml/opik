@@ -19,7 +19,8 @@ const getAllUserWorkspaces = async (
   return (await Promise.all(workspacesPromises || [])).flat();
 };
 
-// the workspaces of all organizations that a user has access to
+// the workspaces of all organizations where a user is admin
+// we can't take all organizations because it throws 403 error
 export default function useAdminOrganizationWorkspaces(
   options?: QueryConfig<Workspace[]>,
 ) {
