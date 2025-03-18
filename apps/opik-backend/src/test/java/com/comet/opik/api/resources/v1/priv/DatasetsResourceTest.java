@@ -4318,11 +4318,18 @@ class DatasetsResourceTest {
             UUID experimentId = GENERATOR.generate();
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
-            createScores(traces, projectName, scores);
+            createScores(traces.subList(0, traces.size() - 1), projectName, scores);
+            scores = scores.stream()
+                    .map(score -> score.toBuilder()
+                            .name(factory.manufacturePojo(String.class))
+                            .build())
+                    .toList();
             createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
-            createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
+            createExperimentItems(datasetItems, traces, Stream.concat(scores.stream(),
+                    Stream.of((FeedbackScoreBatchItem) null)).collect(Collectors.toList()),
+                    experimentId, experimentItems);
 
             createAndAssert(
                     ExperimentItemsBatch.builder()
@@ -4341,10 +4348,11 @@ class DatasetsResourceTest {
                             .value("")
                             .build());
 
-            var actualPageIsEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,
-                    workspaceName, columns, datasetItems.reversed());
+            var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isNotEmptyFilter, apiKey,
+                    workspaceName, columns, List.of(datasetItems.getFirst()));
 
-            assertDatasetItemExperiments(actualPageIsEmpty, datasetItems.reversed(), experimentItems.reversed());
+            assertDatasetItemExperiments(actualPageIsNotEmpty, List.of(datasetItems.getFirst()),
+                    List.of(experimentItems.getFirst()));
 
             var isEmptyFilter = List.of(
                     ExperimentsComparisonFilter.builder()
@@ -4354,10 +4362,11 @@ class DatasetsResourceTest {
                             .value("")
                             .build());
 
-            var actualPageIsNotEmpty = assertDatasetExperimentPage(datasetId, experimentId, isEmptyFilter, apiKey,
-                    workspaceName, columns, List.of());
+            var actualPageIsEmpty = assertDatasetExperimentPage(datasetId, experimentId, isEmptyFilter, apiKey,
+                    workspaceName, columns, datasetItems.subList(1, datasetItems.size()).reversed());
 
-            assertDatasetItemExperiments(actualPageIsNotEmpty, List.of(), List.of());
+            assertDatasetItemExperiments(actualPageIsEmpty, datasetItems.subList(1, datasetItems.size()).reversed(),
+                    experimentItems.subList(1, datasetItems.size()).reversed());
         }
 
         @ParameterizedTest

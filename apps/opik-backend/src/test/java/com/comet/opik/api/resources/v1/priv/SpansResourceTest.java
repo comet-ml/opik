@@ -3256,8 +3256,9 @@ class SpansResourceTest {
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
 
+            spans.set(spans.size() - 1, spans.getLast().toBuilder().feedbackScores(null).build());
             spans.forEach(expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
-            spans.forEach(span -> span.feedbackScores()
+            spans.subList(0, spans.size() - 1).forEach(span -> span.feedbackScores()
                     .forEach(feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
 
             var expectedSpans = getExpectedSpans.apply(spans);
@@ -8200,8 +8201,9 @@ class SpansResourceTest {
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
 
+            spans.set(spans.size() - 1, spans.getLast().toBuilder().feedbackScores(null).build());
             spans.forEach(expectedSpan -> createAndAssert(expectedSpan, apiKey, workspaceName));
-            spans.forEach(
+            spans.subList(0, spans.size() - 1).forEach(
                     span -> span.feedbackScores().forEach(
                             feedbackScore -> createAndAssert(span.id(), feedbackScore, workspaceName, apiKey)));
 
