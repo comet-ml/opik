@@ -8,18 +8,24 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.http.HttpStatus;
+import org.glassfish.jersey.client.ChunkedInput;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -28,6 +34,9 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class TraceResourceClient extends BaseCommentResourceClient {
+
+    private static final GenericType<ChunkedInput<String>> CHUNKED_INPUT_STRING_GENERIC_TYPE = new GenericType<>() {
+    };
 
     public TraceResourceClient(ClientSupport client, String baseURI) {
         super("%s/v1/private/traces", client, baseURI);
@@ -235,6 +244,33 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(WORKSPACE_HEADER, workspace)
                 .post(Entity
                         .json(TraceThreadIdentifier.builder().threadId(threadId).projectId(projectId).build()));
+    }
+
+    public List<Trace> getStreamAndAssertContent(String apiKey, String workspaceName,
+            TraceSearchStreamRequest streamRequest) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("search")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(streamRequest))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            return getStreamedItems(actualResponse);
+        }
+    }
+
+    public List<Trace> getStreamedItems(Response response) {
+        var items = new ArrayList<Trace>();
+        try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
+            String stringItem;
+            while ((stringItem = inputStream.read()) != null) {
+                items.add(JsonUtils.readValue(stringItem, new TypeReference<>() {
+                }));
+            }
+        }
+        return items;
     }
 
 }
