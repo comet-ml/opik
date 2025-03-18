@@ -8,7 +8,10 @@ import {
   ChartLegend,
   ChartTooltip,
 } from "@/components/ui/chart";
-import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
+import {
+  getDefaultHashedColorsChartConfig,
+  truncateChartLabel,
+} from "@/lib/charts";
 import React, { useCallback, useMemo, useState } from "react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis } from "recharts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -56,7 +59,7 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
   const calculateTruncateLength = useCallback((width: number) => {
     const minWidth = 400;
     const minLength = 14;
-    const charsPerWidth = 0.35; // Increased to ~1 char per 3px for more text
+    const charsPerWidth = 0.35;
 
     if (width <= minWidth) {
       return minLength;
@@ -68,10 +71,6 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
     return minLength + extraChars;
   }, []);
 
-  const truncateText = useCallback((text: string, maxLength: number) => {
-    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
-  }, []);
-
   const renderPolarAngleAxis = useCallback(
     ({
       ...props
@@ -81,7 +80,10 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
       };
     }) => {
       const truncateLength = calculateTruncateLength(width);
-      const truncatedLabel = truncateText(props.payload.value, truncateLength);
+      const truncatedLabel = truncateChartLabel(
+        props.payload.value,
+        truncateLength,
+      );
 
       return (
         <TooltipWrapper content={props.payload.value}>
@@ -91,7 +93,7 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
         </TooltipWrapper>
       );
     },
-    [width, calculateTruncateLength, truncateText],
+    [width, calculateTruncateLength],
   );
 
   return (
