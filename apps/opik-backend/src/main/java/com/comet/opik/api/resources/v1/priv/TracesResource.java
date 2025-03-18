@@ -566,11 +566,12 @@ public class TracesResource {
     @Path("/search")
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
     @Operation(operationId = "searchTraces", summary = "Search traces", description = "Search traces", responses = {
-            @ApiResponse(responseCode = "200", description = "Spans stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+            @ApiResponse(responseCode = "200", description = "Traces stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
                     Trace.class,
                     ErrorMessage.class
             }), maxItems = 2000))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @JsonView(Trace.View.Public.class)
     public ChunkedOutput<JsonNode> searchTraces(

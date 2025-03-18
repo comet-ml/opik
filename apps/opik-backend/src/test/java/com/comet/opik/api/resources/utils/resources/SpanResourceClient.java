@@ -222,35 +222,6 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return items;
     }
 
-    public <T> T searchSpan(String apiKey, String workspaceName, SpanSearchStreamRequest request, int expectedStatus,
-            Class<T> bodyClass) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("search")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-            return actualResponse.readEntity(bodyClass);
-        }
-    }
-
-    public <T> T findSpans(String apiKey, String workspaceName, String projectName, List<? extends Filter> filters,
-            int expectedStatus, Class<T> bodyClass) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .queryParam("project_name", projectName)
-                .queryParam("filters", toURLEncodedQueryParam(filters))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
-
-        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-
-        return actualResponse.readEntity(bodyClass);
-    }
-
     private String toURLEncodedQueryParam(List<? extends Filter> filters) {
         return CollectionUtils.isEmpty(filters)
                 ? null

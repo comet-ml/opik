@@ -84,9 +84,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.com.google.common.collect.Lists;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple3;
@@ -114,6 +116,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -1508,6 +1511,79 @@ class SpansResourceTest {
                     unexpectedSpans,
                     apiKey,
                     List.of());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void whenUsingPagination__thenReturnTracesPaginated(boolean stream) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var expectedSpans = spans.stream()
+                    .sorted(stream
+                            ? Comparator.comparing(Span::id).reversed()
+                            : Comparator.comparing(Span::traceId)
+                                    .thenComparing(Span::parentSpanId)
+                                    .thenComparing(Span::id)
+                                    .reversed())
+                    .toList();
+
+            int pageSize = 2;
+
+            if (stream) {
+                AtomicReference<UUID> lastId = new AtomicReference<>(null);
+                Lists.partition(expectedSpans, pageSize)
+                        .forEach(trace -> {
+                            var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                                    SpanSearchStreamRequest.builder()
+                                            .projectName(projectName)
+                                            .lastRetrievedId(lastId.get())
+                                            .limit(pageSize)
+                                            .build());
+
+                            SpanAssertions.assertSpan(actualSpans, trace, USER);
+
+                            lastId.set(actualSpans.getLast().id());
+                        });
+            } else {
+
+                for (int i = 0; i < expectedSpans.size() / pageSize; i++) {
+                    int page = i + 1;
+                    getAndAssertPage(
+                            workspaceName,
+                            projectName,
+                            null,
+                            null,
+                            null,
+                            List.of(),
+                            page,
+                            pageSize,
+                            expectedSpans.subList(i * pageSize, Math.min((i + 1) * pageSize, expectedSpans.size())),
+                            spans.size(),
+                            List.of(),
+                            apiKey,
+                            List.of());
+                }
+            }
         }
 
         @ParameterizedTest
@@ -6233,20 +6309,6 @@ class SpansResourceTest {
 
     private static int randomNumber(int minValue, int maxValue) {
         return PodamUtils.getIntegerInRange(minValue, maxValue);
-    }
-
-    private void batchCreateSpansAndAssert(List<Span> spans, String apiKey, String workspaceName) {
-
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("batch")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(SpanBatch.builder().spans(spans).build()))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
     }
 
     @Nested

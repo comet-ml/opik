@@ -6320,7 +6320,7 @@ class TracesResourceTest {
 
             getAndAssertPage(1, traces.size(), projectName, null, List.of(), traces.reversed(), List.of(),
                     TEST_WORKSPACE,
-                    API_KEY, null, traces.reversed().size());
+                    API_KEY, null, traces.size());
         }
 
         @Test
