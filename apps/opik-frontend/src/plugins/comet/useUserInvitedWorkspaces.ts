@@ -1,6 +1,7 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig } from "./api";
-import { Workspace } from "./types";
+import { ORGANIZATION_ROLE_TYPE, Workspace } from "./types";
+import useOrganizations from "@/plugins/comet/useOrganizations";
 
 const getUserInvitedWorkspaces = async ({ signal }: QueryFunctionContext) => {
   return await api
@@ -15,8 +16,18 @@ const getUserInvitedWorkspaces = async ({ signal }: QueryFunctionContext) => {
 export default function useUserInvitedWorkspaces(
   options?: QueryConfig<Workspace[]>,
 ) {
+  const { data: organizations } = useOrganizations({
+    enabled: options?.enabled,
+  });
+
+  const organizationIds = organizations
+    ?.filter((organization) => {
+      return organization.role === ORGANIZATION_ROLE_TYPE.admin;
+    })
+    .map((organization) => organization.id);
+
   return useQuery({
-    queryKey: ["user-invited-workspaces"],
+    queryKey: ["user-invited-workspaces", { organizationIds }],
     queryFn: (context) => getUserInvitedWorkspaces(context),
     ...options,
     enabled: Boolean(options?.enabled),
