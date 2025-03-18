@@ -167,6 +167,15 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
   },
+  {
+    id: "span_count",
+    label: "Span count",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.span_count && isNumber(row.span_count)
+        ? `${row.span_count}`
+        : "0",
+  },
 ];
 
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {

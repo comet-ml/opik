@@ -363,12 +363,15 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    COUNT(DISTINCT id) as span_count
+
                 FROM (
                     SELECT
                         workspace_id,
                         project_id,
                         trace_id,
+                        id,
                         usage,
                         total_estimated_cost
                     FROM spans
@@ -436,7 +439,8 @@ class TraceDAOImpl implements TraceDAO {
                   t.thread_id as thread_id,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
-                  groupUniqArrayArray(c.comments_array) as comments
+                  groupUniqArrayArray(c.comments_array) as comments,
+                  max(s.span_count) AS span_count
              FROM (
                  SELECT
                      *,
@@ -1239,6 +1243,7 @@ class TraceDAOImpl implements TraceDAO {
                         .filter(it -> !it.isEmpty())
                         .orElse(null))
                 .comments(getComments(row.get("comments", List[].class)))
+                .spanCount(row.get("span_count", Integer.class))
                 .usage(row.get("usage", Map.class))
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                         ? null
