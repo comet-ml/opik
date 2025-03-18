@@ -1,6 +1,8 @@
 import logging
 from typing import Any, Optional
 
+from opik.types import CreatedByType
+
 from .. import observation_data
 
 LOGGER = logging.getLogger(__name__)
@@ -12,6 +14,7 @@ class TraceData(observation_data.ObservationData):
     """
 
     thread_id: Optional[str] = None
+    created_by: Optional[CreatedByType] = None
 
     def update(self, **new_data: Any) -> "TraceData":
         return super().update(**new_data)

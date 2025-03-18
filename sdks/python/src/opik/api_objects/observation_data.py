@@ -10,10 +10,13 @@ from opik.types import ErrorInfoDict, FeedbackScoreDict
 
 LOGGER = logging.getLogger(__name__)
 
+
 class ObservationData(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="allow", validate_default=False)
 
-    id: pydantic.SkipValidation[str] = pydantic.Field(default_factory=id_helpers.generate_id)
+    id: pydantic.SkipValidation[str] = pydantic.Field(
+        default_factory=id_helpers.generate_id
+    )
     name: Optional[str] = None
     start_time: Optional[datetime.datetime] = pydantic.Field(
         default_factory=datetime_helpers.local_timestamp
