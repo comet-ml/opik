@@ -122,7 +122,11 @@ class ChatCompletionsClient:
             method="POST",
             json={
                 "model": model,
-                "messages": messages,
+                "messages": convert_and_respect_annotation_metadata(
+                    object_=messages,
+                    annotation=typing.Sequence[Message],
+                    direction="write",
+                ),
                 "temperature": temperature,
                 "top_p": top_p,
                 "n": n,
@@ -288,7 +292,11 @@ class AsyncChatCompletionsClient:
             method="POST",
             json={
                 "model": model,
-                "messages": messages,
+                "messages": convert_and_respect_annotation_metadata(
+                    object_=messages,
+                    annotation=typing.Sequence[Message],
+                    direction="write",
+                ),
                 "temperature": temperature,
                 "top_p": top_p,
                 "n": n,
