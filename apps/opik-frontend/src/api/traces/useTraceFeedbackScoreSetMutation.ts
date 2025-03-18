@@ -124,7 +124,7 @@ const useTraceFeedbackScoreSetMutation = () => {
         queryKey: ["experiments-columns"],
       });
       await queryClient.invalidateQueries({
-        queryKey: ["experiments-by-ids"],
+        queryKey: ["experiment"],
       });
       await queryClient.invalidateQueries({
         queryKey: [COMPARE_EXPERIMENTS_KEY],

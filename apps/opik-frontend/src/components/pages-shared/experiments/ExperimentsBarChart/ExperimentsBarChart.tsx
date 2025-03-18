@@ -19,21 +19,20 @@ import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig"
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { uniq } from "lodash";
 import NoData from "@/components/shared/NoData/NoData";
-
-export type BarDataPoint = Record<string, string | number>;
+import { BarDataPoint } from "@/types/chart";
 
 interface ExperimentsBarChartProps {
   name: string;
   chartId: string;
   data: BarDataPoint[];
-  names: string[];
+  keys: string[];
 }
 
 const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   name,
   chartId,
   data,
-  names,
+  keys,
 }) => {
   const [activeBar, setActiveBar] = useState<string | null>(null);
   const [width, setWidth] = useState<number>(0);
@@ -42,8 +41,8 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   );
 
   const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(names);
-  }, [names]);
+    return getDefaultHashedColorsChartConfig(keys);
+  }, [keys]);
 
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -58,11 +57,11 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
     [],
   );
 
-  const noData = !names.length;
+  const noData = !keys.length;
 
   const values = useMemo(() => {
     const valuesList = data.reduce<number[]>((acc, data) => {
-      const valuesByScore = names.map((name) => data[name] as number);
+      const valuesByScore = keys.map((name) => data[name] as number);
       return uniq([...acc, ...valuesByScore]);
     }, []);
 
@@ -71,7 +70,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
     }
 
     return valuesList;
-  }, [data, names]);
+  }, [data, keys]);
 
   const {
     width: tickWidth,
@@ -85,7 +84,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
 
   const truncateXAxisLabel = useCallback(
     (label: string) => {
-      const labelsCount = names.length;
+      const labelsCount = keys.length;
       const xAxisWidth = width - 100;
       const maxLabelWidth = xAxisWidth / labelsCount;
 
@@ -93,7 +92,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
 
       return truncateChartLabel(label, maxTruncateLength);
     },
-    [names.length, width],
+    [keys.length, width],
   );
 
   return (
@@ -158,8 +157,8 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
                   />
                 }
               />
-              {names.map((name) => {
-                const isActive = name === activeBar;
+              {keys.map((key) => {
+                const isActive = key === activeBar;
                 let fillOpacity = 1;
 
                 if (activeBar) {
@@ -168,10 +167,10 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
 
                 return (
                   <Bar
-                    key={name}
-                    name={name}
-                    dataKey={name}
-                    fill={config[name].color || ""}
+                    key={key}
+                    name={key}
+                    dataKey={key}
+                    fill={config[key].color || ""}
                     fillOpacity={fillOpacity}
                     maxBarSize={52}
                   />

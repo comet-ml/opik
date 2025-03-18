@@ -16,7 +16,7 @@ export default function useExperimentsByIds(params: UseExperimentsByIdsParams) {
       };
 
       return {
-        queryKey: ["experiments-by-ids", p],
+        queryKey: ["experiment", p],
         queryFn: (context: QueryFunctionContext) =>
           getExperimentById(context, p),
       };

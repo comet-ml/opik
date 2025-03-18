@@ -9,6 +9,7 @@ import {
   ChartTooltip,
 } from "@/components/ui/chart";
 import {
+  calculateChartTruncateLength,
   getDefaultHashedColorsChartConfig,
   truncateChartLabel,
 } from "@/lib/charts";
@@ -17,21 +18,23 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis } from "recharts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExperimentRadarChartLegendContent from "./ExperimentRadarChartLegendContent";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-
-export type RadarDataPoint = Record<string, string | number>;
+import { RadarDataPoint } from "@/types/chart";
+import { ExperimentLabelsMap } from "@/components/pages/CompareExperimentsDetails/hooks/useCompareExperimentsChartsData";
 
 interface ExperimentsRadarChartProps {
   name: string;
   chartId: string;
   data: RadarDataPoint[];
-  names: string[];
+  keys: string[];
+  experimentLabelsMap: ExperimentLabelsMap;
 }
 
 const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
   name,
   chartId,
   data,
-  names,
+  keys,
+  experimentLabelsMap,
 }) => {
   const [width, setWidth] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) =>
@@ -40,8 +43,8 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
   const [activeLine, setActiveLine] = useState<string | null>(null);
 
   const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(names);
-  }, [names]);
+    return getDefaultHashedColorsChartConfig(keys, experimentLabelsMap);
+  }, [keys, experimentLabelsMap]);
 
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -56,21 +59,6 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
     [],
   );
 
-  const calculateTruncateLength = useCallback((width: number) => {
-    const minWidth = 400;
-    const minLength = 14;
-    const charsPerWidth = 0.35;
-
-    if (width <= minWidth) {
-      return minLength;
-    }
-
-    const extraWidth = width - minWidth;
-    const extraChars = Math.floor(extraWidth * charsPerWidth);
-
-    return minLength + extraChars;
-  }, []);
-
   const renderPolarAngleAxis = useCallback(
     ({
       ...props
@@ -79,7 +67,9 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
         value: string;
       };
     }) => {
-      const truncateLength = calculateTruncateLength(width);
+      const truncateLength = calculateChartTruncateLength({
+        width,
+      });
       const truncatedLabel = truncateChartLabel(
         props.payload.value,
         truncateLength,
@@ -93,7 +83,7 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
         </TooltipWrapper>
       );
     },
-    [width, calculateTruncateLength],
+    [width],
   );
 
   return (
@@ -115,8 +105,8 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
                 <ChartTooltipContent renderHeader={renderChartTooltipHeader} />
               }
             />
-            {names.map((name) => {
-              const isActive = name === activeLine;
+            {keys.map((key) => {
+              const isActive = key === activeLine;
               let strokeOpacity = 1;
 
               if (activeLine) {
@@ -125,11 +115,11 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
 
               return (
                 <Radar
-                  key={name}
-                  name={name}
-                  dataKey={name}
-                  stroke={config[name].color || ""}
-                  fill={config[name].color || ""}
+                  key={key}
+                  name={experimentLabelsMap[key]}
+                  dataKey={key}
+                  stroke={config[key].color || ""}
+                  fill={config[key].color || ""}
                   fillOpacity={0.05}
                   strokeWidth={1.5}
                   animationDuration={600}

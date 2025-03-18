@@ -1,19 +1,20 @@
-import { RadarDataPoint } from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
 import { useMemo } from "react";
 import { Experiment } from "@/types/datasets";
-import { getUniqueExperiments } from "@/lib/experiments";
 import uniq from "lodash/uniq";
+import { BarDataPoint, RadarDataPoint } from "@/types/chart";
 
-type useCompareExperimentsChartsDataArgs = {
+export type ExperimentLabelsMap = Record<string, string>;
+type UseCompareExperimentsChartsDataArgs = {
   isCompare: boolean;
   experiments: Experiment[];
 };
 
 type CompareExperimentsChartsData = {
   radarChartData: RadarDataPoint[];
-  radarChartNames: string[];
-  barChartData: Record<string, number | string>[];
-  barChartNames: string[];
+  radarChartKeys: string[];
+  barChartData: BarDataPoint[];
+  barChartKeys: string[];
+  experimentLabelsMap: ExperimentLabelsMap;
 };
 
 const MAX_VISIBLE_ENTITIES = 10;
@@ -21,14 +22,14 @@ const MAX_VISIBLE_ENTITIES = 10;
 const useCompareExperimentsChartsData = ({
   isCompare,
   experiments,
-}: useCompareExperimentsChartsDataArgs): CompareExperimentsChartsData => {
-  const uniqueExperiments = useMemo(() => {
-    return getUniqueExperiments(experiments).slice(0, MAX_VISIBLE_ENTITIES);
+}: UseCompareExperimentsChartsDataArgs): CompareExperimentsChartsData => {
+  const experimentsList = useMemo(() => {
+    return experiments.slice(0, MAX_VISIBLE_ENTITIES);
   }, [experiments]);
 
   const scoreMap = useMemo(() => {
     if (!isCompare) return {};
-    return uniqueExperiments.reduce<Record<string, Record<string, number>>>(
+    return experimentsList.reduce<Record<string, Record<string, number>>>(
       (acc, e) => {
         acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
           (a, f) => {
@@ -41,7 +42,7 @@ const useCompareExperimentsChartsData = ({
       },
       {},
     );
-  }, [uniqueExperiments, isCompare]);
+  }, [experimentsList, isCompare]);
 
   const scoreColumns = useMemo(() => {
     return uniq(
@@ -53,22 +54,21 @@ const useCompareExperimentsChartsData = ({
 
   const radarChartData = useMemo(() => {
     return scoreColumns.map((name) => {
-      const dataPoint: Record<string, number | string> = { name };
-      uniqueExperiments.forEach((experiment) => {
-        const expName = experiment.name;
-        dataPoint[expName] = scoreMap[experiment.id]?.[name] || 0;
+      const dataPoint: RadarDataPoint = { name };
+      experimentsList.forEach((experiment) => {
+        dataPoint[experiment.id] = scoreMap[experiment.id]?.[name] || 0;
       });
       return dataPoint;
     });
-  }, [scoreColumns, scoreMap, uniqueExperiments]);
+  }, [scoreColumns, scoreMap, experimentsList]);
 
-  const radarChartNames = useMemo(() => {
-    return uniqueExperiments.map((experiment) => experiment.name);
-  }, [uniqueExperiments]);
+  const radarChartKeys = useMemo(() => {
+    return experimentsList.map((experiment) => experiment.id);
+  }, [experimentsList]);
 
   const barChartData = useMemo(() => {
-    return uniqueExperiments.map((experiment) => {
-      const dataPoint: Record<string, number | string> = {
+    return experimentsList.map((experiment) => {
+      const dataPoint: BarDataPoint = {
         name: experiment.name,
       };
       scoreColumns.forEach((scoreName) => {
@@ -76,13 +76,27 @@ const useCompareExperimentsChartsData = ({
       });
       return dataPoint;
     });
-  }, [scoreColumns, scoreMap, uniqueExperiments]);
+  }, [scoreColumns, scoreMap, experimentsList]);
 
-  const barChartNames = useMemo(() => {
+  const barChartKeys = useMemo(() => {
     return scoreColumns;
   }, [scoreColumns]);
 
-  return { radarChartData, radarChartNames, barChartData, barChartNames };
+  const experimentLabelsMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    experimentsList.forEach((experiment) => {
+      map[experiment.id] = experiment.name;
+    });
+    return map;
+  }, [experimentsList]);
+
+  return {
+    radarChartData,
+    radarChartKeys,
+    barChartData,
+    barChartKeys,
+    experimentLabelsMap,
+  };
 };
 
 export default useCompareExperimentsChartsData;

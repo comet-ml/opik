@@ -48,11 +48,16 @@ const CompareExperimentsDetails: React.FunctionComponent<
     return () => setBreadcrumbParam("compare", "compare", "");
   }, [title, setBreadcrumbParam]);
 
-  const { radarChartData, radarChartNames, barChartData, barChartNames } =
-    useCompareExperimentsChartsData({
-      isCompare,
-      experiments,
-    });
+  const {
+    radarChartData,
+    radarChartKeys,
+    barChartData,
+    barChartKeys,
+    experimentLabelsMap,
+  } = useCompareExperimentsChartsData({
+    isCompare,
+    experiments,
+  });
 
   const renderCompareFeedbackScoresButton = () => {
     if (!isCompare) return null;
@@ -137,7 +142,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
                   name="Feedback scores"
                   chartId="feedback-scores-radar-chart"
                   data={radarChartData}
-                  names={radarChartNames}
+                  keys={radarChartKeys}
+                  experimentLabelsMap={experimentLabelsMap}
                 />
               </div>
             )}
@@ -146,7 +152,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
                 name="Feedback scores distribution"
                 chartId="feedback-scores-bar-chart"
                 data={barChartData}
-                names={barChartNames}
+                keys={barChartKeys}
               />
             </div>
           </div>

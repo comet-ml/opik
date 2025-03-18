@@ -73,8 +73,8 @@ const ChartTooltipContent = React.forwardRef<
             )}
 
             <div className="grid gap-1.5">
-              {payload.map((item) => {
-                const key = `${item.name || item.dataKey || "value"}`;
+              {payload.map((item, idx) => {
+                const key = `${item.name || item.dataKey || "value"}${idx}`;
                 const itemConfig = getPayloadConfigFromPayload(
                   config,
                   item,

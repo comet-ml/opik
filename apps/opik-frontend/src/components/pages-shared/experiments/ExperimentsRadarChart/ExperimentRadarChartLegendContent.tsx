@@ -30,13 +30,13 @@ const ExperimentRadarChartLegendContent = React.forwardRef<
       onMouseLeave={handleMouseLeave}
     >
       <div className="group inline-flex max-w-full flex-wrap items-center justify-center space-x-2">
-        {payload.map((item) => {
+        {payload.map((item, idx) => {
           const key = `${item.value || "value"}`;
           const indicatorColor = color || item.color;
 
           return (
             <div
-              key={key}
+              key={key + idx}
               className="relative min-w-0 cursor-pointer pl-3 duration-200 group-hover-except-self:opacity-60"
               onMouseEnter={() => handleMouseEnter(item.value)}
             >
