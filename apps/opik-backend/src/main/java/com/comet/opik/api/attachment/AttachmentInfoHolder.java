@@ -7,4 +7,5 @@ public interface AttachmentInfoHolder {
     EntityType entityType();
     UUID entityId();
     String fileName();
+    String mimeType();
 }

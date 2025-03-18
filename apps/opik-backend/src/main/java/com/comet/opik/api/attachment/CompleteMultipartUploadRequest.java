@@ -23,6 +23,7 @@ public record CompleteMultipartUploadRequest(
         @NotNull EntityType entityType,
         @NotNull UUID entityId,
         @NotNull Long fileSize,
+        String mimeType,
         @NotBlank String uploadId,
         @NotNull List<MultipartUploadPart> uploadedFileParts) implements AttachmentInfoHolder {
 }

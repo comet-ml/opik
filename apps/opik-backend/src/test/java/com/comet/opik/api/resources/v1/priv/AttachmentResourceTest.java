@@ -138,7 +138,8 @@ class AttachmentResourceTest {
         // Initiate upload
         StartMultipartUploadRequest startUploadRequest = factory.manufacturePojo(StartMultipartUploadRequest.class);
 
-        log.info("Start attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId, startUploadRequest.projectName(),
+        log.info("Start attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId,
+                startUploadRequest.projectName(),
                 startUploadRequest.entityId());
 
         StartMultipartUploadResponse startUploadResponse = attachmentResourceClient
@@ -154,7 +155,8 @@ class AttachmentResourceTest {
 
         attachmentResourceClient.completeMultiPartUpload(completeUploadRequest, apiKey, workspaceName, 204);
 
-        log.info("Complete attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId, startUploadRequest.projectName(),
+        log.info("Complete attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId,
+                startUploadRequest.projectName(),
                 startUploadRequest.entityId());
 
         // TODO: proper verification that the file was uploaded will be done once we prepare corresponding endpoint in OPIK-728

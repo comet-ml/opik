@@ -12,10 +12,12 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.tika.Tika;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.domain.attachment.AttachmentUtils.KEY_TEMPLATE;
@@ -45,9 +47,9 @@ class AttachmentServiceImpl implements AttachmentService {
             String workspaceId, String userName) {
         UUID projectId = getProjectIdByName(startUploadRequest.projectName(), workspaceId, userName);
         String key = prepareKey(startUploadRequest, workspaceId, projectId);
-        String mimeType = tika.detect(startUploadRequest.fileName());
 
-        CreateMultipartUploadResponse createResponse = fileUploadService.createMultipartUpload(key, mimeType);
+        CreateMultipartUploadResponse createResponse = fileUploadService.createMultipartUpload(key,
+                getMimeType(startUploadRequest));
         List<String> presignedUrls = preSignerService.generatePresignedUrls(key, startUploadRequest.numOfFileParts(),
                 createResponse.uploadId());
 
@@ -65,7 +67,7 @@ class AttachmentServiceImpl implements AttachmentService {
         fileUploadService.completeMultipartUpload(key,
                 completeUploadRequest.uploadId(), completeUploadRequest.uploadedFileParts());
 
-        attachmentDAO.addAttachment(completeUploadRequest, projectId, tika.detect(completeUploadRequest.fileName()))
+        attachmentDAO.addAttachment(completeUploadRequest, projectId, getMimeType(completeUploadRequest))
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .block();
     }
@@ -81,5 +83,11 @@ class AttachmentServiceImpl implements AttachmentService {
     private UUID getProjectIdByName(String inputProjectName, String workspaceId, String userName) {
         String projectName = WorkspaceUtils.getProjectName(inputProjectName);
         return projectService.getOrCreate(workspaceId, projectName, userName).id();
+    }
+
+    private String getMimeType(AttachmentInfoHolder infoHolder) {
+        return Optional.ofNullable(infoHolder.mimeType())
+                .filter(StringUtils::isNotBlank)
+                .orElseGet(() -> tika.detect(infoHolder.fileName()));
     }
 }

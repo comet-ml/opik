@@ -1,8 +1,8 @@
 package com.comet.opik.podam.manufacturer;
 
-import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
+import org.apache.tika.Tika;
 import uk.co.jemos.podam.api.AttributeMetadata;
 import uk.co.jemos.podam.api.DataProviderStrategy;
 import uk.co.jemos.podam.api.PodamUtils;
@@ -17,12 +17,15 @@ public class StartMultipartUploadRequestManufacturer extends AbstractTypeManufac
 
     private static final List<String> FILE_EXTENSIONS = List.of("jpg", "jpeg", "png", "gif", "bmp", "webp", "txt",
             "json", "css", "xml", "rtf", "mp4");
+    private static final Tika tika = new Tika();
 
     @Override
     public StartMultipartUploadRequest getType(DataProviderStrategy strategy, AttributeMetadata metadata,
             ManufacturingContext context) {
+        String fileName = randomFileName();
         return StartMultipartUploadRequest.builder()
-                .fileName(randomFileName())
+                .fileName(fileName)
+                .mimeType(PodamUtils.getIntegerInRange(0, 1) == 1 ? null : tika.detect(fileName))
                 .numOfFileParts(PodamUtils.getIntegerInRange(1, 3))
                 .entityType(randomEntityType())
                 .entityId(strategy.getTypeValue(metadata, context, UUID.class))

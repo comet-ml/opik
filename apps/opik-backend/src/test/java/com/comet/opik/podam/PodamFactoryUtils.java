@@ -65,7 +65,8 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceTypeManufacturer(AnthropicCreateMessageResponse.class,
                 AnthropicCreateMessageResponseManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(ChatCompletionRequest.class, ChatCompletionRequestManufacturer.INSTANCE);
-        strategy.addOrReplaceTypeManufacturer(StartMultipartUploadRequest.class, StartMultipartUploadRequestManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(StartMultipartUploadRequest.class,
+                StartMultipartUploadRequestManufacturer.INSTANCE);
 
         return podamFactory;
     }

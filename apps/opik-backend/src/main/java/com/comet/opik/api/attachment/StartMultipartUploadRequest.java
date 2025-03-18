@@ -19,6 +19,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 public record StartMultipartUploadRequest(
         @NotBlank String fileName,
         @NotNull Integer numOfFileParts,
+        String mimeType,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @NotNull EntityType entityType,
         @NotNull UUID entityId) implements AttachmentInfoHolder {
