@@ -1,7 +1,7 @@
 import os
 
-os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-e3eb26a2-ff5f-4995-9526-08ba46ea5b61"
-os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-cdee602d-ff4d-4609-8bd0-904628e9c930"
+os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-ddbe31ce-2197-4de7-bba2-62c63fc8eb9f"
+os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-f7b051f9-7f5c-4aee-b345-7cee669c2afd"
 os.environ["LANGFUSE_HOST"] = "http://localhost:3000"
 
 import uuid
