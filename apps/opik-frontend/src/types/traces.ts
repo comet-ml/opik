@@ -44,6 +44,7 @@ export interface BaseTraceData {
   tags: string[];
   usage?: UsageData;
   total_estimated_cost?: number;
+  span_count: number;
   error_info?: BaseTraceDataErrorInfo;
 }
 

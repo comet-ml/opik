@@ -172,9 +172,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Span count",
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
-      row.span_count && isNumber(row.span_count)
-        ? `${row.span_count}`
-        : "0",
+      row.span_count && isNumber(row.span_count) ? `${row.span_count}` : "0",
   },
 ];
 
