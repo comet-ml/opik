@@ -3,12 +3,12 @@ import api, { QueryConfig } from "./api";
 import { Workspace } from "./types";
 
 const getUserInvitedWorkspaces = async ({ signal }: QueryFunctionContext) => {
-  const workspaces = await api.get<Workspace[]>(`/workspaces`, {
+  const response = await api.get<Workspace[]>(`/workspaces`, {
     signal,
     params: { withoutExtendedData: true },
   });
 
-  return workspaces.data;
+  return response.data;
 };
 
 // workspaces to which a user has been invited
