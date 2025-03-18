@@ -125,7 +125,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
-import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -224,8 +223,8 @@ class TracesResourceTest {
         return projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
     }
 
-    private UUID createProject(String projectName, String workspaceName, String apiKey) {
-        return projectResourceClient.createProject(projectName, apiKey, workspaceName);
+    private void createProject(String projectName, String workspaceName, String apiKey) {
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
     }
 
     @Nested
@@ -882,6 +881,7 @@ class TracesResourceTest {
             Tuple3<List<?>, List<?>, List<?>> get(List<T> traces, List<T> expected, List<T> unexpected);
         }
 
+        @SuppressWarnings("unchecked")
         private TestAssertion getStatsAssertionMethod() {
             return (projectName, projectId, apiKey, workspaceName, expected, unexpected, traces, filters,
                     queryParams) -> getStatsAndAssert(projectName, projectId, filters, apiKey, workspaceName,
@@ -893,17 +893,18 @@ class TracesResourceTest {
                     List.of());
         }
 
+        @SuppressWarnings("unchecked")
         private TestAssertion getTracesAssertionMethod() {
             return (projectName, projectId, apiKey, workspaceName, expected, unexpected, traces, filters,
-                    queryParams) -> getAndAssertPage(Integer.valueOf(queryParams.getOrDefault("page", "1")),
-                            Integer.valueOf(queryParams.getOrDefault("size",
+                    queryParams) -> getAndAssertPage(Integer.parseInt(queryParams.getOrDefault("page", "1")),
+                            Integer.parseInt(queryParams.getOrDefault("size",
                                     traces.size() + expected.size() + unexpected.size() + "")),
                             projectName, projectId, filters, (List<Trace>) expected, (List<Trace>) unexpected,
                             workspaceName, apiKey, List.of());
         }
 
         private TestAssertionArgs<Trace> getTracesAssertionMethodArgs() {
-            return (traces, expected, unexpected) -> Tuples.of(traces, expected, unexpected);
+            return Tuples::of;
         }
 
         private Stream<Arguments> getFilterTestArguments() {
@@ -4048,8 +4049,8 @@ class TracesResourceTest {
                             (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
                                     .field(TraceThreadField.FIRST_MESSAGE)
                                     .operator(Operator.CONTAINS)
-                                    .value(traces.stream().sorted(Comparator.comparing(Trace::startTime)).findFirst()
-                                            .get().input().toString().substring(0, 20))
+                                    .value(traces.stream().min(Comparator.comparing(Trace::startTime))
+                                            .orElseThrow().input().toString().substring(0, 20))
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
                             (Function<List<Trace>, List<Trace>>) traces -> traces),
@@ -4057,8 +4058,8 @@ class TracesResourceTest {
                             (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
                                     .field(TraceThreadField.LAST_MESSAGE)
                                     .operator(Operator.CONTAINS)
-                                    .value(traces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                            .findFirst().get().output().toString().substring(0, 20))
+                                    .value(traces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                            .output().toString().substring(0, 20))
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
                             (Function<List<Trace>, List<Trace>>) traces -> traces),
@@ -4067,7 +4068,8 @@ class TracesResourceTest {
                                     .field(TraceThreadField.CREATED_AT)
                                     .operator(Operator.EQUAL)
                                     .key(null)
-                                    .value(traces.stream().min(Comparator.comparing(Trace::createdAt)).get().createdAt()
+                                    .value(traces.stream().min(Comparator.comparing(Trace::createdAt))
+                                            .orElseThrow().createdAt()
                                             .toString())
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
@@ -4145,7 +4147,7 @@ class TracesResourceTest {
                     .createdBy(USER)
                     .startTime(trace.startTime())
                     .endTime(trace.endTime())
-                    .numberOfMessages(traces.size() * 2)
+                    .numberOfMessages(traces.size() * 2L)
                     .id(threadId)
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
@@ -4272,30 +4274,31 @@ class TracesResourceTest {
     }
 
     private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId) {
-        return expectedTraces.size() == 0
+        return expectedTraces.isEmpty()
                 ? List.of()
                 : List.of(TraceThread.builder()
-                        .firstMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
-                                .findFirst().get().input())
-                        .lastMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                .findFirst().get().output())
+                        .firstMessage(expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).orElseThrow()
+                                .input())
+                        .lastMessage(expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                .output())
                         .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                                expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).get()
+                                expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).orElseThrow()
                                         .startTime(),
-                                expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime()))
+                                expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                        .endTime()))
                         .projectId(projectId)
                         .createdBy(USER)
-                        .startTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
-                                .findFirst().get().startTime())
-                        .endTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                .findFirst().get().endTime())
-                        .numberOfMessages(expectedTraces.size() * 2)
+                        .startTime(expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).orElseThrow()
+                                .startTime())
+                        .endTime(expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                .endTime())
+                        .numberOfMessages(expectedTraces.size() * 2L)
                         .id(threadId)
-                        .createdAt(expectedTraces.stream().sorted(Comparator.comparing(Trace::createdAt))
-                                .findFirst().get().createdAt())
-                        .lastUpdatedAt(expectedTraces.stream()
-                                .sorted(Comparator.comparing(Trace::lastUpdatedAt).reversed()).findFirst().get()
-                                .lastUpdatedAt())
+                        .createdAt(expectedTraces.stream().min(Comparator.comparing(Trace::createdAt)).orElseThrow()
+                                .createdAt())
+                        .lastUpdatedAt(
+                                expectedTraces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).orElseThrow()
+                                        .lastUpdatedAt())
                         .build());
     }
 
@@ -4890,14 +4893,6 @@ class TracesResourceTest {
         return traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
-    private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status,
-            String errorMessage) {
-        try (var response = traceResourceClient.callCreateTrace(trace, apiKey, workspaceName)) {
-            assertThat(response.getStatus()).isEqualTo(status);
-            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
-        }
-    }
-
     private void create(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
         traceResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
     }
@@ -4976,35 +4971,6 @@ class TracesResourceTest {
 
             getAndAssert(trace1, projectId1, API_KEY, TEST_WORKSPACE);
             getAndAssert(trace2, projectId2, API_KEY, TEST_WORKSPACE);
-        }
-
-        @Test
-        @DisplayName("when creating traces with same Id for different workspaces, then return conflict")
-        void create__whenCreatingTracesWithSameIdForDifferentWorkspaces__thenReturnConflict() {
-
-            var trace1 = createTrace()
-                    .toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .build();
-            create(trace1, API_KEY, TEST_WORKSPACE);
-
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var trace2 = createTrace()
-                    .toBuilder()
-                    .id(trace1.id())
-                    .projectName(DEFAULT_PROJECT)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .build();
-            createAndAssertErrorMessage(trace2, apiKey, workspaceName, HttpStatus.SC_CONFLICT,
-                    PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }
 
         @Test

@@ -349,11 +349,7 @@ class SpanDAO {
                     LENGTH(CAST(old_span.project_id AS Nullable(String))) > 0, old_span.project_id,
                     new_span.project_id
                 ) as project_id,
-                multiIf(
-                    LENGTH(old_span.workspace_id) > 0 AND notEquals(old_span.workspace_id, new_span.workspace_id), CAST(leftPad(new_span.workspace_id, 40, '*') AS FixedString(19)),
-                    LENGTH(old_span.workspace_id) > 0, old_span.workspace_id,
-                    new_span.workspace_id
-                ) as workspace_id,
+                new_span.workspace_id as workspace_id,
                 multiIf(
                     LENGTH(CAST(old_span.trace_id AS Nullable(String))) > 0 AND notEquals(old_span.trace_id, new_span.trace_id), leftPad('', 40, '*'),
                     LENGTH(CAST(old_span.trace_id AS Nullable(String))) > 0, old_span.trace_id,
@@ -470,6 +466,7 @@ class SpanDAO {
                     *
                 FROM spans
                 WHERE id = :id
+                AND workspace_id = :workspace_id
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
