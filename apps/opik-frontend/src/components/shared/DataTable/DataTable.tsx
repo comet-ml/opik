@@ -108,7 +108,10 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   columnsStatistic?: ColumnsStatistic;
   data: TData[];
-  renderCustomRow?: (row: Row<TData>) => ReactNode | null;
+  renderCustomRow?: (
+    row: Row<TData>,
+    stickyWorkaround?: boolean,
+  ) => ReactNode | null;
   getIsCustomRow?: (row: Row<TData>) => boolean;
   activeRowId?: string;
   sortConfig?: SortConfig;
@@ -223,13 +226,23 @@ const DataTable = <TData, TValue>({
   }, [headers, columnSizing]);
 
   const [tableHeight, setTableHeight] = useState(0);
+  const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
   const { ref: tableRef } = useObserveResizeNode<HTMLTableElement>((node) => {
     setTableHeight(node.clientHeight);
+    setHasHorizontalScroll(
+      node.parentElement!.scrollWidth > node?.parentElement!.clientWidth,
+    );
   });
+
+  // TODO move this workaround to context that wil be added to handle columns width
+  // In the version of Chrome Version 134.0.6998.89 (Official Build) (arm64)
+  // was introduced an issue that border (from row) for sticky cells is not presented on some displays
+  // this workaround checks if table can be scrolled and only then allow the library to set position sticky for cells
+  const stickyBorderWorkaround = !hasHorizontalScroll && !stickyHeader;
 
   const renderRow = (row: Row<TData>) => {
     if (isFunction(renderCustomRow) && getIsCustomRow(row)) {
-      return renderCustomRow(row);
+      return renderCustomRow(row, stickyBorderWorkaround);
     }
 
     return (
@@ -266,7 +279,11 @@ const DataTable = <TData, TValue>({
           key={cell.id}
           data-cell-id={cell.id}
           style={{
-            ...getCommonPinningStyles(cell.column),
+            ...getCommonPinningStyles(
+              cell.column,
+              false,
+              stickyBorderWorkaround,
+            ),
           }}
           className={getCommonPinningClasses(cell.column)}
         />
@@ -278,7 +295,7 @@ const DataTable = <TData, TValue>({
         key={cell.id}
         data-cell-id={cell.id}
         style={{
-          ...getCommonPinningStyles(cell.column),
+          ...getCommonPinningStyles(cell.column, false, stickyBorderWorkaround),
         }}
         className={getCommonPinningClasses(cell.column)}
       >

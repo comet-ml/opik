@@ -263,8 +263,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
   }, []);
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedExperiment>) => {
-      return renderCustomRow(row, setGroupLimit);
+    (row: Row<GroupedExperiment>, applyStickyWorkaround?: boolean) => {
+      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
     },
     [setGroupLimit],
   );
