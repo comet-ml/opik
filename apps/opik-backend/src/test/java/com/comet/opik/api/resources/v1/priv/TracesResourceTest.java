@@ -149,7 +149,6 @@ class TracesResourceTest {
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
             "comments", "threadId"};
-    private static final String[] IGNORED_FIELDS_SPANS = SpanAssertions.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -4614,13 +4613,13 @@ class TracesResourceTest {
 
             assertThat(actualSpans.size()).isEqualTo(expectedSpans.size());
             assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_SPANS)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedSpans);
             assertIgnoredFieldsSpans(actualSpans, expectedSpans);
 
             if (!unexpectedSpans.isEmpty()) {
                 assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_SPANS)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                         .doesNotContainAnyElementsOf(unexpectedSpans);
             }
         }
