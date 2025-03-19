@@ -11,7 +11,7 @@ import ExperimentFeedbackScoresTab from "@/components/pages/CompareExperimentsPa
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
-import CompareExperimentsDetails from "../CompareExperimentsDetails/CompareExperimentsDetails";
+import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
