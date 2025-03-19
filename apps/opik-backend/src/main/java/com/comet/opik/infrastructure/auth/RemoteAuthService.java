@@ -104,6 +104,7 @@ class RemoteAuthService implements AuthService {
         var credentials = validateApiKeyAndGetCredentials(workspaceName, apiKey, path);
         if (credentials.shouldCache()) {
             log.debug("Caching user and workspace id for API key");
+            // TODO: handle quotas caching
             cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId(),
                     credentials.workspaceName());
         }
@@ -128,9 +129,11 @@ class RemoteAuthService implements AuthService {
                         .userName(authResponse.user())
                         .workspaceId(authResponse.workspaceId())
                         .workspaceName(authResponse.workspaceName())
+                        .quotas(authResponse.quotas())
                         .build();
             }
         } else {
+            // TODO: retrieve quotas from cache
             return ValidatedAuthCredentials.builder()
                     .shouldCache(false)
                     .userName(credentials.get().userName())

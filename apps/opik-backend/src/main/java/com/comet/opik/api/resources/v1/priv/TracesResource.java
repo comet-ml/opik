@@ -176,6 +176,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/{traceId}", schema = @Schema(implementation = String.class))})})
     @RateLimited
+    @FreeTierLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Trace.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid Trace trace,
             @Context UriInfo uriInfo) {

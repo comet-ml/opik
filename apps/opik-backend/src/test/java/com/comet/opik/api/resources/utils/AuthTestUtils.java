@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.infrastructure.freetierlimit.Quota;
+import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.experimental.UtilityClass;
@@ -33,7 +34,8 @@ public class AuthTestUtils {
 
     public static String newWorkspaceAuthResponse(
             String user, String workspaceId, String workspaceName, List<Quota> quotas) {
-        return AUTH_RESPONSE.formatted(user, workspaceId, workspaceName, quotas);
+        return AUTH_RESPONSE.formatted(user, workspaceId, workspaceName,
+                quotas == null ? null : JsonUtils.writeValueAsString(quotas));
     }
 
     public static void mockTargetWorkspace(WireMockServer server, String apiKey, String workspaceName,
