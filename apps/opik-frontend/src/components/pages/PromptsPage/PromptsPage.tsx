@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -80,6 +82,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const PromptsPage: React.FunctionComponent = () => {
+  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
@@ -166,6 +169,19 @@ const PromptsPage: React.FunctionComponent = () => {
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleRowClick = useCallback(
+    (row: Prompt) => {
+      navigate({
+        to: "/$workspaceName/prompts/$promptId",
+        params: {
+          promptId: row.id,
+          workspaceName,
+        },
+      });
+    },
+    [navigate, workspaceName],
+  );
+
   const handleNewPromptClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
@@ -206,6 +222,7 @@ const PromptsPage: React.FunctionComponent = () => {
       <DataTable
         columns={columns}
         data={prompts}
+        onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,

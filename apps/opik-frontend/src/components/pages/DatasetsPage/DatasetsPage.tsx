@@ -180,14 +180,14 @@ const DatasetsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  const onDatasetCreated = useCallback(
-    (dataset: Dataset) => {
-      if (!dataset.id) return;
+  const handleRowClick = useCallback(
+    (row: Dataset) => {
+      if (!row.id) return;
 
       navigate({
         to: "/$workspaceName/datasets/$datasetId",
         params: {
-          datasetId: dataset.id,
+          datasetId: row.id,
           workspaceName,
         },
       });
@@ -230,6 +230,7 @@ const DatasetsPage: React.FunctionComponent = () => {
       <DataTable
         columns={columns}
         data={datasets}
+        onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
@@ -260,7 +261,7 @@ const DatasetsPage: React.FunctionComponent = () => {
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
-        onDatasetCreated={onDatasetCreated}
+        onDatasetCreated={handleRowClick}
       />
     </div>
   );

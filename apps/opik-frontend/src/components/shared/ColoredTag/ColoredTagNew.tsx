@@ -44,7 +44,7 @@ const ColoredTagNew: React.FunctionComponent<ColoredTagNewProps> = ({
         className="grow-0 rounded-[2px] bg-[var(--bg-color)] p-1"
         style={{ "--bg-color": color } as React.CSSProperties}
       />
-      <TooltipWrapper content={label}>
+      <TooltipWrapper content={label} stopClickPropagation>
         <div className={cn(labelVariants({ size }))}>{label}</div>
       </TooltipWrapper>
     </div>

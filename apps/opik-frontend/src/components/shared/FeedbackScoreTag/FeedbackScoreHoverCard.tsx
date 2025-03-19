@@ -33,6 +33,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
         align="start"
         className="w-[320px] border border-border px-1 py-1.5"
         collisionPadding={24}
+        onClick={(event) => event.stopPropagation()}
       >
         <div className="relative size-full max-h-[40vh] max-w-[320px] overflow-auto p-1 pb-0">
           <div className="flex flex-col gap-1.5 border-b border-border px-2 pb-2">

@@ -26,7 +26,10 @@ const CodeCell = (context: CellContext<unknown, unknown>) => {
     );
   } else {
     content = (
-      <div className="size-full overflow-y-auto overflow-x-hidden whitespace-normal">
+      <div
+        className="size-full overflow-y-auto overflow-x-hidden whitespace-normal"
+        onClick={(event) => event.stopPropagation()}
+      >
         <JsonView
           src={safelyParseJSON(value)}
           theme="github"

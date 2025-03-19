@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -79,6 +79,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const ObservabilitySection: React.FunctionComponent = () => {
+  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
@@ -119,6 +120,19 @@ const ObservabilitySection: React.FunctionComponent = () => {
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleRowClick = useCallback(
+    (row: ProjectWithStatistic) => {
+      navigate({
+        to: "/$workspaceName/projects/$projectId/traces",
+        params: {
+          projectId: row.id,
+          workspaceName,
+        },
+      });
+    },
+    [navigate, workspaceName],
+  );
+
   const handleNewProjectClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
@@ -136,6 +150,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
       <DataTable
         columns={COLUMNS}
         data={projects}
+        onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={

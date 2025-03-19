@@ -29,6 +29,7 @@ const ErrorCell = <TData,>(
             ? `Message: ${value.message}`
             : "Error message is not specified"
         }
+        stopClickPropagation
       >
         {isSmall ? (
           <span className="truncate">{value.exception_type}</span>

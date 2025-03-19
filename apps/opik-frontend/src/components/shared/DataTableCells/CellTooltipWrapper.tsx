@@ -15,7 +15,9 @@ const CellTooltipWrapper: React.FC<CellTooltipWrapperProps> = ({
   const showTooltip =
     content && content !== "-" && content.length > MIN_CHARACTERS_FOR_TOOLTIP;
   return showTooltip ? (
-    <TooltipWrapper content={content}>{children}</TooltipWrapper>
+    <TooltipWrapper content={content} stopClickPropagation>
+      {children}
+    </TooltipWrapper>
   ) : (
     children
   );

@@ -376,6 +376,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       <DataTable
         columns={columns}
         data={rows}
+        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         selectionConfig={{
