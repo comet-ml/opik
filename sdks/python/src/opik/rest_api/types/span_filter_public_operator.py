@@ -14,8 +14,6 @@ SpanFilterPublicOperator = typing.Union[
         ">=",
         "<",
         "<=",
-        "is_empty",
-        "is_not_empty",
     ],
     typing.Any,
 ]

@@ -13,7 +13,7 @@ class OpenTelemetryIngestionClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    def receive_protobuf_traces(
+    def receive_traces(
         self, *, request_options: typing.Optional[RequestOptions] = None
     ) -> typing.Optional[typing.Any]:
         """
@@ -35,7 +35,7 @@ class OpenTelemetryIngestionClient:
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
-        client.open_telemetry_ingestion.receive_protobuf_traces()
+        client.open_telemetry_ingestion.receive_traces()
         """
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/otel/v1/traces",
@@ -61,7 +61,7 @@ class AsyncOpenTelemetryIngestionClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    async def receive_protobuf_traces(
+    async def receive_traces(
         self, *, request_options: typing.Optional[RequestOptions] = None
     ) -> typing.Optional[typing.Any]:
         """
@@ -88,7 +88,7 @@ class AsyncOpenTelemetryIngestionClient:
 
 
         async def main() -> None:
-            await client.open_telemetry_ingestion.receive_protobuf_traces()
+            await client.open_telemetry_ingestion.receive_traces()
 
 
         asyncio.run(main())

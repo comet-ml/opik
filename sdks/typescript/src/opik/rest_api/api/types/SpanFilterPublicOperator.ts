@@ -12,9 +12,7 @@ export type SpanFilterPublicOperator =
     | ">"
     | ">="
     | "<"
-    | "<="
-    | "is_empty"
-    | "is_not_empty";
+    | "<=";
 export const SpanFilterPublicOperator = {
     Contains: "contains",
     NotContains: "not_contains",
@@ -26,6 +24,4 @@ export const SpanFilterPublicOperator = {
     GreaterThanOrEqualTo: ">=",
     LessThan: "<",
     LessThanOrEqualTo: "<=",
-    IsEmpty: "is_empty",
-    IsNotEmpty: "is_not_empty",
 } as const;

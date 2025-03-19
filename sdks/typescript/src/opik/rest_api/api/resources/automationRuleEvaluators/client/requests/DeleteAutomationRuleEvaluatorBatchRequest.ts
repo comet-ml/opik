@@ -7,12 +7,13 @@ import * as OpikApi from "../../../../index";
 /**
  * @example
  *     {
+ *         projectId: "project_id",
  *         body: {
  *             ids: ["ids"]
  *         }
  *     }
  */
 export interface DeleteAutomationRuleEvaluatorBatchRequest {
-    projectId?: string;
+    projectId: string;
     body: OpikApi.BatchDelete;
 }

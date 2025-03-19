@@ -3,8 +3,6 @@
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
 from .span_public import SpanPublic
-import typing_extensions
-from ..core.serialization import FieldMetadata
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 
@@ -14,9 +12,6 @@ class SpanPagePublic(UniversalBaseModel):
     size: typing.Optional[int] = None
     total: typing.Optional[int] = None
     content: typing.Optional[typing.List[SpanPublic]] = None
-    sortable_by: typing_extensions.Annotated[
-        typing.Optional[typing.List[str]], FieldMetadata(alias="sortableBy")
-    ] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
