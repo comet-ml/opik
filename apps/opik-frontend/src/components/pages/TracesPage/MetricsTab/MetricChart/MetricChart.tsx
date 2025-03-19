@@ -301,6 +301,7 @@ const MetricChart = ({
                   connectNulls
                   strokeWidth={1.5}
                   strokeOpacity={strokeOpacity}
+                  animationDuration={800}
                 />
               );
             })

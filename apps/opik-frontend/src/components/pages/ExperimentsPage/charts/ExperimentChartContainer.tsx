@@ -185,6 +185,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                     activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}
                     strokeWidth={1.5}
                     strokeOpacity={strokeOpacity}
+                    animationDuration={400}
                   />
                 );
               })}
