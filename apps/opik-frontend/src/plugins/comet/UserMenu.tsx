@@ -116,7 +116,7 @@ const UserMenu = () => {
     isOrganizationAdmin || invitePermission?.permissionValue === "true";
 
   const handleChangeOrganization = (newOrganization: Organization) => {
-    const newOrganizationWorkspaces = allWorkspaces.filter(
+    const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
       (workspace) => workspace.organizationId === newOrganization.id,
     );
 
