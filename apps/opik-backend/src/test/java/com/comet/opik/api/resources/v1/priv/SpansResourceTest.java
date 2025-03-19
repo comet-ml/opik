@@ -536,6 +536,18 @@ class SpansResourceTest {
 
     }
 
+    private void assertExpectedResponseWithoutBody(boolean expected, Response actualResponse, int expectedStatus,
+            io.dropwizard.jersey.errors.ErrorMessage expectedErrorMessage) {
+        if (expected) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        } else {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+            assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                    .isEqualTo(expectedErrorMessage);
+        }
+    }
+
     @Nested
     @DisplayName("Session Token Cookie Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -825,18 +837,6 @@ class SpansResourceTest {
                             .isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
-        }
-    }
-
-    private void assertExpectedResponseWithoutBody(boolean expected, Response actualResponse, int expectedStatus,
-            io.dropwizard.jersey.errors.ErrorMessage expectedErrorMessage) {
-        if (expected) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        } else {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
-            assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                    .isEqualTo(expectedErrorMessage);
         }
     }
 
