@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
@@ -19,8 +18,12 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.jdbi.v3.core.Jdbi;
@@ -36,36 +39,30 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Attachment Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
 @Slf4j
-class AttachmentResourceTest {
+class AttachmentResourceMinIOTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
-    public static final String LARGE_FILE_NAME = "large.txt";
     public static final String FILE_NAME = "test.jpg";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -96,39 +93,15 @@ class AttachmentResourceTest {
                         .redisUrl(REDIS.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
                         .authCacheTtlInSeconds(null)
-                        .isMinIO(false)
-                        .modules(List.of(new AbstractModule() {
-                            @Override
-                            public void configure() {
-                                Region region = Region.US_EAST_1;
-                                var s3Client = S3Client.builder()
-                                        .region(region)
-                                        .credentialsProvider(DefaultCredentialsProvider.create())
-                                        .forcePathStyle(true)
-                                        .endpointOverride(URI.create(minioUrl))
-                                        .build();
-
-                                S3Configuration s3Configuration = S3Configuration.builder()
-                                        .pathStyleAccessEnabled(true)
-                                        .build();
-
-                                S3Presigner s3Presigner = S3Presigner.builder()
-                                        .credentialsProvider(DefaultCredentialsProvider.create())
-                                        .region(region)
-                                        .serviceConfiguration(s3Configuration)
-                                        .endpointOverride(URI.create(minioUrl))
-                                        .build();
-
-                                bind(S3Client.class).toInstance(s3Client);
-                                bind(S3Presigner.class).toInstance(s3Presigner);
-                            }
-                        }))
+                        .minioUrl(minioUrl)
+                        .isMinIO(true)
                         .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
     private HttpClient httpClient;
+    private Client client;
     private String baseURI;
     public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576;//6M
 
@@ -144,6 +117,7 @@ class AttachmentResourceTest {
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
         this.httpClient = HttpClient.newHttpClient();
+        this.client = ClientBuilder.newClient();
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
 
         ClientSupportUtils.config(client);
@@ -157,6 +131,7 @@ class AttachmentResourceTest {
     void tearDownAll() {
         wireMock.server().stop();
         httpClient.close();
+        client.close();
     }
 
     @Test
@@ -170,7 +145,7 @@ class AttachmentResourceTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         // Initiate upload
-        StartMultipartUploadRequest startUploadRequest = factory.manufacturePojo(StartMultipartUploadRequest.class);
+        StartMultipartUploadRequest startUploadRequest = prepareStartUploadRequest();
 
         log.info("Start attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId,
                 startUploadRequest.projectName(),
@@ -180,14 +155,10 @@ class AttachmentResourceTest {
                 .startMultiPartUpload(startUploadRequest, apiKey, workspaceName, 200);
 
         // Upload file using presigned url, will be done on client side (SDK)
-        InputStream is = getClass().getClassLoader().getResourceAsStream(LARGE_FILE_NAME);
+        InputStream is = getClass().getClassLoader().getResourceAsStream(FILE_NAME);
         byte[] fileData = IOUtils.toByteArray(is);
-        List<String> eTags = uploadParts(startUploadResponse, fileData);
 
-        CompleteMultipartUploadRequest completeUploadRequest = prepareCompleteUploadRequest(startUploadRequest,
-                fileData.length, startUploadResponse.uploadId(), eTags);
-
-        attachmentResourceClient.completeMultiPartUpload(completeUploadRequest, apiKey, workspaceName, 204);
+        uploadFile(startUploadResponse, fileData, apiKey, workspaceName);
 
         log.info("Complete attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId,
                 startUploadRequest.projectName(),
@@ -196,44 +167,23 @@ class AttachmentResourceTest {
         // TODO: proper verification that the file was uploaded will be done once we prepare corresponding endpoint in OPIK-728
     }
 
-    @Test
-    @DisplayName("Direct upload for AWS S3 should fail")
-    void directS3UploadShouldFailTest() throws IOException {
-        String workspaceName = UUID.randomUUID().toString();
-        String apiKey = UUID.randomUUID().toString();
-        String workspaceId = UUID.randomUUID().toString();
-
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-        // Initiate upload
-        AttachmentInfo attachmentInfo = factory.manufacturePojo(AttachmentInfo.class);
-        InputStream is = getClass().getClassLoader().getResourceAsStream(FILE_NAME);
-        byte[] fileData = IOUtils.toByteArray(is);
-        attachmentResourceClient.uploadAttachment(attachmentInfo, fileData, apiKey, workspaceName, 403);
+    private void uploadFile(StartMultipartUploadResponse startUploadResponse, byte[] data, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(startUploadResponse.preSignUrls().getFirst())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.entity(data, MediaType.APPLICATION_OCTET_STREAM))) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(204);
+        }
     }
 
-    private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data)
-            throws IOException, InterruptedException {
-        List<String> eTags = new ArrayList<>();
-        for (int i = 0; i < startUploadResponse.preSignUrls().size(); i++) {
-            int chunkToUpload = i == startUploadResponse.preSignUrls().size() - 1
-                    ? data.length - i * MULTI_UPLOAD_CHUNK_SIZE
-                    : MULTI_UPLOAD_CHUNK_SIZE;
-            byte[] partData = new byte[chunkToUpload];
-            System.arraycopy(data, i * MULTI_UPLOAD_CHUNK_SIZE, partData, 0, chunkToUpload);
-
-            var request = HttpRequest.newBuilder()
-                    .uri(URI.create(startUploadResponse.preSignUrls().get(i)))
-                    .PUT(HttpRequest.BodyPublishers.ofByteArray(data))
-                    .build();
-
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-            String eTag = response.headers().firstValue("ETag").orElseThrow();
-            eTags.add(eTag);
-        }
-
-        return eTags;
+    private StartMultipartUploadRequest prepareStartUploadRequest() {
+        return factory.manufacturePojo(StartMultipartUploadRequest.class)
+                .toBuilder()
+                .path(Base64.getUrlEncoder().withoutPadding().encodeToString(baseURI.getBytes()))
+                .build();
     }
 
     private CompleteMultipartUploadRequest prepareCompleteUploadRequest(StartMultipartUploadRequest startUploadRequest,

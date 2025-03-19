@@ -22,5 +22,6 @@ public record StartMultipartUploadRequest(
         String mimeType,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @NotNull EntityType entityType,
-        @NotNull UUID entityId) implements AttachmentInfoHolder {
+        @NotNull UUID entityId,
+        @NotBlank String path) implements AttachmentInfoHolder {
 }

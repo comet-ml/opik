@@ -30,6 +30,7 @@ public class StartMultipartUploadRequestManufacturer extends AbstractTypeManufac
                 .entityType(randomEntityType())
                 .entityId(strategy.getTypeValue(metadata, context, UUID.class))
                 .projectName(strategy.getTypeValue(metadata, context, String.class))
+                .path(strategy.getTypeValue(metadata, context, String.class))
                 .build();
     }
 

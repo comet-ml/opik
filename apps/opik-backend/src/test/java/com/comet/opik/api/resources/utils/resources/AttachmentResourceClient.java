@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
@@ -50,6 +51,25 @@ public class AttachmentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void uploadAttachment(AttachmentInfo attachmentInfo, byte[] data,
+            String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("upload")
+                .queryParam("file_name", attachmentInfo.fileName())
+                .queryParam("project_name", attachmentInfo.projectName())
+                .queryParam("mime_type", attachmentInfo.mimeType())
+                .queryParam("entity_type", attachmentInfo.entityType().getValue())
+                .queryParam("entity_id", attachmentInfo.entityId())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.entity(data, MediaType.APPLICATION_OCTET_STREAM))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
         }
