@@ -94,7 +94,7 @@ public class AttachmentResource {
 
     @PUT
     @Path("/upload")
-    @Consumes(MediaType.APPLICATION_OCTET_STREAM)
+    @Consumes("*/*")
     @Operation(operationId = "uploadAttachment", summary = "Upload attachment to MinIO", description = "Upload attachment to MinIO", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),

@@ -136,17 +136,19 @@ class AttachmentServiceImpl implements AttachmentService {
 
         String baseUrl = new String(Base64.getUrlDecoder().decode(uploadRequest.path()));
 
-        URI uploadUrl = UriBuilder.fromUri(baseUrl)
+        UriBuilder uriBuilder = UriBuilder.fromUri(baseUrl)
                 .path("v1/private/attachment/upload")
                 .queryParam("file_name", uploadRequest.fileName())
-                .queryParam("project_name", uploadRequest.projectName())
                 .queryParam("mime_type", getMimeType(uploadRequest))
                 .queryParam("entity_type", uploadRequest.entityType().getValue())
-                .queryParam("entity_id", uploadRequest.entityId())
-                .build();
+                .queryParam("entity_id", uploadRequest.entityId());
+
+        if (uploadRequest.projectName() != null) {
+            uriBuilder.queryParam("project_name", uploadRequest.projectName());
+        }
 
         return StartMultipartUploadResponse.builder()
-                .preSignUrls(List.of(uploadUrl.toASCIIString()))
+                .preSignUrls(List.of(uriBuilder.build().toASCIIString()))
                 .uploadId("BEMinIO")
                 .build();
     }
