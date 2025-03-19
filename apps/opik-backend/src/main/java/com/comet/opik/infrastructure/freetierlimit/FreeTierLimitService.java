@@ -6,6 +6,9 @@ import org.apache.commons.collections4.ListUtils;
 import java.util.Optional;
 
 public class FreeTierLimitService {
+    public static final String ERR_LIMIT_EXCEEDED = "You have reached the maximum allowed spans for a free account " +
+            "(%s). Please contact sales at https://www.comet.com/site/about-us/contact-us/.";
+
     public Optional<String> isQuotaExceeded(RequestContext requestContext) {
         // no quota means it's either a self-hosted installation or pro plan user
         if (ListUtils.emptyIfNull(requestContext.getQuotas()).isEmpty()) {
@@ -23,7 +26,6 @@ public class FreeTierLimitService {
     }
 
     private String getMessage(Quota quota) {
-        return String.format("You have reached the maximum allowed spans for a free account (%s). " +
-                "Please contact sales at https://www.comet.com/site/about-us/contact-us/.", quota.limit());
+        return String.format(ERR_LIMIT_EXCEEDED, quota.limit());
     }
 }
