@@ -43,7 +43,6 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.http.HttpClient;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Base64;
