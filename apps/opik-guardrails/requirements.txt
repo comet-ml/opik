@@ -1,0 +1,5 @@
+flask
+gunicorn
+torch
+transformers
+accelerate  # for optimized GPU utilization
