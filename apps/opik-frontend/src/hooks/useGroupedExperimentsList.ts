@@ -44,7 +44,7 @@ type UseGroupedExperimentsListResponse = {
     groupIds: string[];
     total: number;
   };
-  datasetsIds: string[];
+  datasetsData: Dataset[];
   isPending: boolean;
   refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
@@ -302,6 +302,6 @@ export default function useGroupedExperimentsList(
     data,
     isPending,
     refetch,
-    datasetsIds,
+    datasetsData,
   } as UseGroupedExperimentsListResponse;
 }
