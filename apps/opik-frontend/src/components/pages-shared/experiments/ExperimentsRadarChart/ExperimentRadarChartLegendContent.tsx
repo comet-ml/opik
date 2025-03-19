@@ -3,7 +3,7 @@ import * as RechartsPrimitive from "recharts";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-const MetricChartLegendContent = React.forwardRef<
+const ExperimentRadarChartLegendContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<typeof RechartsPrimitive.Legend> &
     React.ComponentProps<"div"> & {
@@ -26,17 +26,17 @@ const MetricChartLegendContent = React.forwardRef<
   return (
     <div
       ref={ref}
-      className="-mt-2.5 w-full max-w-full pt-6 text-center"
+      className="mt-6 flex size-full max-h-[34px] justify-center overflow-auto"
       onMouseLeave={handleMouseLeave}
     >
-      <div className="group inline-flex max-w-full flex-wrap items-center justify-center space-x-3">
-        {payload.map((item) => {
+      <div className="group inline-flex max-w-full flex-wrap items-center justify-center space-x-2">
+        {payload.map((item, idx) => {
           const key = `${item.value || "value"}`;
           const indicatorColor = color || item.color;
 
           return (
             <div
-              key={key}
+              key={key + idx}
               className="relative min-w-0 cursor-pointer pl-3 duration-200 group-hover-except-self:opacity-60"
               onMouseEnter={() => handleMouseEnter(item.value)}
             >
@@ -61,6 +61,7 @@ const MetricChartLegendContent = React.forwardRef<
     </div>
   );
 });
-MetricChartLegendContent.displayName = "MetricChartLegendContent";
+ExperimentRadarChartLegendContent.displayName =
+  "ExperimentRadarChartLegendContent";
 
-export default MetricChartLegendContent;
+export default ExperimentRadarChartLegendContent;

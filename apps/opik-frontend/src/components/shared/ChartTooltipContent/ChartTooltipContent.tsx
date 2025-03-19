@@ -56,12 +56,16 @@ const ChartTooltipContent = React.forwardRef<
     };
 
     return (
-      <Popover open>
+      <Popover defaultOpen>
         <PopoverAnchor asChild>
           <div className="size-0.5 bg-transparent"></div>
         </PopoverAnchor>
-        <PopoverContent className="min-w-32 max-w-72 px-1 py-1.5">
-          <div ref={ref} className="grid items-start gap-1.5 bg-background">
+        <PopoverContent
+          forceMount
+          className="min-w-32 max-w-72 px-1 py-1.5 will-change-transform"
+          asChild
+        >
+          <div ref={ref} className={"grid items-start gap-1.5 bg-background"}>
             {isFunction(renderHeader) && (
               <div className="mb-1 max-w-full overflow-hidden border-b px-2 pt-0.5">
                 {renderHeader({ payload })}
@@ -69,8 +73,8 @@ const ChartTooltipContent = React.forwardRef<
             )}
 
             <div className="grid gap-1.5">
-              {payload.map((item) => {
-                const key = `${item.name || item.dataKey || "value"}`;
+              {payload.map((item, idx) => {
+                const key = `${item.name || item.dataKey || "value"}${idx}`;
                 const itemConfig = getPayloadConfigFromPayload(
                   config,
                   item,

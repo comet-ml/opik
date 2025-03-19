@@ -3,5 +3,5 @@ export const DEFAULT_CHART_TICK = {
   fontWeight: 200,
   letterSpacing: "0.05rem",
   fontSize: "10px",
-  lineHeight: "12px",
+  lineheight: "12px",
 };
