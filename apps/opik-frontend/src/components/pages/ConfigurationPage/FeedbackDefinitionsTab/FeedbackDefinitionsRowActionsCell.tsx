@@ -60,7 +60,11 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuContent
+          align="end"
+          className="w-52"
+          onClick={(event) => event.stopPropagation()}
+        >
           <DropdownMenuItem
             onClick={() => {
               setOpen(2);

@@ -258,7 +258,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("create trace, when api key is present, then return proper response")
         void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                                                                   io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -293,7 +293,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("update trace, when api key is present, then return proper response")
         void update__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                                                                   io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -330,7 +330,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("delete trace, when api key is present, then return proper response")
         void delete__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                                                                   io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
 
@@ -360,7 +360,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("get traces, when api key is present, then return proper response")
         void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                                                                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -392,7 +392,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("Trace feedback, when api key is present, then return proper response")
         void feedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                                                                     io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
@@ -431,7 +431,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("delete feedback, when api key is present, then return proper response")
         void deleteFeedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                                                                           io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var trace = createTrace();
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -467,7 +467,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("Trace feedback batch, when api key is present, then return proper response")
         void feedbackBatch__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                                                                          io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var trace = createTrace();
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -506,7 +506,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("get trace threads, when api key is present, then return proper response")
         void getThreads__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                                                                       io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -573,7 +573,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("create trace, when session token is present, then return proper response")
         void create__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
+                                                                         String workspaceName) {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
@@ -605,7 +605,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("update trace, when session token is present, then return proper response")
         void update__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
+                                                                         String workspaceName) {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
@@ -640,7 +640,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("delete trace, when session token is present, then return proper response")
         void delete__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
+                                                                         String workspaceName) {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
@@ -669,7 +669,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("get traces, when session token is present, then return proper response")
         void get__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
+                                                                      String workspaceName) {
 
             var projectName = UUID.randomUUID().toString();
 
@@ -711,7 +711,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("Trace feedback, when session token is present, then return proper response")
         void feedback__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
+                                                                           String workspaceName) {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
@@ -750,7 +750,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("delete feedback, when session token is present, then return proper response")
         void deleteFeedback__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean expected, String workspaceName) {
+                                                                                 boolean expected, String workspaceName) {
             var trace = createTrace();
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
@@ -785,7 +785,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("Trace feedback batch, when session token is present, then return proper response")
         void feedbackBatch__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
+                                                                                String workspaceName) {
 
             var trace = createTrace();
 
@@ -824,7 +824,7 @@ class TracesResourceTest {
         @MethodSource("credentials")
         @DisplayName("get trace threads, when session token is present, then return proper response")
         void getThreads__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
+                                                                             String workspaceName) {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
@@ -852,7 +852,7 @@ class TracesResourceTest {
     }
 
     private void assertExpectedResponseWithoutABody(boolean expected, Response actualResponse,
-            io.dropwizard.jersey.errors.ErrorMessage errorMessage, int expectedStatus) {
+                                                    io.dropwizard.jersey.errors.ErrorMessage errorMessage, int expectedStatus) {
         if (expected) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
             if (expectedStatus == HttpStatus.SC_NO_CONTENT) {
@@ -1215,7 +1215,7 @@ class TracesResourceTest {
         @MethodSource("getFilterTestArguments")
         @DisplayName("when project name is not empty, then return traces by project name")
         void whenProjectNameIsNotEmpty__thenReturnTracesByProjectName(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                      TracePageTestAssertion testAssertion) {
 
             var projectName = UUID.randomUUID().toString();
 
@@ -1252,7 +1252,7 @@ class TracesResourceTest {
         @MethodSource("getFilterTestArguments")
         @DisplayName("when project id is not empty, then return traces by project id")
         void whenProjectIdIsNotEmpty__thenReturnTracesByProjectId(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                  TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectName = UUID.randomUUID().toString();
@@ -1343,7 +1343,7 @@ class TracesResourceTest {
         @MethodSource("getFilterTestArguments")
         @DisplayName("when traces have cost estimation, then return total cost estimation")
         void whenTracesHaveCostEstimation__thenReturnTotalCostEstimation(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                         TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectName = UUID.randomUUID().toString();
@@ -1403,10 +1403,10 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterIdAndNameEqual__thenReturnTracesFiltered(String endpoint,
-                Operator operator,
-                Function<List<Trace>, List<Trace>> getExpectedTraces,
-                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TracePageTestAssertion testAssertion) {
+                                                                Operator operator,
+                                                                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                                                                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1454,10 +1454,10 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterByThreadEqual__thenReturnTracesFiltered(String endpoint,
-                Operator operator,
-                Function<List<Trace>, List<Trace>> getExpectedTraces,
-                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TracePageTestAssertion testAssertion) {
+                                                               Operator operator,
+                                                               Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                               Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                                                               TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1673,7 +1673,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterNameNotContains__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                 TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1724,10 +1724,10 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterStartTimeEqual__thenReturnTracesFiltered(String endpoint,
-                Operator operator,
-                Function<List<Trace>, List<Trace>> getExpectedTraces,
-                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TracePageTestAssertion testAssertion) {
+                                                                Operator operator,
+                                                                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                                                                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1766,7 +1766,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeGreaterThan__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                      TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1812,7 +1812,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeGreaterThanEqual__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                           TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1859,7 +1859,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeLessThan__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                   TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1905,7 +1905,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeLessThanEqual__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                        TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2078,7 +2078,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterTotalEstimatedCostGreaterThen__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                               TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2135,10 +2135,10 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnTracesFiltered(String endpoint,
-                Operator operator,
-                Function<List<Trace>, List<Trace>> getUnexpectedTraces, // Here we swap the expected and unexpected traces
-                Function<List<Trace>, List<Trace>> getExpectedTraces,
-                TracePageTestAssertion testAssertion) {
+                                                                                  Operator operator,
+                                                                                  Function<List<Trace>, List<Trace>> getUnexpectedTraces, // Here we swap the expected and unexpected traces
+                                                                                  Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                                  TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2209,10 +2209,10 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterMetadataEqualString__thenReturnTracesFiltered(String endpoint,
-                Operator operator,
-                Function<List<Trace>, List<Trace>> getExpectedTraces,
-                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TracePageTestAssertion testAssertion) {
+                                                                     Operator operator,
+                                                                     Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                     Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                                                                     TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2258,7 +2258,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualNumber__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                     TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2306,7 +2306,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualBoolean__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                      TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2357,7 +2357,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualNull__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                   TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2406,7 +2406,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsString__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                        TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2454,7 +2454,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsNumber__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                        TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2503,7 +2503,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsBoolean__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                         TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2553,7 +2553,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsNull__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                      TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2603,7 +2603,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanNumber__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                           TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2652,7 +2652,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanString__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                           TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2698,7 +2698,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanBoolean__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                            TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2742,7 +2742,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanNull__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                         TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2785,7 +2785,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanNumber__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                        TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2834,7 +2834,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanString__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                        TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2878,7 +2878,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanBoolean__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                         TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2922,7 +2922,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanNull__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                      TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3010,9 +3010,9 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageEqual__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion,
-                String usageKey,
-                Field field) {
+                                                            TracePageTestAssertion testAssertion,
+                                                            String usageKey,
+                                                            Field field) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -3074,9 +3074,9 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageGreaterThan__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion,
-                String usageKey,
-                Field field) {
+                                                                  TracePageTestAssertion testAssertion,
+                                                                  String usageKey,
+                                                                  Field field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3133,9 +3133,9 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageGreaterThanEqual__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion,
-                String usageKey,
-                Field field) {
+                                                                       TracePageTestAssertion testAssertion,
+                                                                       String usageKey,
+                                                                       Field field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3193,9 +3193,9 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageLessThan__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion,
-                String usageKey,
-                Field field) {
+                                                               TracePageTestAssertion testAssertion,
+                                                               String usageKey,
+                                                               Field field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3253,9 +3253,9 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageLessThanEqual__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion,
-                String usageKey,
-                Field field) {
+                                                                    TracePageTestAssertion testAssertion,
+                                                                    String usageKey,
+                                                                    Field field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3313,10 +3313,10 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFeedbackScoresArgs")
         void whenFilterFeedbackScoresEqual__thenReturnTracesFiltered(String endpoint,
-                Operator operator,
-                Function<List<Trace>, List<Trace>> getExpectedTraces,
-                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TracePageTestAssertion testAssertion) {
+                                                                     Operator operator,
+                                                                     Function<List<Trace>, List<Trace>> getExpectedTraces,
+                                                                     Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                                                                     TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3451,7 +3451,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresGreaterThan__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                           TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3517,7 +3517,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresGreaterThanEqual__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3579,7 +3579,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresLessThan__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                        TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3642,7 +3642,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresLessThanEqual__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+                                                                             TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3704,10 +3704,10 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getDurationArgs")
         void whenFilterByDuration__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion,
-                Operator operator,
-                long end,
-                double duration) {
+                                                            TracePageTestAssertion testAssertion,
+                                                            Operator operator,
+                                                            long end,
+                                                            double duration) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3871,7 +3871,7 @@ class TracesResourceTest {
     }
 
     private void assertThreadPage(String projectName, UUID projectId, List<? extends TraceThread> expectedThreads,
-            List<TraceThreadFilter> filters, Map<String, String> queryParams, String apiKey, String workspaceName) {
+                                  List<TraceThreadFilter> filters, Map<String, String> queryParams, String apiKey, String workspaceName) {
         WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("threads");
 
@@ -4032,9 +4032,9 @@ class TracesResourceTest {
                                     .operator(Operator.EQUAL)
                                     .key(null)
                                     .value(DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                                            traces.stream().min(Comparator.comparing(Trace::startTime)).get()
-                                                    .startTime(),
-                                            traces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime())
+                                                    traces.stream().min(Comparator.comparing(Trace::startTime)).get()
+                                                            .startTime(),
+                                                    traces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime())
                                             .toString())
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
@@ -4229,28 +4229,28 @@ class TracesResourceTest {
         return expectedTraces.size() == 0
                 ? List.of()
                 : List.of(TraceThread.builder()
-                        .firstMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
-                                .findFirst().get().input())
-                        .lastMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                .findFirst().get().output())
-                        .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                                expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).get()
-                                        .startTime(),
-                                expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime()))
-                        .projectId(projectId)
-                        .createdBy(USER)
-                        .startTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
-                                .findFirst().get().startTime())
-                        .endTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                .findFirst().get().endTime())
-                        .numberOfMessages(expectedTraces.size() * 2)
-                        .id(threadId)
-                        .createdAt(expectedTraces.stream().sorted(Comparator.comparing(Trace::createdAt))
-                                .findFirst().get().createdAt())
-                        .lastUpdatedAt(expectedTraces.stream()
-                                .sorted(Comparator.comparing(Trace::lastUpdatedAt).reversed()).findFirst().get()
-                                .lastUpdatedAt())
-                        .build());
+                .firstMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
+                        .findFirst().get().input())
+                .lastMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
+                        .findFirst().get().output())
+                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                        expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).get()
+                                .startTime(),
+                        expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime()))
+                .projectId(projectId)
+                .createdBy(USER)
+                .startTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
+                        .findFirst().get().startTime())
+                .endTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
+                        .findFirst().get().endTime())
+                .numberOfMessages(expectedTraces.size() * 2)
+                .id(threadId)
+                .createdAt(expectedTraces.stream().sorted(Comparator.comparing(Trace::createdAt))
+                        .findFirst().get().createdAt())
+                .lastUpdatedAt(expectedTraces.stream()
+                        .sorted(Comparator.comparing(Trace::lastUpdatedAt).reversed()).findFirst().get()
+                        .lastUpdatedAt())
+                .build());
     }
 
     @Nested
@@ -4414,7 +4414,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource
         void getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted(Comparator<Trace> comparator,
-                SortingField sorting) {
+                                                                                  SortingField sorting) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -4544,17 +4544,17 @@ class TracesResourceTest {
     }
 
     private void getAndAssertPage(String workspaceName, String projectName, UUID projectId,
-            List<? extends Filter> filters,
-            List<Trace> traces,
-            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey) {
+                                  List<? extends Filter> filters,
+                                  List<Trace> traces,
+                                  List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey) {
         getAndAssertPage(workspaceName, projectName, projectId, filters, traces, expectedTraces, unexpectedTraces,
                 apiKey, null);
     }
 
     private void getAndAssertPage(String workspaceName, String projectName, UUID projectId,
-            List<? extends Filter> filters,
-            List<Trace> traces,
-            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey, List<SortingField> sortingFields) {
+                                  List<? extends Filter> filters,
+                                  List<Trace> traces,
+                                  List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey, List<SortingField> sortingFields) {
         int page = 1;
 
         int size = traces.size() + expectedTraces.size() + unexpectedTraces.size();
@@ -4563,9 +4563,9 @@ class TracesResourceTest {
     }
 
     private void getAndAssertPage(int page, int size, String projectName, UUID projectId,
-            List<? extends Filter> filters,
-            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String workspaceName, String apiKey,
-            List<SortingField> sortingFields, int total) {
+                                  List<? extends Filter> filters,
+                                  List<Trace> expectedTraces, List<Trace> unexpectedTraces, String workspaceName, String apiKey,
+                                  List<SortingField> sortingFields, int total) {
 
         WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI));
 
@@ -4741,9 +4741,9 @@ class TracesResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var span = factory.manufacturePojo(Span.class);
             var usage = Stream.concat(
-                    Map.of("completion_tokens", 2 * 5L, "prompt_tokens", 3 * 5L + 3, "total_tokens", 4 * 5L)
-                            .entrySet().stream(),
-                    span.usage().entrySet().stream())
+                            Map.of("completion_tokens", 2 * 5L, "prompt_tokens", 3 * 5L + 3, "total_tokens", 4 * 5L)
+                                    .entrySet().stream(),
+                            span.usage().entrySet().stream())
                     .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue().longValue()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             var trace = createTrace()
@@ -4886,7 +4886,7 @@ class TracesResourceTest {
     }
 
     private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status,
-            String errorMessage) {
+                                             String errorMessage) {
         try (var response = traceResourceClient.callCreateTrace(trace, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(status);
             assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
@@ -6451,10 +6451,10 @@ class TracesResourceTest {
                     arguments(FeedbackScoreBatch.builder().scores(List.of()).build(),
                             "scores size must be between 1 and 1000"),
                     arguments(FeedbackScoreBatch.builder().scores(
-                            IntStream.range(0, 1001)
-                                    .mapToObj(__ -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
-                                            .projectName(DEFAULT_PROJECT).build())
-                                    .toList())
+                                    IntStream.range(0, 1001)
+                                            .mapToObj(__ -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                                    .projectName(DEFAULT_PROJECT).build())
+                                            .toList())
                             .build(), "scores size must be between 1 and 1000"),
                     arguments(
                             FeedbackScoreBatch.builder()
@@ -6960,7 +6960,7 @@ class TracesResourceTest {
         @MethodSource
         @DisplayName("when thread ids is empty, then return bad request")
         void deleteTraceThread__whenThreadIdsIsEmpty__thenReturnBadRequest(List<String> threadIds,
-                String errorMessage) {
+                                                                           String errorMessage) {
             Trace trace = createTrace().toBuilder()
                     .threadId(UUID.randomUUID().toString())
                     .build();
@@ -7054,7 +7054,7 @@ class TracesResourceTest {
     }
 
     private void fetchAndAssertResponse(List<String> expectedNames, UUID projectId, String apiKey,
-            String workspaceName) {
+                                        String workspaceName) {
 
         WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
                 .path("feedback-scores")
