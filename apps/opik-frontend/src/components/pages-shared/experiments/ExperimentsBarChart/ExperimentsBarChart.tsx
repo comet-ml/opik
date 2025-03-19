@@ -1,4 +1,3 @@
-import MetricChartLegendContent from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartLegendContent";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
@@ -20,6 +19,7 @@ import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { uniq } from "lodash";
 import NoData from "@/components/shared/NoData/NoData";
 import { BarDataPoint } from "@/types/chart";
+import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
 
 interface ExperimentsBarChartProps {
   name: string;
@@ -27,6 +27,8 @@ interface ExperimentsBarChartProps {
   data: BarDataPoint[];
   keys: string[];
 }
+
+const CHART_INNER_PADDING = 100;
 
 const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   name,
@@ -49,9 +51,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
       const { name } = payload[0].payload;
 
       return (
-        <>
-          <div className="comet-body-xs-accented truncate pb-1.5">{name}</div>
-        </>
+        <div className="comet-body-xs-accented truncate pb-1.5">{name}</div>
       );
     },
     [],
@@ -85,7 +85,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   const truncateXAxisLabel = useCallback(
     (label: string) => {
       const labelsCount = keys.length;
-      const xAxisWidth = width - 100;
+      const xAxisWidth = width - CHART_INNER_PADDING;
       const maxLabelWidth = xAxisWidth / labelsCount;
 
       const maxTruncateLength = Math.floor(maxLabelWidth / 7);
@@ -142,7 +142,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
               />
               <ChartLegend
                 content={
-                  <MetricChartLegendContent
+                  <ChartHorizontalLegendContent
                     setActiveLine={setActiveBar}
                     chartId={chartId}
                   />
