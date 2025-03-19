@@ -161,7 +161,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 width={legendWidth}
                 height={128}
               />
-              {chartData.lines.map((line, index) => {
+              {chartData.lines.map((line) => {
                 const isActive = line === activeLine;
 
                 let strokeOpacity = 1;
@@ -173,7 +173,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
                 return (
                   <Line
                     type="linear"
-                    key={line + index}
+                    key={line}
                     dataKey={(record) => record.scores[line]}
                     name={config[line].label as string}
                     stroke={config[line].color as string}
