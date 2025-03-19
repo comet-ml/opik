@@ -1,6 +1,9 @@
-package com.comet.opik.api.resources.utils;
+package com.comet.opik.api.resources.utils.traces;
 
+import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.resources.utils.DurationUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import jakarta.ws.rs.core.Response;
 
 import java.math.BigDecimal;
@@ -101,4 +104,17 @@ public class TraceAssertions {
 
     }
 
+    public static void assertStats(List<ProjectStatItem<?>> actualStats, List<ProjectStatItem<?>> expectedStats) {
+        assertThat(actualStats).hasSize(expectedStats.size());
+
+        assertThat(actualStats)
+                .usingRecursiveComparison(StatsUtils.getRecursiveComparisonConfiguration())
+                .isEqualTo(expectedStats);
+    }
+
+    public static void assertPage(Trace.TracePage actualPage, int page, int expectedPageSize, int expectedTotal) {
+        assertThat(actualPage.page()).isEqualTo(page);
+        assertThat(actualPage.size()).isEqualTo(expectedPageSize);
+        assertThat(actualPage.total()).isEqualTo(expectedTotal);
+    }
 }

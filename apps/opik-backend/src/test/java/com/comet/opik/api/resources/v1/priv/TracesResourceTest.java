@@ -9,8 +9,6 @@ import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.ProjectStats;
-import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -36,12 +34,16 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.TraceAssertions;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
+import com.comet.opik.api.resources.utils.traces.TraceAssertions;
+import com.comet.opik.api.resources.utils.traces.TracePageTestAssertion;
+import com.comet.opik.api.resources.utils.traces.TraceStatsAssertion;
+import com.comet.opik.api.resources.utils.traces.TraceStreamTestAssertion;
+import com.comet.opik.api.resources.utils.traces.TraceTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -89,8 +91,6 @@ import org.testcontainers.shaded.com.google.common.collect.Lists;
 import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple3;
-import reactor.util.function.Tuples;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -123,7 +123,6 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTra
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.api.resources.utils.StatsUtils.getProjectTraceStatItems;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -871,72 +870,22 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FilterTest {
 
-        interface TestAssertion {
-            void assertTest(String projectName, UUID projectId, String apiKey, String workspaceName, List<?> expected,
-                    List<?> unexpected, List<?> traces, List<? extends TraceFilter> filters,
-                    Map<String, String> queryParams);
-        }
-
-        interface TestAssertionArgs<T> {
-            Tuple3<List<?>, List<?>, List<?>> get(List<T> traces, List<T> expected, List<T> unexpected);
-        }
-
-        private TestAssertion getStatsAssertionMethod() {
-            return (projectName, projectId, apiKey, workspaceName, expected, unexpected, traces, filters,
-                    queryParams) -> getStatsAndAssert(projectName, projectId, filters, apiKey, workspaceName,
-                            (List<ProjectStatItem<?>>) expected, queryParams);
-        }
-
-        private TestAssertionArgs<Trace> getStatsAssertionMethodArgs() {
-            return (traces, expected, unexpected) -> Tuples.of(List.of(), getProjectTraceStatItems(expected),
-                    List.of());
-        }
-
-        private TestAssertion getTracesAssertionMethod() {
-            return (projectName, projectId, apiKey, workspaceName, expected, unexpected, traces, filters,
-                    queryParams) -> getAndAssertPage(Integer.valueOf(queryParams.getOrDefault("page", "1")),
-                            Integer.valueOf(queryParams.getOrDefault("size",
-                                    traces.size() + expected.size() + unexpected.size() + "")),
-                            projectName, projectId, filters, (List<Trace>) expected, (List<Trace>) unexpected,
-                            workspaceName, apiKey, List.of(), ((List<Trace>) expected).size());
-        }
-
-        private TestAssertion streamTraceAssertionMethod() {
-            return (projectName, projectId, apiKey, workspaceName, expected, unexpected, traces, filters,
-                    queryParams) -> {
-
-                int limit = expected.size() + unexpected.size() + traces.size();
-                var streamRequest = TraceSearchStreamRequest.builder()
-                        .projectName(projectName)
-                        .projectId(projectId)
-                        .filters(List.copyOf(filters))
-                        .limit(limit > 0 ? limit : null)
-                        .build();
-
-                var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
-
-                TraceAssertions.assertTraces(actualTraces, (List<Trace>) expected, USER);
-            };
-        }
-
-        private TestAssertionArgs<Trace> getTracesAssertionMethodArgs() {
-            return (traces, expected, unexpected) -> Tuples.of(traces, expected, unexpected);
-        }
+        private final TraceStatsAssertion traceStatsAssertion = new TraceStatsAssertion(traceResourceClient);
+        private final TraceTestAssertion traceTestAssertion = new TraceTestAssertion(traceResourceClient, USER);
+        private final TraceStreamTestAssertion traceStreamTestAssertion = new TraceStreamTestAssertion(
+                traceResourceClient, USER);
 
         private Stream<Arguments> getFilterTestArguments() {
             return Stream.of(
                     Arguments.of(
                             "/traces/stats",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            traceStatsAssertion),
                     Arguments.of(
                             "/traces",
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceTestAssertion),
                     Arguments.of(
                             "/traces/search",
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs()));
+                            traceStreamTestAssertion));
         }
 
         private Stream<Arguments> equalAndNotEqualFilters() {
@@ -946,99 +895,84 @@ class TracesResourceTest {
                             Operator.EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            traceStatsAssertion),
                     Arguments.of(
                             "/traces",
                             Operator.EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceTestAssertion),
                     Arguments.of(
                             "/traces/search",
                             Operator.EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceStreamTestAssertion),
                     Arguments.of(
                             "/traces/stats",
                             Operator.NOT_EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            traceStatsAssertion),
                     Arguments.of(
                             "/traces",
                             Operator.NOT_EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceTestAssertion),
                     Arguments.of(
                             "/traces/search",
                             Operator.NOT_EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs()));
+                            traceStreamTestAssertion));
         }
 
         private Stream<Arguments> getUsageKeyArgs() {
             return Stream.of(
                     Arguments.of(
                             "/traces/stats",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs(),
+                            traceStatsAssertion,
                             "completion_tokens",
                             TraceField.USAGE_COMPLETION_TOKENS),
                     Arguments.of(
                             "/traces/stats",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs(),
+                            traceStatsAssertion,
                             "prompt_tokens",
                             TraceField.USAGE_PROMPT_TOKENS),
                     Arguments.of(
                             "/traces/stats",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs(),
+                            traceStatsAssertion,
                             "total_tokens",
                             TraceField.USAGE_TOTAL_TOKENS),
                     Arguments.of(
                             "/traces",
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs(),
+                            traceTestAssertion,
                             "completion_tokens",
                             TraceField.USAGE_COMPLETION_TOKENS),
                     Arguments.of(
                             "/traces",
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs(),
+                            traceTestAssertion,
                             "prompt_tokens",
                             TraceField.USAGE_PROMPT_TOKENS),
                     Arguments.of(
                             "/traces",
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs(),
+                            traceTestAssertion,
                             "total_tokens",
                             TraceField.USAGE_TOTAL_TOKENS),
                     Arguments.of(
                             "/traces/search",
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs(),
+                            traceStreamTestAssertion,
                             "completion_tokens",
                             TraceField.USAGE_COMPLETION_TOKENS),
                     Arguments.of(
                             "/traces/search",
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs(),
+                            traceStreamTestAssertion,
                             "prompt_tokens",
                             TraceField.USAGE_PROMPT_TOKENS),
                     Arguments.of(
                             "/traces/search",
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs(),
+                            traceStreamTestAssertion,
                             "total_tokens",
                             TraceField.USAGE_TOTAL_TOKENS));
         }
@@ -1050,43 +984,37 @@ class TracesResourceTest {
                             Operator.EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            traceStatsAssertion),
                     Arguments.of(
                             "/traces",
                             Operator.EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceTestAssertion),
                     Arguments.of(
                             "/traces/search",
                             Operator.EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceStreamTestAssertion),
                     Arguments.of(
                             "/traces/stats",
                             Operator.NOT_EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(2, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(0, 2),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            traceStatsAssertion),
                     Arguments.of(
                             "/traces",
                             Operator.NOT_EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(2, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(0, 2),
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceTestAssertion),
                     Arguments.of(
                             "/traces/search",
                             Operator.NOT_EQUAL,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(2, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(0, 2),
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs()));
+                            traceStreamTestAssertion));
         }
 
         private Stream<Arguments> getDurationArgs() {
@@ -1100,11 +1028,11 @@ class TracesResourceTest {
                     arguments(Operator.LESS_THAN_EQUAL, Duration.ofMillis(1L).toNanos() / 1000, 2.0));
 
             return arguments.flatMap(arg -> Stream.of(
-                    arguments("/traces/stats", getStatsAssertionMethod(), getStatsAssertionMethodArgs(), arg.get()[0],
+                    arguments("/traces/stats", traceStatsAssertion, arg.get()[0],
                             arg.get()[1], arg.get()[2]),
-                    arguments("/traces", getTracesAssertionMethod(), getTracesAssertionMethodArgs(), arg.get()[0],
+                    arguments("/traces", traceTestAssertion, arg.get()[0],
                             arg.get()[1], arg.get()[2]),
-                    arguments("/traces/search", streamTraceAssertionMethod(), getTracesAssertionMethodArgs(),
+                    arguments("/traces/search", traceStreamTestAssertion,
                             arg.get()[0],
                             arg.get()[1], arg.get()[2])));
         }
@@ -1176,8 +1104,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         @DisplayName("when project name and project id are null, then return bad request")
-        void whenProjectNameAndIdAreNull__thenReturnBadRequest(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenProjectNameAndIdAreNull__thenReturnBadRequest(String endpoint, TracePageTestAssertion testAssertion) {
 
             UUID projectId = generator.generate();
 
@@ -1191,7 +1118,7 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void findWithUsage(String endpoint, TestAssertion testAssertion, TestAssertionArgs<Trace> testAssertionArgs) {
+        void findWithUsage(String endpoint, TracePageTestAssertion testAssertion) {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
@@ -1240,16 +1167,15 @@ class TracesResourceTest {
                     .comments(traceIdToCommentsMap.get(trace.id()))
                     .build()).toList();
 
-            var values = testAssertionArgs.get(traces, traces.reversed(), List.of());
+            var values = testAssertion.transformTestParams(traces, traces.reversed(), List.of());
 
-            testAssertion.assertTest(projectName, null, API_KEY, TEST_WORKSPACE, values.getT2(), values.getT3(),
-                    values.getT1(), List.of(), Map.of());
+            testAssertion.assertTest(projectName, null, API_KEY, TEST_WORKSPACE, values.expected(), values.unexpected(),
+                    values.all(), List.of(), Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void findWithoutUsage(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void findWithoutUsage(String endpoint, TracePageTestAssertion testAssertion) {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1279,17 +1205,17 @@ class TracesResourceTest {
                     .toList();
             batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
-            var values = testAssertionArgs.get(traces, traces.reversed(), List.of());
+            var values = testAssertion.transformTestParams(traces, traces.reversed(), List.of());
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), List.of(), Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), List.of(), Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         @DisplayName("when project name is not empty, then return traces by project name")
-        void whenProjectNameIsNotEmpty__thenReturnTracesByProjectName(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenProjectNameIsNotEmpty__thenReturnTracesByProjectName(String endpoint,
+                TracePageTestAssertion testAssertion) {
 
             var projectName = UUID.randomUUID().toString();
 
@@ -1316,17 +1242,17 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            var values = testAssertionArgs.get(traces, traces.reversed(), List.of());
+            var values = testAssertion.transformTestParams(traces, traces.reversed(), List.of());
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), List.of(), Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), List.of(), Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         @DisplayName("when project id is not empty, then return traces by project id")
-        void whenProjectIdIsNotEmpty__thenReturnTracesByProjectId(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenProjectIdIsNotEmpty__thenReturnTracesByProjectId(String endpoint,
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectName = UUID.randomUUID().toString();
@@ -1349,17 +1275,16 @@ class TracesResourceTest {
 
             UUID projectId = getProjectId(projectName, workspaceName, apiKey);
 
-            var values = testAssertionArgs.get(List.of(), List.of(trace), List.of());
+            var values = testAssertion.transformTestParams(List.of(), List.of(trace), List.of());
 
-            testAssertion.assertTest(null, projectId, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), List.of(), Map.of());
+            testAssertion.assertTest(null, projectId, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), List.of(), Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         @DisplayName("when filtering by workspace name, then return traces filtered")
-        void whenFilterWorkspaceName__thenReturnTracesFiltered(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterWorkspaceName__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
 
             var workspaceName1 = UUID.randomUUID().toString();
             var workspaceName2 = UUID.randomUUID().toString();
@@ -1405,20 +1330,20 @@ class TracesResourceTest {
             traceResourceClient.batchCreateTraces(traces1, apiKey1, workspaceName1);
             traceResourceClient.batchCreateTraces(traces2, apiKey2, workspaceName2);
 
-            var valueTraces1 = testAssertionArgs.get(traces1, traces1.reversed(), List.of());
-            var valueTraces2 = testAssertionArgs.get(traces2, traces2.reversed(), List.of());
+            var valueTraces1 = testAssertion.transformTestParams(traces1, traces1.reversed(), List.of());
+            var valueTraces2 = testAssertion.transformTestParams(traces2, traces2.reversed(), List.of());
 
-            testAssertion.assertTest(projectName1, null, apiKey1, workspaceName1, valueTraces1.getT2(),
-                    valueTraces1.getT3(), valueTraces1.getT1(), List.of(), Map.of());
-            testAssertion.assertTest(projectName1, null, apiKey2, workspaceName2, valueTraces2.getT2(),
-                    valueTraces2.getT3(), valueTraces2.getT1(), List.of(), Map.of());
+            testAssertion.assertTest(projectName1, null, apiKey1, workspaceName1, valueTraces1.expected(),
+                    valueTraces1.unexpected(), valueTraces1.all(), List.of(), Map.of());
+            testAssertion.assertTest(projectName1, null, apiKey2, workspaceName2, valueTraces2.expected(),
+                    valueTraces2.unexpected(), valueTraces2.all(), List.of(), Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         @DisplayName("when traces have cost estimation, then return total cost estimation")
-        void whenTracesHaveCostEstimation__thenReturnTotalCostEstimation(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenTracesHaveCostEstimation__thenReturnTotalCostEstimation(String endpoint,
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectName = UUID.randomUUID().toString();
@@ -1469,10 +1394,10 @@ class TracesResourceTest {
 
             UUID projectId = getProjectId(projectName, workspaceName, apiKey);
 
-            var values = testAssertionArgs.get(traces, traces.reversed(), List.of());
+            var values = testAssertion.transformTestParams(traces, traces.reversed(), List.of());
 
-            testAssertion.assertTest(null, projectId, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), List.of(), Map.of());
+            testAssertion.assertTest(null, projectId, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), List.of(), Map.of());
         }
 
         @ParameterizedTest
@@ -1481,8 +1406,7 @@ class TracesResourceTest {
                 Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1520,10 +1444,10 @@ class TracesResourceTest {
                             .value(traces.getFirst().name())
                             .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
@@ -1533,8 +1457,7 @@ class TracesResourceTest {
                 Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1571,17 +1494,16 @@ class TracesResourceTest {
                             .value(traces.getFirst().threadId())
                             .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameEqual__thenReturnTracesFiltered(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterNameEqual__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1615,17 +1537,16 @@ class TracesResourceTest {
                     .value(traces.getFirst().name().toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameStartsWith__thenReturnTracesFiltered(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterNameStartsWith__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1657,18 +1578,16 @@ class TracesResourceTest {
                     .value(traces.getFirst().name().substring(0, traces.getFirst().name().length() - 4).toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameEndsWith__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterNameEndsWith__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1701,18 +1620,16 @@ class TracesResourceTest {
                     .value(traces.getFirst().name().substring(3).toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameContains__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterNameContains__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1746,18 +1663,17 @@ class TracesResourceTest {
                     .value(traces.getFirst().name().substring(2, traces.getFirst().name().length() - 3).toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterNameNotContains__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1798,10 +1714,10 @@ class TracesResourceTest {
                     .value(traceName.toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
@@ -1811,8 +1727,7 @@ class TracesResourceTest {
                 Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1841,18 +1756,17 @@ class TracesResourceTest {
                     .value(traces.getFirst().startTime().toString())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeGreaterThan__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1888,18 +1802,17 @@ class TracesResourceTest {
                     .value(Instant.now().toString())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeGreaterThanEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1936,18 +1849,17 @@ class TracesResourceTest {
                     .value(traces.getFirst().startTime().toString())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeLessThan__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1983,18 +1895,17 @@ class TracesResourceTest {
                     .value(Instant.now().toString())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeLessThanEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2030,18 +1941,16 @@ class TracesResourceTest {
                     .value(traces.getFirst().startTime().toString())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterEndTimeEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterEndTimeEqual__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2074,18 +1983,16 @@ class TracesResourceTest {
                     .value(traces.getFirst().endTime().toString())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterInputEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterInputEqual__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2118,18 +2025,16 @@ class TracesResourceTest {
                     .value(traces.getFirst().input().toString())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterOutputEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterOutputEqual__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2163,18 +2068,17 @@ class TracesResourceTest {
                     .value(traces.getFirst().output().toString())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(),
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
                     filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterTotalEstimatedCostGreaterThen__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2222,10 +2126,10 @@ class TracesResourceTest {
                     .value("0")
                     .build());
 
-            var values = testAssertionArgs.get(traces, List.of(expectedTrace), unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, List.of(expectedTrace), unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -2234,8 +2138,7 @@ class TracesResourceTest {
                 Operator operator,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces, // Here we swap the expected and unexpected traces
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2297,10 +2200,10 @@ class TracesResourceTest {
                     .value("0.00")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -2309,8 +2212,7 @@ class TracesResourceTest {
                 Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2346,18 +2248,17 @@ class TracesResourceTest {
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
 
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualNumber__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2396,17 +2297,16 @@ class TracesResourceTest {
                     .value("2023")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualBoolean__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2448,17 +2348,16 @@ class TracesResourceTest {
                     .value("TRUE")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualNull__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2498,17 +2397,16 @@ class TracesResourceTest {
                     .value("NULL")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsString__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2547,17 +2445,16 @@ class TracesResourceTest {
                     .value("CHAT-GPT")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsNumber__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2597,17 +2494,16 @@ class TracesResourceTest {
                     .value("02")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsBoolean__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2648,17 +2544,16 @@ class TracesResourceTest {
                     .value("TRU")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsNull__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2699,17 +2594,16 @@ class TracesResourceTest {
                     .value("NUL")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanNumber__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2749,17 +2643,16 @@ class TracesResourceTest {
                     .value("2023")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanString__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -2796,17 +2689,16 @@ class TracesResourceTest {
                     .value("a")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanBoolean__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2841,17 +2733,16 @@ class TracesResourceTest {
                     .value("a")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanNull__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2885,17 +2776,16 @@ class TracesResourceTest {
                     .value("a")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanNumber__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2935,17 +2825,16 @@ class TracesResourceTest {
                     .value("2025")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanString__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2980,17 +2869,16 @@ class TracesResourceTest {
                     .value("z")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanBoolean__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3025,17 +2913,16 @@ class TracesResourceTest {
                     .value("z")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanNull__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3069,17 +2956,15 @@ class TracesResourceTest {
                     .value("z")
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterTagsContains__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+        void whenFilterTagsContains__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3116,17 +3001,16 @@ class TracesResourceTest {
                             .toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs,
+                TracePageTestAssertion testAssertion,
                 String usageKey,
                 Field field) {
 
@@ -3181,17 +3065,16 @@ class TracesResourceTest {
             var unexpectedTraces = Stream.of(traces.subList(1, traces.size()), unrelatedTraces).flatMap(List::stream)
                     .toList();
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageGreaterThan__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs,
+                TracePageTestAssertion testAssertion,
                 String usageKey,
                 Field field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -3241,17 +3124,16 @@ class TracesResourceTest {
             var unexpectedTraces = Stream.of(traces.subList(1, traces.size()), unrelatedTraces).flatMap(List::stream)
                     .toList();
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageGreaterThanEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs,
+                TracePageTestAssertion testAssertion,
                 String usageKey,
                 Field field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -3302,17 +3184,16 @@ class TracesResourceTest {
             var unexpectedTraces = Stream.of(traces.subList(1, traces.size()), unrelatedTraces).flatMap(List::stream)
                     .toList();
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageLessThan__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs,
+                TracePageTestAssertion testAssertion,
                 String usageKey,
                 Field field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -3363,17 +3244,16 @@ class TracesResourceTest {
             var unexpectedTraces = Stream.of(traces.subList(1, traces.size()), unrelatedTraces).flatMap(List::stream)
                     .toList();
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageLessThanEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs,
+                TracePageTestAssertion testAssertion,
                 String usageKey,
                 Field field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -3424,10 +3304,10 @@ class TracesResourceTest {
             var unexpectedTraces = Stream.of(traces.subList(1, traces.size()), unrelatedTraces).flatMap(List::stream)
                     .toList();
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -3436,8 +3316,7 @@ class TracesResourceTest {
                 Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3487,10 +3366,10 @@ class TracesResourceTest {
                             .value(traces.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -3499,8 +3378,7 @@ class TracesResourceTest {
                 Operator operator,
                 Function<List<Trace>, List<Trace>> getExpectedTraces,
                 Function<List<Trace>, List<Trace>> getUnexpectedTraces,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3536,10 +3414,10 @@ class TracesResourceTest {
                     .key(traces.getFirst().feedbackScores().getFirst().name())
                     .value("")
                     .build());
-            var values = testAssertionArgs.get(traces, expectedTraces.reversed(), unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         private Stream<Arguments> getTracesByProject__whenFilterFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
@@ -3547,40 +3425,33 @@ class TracesResourceTest {
                     Arguments.of(Operator.IS_NOT_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceTestAssertion),
                     Arguments.of(Operator.IS_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
-                            getTracesAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceTestAssertion),
                     Arguments.of(Operator.IS_NOT_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            traceStatsAssertion),
                     Arguments.of(Operator.IS_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            traceStatsAssertion),
                     Arguments.of(Operator.IS_NOT_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs()),
+                            traceStreamTestAssertion),
                     Arguments.of(Operator.IS_EMPTY,
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
-                            streamTraceAssertionMethod(),
-                            getTracesAssertionMethodArgs()));
+                            traceStreamTestAssertion));
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresGreaterThan__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3637,17 +3508,16 @@ class TracesResourceTest {
                             .value("2345.6788")
                             .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresGreaterThanEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3700,17 +3570,16 @@ class TracesResourceTest {
                             .value(traces.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresLessThan__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3764,17 +3633,16 @@ class TracesResourceTest {
                             .value("2345.6788")
                             .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresLessThanEqual__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs) {
+                TracePageTestAssertion testAssertion) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -3827,17 +3695,16 @@ class TracesResourceTest {
                             .value(traces.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getDurationArgs")
         void whenFilterByDuration__thenReturnTracesFiltered(String endpoint,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Trace> testAssertionArgs,
+                TracePageTestAssertion testAssertion,
                 Operator operator,
                 long end,
                 double duration) {
@@ -3892,10 +3759,10 @@ class TracesResourceTest {
                             .value(String.valueOf(duration))
                             .build());
 
-            var values = testAssertionArgs.get(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -4051,44 +3918,6 @@ class TracesResourceTest {
             assertThat(actualThread.createdAt()).isBetween(expectedThread.createdAt(), Instant.now());
             assertThat(actualThread.lastUpdatedAt()).isBetween(expectedThread.lastUpdatedAt(), Instant.now());
         }
-    }
-
-    private void getStatsAndAssert(String projectName, UUID projectId, List<? extends TraceFilter> filters,
-            String apiKey, String workspaceName, List<ProjectStatItem<?>> expectedStats,
-            Map<String, String> queryParams) {
-        WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("stats");
-
-        if (projectName != null) {
-            webTarget = webTarget.queryParam("project_name", projectName);
-        }
-
-        if (filters != null) {
-            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
-        }
-
-        if (projectId != null) {
-            webTarget = webTarget.queryParam("project_id", projectId);
-        }
-
-        webTarget = queryParams.entrySet()
-                .stream()
-                .reduce(webTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
-
-        var actualResponse = webTarget
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
-
-        assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
-        ProjectStats actualStats = actualResponse.readEntity(ProjectStats.class);
-
-        assertThat(actualStats.stats()).hasSize(expectedStats.size());
-
-        assertThat(actualStats.stats())
-                .usingRecursiveComparison(StatsUtils.getRecursiveComparisonConfiguration())
-                .isEqualTo(expectedStats);
     }
 
     private String getValidValue(Field field) {
@@ -7283,4 +7112,5 @@ class TracesResourceTest {
                 .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
+
 }
