@@ -170,7 +170,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     };
   }, []);
 
-  const { data, isPending, refetch } = useGroupedExperimentsList({
+  const { data, isPending, refetch, datasetsIds } = useGroupedExperimentsList({
     workspaceName,
     groupLimit,
     datasetId: datasetId!,
@@ -322,7 +322,10 @@ const ExperimentsPage: React.FunctionComponent = () => {
           </Button>
         </div>
       </div>
-      <ExperimentsChartsWrapper experiments={experiments} />
+      <ExperimentsChartsWrapper
+        experiments={experiments}
+        datasetsIds={datasetsIds}
+      />
       <DataTable
         columns={columns}
         data={experiments}

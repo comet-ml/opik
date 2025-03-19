@@ -10,13 +10,16 @@ import { formatDate } from "@/lib/date";
 import ExperimentChartContainer, {
   ChartData,
 } from "@/components/pages/ExperimentsPage/charts/ExperimentChartContainer";
+import { Spinner } from "@/components/ui/spinner";
 
 export type ExperimentsChartsWrapperProps = {
   experiments: GroupedExperiment[];
+  datasetsIds: string[];
 };
 
 const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
   experiments,
+  datasetsIds,
 }) => {
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
@@ -53,13 +56,13 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
       }
     });
 
-    return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
+    return groupsMap;
   }, [experiments]);
 
   const chartClassName =
-    chartsData.length === 1
+    datasetsIds.length === 1
       ? "w-full"
-      : chartsData.length === 2
+      : datasetsIds.length === 2
         ? "basis-1/2"
         : "basis-[520px]";
 
@@ -67,16 +70,33 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
     <div
       className={cn(
         "flex items-center gap-4 overflow-y-auto",
-        chartsData.length > 0 && "mb-4",
+        datasetsIds.length > 0 && "mb-4",
       )}
     >
-      {chartsData.map((data) => (
-        <ExperimentChartContainer
-          key={data.dataset.id}
-          chartData={data}
-          className={chartClassName}
-        />
-      ))}
+      {datasetsIds.map((datasetId) => {
+        const chartData = chartsData[datasetId];
+
+        if (!chartData) {
+          return (
+            <div
+              key={datasetId}
+              className={cn(
+                "flex h-52 w-full items-center justify-center rounded-lg border bg-card shadow-sm",
+                chartClassName,
+              )}
+            >
+              <Spinner />
+            </div>
+          );
+        }
+        return (
+          <ExperimentChartContainer
+            key={datasetId}
+            chartData={chartData}
+            className={chartClassName}
+          />
+        );
+      })}
     </div>
   );
 };
