@@ -14,9 +14,9 @@ import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import useAppStore from "@/store/AppStore";
 import useSegment from "./analytics/useSegment";
 import Logo from "./Logo";
-import useAllUserWorkspaces from "./useAllUserWorkspaces";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -26,9 +26,11 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   children,
 }) => {
   const { data: user, isLoading } = useUser();
-  const { data: allWorkspaces } = useAllUserWorkspaces({
+
+  const { data: allWorkspaces } = useAllWorkspaces({
     enabled: !!user?.loggedIn,
   });
+
   const matchRoute = useMatchRoute();
   const workspaceNameFromURL = useParams({
     strict: false,
