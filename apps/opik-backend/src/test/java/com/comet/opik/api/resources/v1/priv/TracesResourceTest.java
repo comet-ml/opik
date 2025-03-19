@@ -54,6 +54,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.freetierlimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -131,6 +132,7 @@ import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.freetierlimit.FreeTierLimitService.ERR_LIMIT_EXCEEDED;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -536,6 +538,48 @@ class TracesResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), okApikey, workspaceName, workspaceId, USER, quotas);
+
+            var trace = createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callCreateTrace(trace, okApikey, workspaceName)) {
+                if (isLimitReached) {
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+                }
+            }
+        }
+
+        Stream<Arguments> testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation() {
+            return Stream.of(
+                    arguments(null, false),
+                    arguments(List.of(), false),
+                    arguments(List.of(Quota.builder()
+                            .type(Quota.QuotaType.SPAN_COUNT)
+                            .limit(25_000)
+                            .used(24_999)
+                            .build()), false),
+                    arguments(List.of(Quota.builder()
+                            .type(Quota.QuotaType.SPAN_COUNT)
+                            .limit(25_000)
+                            .used(25_000)
+                            .build()), true));
+        }
     }
 
     @Nested
