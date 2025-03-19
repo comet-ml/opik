@@ -156,8 +156,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class SpansResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
-    public static final String[] IGNORED_FIELDS = SpanAssertions.IGNORED_FIELDS;
-    public static final String[] IGNORED_FIELDS_SCORES = SpanAssertions.IGNORED_FIELDS_SCORES;
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -1562,7 +1560,7 @@ class SpansResourceTest {
                         .toList();
 
                 assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                         .containsExactlyElementsOf(expectedSpans);
             }
         }
@@ -4227,14 +4225,14 @@ class SpansResourceTest {
 
             assertThat(actualSpans).hasSize(expectedSpans.size());
             assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedSpans);
 
             SpanAssertions.assertIgnoredFields(actualSpans, expectedSpans, USER);
 
             if (!unexpectedSpans.isEmpty()) {
                 assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                         .doesNotContainAnyElementsOf(unexpectedSpans);
             }
         }
@@ -4724,7 +4722,7 @@ class SpansResourceTest {
         var actualSpan = spanResourceClient.getById(expectedSpan.id(), workspaceName, apiKey);
         assertThat(actualSpan)
                 .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS)
+                .ignoringFields(SpanAssertions.IGNORED_FIELDS)
                 .ignoringCollectionOrderInFields("tags")
                 .isEqualTo(expectedSpan);
         assertThat(actualSpan.projectId()).isNotNull();
@@ -5494,7 +5492,7 @@ class SpansResourceTest {
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                    .withIgnoredFields(IGNORED_FIELDS_SCORES)
+                                    .withIgnoredFields(SpanAssertions.IGNORED_FIELDS_SCORES)
                                     .build())
                     .isEqualTo(score);
 
@@ -5526,7 +5524,7 @@ class SpansResourceTest {
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                    .withIgnoredFields(IGNORED_FIELDS_SCORES)
+                                    .withIgnoredFields(SpanAssertions.IGNORED_FIELDS_SCORES)
                                     .build())
                     .isEqualTo(score);
 
@@ -5558,7 +5556,7 @@ class SpansResourceTest {
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                    .withIgnoredFields(IGNORED_FIELDS_SCORES)
+                                    .withIgnoredFields(SpanAssertions.IGNORED_FIELDS_SCORES)
                                     .build())
                     .isEqualTo(newScore);
 
@@ -6376,7 +6374,7 @@ class SpansResourceTest {
                 .usingRecursiveComparison(
                         RecursiveComparisonConfiguration.builder()
                                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                .withIgnoredFields(IGNORED_FIELDS_SCORES)
+                                .withIgnoredFields(SpanAssertions.IGNORED_FIELDS_SCORES)
                                 .build())
                 .isEqualTo(score);
 
@@ -6391,7 +6389,7 @@ class SpansResourceTest {
                 .usingRecursiveComparison(
                         RecursiveComparisonConfiguration.builder()
                                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                .withIgnoredFields(IGNORED_FIELDS_SCORES)
+                                .withIgnoredFields(SpanAssertions.IGNORED_FIELDS_SCORES)
                                 .build())
                 .ignoringCollectionOrder()
                 .isEqualTo(score);
