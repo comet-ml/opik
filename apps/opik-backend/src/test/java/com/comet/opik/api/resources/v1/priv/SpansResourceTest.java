@@ -19,7 +19,6 @@ import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
-import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
@@ -30,14 +29,17 @@ import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.SpanAssertions;
-import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
+import com.comet.opik.api.resources.utils.spans.SpanPageTestAssertion;
+import com.comet.opik.api.resources.utils.spans.SpanStreamTestAssertion;
+import com.comet.opik.api.resources.utils.spans.SpansTestAssertion;
+import com.comet.opik.api.resources.utils.spans.StatsTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -91,8 +93,6 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple3;
-import reactor.util.function.Tuples;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -129,10 +129,12 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTra
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS;
+import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS_SCORES;
+import static com.comet.opik.api.resources.utils.spans.SpanAssertions.assertSpan;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PARENT_SPAN_IS_MISMATCH;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
@@ -159,8 +161,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class SpansResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/spans";
-    public static final String[] IGNORED_FIELDS = SpanAssertions.IGNORED_FIELDS;
-    public static final String[] IGNORED_FIELDS_SCORES = SpanAssertions.IGNORED_FIELDS_SCORES;
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -539,6 +539,18 @@ class SpansResourceTest {
 
     }
 
+    private void assertExpectedResponseWithoutBody(boolean expected, Response actualResponse, int expectedStatus,
+            io.dropwizard.jersey.errors.ErrorMessage expectedErrorMessage) {
+        if (expected) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        } else {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
+            assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                    .isEqualTo(expectedErrorMessage);
+        }
+    }
+
     @Nested
     @DisplayName("Session Token Cookie Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -831,18 +843,6 @@ class SpansResourceTest {
         }
     }
 
-    private void assertExpectedResponseWithoutBody(boolean expected, Response actualResponse, int expectedStatus,
-            io.dropwizard.jersey.errors.ErrorMessage expectedErrorMessage) {
-        if (expected) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        } else {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
-            assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                    .isEqualTo(expectedErrorMessage);
-        }
-    }
-
     private void mockSessionCookieTargetWorkspace(String sessionToken, String workspaceName,
             String workspaceId) {
         AuthTestUtils.mockSessionCookieTargetWorkspace(wireMock.server(), sessionToken, workspaceName, workspaceId,
@@ -853,82 +853,22 @@ class SpansResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindSpans {
 
-        interface TestAssertion {
-            void assertTest(String projectName,
-                    UUID projectId,
-                    String apiKey,
-                    String workspaceName,
-                    List<?> expected,
-                    List<?> unexpected,
-                    List<?> spans,
-                    List<? extends SpanFilter> filters,
-                    Map<String, String> queryParams);
-        }
-
-        interface TestAssertionArgs<T> {
-            Tuple3<List<?>, List<?>, List<?>> get(List<T> spans, List<T> expected, List<T> unexpected);
-        }
-
-        private TestAssertion getStatsAssertionMethod() {
-            return (projectName, projectId, apiKey, workspaceName, expected, unexpected, spans, filters,
-                    queryParams) -> getStatsAndAssert(projectName, projectId, filters, apiKey, workspaceName,
-                            (List<ProjectStatItem<?>>) expected, queryParams);
-        }
-
-        private TestAssertionArgs<Span> getStatsAssertionMethodArgs() {
-            return (traces, expected, unexpected) -> Tuples.of(List.of(), getProjectSpanStatItems(expected),
-                    List.of());
-        }
-
-        private TestAssertion getSpansAssertionMethod() {
-            return (projectName, projectId, apiKey, workspaceName, expected, unexpected, spans, filters,
-                    queryParams) -> getAndAssertPage(
-                            workspaceName,
-                            projectName,
-                            projectId,
-                            Optional.ofNullable(queryParams.get("trace_id")).map(UUID::fromString).orElse(null),
-                            Optional.ofNullable(queryParams.get("type")).map(SpanType::valueOf).orElse(null),
-                            filters,
-                            Integer.parseInt(queryParams.getOrDefault("page", "1")),
-                            Integer.parseInt(queryParams.getOrDefault("size",
-                                    spans.size() + expected.size() + unexpected.size() + "")),
-                            (List<Span>) expected,
-                            expected.size(),
-                            (List<Span>) unexpected,
-                            apiKey,
-                            List.of());
-        }
-
-        private TestAssertion streamSpansAssertionMethod() {
-            return (projectName, projectId, apiKey, workspaceName, expected, unexpected, spans, filters,
-                    queryParams) -> {
-
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-                var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
-
-                SpanAssertions.assertSpan(actualSpans, (List<Span>) expected, USER);
-            };
-        }
-
-        private TestAssertionArgs<Span> getSpansAssertionMethodArgs() {
-            return (traces, expected, unexpected) -> Tuples.of(traces, expected, unexpected);
-        }
+        private final StatsTestAssertion statsTestAssertion = new StatsTestAssertion(spanResourceClient);
+        private final SpansTestAssertion spansTestAssertion = new SpansTestAssertion(spanResourceClient, USER);
+        private final SpanStreamTestAssertion spanStreamTestAssertion = new SpanStreamTestAssertion(spanResourceClient,
+                USER);
 
         private Stream<Arguments> getFilterTestArguments() {
             return Stream.of(
                     Arguments.of(
                             "/spans/stats",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     Arguments.of(
                             "/spans",
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spansTestAssertion),
                     Arguments.of(
                             "/spans/search",
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()));
+                            spanStreamTestAssertion));
         }
 
         private Stream<Arguments> equalAndNotEqualFilters() {
@@ -938,99 +878,84 @@ class SpansResourceTest {
                             Operator.EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     Arguments.of(
                             "/spans",
                             Operator.EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spansTestAssertion),
                     Arguments.of(
                             "/spans/search",
                             Operator.EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spanStreamTestAssertion),
                     Arguments.of(
                             "/spans/stats",
                             Operator.NOT_EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     Arguments.of(
                             "/spans",
                             Operator.NOT_EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spansTestAssertion),
                     Arguments.of(
                             "/spans/search",
                             Operator.NOT_EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()));
+                            spanStreamTestAssertion));
         }
 
         private Stream<Arguments> getUsageKeyArgs() {
             return Stream.of(
                     Arguments.of(
                             "/spans/stats",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs(),
+                            statsTestAssertion,
                             "completion_tokens",
                             SpanField.USAGE_COMPLETION_TOKENS),
                     Arguments.of(
                             "/spans/stats",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs(),
+                            statsTestAssertion,
                             "prompt_tokens",
                             SpanField.USAGE_PROMPT_TOKENS),
                     Arguments.of(
                             "/spans/stats",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs(),
+                            statsTestAssertion,
                             "total_tokens",
                             SpanField.USAGE_TOTAL_TOKENS),
                     Arguments.of(
                             "/spans",
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs(),
+                            spansTestAssertion,
                             "completion_tokens",
                             SpanField.USAGE_COMPLETION_TOKENS),
                     Arguments.of(
                             "/spans",
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs(),
+                            spansTestAssertion,
                             "prompt_tokens",
                             SpanField.USAGE_PROMPT_TOKENS),
                     Arguments.of(
                             "/spans",
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs(),
+                            spansTestAssertion,
                             "total_tokens",
                             SpanField.USAGE_TOTAL_TOKENS),
                     Arguments.of(
                             "/spans/search",
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs(),
+                            spanStreamTestAssertion,
                             "completion_tokens",
                             SpanField.USAGE_COMPLETION_TOKENS),
                     Arguments.of(
                             "/spans/search",
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs(),
+                            spanStreamTestAssertion,
                             "prompt_tokens",
                             SpanField.USAGE_PROMPT_TOKENS),
                     Arguments.of(
                             "/spans/search",
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs(),
+                            spanStreamTestAssertion,
                             "total_tokens",
                             SpanField.USAGE_TOTAL_TOKENS));
         }
@@ -1042,43 +967,37 @@ class SpansResourceTest {
                             Operator.EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     Arguments.of(
                             "/spans",
                             Operator.EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spansTestAssertion),
                     Arguments.of(
                             "/spans/search",
                             Operator.EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spanStreamTestAssertion),
                     Arguments.of(
                             "/spans/stats",
                             Operator.NOT_EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(2, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(0, 2),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     Arguments.of(
                             "/spans",
                             Operator.NOT_EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(2, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(0, 2),
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spansTestAssertion),
                     Arguments.of(
                             "/spans/search",
                             Operator.NOT_EQUAL,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(2, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(0, 2),
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()));
+                            spanStreamTestAssertion));
         }
 
         private Stream<Arguments> getDurationArgs() {
@@ -1092,11 +1011,11 @@ class SpansResourceTest {
                     arguments(Operator.LESS_THAN_EQUAL, Duration.ofMillis(1L).toNanos() / 1000, 2.0));
 
             return arguments.flatMap(arg -> Stream.of(
-                    arguments("/spans/stats", getStatsAssertionMethod(), getStatsAssertionMethodArgs(), arg.get()[0],
+                    arguments("/spans/stats", statsTestAssertion, arg.get()[0],
                             arg.get()[1], arg.get()[2]),
-                    arguments("/spans", getSpansAssertionMethod(), getSpansAssertionMethodArgs(), arg.get()[0],
+                    arguments("/spans", spansTestAssertion, arg.get()[0],
                             arg.get()[1], arg.get()[2]),
-                    arguments("/spans/search", streamSpansAssertionMethod(), getSpansAssertionMethodArgs(),
+                    arguments("/spans/search", spanStreamTestAssertion,
                             arg.get()[0],
                             arg.get()[1], arg.get()[2])));
         }
@@ -1195,64 +1114,55 @@ class SpansResourceTest {
                             SpanField.TOTAL_ESTIMATED_COST,
                             Operator.GREATER_THAN,
                             "0",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     Arguments.of(
                             "/spans/search",
                             SpanField.TOTAL_ESTIMATED_COST,
                             Operator.GREATER_THAN,
                             "0",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            spanStreamTestAssertion),
                     Arguments.of(
                             "/spans",
                             SpanField.TOTAL_ESTIMATED_COST,
                             Operator.GREATER_THAN,
                             "0",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            spansTestAssertion),
                     Arguments.of(
                             "/spans/stats",
                             SpanField.MODEL,
                             Operator.EQUAL,
                             "gpt-3.5-turbo-1106",
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     Arguments.of(
                             "/spans/search",
                             SpanField.MODEL,
                             Operator.EQUAL,
                             "gpt-3.5-turbo-1106",
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spanStreamTestAssertion),
                     Arguments.of(
                             "/spans",
                             SpanField.MODEL,
                             Operator.EQUAL,
                             "gpt-3.5-turbo-1106",
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spansTestAssertion),
                     Arguments.of(
                             "/spans/stats",
                             SpanField.PROVIDER,
                             Operator.EQUAL,
                             null,
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     Arguments.of(
                             "/spans/search",
                             SpanField.PROVIDER,
                             Operator.EQUAL,
                             null,
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spanStreamTestAssertion),
                     Arguments.of(
                             "/spans",
                             SpanField.PROVIDER,
                             Operator.EQUAL,
                             null,
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()));
+                            spansTestAssertion));
         }
 
         @Test
@@ -1683,13 +1593,12 @@ class SpansResourceTest {
 
             List<Span> actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
-            SpanAssertions.assertSpan(actualSpans, expectedSpans, USER);
+            assertSpan(actualSpans, expectedSpans, USER);
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterIdAndNameEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion,
-                TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterIdAndNameEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1728,17 +1637,18 @@ class SpansResourceTest {
                             .value(spans.getFirst().name())
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource
         void whenFilterByCorrespondingField__thenReturnSpansFiltered(
                 String endpoint, SpanField filterField, Operator filterOperator, String filterValue,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1784,18 +1694,18 @@ class SpansResourceTest {
                                     : filterValue)
                             .build());
 
-            var values = testAssertionArgs.get(expectedSpans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(expectedSpans, expectedSpans.reversed(), unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnSpansFiltered(
                 String endpoint, Operator operator, Function<List<Span>, List<Span>> getUnexpectedSpans,
-                Function<List<Span>, List<Span>> getExpectedSpans, TestAssertion testAssertion,
-                TestAssertionArgs<Span> testAssertionArgs) {
+                Function<List<Span>, List<Span>> getExpectedSpans, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1830,10 +1740,11 @@ class SpansResourceTest {
                     .value("0")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -1842,8 +1753,7 @@ class SpansResourceTest {
                 String endpoint, Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
-                TestAssertion testAssertion,
-                TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -1875,16 +1785,16 @@ class SpansResourceTest {
                     .value(spans.getFirst().name().toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameStartsWith__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterNameStartsWith__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1917,16 +1827,16 @@ class SpansResourceTest {
                     .value(spans.getFirst().name().substring(0, spans.getFirst().name().length() - 4).toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameEndsWith__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterNameEndsWith__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1959,16 +1869,16 @@ class SpansResourceTest {
                     .value(spans.getFirst().name().substring(3).toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameContains__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterNameContains__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2001,16 +1911,16 @@ class SpansResourceTest {
                     .value(spans.getFirst().name().substring(2, spans.getFirst().name().length() - 3).toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameNotContains__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterNameNotContains__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2048,18 +1958,18 @@ class SpansResourceTest {
                     .value(spanName.toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterStartTimeEqual_NotEqual__thenReturnSpansFiltered(String endpoint,
                 Operator operator, Function<List<Span>, List<Span>> getExpectedSpans,
-                Function<List<Span>, List<Span>> getUnexpectedSpans, TestAssertion testAssertion,
-                TestAssertionArgs<Span> testAssertionArgs) {
+                Function<List<Span>, List<Span>> getUnexpectedSpans, SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2083,7 +1993,7 @@ class SpansResourceTest {
             var expectedSpans = getExpectedSpans.apply(spans);
             var unexpectedSpans = getUnexpectedSpans.apply(spans);
 
-            var values = testAssertionArgs.get(spans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
 
             var filters = List.of(SpanFilter.builder()
                     .field(SpanField.START_TIME)
@@ -2091,14 +2001,15 @@ class SpansResourceTest {
                     .value(spans.getFirst().startTime().toString())
                     .build());
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeGreaterThan__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2136,16 +2047,17 @@ class SpansResourceTest {
                     .value(Instant.now().toString())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeGreaterThanEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2183,16 +2095,17 @@ class SpansResourceTest {
                     .value(spans.getFirst().startTime().toString())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeLessThan__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2230,16 +2143,17 @@ class SpansResourceTest {
                     .value(Instant.now().toString())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeLessThanEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2277,16 +2191,16 @@ class SpansResourceTest {
                     .value(spans.getFirst().startTime().toString())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterEndTimeEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterEndTimeEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2320,16 +2234,16 @@ class SpansResourceTest {
                     .value(spans.getFirst().endTime().toString())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterInputEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterInputEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2363,16 +2277,16 @@ class SpansResourceTest {
                     .value(spans.getFirst().input().toString())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterOutputEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterOutputEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2406,10 +2320,11 @@ class SpansResourceTest {
                     .value(spans.getFirst().output().toString())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -2418,7 +2333,7 @@ class SpansResourceTest {
                 Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2455,16 +2370,17 @@ class SpansResourceTest {
                     .value("OPENAI, CHAT-GPT 4.0")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualNumber__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2505,16 +2421,17 @@ class SpansResourceTest {
                     .value("2023")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualBoolean__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2556,16 +2473,17 @@ class SpansResourceTest {
                     .value("TRUE")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataEqualNull__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2606,16 +2524,17 @@ class SpansResourceTest {
                     .value("NULL")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsString__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2656,16 +2575,17 @@ class SpansResourceTest {
                     .value("CHAT-GPT")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsNumber__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2705,16 +2625,17 @@ class SpansResourceTest {
                     .value("02")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsBoolean__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2756,16 +2677,17 @@ class SpansResourceTest {
                     .value("TRU")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataContainsNull__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2806,16 +2728,17 @@ class SpansResourceTest {
                     .value("NUL")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanNumber__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2856,16 +2779,17 @@ class SpansResourceTest {
                     .value("2023")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanString__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2902,16 +2826,17 @@ class SpansResourceTest {
                     .value("a")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanBoolean__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2948,16 +2873,17 @@ class SpansResourceTest {
                     .value("a")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanNull__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2994,16 +2920,17 @@ class SpansResourceTest {
                     .value("a")
                     .build());
 
-            var values = testAssertionArgs.get(expectedSpans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(expectedSpans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanNumber__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3044,16 +2971,17 @@ class SpansResourceTest {
                     .value("2025")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanString__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3090,16 +3018,17 @@ class SpansResourceTest {
                     .value("z")
                     .build());
 
-            var values = testAssertionArgs.get(expectedSpans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(expectedSpans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanBoolean__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3135,16 +3064,17 @@ class SpansResourceTest {
                     .value("z")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataLessThanNull__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3180,16 +3110,16 @@ class SpansResourceTest {
                     .value("z")
                     .build());
 
-            var values = testAssertionArgs.get(expectedSpans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(expectedSpans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterTagsContains__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterTagsContains__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3226,16 +3156,17 @@ class SpansResourceTest {
                             .toUpperCase())
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs, String usageKey, Field field) {
+        void whenFilterUsageEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
+                String usageKey, Field field) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3283,16 +3214,17 @@ class SpansResourceTest {
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageGreaterThan__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs, String usageKey, Field field) {
+        void whenFilterUsageGreaterThan__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
+                String usageKey, Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3330,17 +3262,17 @@ class SpansResourceTest {
                             .value("123")
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageGreaterThanEqual__thenReturnSpansFiltered(
-                String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs,
+        void whenFilterUsageGreaterThanEqual__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion,
                 String usageKey, Field field) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -3380,16 +3312,16 @@ class SpansResourceTest {
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageLessThan__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs,
+        void whenFilterUsageLessThan__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
                 String usageKey, Field field) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -3429,16 +3361,16 @@ class SpansResourceTest {
                             .value("456")
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageLessThanEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs,
+        void whenFilterUsageLessThanEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
                 String usageKey, Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3477,10 +3409,11 @@ class SpansResourceTest {
                             .value(spans.getFirst().usage().get(usageKey).toString())
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -3489,7 +3422,7 @@ class SpansResourceTest {
                 Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3542,16 +3475,17 @@ class SpansResourceTest {
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresGreaterThan__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3610,17 +3544,17 @@ class SpansResourceTest {
                             .value("2345.6788")
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterFeedbackScoresGreaterThanEqual__thenReturnSpansFiltered(
-                String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+        void whenFilterFeedbackScoresGreaterThanEqual__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3670,16 +3604,17 @@ class SpansResourceTest {
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresLessThan__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3731,16 +3666,17 @@ class SpansResourceTest {
                             .value("2345.6788")
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresLessThanEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3791,16 +3727,16 @@ class SpansResourceTest {
                             .value(spans.getFirst().feedbackScores().get(2).value().toString())
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
         @MethodSource("getDurationArgs")
-        void whenFilterByDuration__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs,
+        void whenFilterByDuration__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
                 Operator operator, long end, double duration) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -3852,10 +3788,11 @@ class SpansResourceTest {
                             .value(String.valueOf(duration))
                             .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans, unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         Stream<Arguments> whenFilterByIsEmpty__thenReturnSpansFiltered() {
@@ -3865,43 +3802,37 @@ class SpansResourceTest {
                             Operator.IS_NOT_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spanStreamTestAssertion),
                     arguments(
                             "/spans",
                             Operator.IS_NOT_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spansTestAssertion),
                     arguments(
                             "/spans/stats",
                             Operator.IS_NOT_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()),
+                            statsTestAssertion),
                     arguments(
                             "/spans/search",
                             Operator.IS_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
-                            streamSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spanStreamTestAssertion),
                     arguments(
                             "/spans",
                             Operator.IS_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
-                            getSpansAssertionMethod(),
-                            getSpansAssertionMethodArgs()),
+                            spansTestAssertion),
                     arguments(
                             "/spans/stats",
                             Operator.IS_EMPTY,
                             (Function<List<Span>, List<Span>>) spans -> spans.subList(1, spans.size()),
                             (Function<List<Span>, List<Span>>) spans -> List.of(spans.getFirst()),
-                            getStatsAssertionMethod(),
-                            getStatsAssertionMethodArgs()));
+                            statsTestAssertion));
         }
 
         @ParameterizedTest
@@ -3911,7 +3842,7 @@ class SpansResourceTest {
                 Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
-                TestAssertion testAssertion, TestAssertionArgs<Span> testAssertionArgs) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3953,10 +3884,11 @@ class SpansResourceTest {
                     .value("")
                     .build());
 
-            var values = testAssertionArgs.get(spans, expectedSpans.reversed(), unexpectedSpans);
+            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
 
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.getT2(), values.getT3(),
-                    values.getT1(), filters, Map.of());
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest
@@ -4241,7 +4173,7 @@ class SpansResourceTest {
     private void getAndAssertPage(
             String workspaceName,
             String projectName,
-            List<? extends Filter> filters,
+            List<? extends SpanFilter> filters,
             List<Span> spans,
             List<Span> expectedSpans,
             List<Span> unexpectedSpans,
@@ -4271,7 +4203,7 @@ class SpansResourceTest {
             UUID projectId,
             UUID traceId,
             SpanType type,
-            List<? extends Filter> filters,
+            List<? extends SpanFilter> filters,
             int page,
             int size,
             List<Span> expectedSpans,
@@ -4279,41 +4211,21 @@ class SpansResourceTest {
             List<Span> unexpectedSpans,
             String apiKey,
             List<SortingField> sortingFields) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                .queryParam("page", page)
-                .queryParam("size", size)
-                .queryParam("project_name", projectName)
-                .queryParam("project_id", projectId)
-                .queryParam("trace_id", traceId)
-                .queryParam("type", type)
-                .queryParam("filters", toURLEncodedQueryParam(filters))
-                .queryParam("sorting", toURLEncodedQueryParam(sortingFields))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
-            var actualPage = actualResponse.readEntity(Span.SpanPage.class);
-            var actualSpans = actualPage.content();
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+        Span.SpanPage actualPage = spanResourceClient.findSpans(
+                workspaceName,
+                apiKey,
+                projectName,
+                projectId,
+                page,
+                size,
+                traceId,
+                type,
+                filters,
+                sortingFields);
 
-            assertThat(actualPage.page()).isEqualTo(page);
-            assertThat(actualPage.size()).isEqualTo(expectedSpans.size());
-            assertThat(actualPage.total()).isEqualTo(expectedTotal);
-
-            assertThat(actualSpans).hasSize(expectedSpans.size());
-            assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                    .containsExactlyElementsOf(expectedSpans);
-
-            SpanAssertions.assertIgnoredFields(actualSpans, expectedSpans, USER);
-
-            if (!unexpectedSpans.isEmpty()) {
-                assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                        .doesNotContainAnyElementsOf(unexpectedSpans);
-            }
-        }
+        SpanAssertions.assertPage(actualPage, page, expectedSpans.size(), expectedTotal);
+        SpanAssertions.assertSpan(actualPage.content(), expectedSpans, unexpectedSpans, USER);
     }
 
     private String toURLEncodedQueryParam(List<?> filters) {
@@ -4327,16 +4239,7 @@ class SpansResourceTest {
     }
 
     private void createAndAssert(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).path(entityId.toString())
-                .path("feedback-scores")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(score))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+        spanResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
     }
 
     private void createAndAssertErrorMessage(Span span, String apiKey, String workspaceName, int status,
@@ -6267,40 +6170,11 @@ class SpansResourceTest {
             String workspaceName,
             List<ProjectStatItem<?>> expectedStats,
             Map<String, String> queryParams) {
-        WebTarget webTarget = client.target(URL_TEMPLATE.formatted(baseURI))
-                .path("stats");
 
-        if (projectName != null) {
-            webTarget = webTarget.queryParam("project_name", projectName);
-        }
+        ProjectStats actualStats = spanResourceClient.getSpansStats(projectName, projectId, filters, apiKey,
+                workspaceName, queryParams);
 
-        if (filters != null) {
-            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
-        }
-
-        if (projectId != null) {
-            webTarget = webTarget.queryParam("project_id", projectId);
-        }
-
-        webTarget = queryParams.entrySet()
-                .stream()
-                .reduce(webTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
-
-        var actualResponse = webTarget
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .get();
-
-        assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
-        ProjectStats actualStats = actualResponse.readEntity(ProjectStats.class);
-
-        assertThat(actualStats.stats()).hasSize(expectedStats.size());
-
-        assertThat(actualStats.stats())
-                .usingRecursiveComparison(StatsUtils.getRecursiveComparisonConfiguration())
-                .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                .isEqualTo(expectedStats);
+        SpanAssertions.assertionStatusPage(actualStats.stats(), expectedStats);
     }
 
     private static int randomNumber() {
@@ -6458,4 +6332,5 @@ class SpansResourceTest {
                 .ignoringCollectionOrder()
                 .isEqualTo(score);
     }
+
 }

@@ -1,13 +1,18 @@
-package com.comet.opik.api.resources.utils;
+package com.comet.opik.api.resources.utils.spans;
 
+import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.resources.utils.DurationUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
 import java.math.BigDecimal;
 import java.util.List;
 
+import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 public class SpanAssertions {
 
@@ -17,7 +22,18 @@ public class SpanAssertions {
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
+    public static void assertPage(SpanPage actualPage, int page, int expectedPageSize, int expectedTotal) {
+        assertThat(actualPage.page()).isEqualTo(page);
+        assertThat(actualPage.size()).isEqualTo(expectedPageSize);
+        assertThat(actualPage.total()).isEqualTo(expectedTotal);
+    }
+
     public static void assertSpan(List<Span> actualSpans, List<Span> expectedSpans, String userName) {
+        assertSpan(actualSpans, expectedSpans, List.of(), userName);
+    }
+
+    public static void assertSpan(List<Span> actualSpans, List<Span> expectedSpans, List<Span> unexpectedSpans,
+            String userName) {
 
         assertThat(actualSpans).hasSize(expectedSpans.size());
         assertThat(actualSpans)
@@ -25,6 +41,12 @@ public class SpanAssertions {
                 .containsExactlyElementsOf(expectedSpans);
 
         assertIgnoredFields(actualSpans, expectedSpans, userName);
+
+        if (!unexpectedSpans.isEmpty()) {
+            assertThat(actualSpans)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
+                    .doesNotContainAnyElementsOf(unexpectedSpans);
+        }
     }
 
     public static void assertIgnoredFields(List<Span> actualSpans, List<Span> expectedSpans, String userName) {
@@ -73,6 +95,18 @@ public class SpanAssertions {
                 });
             }
         }
+    }
+
+    public static void assertionStatusPage(List<ProjectStatItem<?>> actualStats,
+            List<ProjectStatItem<?>> expectedStats) {
+
+        assertThat(actualStats).hasSize(expectedStats.size());
+
+        assertThat(actualStats)
+                .usingRecursiveComparison(StatsUtils.getRecursiveComparisonConfiguration())
+                .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                .isEqualTo(expectedStats);
+
     }
 
 }

@@ -38,11 +38,12 @@ import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
-import useAllUserWorkspaces from "./useAllUserWorkspaces";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
 import { buildUrl } from "./utils";
+
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 
 const UserMenu = () => {
@@ -54,14 +55,16 @@ const UserMenu = () => {
   const { data: organizations, isLoading } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
+
   const { data: userInvitedWorkspaces } = useUserInvitedWorkspaces({
     enabled: !!user?.loggedIn,
   });
-  const { data: allUserWorkspaces } = useAllUserWorkspaces({
+
+  const { data: allWorkspaces } = useAllWorkspaces({
     enabled: !!user?.loggedIn,
   });
 
-  const workspace = allUserWorkspaces?.find(
+  const workspace = allWorkspaces?.find(
     (workspace) => workspace.workspaceName === workspaceName,
   );
 
@@ -79,7 +82,7 @@ const UserMenu = () => {
     isLoading ||
     !organizations ||
     !userPermissions ||
-    !allUserWorkspaces ||
+    !allWorkspaces ||
     !userInvitedWorkspaces
   ) {
     return null;
@@ -113,7 +116,7 @@ const UserMenu = () => {
     isOrganizationAdmin || invitePermission?.permissionValue === "true";
 
   const handleChangeOrganization = (newOrganization: Organization) => {
-    const newOrganizationWorkspaces = allUserWorkspaces.filter(
+    const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
       (workspace) => workspace.organizationId === newOrganization.id,
     );
 

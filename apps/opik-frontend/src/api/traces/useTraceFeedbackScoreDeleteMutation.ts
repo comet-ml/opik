@@ -105,6 +105,9 @@ const useTraceFeedbackScoreDeleteMutation = () => {
         queryKey: ["experiments-columns"],
       });
       await queryClient.invalidateQueries({
+        queryKey: ["experiment"],
+      });
+      await queryClient.invalidateQueries({
         queryKey: [COMPARE_EXPERIMENTS_KEY],
       });
     },
