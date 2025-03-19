@@ -100,7 +100,6 @@ class AttachmentResourceMinIOTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
-    private HttpClient httpClient;
     private Client client;
     private String baseURI;
     public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576;//6M
@@ -116,7 +115,6 @@ class AttachmentResourceMinIOTest {
         }
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
-        this.httpClient = HttpClient.newHttpClient();
         this.client = ClientBuilder.newClient();
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
 
@@ -130,13 +128,12 @@ class AttachmentResourceMinIOTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
-        httpClient.close();
         client.close();
     }
 
     @Test
     @DisplayName("Upload attachment with MultiPart Presign URL")
-    void uploadAttachmentWithMultiPartPresignUrl() throws IOException, InterruptedException {
+    void uploadAttachmentWithMultiPartPresignUrl() throws IOException {
 
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
@@ -174,7 +171,7 @@ class AttachmentResourceMinIOTest {
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.entity(data, MediaType.APPLICATION_OCTET_STREAM))) {
+                .put(Entity.entity(data, "*/*"))) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(204);
         }
     }

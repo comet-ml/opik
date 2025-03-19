@@ -21,6 +21,11 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.jdbi.v3.core.Jdbi;
@@ -56,6 +61,8 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Attachment Resource Test")
@@ -128,7 +135,7 @@ class AttachmentResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
-    private HttpClient httpClient;
+    private Client client;
     private String baseURI;
     public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576;//6M
 
@@ -143,8 +150,8 @@ class AttachmentResourceTest {
         }
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
-        this.httpClient = HttpClient.newHttpClient();
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.client = ClientBuilder.newClient();
 
         ClientSupportUtils.config(client);
     }
@@ -156,7 +163,7 @@ class AttachmentResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
-        httpClient.close();
+        client.close();
     }
 
     @Test
@@ -221,19 +228,21 @@ class AttachmentResourceTest {
                     : MULTI_UPLOAD_CHUNK_SIZE;
             byte[] partData = new byte[chunkToUpload];
             System.arraycopy(data, i * MULTI_UPLOAD_CHUNK_SIZE, partData, 0, chunkToUpload);
+            String eTag = uploadFile(startUploadResponse.preSignUrls().get(i), partData);
 
-            var request = HttpRequest.newBuilder()
-                    .uri(URI.create(startUploadResponse.preSignUrls().get(i)))
-                    .PUT(HttpRequest.BodyPublishers.ofByteArray(data))
-                    .build();
-
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-            String eTag = response.headers().firstValue("ETag").orElseThrow();
             eTags.add(eTag);
         }
 
         return eTags;
+    }
+
+    private String uploadFile(String url, byte[] data) {
+        try (var response = client.target(url)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .put(Entity.entity(data, "*/*"))) {
+            return response.getHeaders().get("ETag").getFirst().toString();
+        }
     }
 
     private CompleteMultipartUploadRequest prepareCompleteUploadRequest(StartMultipartUploadRequest startUploadRequest,
