@@ -10,17 +10,19 @@ import { formatDate } from "@/lib/date";
 import ExperimentChartContainer, {
   ChartData,
 } from "@/components/pages/ExperimentsPage/charts/ExperimentChartContainer";
+import { Dataset } from "@/types/datasets";
 
 export type ExperimentsChartsWrapperProps = {
   experiments: GroupedExperiment[];
+  datasetsData: Dataset[];
 };
 
 const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
   experiments,
+  datasetsData,
 }) => {
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
-    let index = 0;
 
     experiments.forEach((experiment) => {
       if (experiment.virtual_dataset_id !== DELETED_DATASET_ID) {
@@ -29,9 +31,7 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
             dataset: experiment.dataset,
             data: [],
             lines: [],
-            index,
           };
-          index += 1;
         }
 
         groupsMap[experiment.virtual_dataset_id].data.unshift({
@@ -53,13 +53,13 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
       }
     });
 
-    return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
+    return groupsMap;
   }, [experiments]);
 
   const chartClassName =
-    chartsData.length === 1
+    datasetsData.length === 1
       ? "w-full"
-      : chartsData.length === 2
+      : datasetsData.length === 2
         ? "basis-1/2"
         : "basis-[520px]";
 
@@ -67,13 +67,15 @@ const ExperimentsChartsWrapper: React.FC<ExperimentsChartsWrapperProps> = ({
     <div
       className={cn(
         "flex items-center gap-4 overflow-y-auto",
-        chartsData.length > 0 && "mb-4",
+        datasetsData.length > 0 && "mb-4",
       )}
     >
-      {chartsData.map((data) => (
+      {datasetsData.map((dataset) => (
         <ExperimentChartContainer
-          key={data.dataset.id}
-          chartData={data}
+          key={dataset.id}
+          chartId={dataset.id}
+          chartData={chartsData[dataset.id]}
+          dataset={dataset}
           className={chartClassName}
         />
       ))}
