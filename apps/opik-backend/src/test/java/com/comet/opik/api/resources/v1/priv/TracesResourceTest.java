@@ -538,48 +538,6 @@ class TracesResourceTest {
             }
         }
 
-        @ParameterizedTest
-        @MethodSource
-        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
-                List<Quota> quotas, boolean isLimitReached) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-
-            AuthTestUtils.mockTargetWorkspace(wireMock.server(), okApikey, workspaceName, workspaceId, USER, quotas);
-
-            var trace = createTrace().toBuilder()
-                    .projectId(null)
-                    .projectName(DEFAULT_PROJECT)
-                    .feedbackScores(null)
-                    .build();
-
-            try (var actualResponse = traceResourceClient.callCreateTrace(trace, okApikey, workspaceName)) {
-                if (isLimitReached) {
-                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
-                            ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
-                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                    assertThat(actualError).isEqualTo(expectedError);
-                } else {
-                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-                }
-            }
-        }
-
-        Stream<Arguments> testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation() {
-            return Stream.of(
-                    arguments(null, false),
-                    arguments(List.of(), false),
-                    arguments(List.of(Quota.builder()
-                            .type(Quota.QuotaType.SPAN_COUNT)
-                            .limit(25_000)
-                            .used(24_999)
-                            .build()), false),
-                    arguments(List.of(Quota.builder()
-                            .type(Quota.QuotaType.SPAN_COUNT)
-                            .limit(25_000)
-                            .used(25_000)
-                            .build()), true));
-        }
     }
 
     @Nested
@@ -5132,6 +5090,48 @@ class TracesResourceTest {
             getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var trace = createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callCreateTrace(trace, API_KEY, workspaceName)) {
+                if (isLimitReached) {
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+                }
+            }
+        }
+
+        Stream<Arguments> testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation() {
+            return Stream.of(
+                    arguments(null, false),
+                    arguments(List.of(), false),
+                    arguments(List.of(Quota.builder()
+                            .type(Quota.QuotaType.SPAN_COUNT)
+                            .limit(25_000)
+                            .used(24_999)
+                            .build()), false),
+                    arguments(List.of(Quota.builder()
+                            .type(Quota.QuotaType.SPAN_COUNT)
+                            .limit(25_000)
+                            .used(25_000)
+                            .build()), true));
+        }
     }
 
     @Nested
@@ -5293,6 +5293,50 @@ class TracesResourceTest {
             getAndAssertPage(TEST_WORKSPACE, projectName, null, List.of(), List.of(), expectedTraces.reversed(),
                     List.of(),
                     API_KEY);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var trace = createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(List.of(trace), API_KEY,
+                    workspaceName)) {
+                if (isLimitReached) {
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                }
+            }
+        }
+
+        Stream<Arguments> testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation() {
+            return Stream.of(
+                    arguments(null, false),
+                    arguments(List.of(), false),
+                    arguments(List.of(Quota.builder()
+                            .type(Quota.QuotaType.SPAN_COUNT)
+                            .limit(25_000)
+                            .used(24_999)
+                            .build()), false),
+                    arguments(List.of(Quota.builder()
+                            .type(Quota.QuotaType.SPAN_COUNT)
+                            .limit(25_000)
+                            .used(25_000)
+                            .build()), true));
         }
     }
 
