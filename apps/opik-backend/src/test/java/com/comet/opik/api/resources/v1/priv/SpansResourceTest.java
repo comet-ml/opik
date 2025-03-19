@@ -29,13 +29,17 @@ import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.SpanAssertions;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
+import com.comet.opik.api.resources.utils.spans.SpanPageTestAssertion;
+import com.comet.opik.api.resources.utils.spans.SpanStreamTestAssertion;
+import com.comet.opik.api.resources.utils.spans.SpansTestAssertion;
+import com.comet.opik.api.resources.utils.spans.StatsTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -122,13 +126,12 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTra
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.api.resources.utils.SpanAssertions.IGNORED_FIELDS;
-import static com.comet.opik.api.resources.utils.SpanAssertions.IGNORED_FIELDS_SCORES;
-import static com.comet.opik.api.resources.utils.SpanAssertions.assertSpan;
-import static com.comet.opik.api.resources.utils.StatsUtils.getProjectSpanStatItems;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS;
+import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS_SCORES;
+import static com.comet.opik.api.resources.utils.spans.SpanAssertions.assertSpan;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PARENT_SPAN_IS_MISMATCH;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
@@ -847,118 +850,10 @@ class SpansResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindSpans {
 
-        private final StatsTestAssertion statsTestAssertion = new StatsTestAssertion();
-        private final SpansTestAssertion spansTestAssertion = new SpansTestAssertion();
-        private final SpanStreamTestAssertion spanStreamTestAssertion = new SpanStreamTestAssertion();
-
-        interface TestAssertion<T, R> {
-
-            record TestArgs<T>(List<T> all, List<T> expected, List<T> unexpected) {
-                static <T> TestArgs<T> of(List<T> all, List<T> expected, List<T> unexpected) {
-                    return new TestArgs<>(all, expected, unexpected);
-                }
-            }
-
-            void runTestAndAssert(String projectName,
-                    UUID projectId,
-                    String apiKey,
-                    String workspaceName,
-                    List<T> expected,
-                    List<T> unexpected,
-                    List<T> spans,
-                    List<? extends SpanFilter> filters,
-                    Map<String, String> queryParams);
-
-            TestArgs<T> transformTestParams(List<R> spans, List<R> expected, List<R> unexpected);
-        }
-
-        class StatsTestAssertion implements TestAssertion<ProjectStatItem<?>, Span> {
-
-            @Override
-            public void runTestAndAssert(String projectName,
-                    UUID projectId,
-                    String apiKey,
-                    String workspaceName,
-                    List<ProjectStatItem<?>> expected,
-                    List<ProjectStatItem<?>> unexpected,
-                    List<ProjectStatItem<?>> spans,
-                    List<? extends SpanFilter> filters,
-                    Map<String, String> queryParams) {
-
-                getStatsAndAssert(projectName, projectId, filters, apiKey, workspaceName, expected, queryParams);
-            }
-
-            @Override
-            public TestArgs<ProjectStatItem<?>> transformTestParams(List<Span> spans, List<Span> expected,
-                    List<Span> unexpected) {
-                return TestArgs.of(List.of(), getProjectSpanStatItems(expected),
-                        List.of());
-            }
-        }
-
-        class SpansTestAssertion implements TestAssertion<Span, Span> {
-
-            @Override
-            public void runTestAndAssert(String projectName,
-                    UUID projectId,
-                    String apiKey,
-                    String workspaceName,
-                    List<Span> expected,
-                    List<Span> unexpected,
-                    List<Span> spans,
-                    List<? extends SpanFilter> filters,
-                    Map<String, String> queryParams) {
-
-                getAndAssertPage(
-                        workspaceName,
-                        projectName,
-                        projectId,
-                        Optional.ofNullable(queryParams.get("trace_id")).map(UUID::fromString).orElse(null),
-                        Optional.ofNullable(queryParams.get("type")).map(SpanType::valueOf).orElse(null),
-                        filters,
-                        Integer.parseInt(queryParams.getOrDefault("page", "1")),
-                        Integer.parseInt(queryParams.getOrDefault("size",
-                                spans.size() + expected.size() + unexpected.size() + "")),
-                        expected,
-                        expected.size(),
-                        unexpected,
-                        apiKey,
-                        List.of());
-
-            }
-
-            @Override
-            public TestArgs<Span> transformTestParams(List<Span> spans, List<Span> expected, List<Span> unexpected) {
-                return TestArgs.of(spans, expected, unexpected);
-            }
-        }
-
-        class SpanStreamTestAssertion implements TestAssertion<Span, Span> {
-
-            @Override
-            public void runTestAndAssert(String projectName,
-                    UUID projectId,
-                    String apiKey,
-                    String workspaceName,
-                    List<Span> expected,
-                    List<Span> unexpected,
-                    List<Span> spans,
-                    List<? extends SpanFilter> filters,
-                    Map<String, String> queryParams) {
-
-                var streamRequest = SpanSearchStreamRequest.builder().projectName(projectName)
-                        .filters(List.copyOf(filters)).build();
-
-                var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
-
-                assertSpan(actualSpans, expected, USER);
-            }
-
-            @Override
-            public TestArgs<Span> transformTestParams(List<Span> spans, List<Span> expected, List<Span> unexpected) {
-                return TestArgs.of(spans, expected, unexpected);
-            }
-        }
+        private final StatsTestAssertion statsTestAssertion = new StatsTestAssertion(spanResourceClient);
+        private final SpansTestAssertion spansTestAssertion = new SpansTestAssertion(spanResourceClient, USER);
+        private final SpanStreamTestAssertion spanStreamTestAssertion = new SpanStreamTestAssertion(spanResourceClient,
+                USER);
 
         private Stream<Arguments> getFilterTestArguments() {
             return Stream.of(
@@ -1627,7 +1522,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterIdAndNameEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterIdAndNameEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1677,7 +1572,7 @@ class SpansResourceTest {
         @MethodSource
         void whenFilterByCorrespondingField__thenReturnSpansFiltered(
                 String endpoint, SpanField filterField, Operator filterOperator, String filterValue,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1734,7 +1629,7 @@ class SpansResourceTest {
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterTotalEstimatedCostEqual_NotEqual__thenReturnSpansFiltered(
                 String endpoint, Operator operator, Function<List<Span>, List<Span>> getUnexpectedSpans,
-                Function<List<Span>, List<Span>> getExpectedSpans, TestAssertion testAssertion) {
+                Function<List<Span>, List<Span>> getExpectedSpans, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1782,7 +1677,7 @@ class SpansResourceTest {
                 String endpoint, Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -1823,7 +1718,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameStartsWith__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterNameStartsWith__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1865,7 +1760,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameEndsWith__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterNameEndsWith__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1907,7 +1802,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameContains__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterNameContains__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1949,7 +1844,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterNameNotContains__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterNameNotContains__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1998,7 +1893,7 @@ class SpansResourceTest {
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterStartTimeEqual_NotEqual__thenReturnSpansFiltered(String endpoint,
                 Operator operator, Function<List<Span>, List<Span>> getExpectedSpans,
-                Function<List<Span>, List<Span>> getUnexpectedSpans, TestAssertion testAssertion) {
+                Function<List<Span>, List<Span>> getUnexpectedSpans, SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2037,7 +1932,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterStartTimeGreaterThan__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterStartTimeGreaterThan__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2085,7 +1981,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterStartTimeGreaterThanEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2132,7 +2028,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterStartTimeLessThan__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterStartTimeLessThan__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2179,7 +2076,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterStartTimeLessThanEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterStartTimeLessThanEqual__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2226,7 +2124,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterEndTimeEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterEndTimeEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2269,7 +2167,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterInputEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterInputEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2312,7 +2210,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterOutputEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterOutputEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2359,7 +2257,7 @@ class SpansResourceTest {
                 Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2405,7 +2303,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataEqualNumber__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataEqualNumber__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2455,7 +2354,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataEqualBoolean__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataEqualBoolean__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2506,7 +2406,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataEqualNull__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataEqualNull__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2556,7 +2457,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataContainsString__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataContainsString__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2606,7 +2508,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataContainsNumber__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataContainsNumber__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2655,7 +2558,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataContainsBoolean__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataContainsBoolean__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2706,7 +2610,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataContainsNull__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataContainsNull__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2757,7 +2662,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanNumber__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2808,7 +2713,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanString__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2855,7 +2760,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterMetadataGreaterThanBoolean__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2901,7 +2806,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataGreaterThanNull__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataGreaterThanNull__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2947,7 +2853,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataLessThanNumber__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataLessThanNumber__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -2997,7 +2904,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataLessThanString__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataLessThanString__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3043,7 +2951,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataLessThanBoolean__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataLessThanBoolean__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3088,7 +2997,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterMetadataLessThanNull__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterMetadataLessThanNull__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3133,7 +3043,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterTagsContains__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterTagsContains__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3179,7 +3089,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion,
+        void whenFilterUsageEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
                 String usageKey, Field field) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -3237,7 +3147,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageGreaterThan__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion,
+        void whenFilterUsageGreaterThan__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
                 String usageKey, Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3285,7 +3195,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageGreaterThanEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion,
+        void whenFilterUsageGreaterThanEqual__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion,
                 String usageKey, Field field) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -3334,7 +3245,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageLessThan__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion,
+        void whenFilterUsageLessThan__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
                 String usageKey, Field field) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -3383,7 +3294,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
-        void whenFilterUsageLessThanEqual__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion,
+        void whenFilterUsageLessThanEqual__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
                 String usageKey, Field field) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3435,7 +3346,7 @@ class SpansResourceTest {
                 Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3498,7 +3409,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresGreaterThan__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3567,7 +3478,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresGreaterThanEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3626,7 +3537,8 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
-        void whenFilterFeedbackScoresLessThan__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion) {
+        void whenFilterFeedbackScoresLessThan__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3688,7 +3600,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
         void whenFilterFeedbackScoresLessThanEqual__thenReturnSpansFiltered(String endpoint,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -3748,7 +3660,7 @@ class SpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getDurationArgs")
-        void whenFilterByDuration__thenReturnSpansFiltered(String endpoint, TestAssertion testAssertion,
+        void whenFilterByDuration__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
                 Operator operator, long end, double duration) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -3854,7 +3766,7 @@ class SpansResourceTest {
                 Operator operator,
                 Function<List<Span>, List<Span>> getExpectedSpans,
                 Function<List<Span>, List<Span>> getUnexpectedSpans,
-                TestAssertion testAssertion) {
+                SpanPageTestAssertion testAssertion) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -6353,4 +6265,5 @@ class SpansResourceTest {
                 .ignoringCollectionOrder()
                 .isEqualTo(score);
     }
+
 }

@@ -1,7 +1,9 @@
-package com.comet.opik.api.resources.utils;
+package com.comet.opik.api.resources.utils.spans;
 
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.resources.utils.DurationUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
 import java.math.BigDecimal;
