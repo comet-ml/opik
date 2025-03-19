@@ -3,17 +3,21 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
-import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -222,38 +226,95 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return items;
     }
 
-    public <T> T searchSpan(String apiKey, String workspaceName, SpanSearchStreamRequest request, int expectedStatus,
-            Class<T> bodyClass) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("search")
+    public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
+            UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
+            List<SortingField> sortingFields) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        if (page != null) {
+            webTarget = webTarget.queryParam("page", page);
+        }
+
+        if (size != null) {
+            webTarget = webTarget.queryParam("size", size);
+        }
+
+        if (projectName != null) {
+            webTarget = webTarget.queryParam("project_name", projectName);
+        }
+
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        if (traceId != null) {
+            webTarget = webTarget.queryParam("trace_id", traceId);
+        }
+
+        if (type != null) {
+            webTarget = webTarget.queryParam("type", type);
+        }
+
+        if (filters != null) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (sortingFields != null) {
+            webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
+        }
+
+        try (var actualResponse = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
+                .get()) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-            return actualResponse.readEntity(bodyClass);
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(Span.SpanPage.class);
         }
     }
 
-    public <T> T findSpans(String apiKey, String workspaceName, String projectName, List<? extends Filter> filters,
-            int expectedStatus, Class<T> bodyClass) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .queryParam("project_name", projectName)
-                .queryParam("filters", toURLEncodedQueryParam(filters))
+    public ProjectStats getSpansStats(String projectName,
+            UUID projectId,
+            List<? extends SpanFilter> filters,
+            String apiKey,
+            String workspaceName,
+            Map<String, String> queryParams) {
+
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("stats");
+
+        if (projectName != null) {
+            webTarget = webTarget.queryParam("project_name", projectName);
+        }
+
+        if (filters != null) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        webTarget = queryParams.entrySet()
+                .stream()
+                .reduce(webTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
+
+        var actualResponse = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
 
-        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
-        return actualResponse.readEntity(bodyClass);
+        return actualResponse.readEntity(ProjectStats.class);
     }
 
-    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
+    private String toURLEncodedQueryParam(List<?> filters) {
         return CollectionUtils.isEmpty(filters)
                 ? null
                 : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
     }
+
 }
