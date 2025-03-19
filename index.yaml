@@ -2,8 +2,42 @@ apiVersion: v1
 entries:
   opik:
   - apiVersion: v2
+    appVersion: 1.6.6
+    created: "2025-03-19T09:29:23.473119395Z"
+    dependencies:
+    - condition: mysql.enabled
+      name: mysql
+      repository: https://charts.bitnami.com/bitnami
+      version: 11.1.9
+    - condition: zookeeper.enabled
+      name: zookeeper
+      repository: https://charts.bitnami.com/bitnami
+      version: 12.12.1
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: 18.19.2
+    - condition: clickhouse.enabled
+      name: altinity-clickhouse-operator
+      repository: https://docs.altinity.com/clickhouse-operator/
+      version: 0.23.7
+    - name: common
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 2.x.x
+    description: A Helm chart for Comet Opik
+    digest: 840f686b622893694e8623da1db54f4d9d267b48e3d43b3bec99dda1c122db13
+    icon: https://www.comet.com/site/favicon-32x32.png
+    maintainers:
+    - email: liyak@comet.com
+      name: Liya Katz
+    name: opik
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-1.6.6.tgz
+    version: 1.6.6
+  - apiVersion: v2
     appVersion: 1.6.5
-    created: "2025-03-14T15:51:04.491412906Z"
+    created: "2025-03-19T09:29:23.457028289Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -37,7 +71,7 @@ entries:
     version: 1.6.5
   - apiVersion: v2
     appVersion: 1.6.4
-    created: "2025-03-14T15:51:04.476141827Z"
+    created: "2025-03-19T09:29:23.440556115Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -71,7 +105,7 @@ entries:
     version: 1.6.4
   - apiVersion: v2
     appVersion: 1.6.3
-    created: "2025-03-14T15:51:04.460193946Z"
+    created: "2025-03-19T09:29:23.424943521Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -105,7 +139,7 @@ entries:
     version: 1.6.3
   - apiVersion: v2
     appVersion: 1.6.2
-    created: "2025-03-14T15:51:04.444415034Z"
+    created: "2025-03-19T09:29:23.408930061Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -139,7 +173,7 @@ entries:
     version: 1.6.2
   - apiVersion: v2
     appVersion: 1.6.1
-    created: "2025-03-14T15:51:04.428341798Z"
+    created: "2025-03-19T09:29:23.393410665Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -173,7 +207,7 @@ entries:
     version: 1.6.1
   - apiVersion: v2
     appVersion: 1.6.0
-    created: "2025-03-14T15:51:04.412467777Z"
+    created: "2025-03-19T09:29:23.376721791Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -207,7 +241,7 @@ entries:
     version: 1.6.0
   - apiVersion: v2
     appVersion: 1.5.9-1183
-    created: "2025-03-14T15:51:04.396121088Z"
+    created: "2025-03-19T09:29:23.360882909Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -241,7 +275,7 @@ entries:
     version: 1.5.9-1183
   - apiVersion: v2
     appVersion: 1.5.8
-    created: "2025-03-14T15:51:04.380952Z"
+    created: "2025-03-19T09:29:23.345823171Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -275,7 +309,7 @@ entries:
     version: 1.5.8
   - apiVersion: v2
     appVersion: 1.5.7
-    created: "2025-03-14T15:51:04.364792538Z"
+    created: "2025-03-19T09:29:23.330105703Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -309,7 +343,7 @@ entries:
     version: 1.5.7
   - apiVersion: v2
     appVersion: 1.5.7-1156
-    created: "2025-03-14T15:51:04.347990299Z"
+    created: "2025-03-19T09:29:23.314069899Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -343,7 +377,7 @@ entries:
     version: 1.5.7-1156
   - apiVersion: v2
     appVersion: 1.5.6
-    created: "2025-03-14T15:51:04.33217091Z"
+    created: "2025-03-19T09:29:23.298091772Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -377,7 +411,7 @@ entries:
     version: 1.5.6
   - apiVersion: v2
     appVersion: 1.5.6-11470
-    created: "2025-03-14T15:51:04.316179057Z"
+    created: "2025-03-19T09:29:23.281763578Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -411,7 +445,7 @@ entries:
     version: 1.5.6-11470
   - apiVersion: v2
     appVersion: 1.5.5
-    created: "2025-03-14T15:51:04.2996831Z"
+    created: "2025-03-19T09:29:23.266914102Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -445,7 +479,7 @@ entries:
     version: 1.5.5
   - apiVersion: v2
     appVersion: 1.5.4
-    created: "2025-03-14T15:51:04.284775352Z"
+    created: "2025-03-19T09:29:23.25166555Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -479,7 +513,7 @@ entries:
     version: 1.5.4
   - apiVersion: v2
     appVersion: 1.5.3
-    created: "2025-03-14T15:51:04.26950939Z"
+    created: "2025-03-19T09:29:23.23451655Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -513,7 +547,7 @@ entries:
     version: 1.5.3
   - apiVersion: v2
     appVersion: 1.5.3-1090
-    created: "2025-03-14T15:51:04.253170397Z"
+    created: "2025-03-19T09:29:23.218010109Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -547,7 +581,7 @@ entries:
     version: 1.5.3-1090
   - apiVersion: v2
     appVersion: 1.5.2
-    created: "2025-03-14T15:51:04.236269975Z"
+    created: "2025-03-19T09:29:23.20165774Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -581,7 +615,7 @@ entries:
     version: 1.5.2
   - apiVersion: v2
     appVersion: 1.5.1
-    created: "2025-03-14T15:51:04.219306409Z"
+    created: "2025-03-19T09:29:23.184338587Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -615,7 +649,7 @@ entries:
     version: 1.5.1
   - apiVersion: v2
     appVersion: 1.5.0
-    created: "2025-03-14T15:51:04.204479663Z"
+    created: "2025-03-19T09:29:23.16785416Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -649,7 +683,7 @@ entries:
     version: 1.5.0
   - apiVersion: v2
     appVersion: 1.4.18-1041
-    created: "2025-03-14T15:51:04.059963118Z"
+    created: "2025-03-19T09:29:23.020766679Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -683,7 +717,7 @@ entries:
     version: 1.4.18-1041
   - apiVersion: v2
     appVersion: 1.4.17
-    created: "2025-03-14T15:51:04.042914702Z"
+    created: "2025-03-19T09:29:23.004253729Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -717,7 +751,7 @@ entries:
     version: 1.4.17
   - apiVersion: v2
     appVersion: 1.4.17-10201
-    created: "2025-03-14T15:51:04.026596554Z"
+    created: "2025-03-19T09:29:22.988431952Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -751,7 +785,7 @@ entries:
     version: 1.4.17-10201
   - apiVersion: v2
     appVersion: 1.4.17-1019
-    created: "2025-03-14T15:51:04.011807377Z"
+    created: "2025-03-19T09:29:22.970219072Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -785,7 +819,7 @@ entries:
     version: 1.4.17-1019
   - apiVersion: v2
     appVersion: 1.4.16
-    created: "2025-03-14T15:51:03.995828815Z"
+    created: "2025-03-19T09:29:22.952860876Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -819,7 +853,7 @@ entries:
     version: 1.4.16
   - apiVersion: v2
     appVersion: 1.4.15
-    created: "2025-03-14T15:51:03.979913976Z"
+    created: "2025-03-19T09:29:22.936731319Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -853,7 +887,7 @@ entries:
     version: 1.4.15
   - apiVersion: v2
     appVersion: 1.4.14
-    created: "2025-03-14T15:51:03.964920467Z"
+    created: "2025-03-19T09:29:22.920991576Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -887,7 +921,7 @@ entries:
     version: 1.4.14
   - apiVersion: v2
     appVersion: 1.4.13
-    created: "2025-03-14T15:51:03.948463201Z"
+    created: "2025-03-19T09:29:22.904677329Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -921,7 +955,7 @@ entries:
     version: 1.4.13
   - apiVersion: v2
     appVersion: 1.4.12
-    created: "2025-03-14T15:51:03.931779366Z"
+    created: "2025-03-19T09:29:22.888944792Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -955,7 +989,7 @@ entries:
     version: 1.4.12
   - apiVersion: v2
     appVersion: 1.4.11
-    created: "2025-03-14T15:51:03.915349001Z"
+    created: "2025-03-19T09:29:22.872073843Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -989,7 +1023,7 @@ entries:
     version: 1.4.11
   - apiVersion: v2
     appVersion: 1.4.10
-    created: "2025-03-14T15:51:03.89947338Z"
+    created: "2025-03-19T09:29:22.856692393Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1023,7 +1057,7 @@ entries:
     version: 1.4.10
   - apiVersion: v2
     appVersion: 1.4.8
-    created: "2025-03-14T15:51:04.188391233Z"
+    created: "2025-03-19T09:29:23.152548218Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1057,7 +1091,7 @@ entries:
     version: 1.4.8
   - apiVersion: v2
     appVersion: 1.4.7
-    created: "2025-03-14T15:51:04.172278003Z"
+    created: "2025-03-19T09:29:23.135375119Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1091,7 +1125,7 @@ entries:
     version: 1.4.7
   - apiVersion: v2
     appVersion: 1.4.6
-    created: "2025-03-14T15:51:04.156663458Z"
+    created: "2025-03-19T09:29:23.118185926Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1125,7 +1159,7 @@ entries:
     version: 1.4.6
   - apiVersion: v2
     appVersion: 1.4.6-8330
-    created: "2025-03-14T15:51:04.140045591Z"
+    created: "2025-03-19T09:29:23.101961921Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1159,7 +1193,7 @@ entries:
     version: 1.4.6-8330
   - apiVersion: v2
     appVersion: 1.4.5
-    created: "2025-03-14T15:51:04.124025131Z"
+    created: "2025-03-19T09:29:23.085855334Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1193,7 +1227,7 @@ entries:
     version: 1.4.5
   - apiVersion: v2
     appVersion: 1.4.4
-    created: "2025-03-14T15:51:04.107478658Z"
+    created: "2025-03-19T09:29:23.069413547Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1227,7 +1261,7 @@ entries:
     version: 1.4.4
   - apiVersion: v2
     appVersion: 1.4.3
-    created: "2025-03-14T15:51:04.091982154Z"
+    created: "2025-03-19T09:29:23.053122202Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1261,7 +1295,7 @@ entries:
     version: 1.4.3
   - apiVersion: v2
     appVersion: 1.4.2
-    created: "2025-03-14T15:51:04.076686362Z"
+    created: "2025-03-19T09:29:23.036338401Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1295,7 +1329,7 @@ entries:
     version: 1.4.2
   - apiVersion: v2
     appVersion: 1.4.1
-    created: "2025-03-14T15:51:03.883661385Z"
+    created: "2025-03-19T09:29:22.84010163Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1329,7 +1363,7 @@ entries:
     version: 1.4.1
   - apiVersion: v2
     appVersion: 1.4.1-784-1
-    created: "2025-03-14T15:51:03.868545873Z"
+    created: "2025-03-19T09:29:22.823226377Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1363,7 +1397,7 @@ entries:
     version: 1.4.1-784-1
   - apiVersion: v2
     appVersion: 1.4.0
-    created: "2025-03-14T15:51:03.852783264Z"
+    created: "2025-03-19T09:29:22.80730526Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1396,7 +1430,7 @@ entries:
     version: 1.4.0
   - apiVersion: v2
     appVersion: 1.3.6
-    created: "2025-03-14T15:51:03.837859195Z"
+    created: "2025-03-19T09:29:22.783224117Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1429,7 +1463,7 @@ entries:
     version: 1.3.6
   - apiVersion: v2
     appVersion: 1.3.5
-    created: "2025-03-14T15:51:03.822087532Z"
+    created: "2025-03-19T09:29:22.7667378Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1462,7 +1496,7 @@ entries:
     version: 1.3.5
   - apiVersion: v2
     appVersion: 1.3.4
-    created: "2025-03-14T15:51:03.805251856Z"
+    created: "2025-03-19T09:29:22.75046668Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1495,7 +1529,7 @@ entries:
     version: 1.3.4
   - apiVersion: v2
     appVersion: 1.3.3
-    created: "2025-03-14T15:51:03.789659918Z"
+    created: "2025-03-19T09:29:22.734274265Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1528,7 +1562,7 @@ entries:
     version: 1.3.3
   - apiVersion: v2
     appVersion: 1.3.2
-    created: "2025-03-14T15:51:03.774639509Z"
+    created: "2025-03-19T09:29:22.71888003Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1561,7 +1595,7 @@ entries:
     version: 1.3.2
   - apiVersion: v2
     appVersion: 1.3.1
-    created: "2025-03-14T15:51:03.759483513Z"
+    created: "2025-03-19T09:29:22.702865775Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1594,7 +1628,7 @@ entries:
     version: 1.3.1
   - apiVersion: v2
     appVersion: 1.3.0
-    created: "2025-03-14T15:51:03.743301774Z"
+    created: "2025-03-19T09:29:22.687183784Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1627,7 +1661,7 @@ entries:
     version: 1.3.0
   - apiVersion: v2
     appVersion: 1.2.8
-    created: "2025-03-14T15:51:03.726460308Z"
+    created: "2025-03-19T09:29:22.67074318Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1660,7 +1694,7 @@ entries:
     version: 1.2.8
   - apiVersion: v2
     appVersion: 1.2.7
-    created: "2025-03-14T15:51:03.710953886Z"
+    created: "2025-03-19T09:29:22.65520977Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1693,7 +1727,7 @@ entries:
     version: 1.2.7
   - apiVersion: v2
     appVersion: 1.2.6
-    created: "2025-03-14T15:51:03.696169635Z"
+    created: "2025-03-19T09:29:22.639020267Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1726,7 +1760,7 @@ entries:
     version: 1.2.6
   - apiVersion: v2
     appVersion: 1.2.5
-    created: "2025-03-14T15:51:03.680206851Z"
+    created: "2025-03-19T09:29:22.622843006Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1759,7 +1793,7 @@ entries:
     version: 1.2.5
   - apiVersion: v2
     appVersion: 1.2.4
-    created: "2025-03-14T15:51:03.663064911Z"
+    created: "2025-03-19T09:29:22.607094119Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1792,7 +1826,7 @@ entries:
     version: 1.2.4
   - apiVersion: v2
     appVersion: 1.2.3
-    created: "2025-03-14T15:51:03.646696622Z"
+    created: "2025-03-19T09:29:22.590624931Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1825,7 +1859,7 @@ entries:
     version: 1.2.3
   - apiVersion: v2
     appVersion: 1.2.2
-    created: "2025-03-14T15:51:03.627612528Z"
+    created: "2025-03-19T09:29:22.574519936Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1858,7 +1892,7 @@ entries:
     version: 1.2.2
   - apiVersion: v2
     appVersion: 1.2.1
-    created: "2025-03-14T15:51:03.611435709Z"
+    created: "2025-03-19T09:29:22.557670625Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1891,7 +1925,7 @@ entries:
     version: 1.2.1
   - apiVersion: v2
     appVersion: 1.2.0
-    created: "2025-03-14T15:51:03.596611257Z"
+    created: "2025-03-19T09:29:22.538774613Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1924,7 +1958,7 @@ entries:
     version: 1.2.0
   - apiVersion: v2
     appVersion: 1.1.13
-    created: "2025-03-14T15:51:03.411692414Z"
+    created: "2025-03-19T09:29:22.348521692Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1957,7 +1991,7 @@ entries:
     version: 1.1.13
   - apiVersion: v2
     appVersion: 1.1.12
-    created: "2025-03-14T15:51:03.395209113Z"
+    created: "2025-03-19T09:29:22.332569508Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -1990,7 +2024,7 @@ entries:
     version: 1.1.12
   - apiVersion: v2
     appVersion: 1.1.11
-    created: "2025-03-14T15:51:03.378937586Z"
+    created: "2025-03-19T09:29:22.314269876Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2023,7 +2057,7 @@ entries:
     version: 1.1.11
   - apiVersion: v2
     appVersion: 1.1.10
-    created: "2025-03-14T15:51:03.364072403Z"
+    created: "2025-03-19T09:29:22.299418129Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2056,7 +2090,7 @@ entries:
     version: 1.1.10
   - apiVersion: v2
     appVersion: 1.1.9
-    created: "2025-03-14T15:51:03.581768159Z"
+    created: "2025-03-19T09:29:22.522331501Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2089,7 +2123,7 @@ entries:
     version: 1.1.9
   - apiVersion: v2
     appVersion: 1.1.8
-    created: "2025-03-14T15:51:03.565780484Z"
+    created: "2025-03-19T09:29:22.507025686Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2122,7 +2156,7 @@ entries:
     version: 1.1.8
   - apiVersion: v2
     appVersion: 1.1.7
-    created: "2025-03-14T15:51:03.550370425Z"
+    created: "2025-03-19T09:29:22.490693484Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2155,7 +2189,7 @@ entries:
     version: 1.1.7
   - apiVersion: v2
     appVersion: 1.1.7-4323
-    created: "2025-03-14T15:51:03.534112017Z"
+    created: "2025-03-19T09:29:22.473286446Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2188,7 +2222,7 @@ entries:
     version: 1.1.7-4323
   - apiVersion: v2
     appVersion: 1.1.7-4322
-    created: "2025-03-14T15:51:03.518002669Z"
+    created: "2025-03-19T09:29:22.457081167Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2221,7 +2255,7 @@ entries:
     version: 1.1.7-4322
   - apiVersion: v2
     appVersion: 1.1.7-4321
-    created: "2025-03-14T15:51:03.501689043Z"
+    created: "2025-03-19T09:29:22.441355764Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2254,7 +2288,7 @@ entries:
     version: 1.1.7-4321
   - apiVersion: v2
     appVersion: 1.1.6
-    created: "2025-03-14T15:51:03.486233966Z"
+    created: "2025-03-19T09:29:22.425495294Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2284,7 +2318,7 @@ entries:
     version: 1.1.6
   - apiVersion: v2
     appVersion: 1.1.5
-    created: "2025-03-14T15:51:03.472054223Z"
+    created: "2025-03-19T09:29:22.410851274Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2314,7 +2348,7 @@ entries:
     version: 1.1.5
   - apiVersion: v2
     appVersion: 1.1.4
-    created: "2025-03-14T15:51:03.456972288Z"
+    created: "2025-03-19T09:29:22.395410565Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2344,7 +2378,7 @@ entries:
     version: 1.1.4
   - apiVersion: v2
     appVersion: 1.1.3
-    created: "2025-03-14T15:51:03.441693008Z"
+    created: "2025-03-19T09:29:22.37885249Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2374,7 +2408,7 @@ entries:
     version: 1.1.3
   - apiVersion: v2
     appVersion: 1.1.2
-    created: "2025-03-14T15:51:03.427648504Z"
+    created: "2025-03-19T09:29:22.363127789Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2404,7 +2438,7 @@ entries:
     version: 1.1.2
   - apiVersion: v2
     appVersion: 1.1.1
-    created: "2025-03-14T15:51:03.348513703Z"
+    created: "2025-03-19T09:29:22.283270553Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2434,7 +2468,7 @@ entries:
     version: 1.1.1
   - apiVersion: v2
     appVersion: 1.1.0
-    created: "2025-03-14T15:51:03.333109898Z"
+    created: "2025-03-19T09:29:22.268231412Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2464,7 +2498,7 @@ entries:
     version: 1.1.0
   - apiVersion: v2
     appVersion: 1.0.5
-    created: "2025-03-14T15:51:03.318851718Z"
+    created: "2025-03-19T09:29:22.253269879Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2494,7 +2528,7 @@ entries:
     version: 1.0.5
   - apiVersion: v2
     appVersion: 1.0.4
-    created: "2025-03-14T15:51:03.303875502Z"
+    created: "2025-03-19T09:29:22.238170103Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2524,7 +2558,7 @@ entries:
     version: 1.0.4
   - apiVersion: v2
     appVersion: 1.0.3
-    created: "2025-03-14T15:51:03.288519952Z"
+    created: "2025-03-19T09:29:22.223598665Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2554,7 +2588,7 @@ entries:
     version: 1.0.3
   - apiVersion: v2
     appVersion: 1.0.2
-    created: "2025-03-14T15:51:03.274108761Z"
+    created: "2025-03-19T09:29:22.209225606Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2584,7 +2618,7 @@ entries:
     version: 1.0.2
   - apiVersion: v2
     appVersion: 1.0.1
-    created: "2025-03-14T15:51:03.259085005Z"
+    created: "2025-03-19T09:29:22.194063493Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2614,7 +2648,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2025-03-14T15:51:03.234121034Z"
+    created: "2025-03-19T09:29:22.178487237Z"
     dependencies:
     - condition: mysql.enabled
       name: mysql
@@ -2642,1222 +2676,4 @@ entries:
     urls:
     - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-1.0.0.tgz
     version: 1.0.0
-  - apiVersion: v2
-    appVersion: 0.2.3-2682
-    created: "2025-03-14T15:51:03.202759536Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: 6ca397459e5cce1a4da79c398574fed990c1e4170ac28bbb4ffde9b9651c9a38
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.2.3-2682.tgz
-    version: 0.2.3-2682
-  - apiVersion: v2
-    appVersion: 0.2.3-2681
-    created: "2025-03-14T15:51:03.187396589Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: 9ad5ad3707e3c57fa06d69b1187774d0553bc24c0af18d201c9acdfa26851a61
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.2.3-2681.tgz
-    version: 0.2.3-2681
-  - apiVersion: v2
-    appVersion: 0.2.3-269
-    created: "2025-03-14T15:51:03.217288805Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: 7be2ea0ea2b31670aa08e300cf973af5a2d4567cddf3b3afa3acaaad437ecb6b
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.2.3-269.tgz
-    version: 0.2.3-269
-  - apiVersion: v2
-    appVersion: 0.2.2
-    created: "2025-03-14T15:51:03.17144176Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: 392fa68706d9be7bea920a9986dd1debfe07ed33bca81dbda260c6960479f591
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.2.2.tgz
-    version: 0.2.2
-  - apiVersion: v2
-    appVersion: 0.2.1
-    created: "2025-03-14T15:51:03.15607927Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: cf7b896411fb526c2cb83a86c8aeb8873d559fd74032e8f1c6a16c756da657e5
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.2.1.tgz
-    version: 0.2.1
-  - apiVersion: v2
-    appVersion: 0.2.0
-    created: "2025-03-14T15:51:03.141597649Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: dcfe7450769e87c681388a270caaa1a4ff0a51cef86aa02bed6b5bccad1db14c
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.2.0.tgz
-    version: 0.2.0
-  - apiVersion: v2
-    appVersion: 0.1.24-237
-    created: "2025-03-14T15:51:02.970966702Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: bf5573f9925803fa474b18c52b73a2caf02522898a925d2c67b1e54645bc992b
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.24-237.tgz
-    version: 0.1.24-237
-  - apiVersion: v2
-    appVersion: 0.1.23
-    created: "2025-03-14T15:51:02.955753665Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: ad15e826e39fc199d03b8a9d287b6e14858e80a360482844a393d8576402026c
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.23.tgz
-    version: 0.1.23
-  - apiVersion: v2
-    appVersion: 0.1.23-2234
-    created: "2025-03-14T15:51:02.925388837Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: 83898426cddcc7882f368b43499baeb5ea8c3f8d3b583a2f94ec62978559528c
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.23-2234.tgz
-    version: 0.1.23-2234
-  - apiVersion: v2
-    appVersion: 0.1.23-2233
-    created: "2025-03-14T15:51:02.911143261Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: d36368f5a62727d6f204f6c23ffe52c021dafec30d0ffbf13b8c5587ffa0cf94
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.23-2233.tgz
-    version: 0.1.23-2233
-  - apiVersion: v2
-    appVersion: 0.1.23-2232
-    created: "2025-03-14T15:51:02.89857425Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 9ab68ef3808b409587d9579b99331b0ea25912e277a693cd563d5bc491d709a2
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.23-2232.tgz
-    version: 0.1.23-2232
-  - apiVersion: v2
-    appVersion: 0.1.23-2231
-    created: "2025-03-14T15:51:02.88512861Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 677551ba2b455f71c36d4d6b04b816cccf5e9c1c64c7a9c1b1f92e1545ecf9c1
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.23-2231.tgz
-    version: 0.1.23-2231
-  - apiVersion: v2
-    appVersion: 0.1.23-2230
-    created: "2025-03-14T15:51:02.870919893Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 1b5fbef07e981209ac872a4cbe177d1aa44174c4fe56601d765498588a04ca32
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.23-2230.tgz
-    version: 0.1.23-2230
-  - apiVersion: v2
-    appVersion: 0.1.23-224
-    created: "2025-03-14T15:51:02.940558569Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    - name: altinity-clickhouse-operator
-      repository: https://docs.altinity.com/clickhouse-operator/
-      version: 0.23.7
-    description: A Helm chart for Comet Opik
-    digest: 99def15c2ee007365b66162aa78ff0db9f0d70ef9af8fe4b31aba5bb60cdf6a6
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.23-224.tgz
-    version: 0.1.23-224
-  - apiVersion: v2
-    appVersion: 0.1.23-223
-    created: "2025-03-14T15:51:02.857698302Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: a56a6a01c6bc279c3f42aa9320abef766db336c7a48a6ccacd22f1e8d2bd06e0
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.23-223.tgz
-    version: 0.1.23-223
-  - apiVersion: v2
-    appVersion: 0.1.22
-    created: "2025-03-14T15:51:02.844369251Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: fe534cbb012089108da09f0cec7ec8c7f26bc602933f47a62ade400fa6e79432
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.22.tgz
-    version: 0.1.22
-  - apiVersion: v2
-    appVersion: 0.1.21
-    created: "2025-03-14T15:51:02.831654817Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: eff12b65362801c161852cf3b82c25472b201f9121f02f2f05bd67a98a52f12b
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.21.tgz
-    version: 0.1.21
-  - apiVersion: v2
-    appVersion: 0.1.20
-    created: "2025-03-14T15:51:02.819153914Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: e3882044c6a4f2725187f1e9a8a0627221def4079f71d80b3fa01266c7a65139
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.20.tgz
-    version: 0.1.20
-  - apiVersion: v2
-    appVersion: 0.1.19
-    created: "2025-03-14T15:51:02.806550603Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 9241ef65738aa5759977eb530bddcc8b3c5f7833db024e8a37077190ac9c3888
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.19.tgz
-    version: 0.1.19
-  - apiVersion: v2
-    appVersion: 0.1.18
-    created: "2025-03-14T15:51:02.793928168Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: f02ed202cd6833463f0ab1748636e5a975983b7f493135162be61b3dc7f601c5
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.18.tgz
-    version: 0.1.18
-  - apiVersion: v2
-    appVersion: 0.1.17
-    created: "2025-03-14T15:51:02.776900738Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 7d4ad7b43304ecfae2e766a208f46d4dea608f5f754b1d7dd802bb417da4da3f
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.17.tgz
-    version: 0.1.17
-  - apiVersion: v2
-    appVersion: 0.1.16
-    created: "2025-03-14T15:51:02.762647586Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: ad9c7813f5f91b1bbe71c70ddc5dd8fb9a302d00c5cf20ea4d9a747132c89eb0
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.16.tgz
-    version: 0.1.16
-  - apiVersion: v2
-    appVersion: 0.1.15
-    created: "2025-03-14T15:51:02.750270641Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: d12bd622197e335d1032b9e3e2c1811d67c887fbb8e339fa2fa7157dbb838d49
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.15.tgz
-    version: 0.1.15
-  - apiVersion: v2
-    appVersion: 0.1.15-142
-    created: "2025-03-14T15:51:02.737561471Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 3b90dff5c60b7be862ce267717a5cc74f2c710e9bfa9e5b123f1b9f52bc6f9a5
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.15-142.tgz
-    version: 0.1.15-142
-  - apiVersion: v2
-    appVersion: 0.1.15-135
-    created: "2025-03-14T15:51:02.724517942Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: e0e48363f6bdfe07caa3adfc589b0ee425ce90c73400c055557ec1997166fd3d
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.15-135.tgz
-    version: 0.1.15-135
-  - apiVersion: v2
-    appVersion: 0.1.14
-    created: "2025-03-14T15:51:02.711545138Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: defa49b78544f64c5e59d71bbfced2f986989699a5dd7df0864415b2b1b4c473
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.14.tgz
-    version: 0.1.14
-  - apiVersion: v2
-    appVersion: 0.1.13
-    created: "2025-03-14T15:51:02.698634522Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: b9b32bb11208b5f8a21368e38aad8a3548b3a8f1ef3aa625ab1b8fb292db179f
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.13.tgz
-    version: 0.1.13
-  - apiVersion: v2
-    appVersion: 0.1.12
-    created: "2025-03-14T15:51:02.686323563Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 3a4f47d2604e988645755008e53d78694928ccda116db3b55c07449f21524498
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.12.tgz
-    version: 0.1.12
-  - apiVersion: v2
-    appVersion: 0.1.11
-    created: "2025-03-14T15:51:02.673860132Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 3995f1edccdb809b9ee906979f6a8ef0842c502c7e0c722c1ab6e5db7016fbf9
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.11.tgz
-    version: 0.1.11
-  - apiVersion: v2
-    appVersion: 0.1.10
-    created: "2025-03-14T15:51:02.6609309Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: b954329a8176fff656efb7d976c02c677d8065b48cc7020209caa3027e671b5a
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.10.tgz
-    version: 0.1.10
-  - apiVersion: v2
-    appVersion: 0.1.9
-    created: "2025-03-14T15:51:03.126700801Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 03db61f01362f30d6f4f493d311b22ffe90937c4763e7ee79196042a7c0e2672
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.9.tgz
-    version: 0.1.9
-  - apiVersion: v2
-    appVersion: 0.1.9-89
-    created: "2025-03-14T15:51:03.113235859Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: ae54420d2bdb4a94622dc98fe4cc64194fa506e038b1e2b64809d84c075c5dbc
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.9-89.tgz
-    version: 0.1.9-89
-  - apiVersion: v2
-    appVersion: 0.1.8
-    created: "2025-03-14T15:51:03.10001931Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 67721dbd7b69483a77eca30ed1eaa7d3d89b182f866c9da361e49392b13614e6
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.8.tgz
-    version: 0.1.8
-  - apiVersion: v2
-    appVersion: 0.1.8-84
-    created: "2025-03-14T15:51:03.087739535Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 4b3a860d5830b5c245d45da518b9fd715aa17d536d82023ceaca3d25f9a1b6ac
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.8-84.tgz
-    version: 0.1.8-84
-  - apiVersion: v2
-    appVersion: 0.1.8-78
-    created: "2025-03-14T15:51:03.075431009Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 671b59b4da0d432bf24b7bdec73cf082b362c9e62303d3189caa5d68347db8c1
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.8-78.tgz
-    version: 0.1.8-78
-  - apiVersion: v2
-    appVersion: 0.1.8-50
-    created: "2025-03-14T15:51:03.063022143Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: f72990154457490c48f6b08dd59892a4a1c25db1fcb0452987ae045d4f2762ac
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.8-50.tgz
-    version: 0.1.8-50
-  - apiVersion: v2
-    appVersion: 0.1.5
-    created: "2025-03-14T15:51:03.049440081Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: b664065f677cf6f7a0674ede30008354a2674dfe649788169a6629c4dc59c193
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.7.tgz
-    version: 0.1.7
-  - apiVersion: v2
-    appVersion: 0.1.6
-    created: "2025-03-14T15:51:03.035904759Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: d1636f93856ed19b0c3b784c84deb4569dac0b0d1f40ffe1dd56855374fb6b57
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.6.tgz
-    version: 0.1.6
-  - apiVersion: v2
-    appVersion: 0.1.5
-    created: "2025-03-14T15:51:03.023640949Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: 86c0de0e233847230ad0af2d85c8e16a6b8b13d6dc0b399351eafb68e08422a9
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.5.tgz
-    version: 0.1.5
-  - apiVersion: v2
-    appVersion: 0.1.4
-    created: "2025-03-14T15:51:03.01078497Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: d10156bcbdf272ccb97fdae2ce348068523416c2bd24507424d4de5e56a81239
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.4.tgz
-    version: 0.1.4
-  - apiVersion: v2
-    appVersion: 0.1.0
-    created: "2025-03-14T15:51:02.997533448Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: dddcd909e6b332ac2b73f929224d3c7dec95c6709b0af8eefba898dfc8dc4fab
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.3.tgz
-    version: 0.1.3
-  - apiVersion: v2
-    appVersion: 0.1.0
-    created: "2025-03-14T15:51:02.984153542Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: e635387b45f970f069cb2673d1bea9c9c36285c7a15d00c56fd14fc0fa3a549e
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.3-10.tgz
-    version: 0.1.3-10
-  - apiVersion: v2
-    appVersion: 0.1.0
-    created: "2025-03-14T15:51:02.64692311Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: af926c209f89d9cbfc62fb782749434e6f0a36a9fe021b53d96930078c6baa97
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.1.tgz
-    version: 0.1.1
-  - apiVersion: v2
-    appVersion: 0.1.0
-    created: "2025-03-14T15:51:02.634492814Z"
-    dependencies:
-    - condition: mysql.enabled
-      name: mysql
-      repository: https://charts.bitnami.com/bitnami
-      version: 11.1.9
-    - condition: zookeeper.enabled
-      name: zookeeper
-      repository: https://charts.bitnami.com/bitnami
-      version: 12.12.1
-    - condition: redis.enabled
-      name: redis
-      repository: https://charts.bitnami.com/bitnami
-      version: 18.19.2
-    description: A Helm chart for Comet Opik
-    digest: aa66176b333d285ad5a4a4f0f46e7c23358f48eb908c92e575f96c3317332362
-    icon: https://www.comet.com/site/favicon-32x32.png
-    maintainers:
-    - email: liyak@comet.com
-      name: Liya Katz
-    name: opik
-    type: application
-    urls:
-    - https://raw.githubusercontent.com/comet-ml/opik/gh-pages/opik-0.1.0.tgz
-    version: 0.1.0
-generated: "2025-03-14T15:51:02.621297738Z"
+generated: "2025-03-19T09:29:22.161024939Z"
