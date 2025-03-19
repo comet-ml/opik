@@ -10,6 +10,7 @@ type ExperimentsFeedbackScoresSelectProps = {
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
+  className?: string;
 };
 
 const ExperimentsFeedbackScoresSelect: React.FC<
@@ -19,6 +20,7 @@ const ExperimentsFeedbackScoresSelect: React.FC<
   value,
   onValueChange,
   placeholder = "Select score",
+  className,
 }) => {
   const { data } = useExperimentsFeedbackScoresNames(
     {
@@ -42,6 +44,7 @@ const ExperimentsFeedbackScoresSelect: React.FC<
       onChange={onValueChange}
       options={options}
       placeholder={placeholder}
+      className={className}
     />
   );
 };

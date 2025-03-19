@@ -9,12 +9,18 @@ import {
 } from "@/lib/date";
 
 export const isFilterValid = (filter: Filter) => {
-  return (
-    (filter.type === COLUMN_TYPE.dictionary ||
+  const hasValue =
+    filter.value !== "" ||
+    filter.operator === "is_empty" ||
+    filter.operator === "is_not_empty";
+
+  const hasKey =
+    filter.type === COLUMN_TYPE.dictionary ||
     filter.type === COLUMN_TYPE.numberDictionary
       ? filter.key !== ""
-      : true) && filter.value !== ""
-  );
+      : true;
+
+  return hasValue && hasKey;
 };
 
 export const createEmptyFilter = () => {

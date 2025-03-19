@@ -4,6 +4,7 @@ import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
 import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
 import { COLUMN_TYPE } from "@/types/shared";
+import { cn } from "@/lib/utils";
 
 export type DictionaryRowConfig = {
   keyComponent: React.FC<unknown> & {
@@ -28,44 +29,55 @@ export const DictionaryRow: React.FunctionComponent<DictionaryRowProps> = ({
   const type: "string" | "number" =
     filter.type === COLUMN_TYPE.dictionary ? "string" : "number";
 
+  const noInput =
+    filter.operator === "is_empty" || filter.operator === "is_not_empty";
+
   const keyValueChangeHandler = (value: unknown) =>
     onChange({ ...filter, key: value as string });
 
   const KeyComponent = config?.keyComponent ?? DebounceInput;
 
+  const operatorSelector = (
+    <OperatorSelector
+      operator={filter.operator}
+      operators={OPERATORS_MAP[filter.type as COLUMN_TYPE] ?? DEFAULT_OPERATORS}
+      onSelect={(o) => onChange({ ...filter, operator: o })}
+    />
+  );
+
   return (
     <>
       <td className="flex gap-2 p-1">
         <KeyComponent
-          className="w-full min-w-32"
+          className="w-full min-w-32 max-w-[30vw]"
           placeholder="key"
           value={filter.key}
           onValueChange={keyValueChangeHandler}
           data-testid="filter-dictionary-key-input"
           {...(config?.keyComponentProps ?? {})}
         />
-        <div className="max-w-32">
-          <OperatorSelector
-            operator={filter.operator}
-            operators={
-              OPERATORS_MAP[filter.type as COLUMN_TYPE] ?? DEFAULT_OPERATORS
-            }
-            onSelect={(o) => onChange({ ...filter, operator: o })}
-          />
-        </div>
+        {!noInput && (
+          <div className={cn(noInput ? "min-w-48" : "max-w-32")}>
+            {operatorSelector}
+          </div>
+        )}
       </td>
       <td className="p-1">
-        <DebounceInput
-          className="w-full min-w-40"
-          placeholder="value"
-          value={filter.value}
-          onValueChange={(value) =>
-            onChange({ ...filter, value: value as string })
-          }
-          disabled={filter.operator === ""}
-          type={type}
-          data-testid="filter-dictionary-value-input"
-        />
+        {noInput ? (
+          operatorSelector
+        ) : (
+          <DebounceInput
+            className="w-full min-w-40"
+            placeholder="value"
+            value={filter.value}
+            onValueChange={(value) =>
+              onChange({ ...filter, value: value as string })
+            }
+            disabled={filter.operator === ""}
+            type={type}
+            data-testid="filter-dictionary-value-input"
+          />
+        )}
       </td>
     </>
   );
