@@ -5,6 +5,7 @@ import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import com.comet.opik.api.resources.utils.AWSUtils;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -19,12 +20,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.MediaType;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.jdbi.v3.core.Jdbi;
@@ -40,16 +36,10 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -98,40 +88,14 @@ class AttachmentResourceTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .authCacheTtlInSeconds(null)
                         .isMinIO(false)
-                        .modules(List.of(new AbstractModule() {
-                            @Override
-                            public void configure() {
-                                Region region = Region.US_EAST_1;
-                                var s3Client = S3Client.builder()
-                                        .region(region)
-                                        .credentialsProvider(DefaultCredentialsProvider.create())
-                                        .forcePathStyle(true)
-                                        .endpointOverride(URI.create(minioUrl))
-                                        .build();
-
-                                S3Configuration s3Configuration = S3Configuration.builder()
-                                        .pathStyleAccessEnabled(true)
-                                        .build();
-
-                                S3Presigner s3Presigner = S3Presigner.builder()
-                                        .credentialsProvider(DefaultCredentialsProvider.create())
-                                        .region(region)
-                                        .serviceConfiguration(s3Configuration)
-                                        .endpointOverride(URI.create(minioUrl))
-                                        .build();
-
-                                bind(S3Client.class).toInstance(s3Client);
-                                bind(S3Presigner.class).toInstance(s3Presigner);
-                            }
-                        }))
+                        .modules(List.of(AWSUtils.testClients(minioUrl)))
                         .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
-    private Client client;
     private String baseURI;
-    public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576;//6M
+    public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576; //6M
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -145,7 +109,6 @@ class AttachmentResourceTest {
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
-        this.client = ClientBuilder.newClient();
 
         ClientSupportUtils.config(client);
     }
@@ -157,7 +120,7 @@ class AttachmentResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
-        client.close();
+        attachmentResourceClient.close();
     }
 
     @Test
@@ -213,8 +176,7 @@ class AttachmentResourceTest {
         attachmentResourceClient.uploadAttachment(attachmentInfo, fileData, apiKey, workspaceName, 403);
     }
 
-    private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data)
-            throws IOException, InterruptedException {
+    private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data) {
         List<String> eTags = new ArrayList<>();
         for (int i = 0; i < startUploadResponse.preSignUrls().size(); i++) {
             int chunkToUpload = i == startUploadResponse.preSignUrls().size() - 1
@@ -222,21 +184,13 @@ class AttachmentResourceTest {
                     : MULTI_UPLOAD_CHUNK_SIZE;
             byte[] partData = new byte[chunkToUpload];
             System.arraycopy(data, i * MULTI_UPLOAD_CHUNK_SIZE, partData, 0, chunkToUpload);
-            String eTag = uploadFile(startUploadResponse.preSignUrls().get(i), partData);
+            String eTag = attachmentResourceClient.uploadFileExternal(startUploadResponse.preSignUrls().get(i),
+                    partData);
 
             eTags.add(eTag);
         }
 
         return eTags;
-    }
-
-    private String uploadFile(String url, byte[] data) {
-        try (var response = client.target(url)
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .put(Entity.entity(data, "*/*"))) {
-            return response.getHeaders().get("ETag").getFirst().toString();
-        }
     }
 
     private CompleteMultipartUploadRequest prepareCompleteUploadRequest(StartMultipartUploadRequest startUploadRequest,

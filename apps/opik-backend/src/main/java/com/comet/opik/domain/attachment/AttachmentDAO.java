@@ -10,15 +10,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
-import java.util.UUID;
-
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(AttachmentDAOImpl.class)
 public interface AttachmentDAO {
 
-    Mono<Long> addAttachment(AttachmentInfoHolder attachmentInfo, UUID containerId, String mimeType, long fileSize);
+    Mono<Long> addAttachment(AttachmentInfoHolder attachmentInfo, String mimeType, long fileSize);
 }
 
 @Singleton
@@ -58,7 +56,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
-    public Mono<Long> addAttachment(@NonNull AttachmentInfoHolder attachmentInfo, UUID containerId,
+    public Mono<Long> addAttachment(@NonNull AttachmentInfoHolder attachmentInfo,
             String mimeType, long fileSize) {
         return asyncTemplate.nonTransaction(connection -> {
 
@@ -66,7 +64,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
 
             statement.bind("entity_id", attachmentInfo.entityId())
                     .bind("entity_type", attachmentInfo.entityType().getValue())
-                    .bind("container_id", containerId)
+                    .bind("container_id", attachmentInfo.containerId())
                     .bind("file_name", attachmentInfo.fileName())
                     .bind("mime_type", mimeType)
                     .bind("file_size", fileSize);

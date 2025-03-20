@@ -19,11 +19,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.jdbi.v3.core.Jdbi;
@@ -51,8 +46,6 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Attachment Resource Test")
@@ -99,7 +92,6 @@ class AttachmentResourceMinIOTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
-    private Client client;
     private String baseURI;
     public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576;//6M
 
@@ -114,7 +106,6 @@ class AttachmentResourceMinIOTest {
         }
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
-        this.client = ClientBuilder.newClient();
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
 
         ClientSupportUtils.config(client);
@@ -127,7 +118,6 @@ class AttachmentResourceMinIOTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
-        client.close();
     }
 
     @Test
@@ -154,25 +144,13 @@ class AttachmentResourceMinIOTest {
         InputStream is = getClass().getClassLoader().getResourceAsStream(FILE_NAME);
         byte[] fileData = IOUtils.toByteArray(is);
 
-        uploadFile(startUploadResponse, fileData, apiKey, workspaceName);
+        attachmentResourceClient.uploadFile(startUploadResponse, fileData, apiKey, workspaceName);
 
         log.info("Complete attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId,
                 startUploadRequest.projectName(),
                 startUploadRequest.entityId());
 
         // TODO: proper verification that the file was uploaded will be done once we prepare corresponding endpoint in OPIK-728
-    }
-
-    private void uploadFile(StartMultipartUploadResponse startUploadResponse, byte[] data, String apiKey,
-            String workspaceName) {
-        try (var response = client.target(startUploadResponse.preSignUrls().getFirst())
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.entity(data, "*/*"))) {
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(204);
-        }
     }
 
     private StartMultipartUploadRequest prepareStartUploadRequest() {

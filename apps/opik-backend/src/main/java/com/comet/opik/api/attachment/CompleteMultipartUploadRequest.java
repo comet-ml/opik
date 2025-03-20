@@ -22,6 +22,7 @@ public record CompleteMultipartUploadRequest(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @NotNull EntityType entityType,
         @NotNull UUID entityId,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID containerId,
         @NotNull Long fileSize,
         String mimeType,
         @NotBlank String uploadId,

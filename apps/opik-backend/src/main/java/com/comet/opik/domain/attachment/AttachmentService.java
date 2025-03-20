@@ -21,6 +21,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.tika.Tika;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -58,8 +59,10 @@ class AttachmentServiceImpl implements AttachmentService {
             return prepareMinIOUploadResponse(startUploadRequest);
         }
 
-        UUID projectId = getProjectIdByName(startUploadRequest.projectName(), workspaceId, userName);
-        String key = prepareKey(startUploadRequest, workspaceId, projectId);
+        startUploadRequest = startUploadRequest.toBuilder()
+                .containerId(getProjectIdByName(startUploadRequest.projectName(), workspaceId, userName))
+                .build();
+        String key = prepareKey(startUploadRequest, workspaceId);
 
         CreateMultipartUploadResponse createResponse = fileUploadService.createMultipartUpload(key,
                 getMimeType(startUploadRequest));
@@ -81,13 +84,15 @@ class AttachmentServiceImpl implements AttachmentService {
             return;
         }
 
-        UUID projectId = getProjectIdByName(completeUploadRequest.projectName(), workspaceId, userName);
-        String key = prepareKey(completeUploadRequest, workspaceId, projectId);
+        completeUploadRequest = completeUploadRequest.toBuilder()
+                .containerId(getProjectIdByName(completeUploadRequest.projectName(), workspaceId, userName))
+                .build();
+        String key = prepareKey(completeUploadRequest, workspaceId);
         fileUploadService.completeMultipartUpload(key,
                 completeUploadRequest.uploadId(), completeUploadRequest.uploadedFileParts());
 
         attachmentDAO
-                .addAttachment(completeUploadRequest, projectId, getMimeType(completeUploadRequest),
+                .addAttachment(completeUploadRequest, getMimeType(completeUploadRequest),
                         completeUploadRequest.fileSize())
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .block();
@@ -102,19 +107,21 @@ class AttachmentServiceImpl implements AttachmentService {
                     Response.Status.FORBIDDEN);
         }
 
-        UUID projectId = getProjectIdByName(attachmentInfo.projectName(), workspaceId, userName);
-        String key = prepareKey(attachmentInfo, workspaceId, projectId);
+        attachmentInfo = attachmentInfo.toBuilder()
+                .containerId(getProjectIdByName(attachmentInfo.projectName(), workspaceId, userName))
+                .build();
+        String key = prepareKey(attachmentInfo, workspaceId);
 
         fileUploadService.upload(key, data, getMimeType(attachmentInfo));
 
-        attachmentDAO.addAttachment(attachmentInfo, projectId, getMimeType(attachmentInfo), data.length)
+        attachmentDAO.addAttachment(attachmentInfo, getMimeType(attachmentInfo), data.length)
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .block();
     }
 
-    String prepareKey(AttachmentInfoHolder infoHolder, String workspaceId, UUID projectId) {
+    private String prepareKey(AttachmentInfoHolder infoHolder, String workspaceId) {
         return KEY_TEMPLATE.replace("{workspaceId}", workspaceId)
-                .replace("{projectId}", projectId.toString())
+                .replace("{projectId}", infoHolder.containerId().toString())
                 .replace("{entity_type}", infoHolder.entityType().getValue())
                 .replace("{entity_id}", infoHolder.entityId().toString())
                 .replace("{file_name}", infoHolder.fileName());
@@ -133,7 +140,7 @@ class AttachmentServiceImpl implements AttachmentService {
 
     private StartMultipartUploadResponse prepareMinIOUploadResponse(StartMultipartUploadRequest uploadRequest) {
 
-        String baseUrl = new String(Base64.getUrlDecoder().decode(uploadRequest.path()));
+        String baseUrl = new String(Base64.getUrlDecoder().decode(uploadRequest.path()), StandardCharsets.UTF_8);
 
         UriBuilder uriBuilder = UriBuilder.fromUri(baseUrl)
                 .path("v1/private/attachment/upload")
