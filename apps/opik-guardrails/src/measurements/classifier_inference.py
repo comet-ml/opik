@@ -32,7 +32,7 @@ def initialize_model():
         task="zero-shot-classification",
         model=model,
         tokenizer=tokenizer,
-        multilabel=True,
+        multi_label=True,
     )
 
     return classifier
@@ -42,10 +42,14 @@ classifier = initialize_model()
 
 def measure_time_per_classification(text: str, topics: List[str], num_requests: int):
     start_time = time.time()
-    
+    results = []
     for _ in tqdm.tqdm(range(num_requests), desc="Performing classifications"):
-        classifier(text, topics)
+        results.append(classifier(text, topics, multilabel=True))
     
+    print(results[0]["labels"])
+    print(results[0]["scores"])
+    print(sum(results[0]["scores"]))
+
     end_time = time.time()
     total_time = end_time - start_time
     time_per_classification = total_time / num_requests
@@ -55,8 +59,16 @@ def measure_time_per_classification(text: str, topics: List[str], num_requests: 
 if __name__ == "__main__":
     with open("/home/akuzmik/work-repos/opik/apps/opik-guardrails/src/measurements/financial_article.txt", mode="rt") as f:
         text = f.read()
-    topics = ["finance"]#, "healthcare"]
-    num_requests = 50
+    
+#     text = """
+# Education and training is an important investment in you and
+# your family. Investing wisely in higher education is one of the
+# best financial decisions you can make. More education means
+# higher earnings for life. Studies show more education leads to
+# bigger paychecks. So, the more you learn, the more you earn."""
+
+    topics = ["finance", "healthcare", "art", "history"]
+    num_requests = 1
     
     throughput = measure_time_per_classification(text, topics, num_requests)
     print(f"Speed: {throughput:.2f} seconds per classification")

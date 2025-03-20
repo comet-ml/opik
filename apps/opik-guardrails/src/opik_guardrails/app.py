@@ -33,7 +33,7 @@ def initialize_model():
         task="zero-shot-classification",
         model=model,
         tokenizer=tokenizer,
-        multilabel=True,
+        multi_label=True,
     )
 
     return classifier
