@@ -1,8 +1,11 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -15,11 +18,17 @@ public class AttachmentResourceClient {
     private static final String RESOURCE_PATH = "%s/v1/private/attachment";
 
     private final ClientSupport client;
+    private final Client externatClient;
     private final String baseURI;
 
     public AttachmentResourceClient(ClientSupport client) {
         this.client = client;
+        this.externatClient = ClientBuilder.newClient();
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
+    }
+
+    public void close() {
+        externatClient.close();
     }
 
     public StartMultipartUploadResponse startMultiPartUpload(
@@ -52,6 +61,46 @@ public class AttachmentResourceClient {
                 .post(Entity.json(request))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void uploadAttachment(AttachmentInfo attachmentInfo, byte[] data,
+            String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("upload")
+                .queryParam("file_name", attachmentInfo.fileName())
+                .queryParam("project_name", attachmentInfo.projectName())
+                .queryParam("mime_type", attachmentInfo.mimeType())
+                .queryParam("entity_type", attachmentInfo.entityType().getValue())
+                .queryParam("entity_id", attachmentInfo.entityId())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.entity(data, MediaType.APPLICATION_OCTET_STREAM))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void uploadFile(StartMultipartUploadResponse startUploadResponse, byte[] data, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(startUploadResponse.preSignUrls().getFirst())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.entity(data, "*/*"))) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(204);
+        }
+    }
+
+    public String uploadFileExternal(String url, byte[] data) {
+        try (var response = externatClient.target(url)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .put(Entity.entity(data, "*/*"))) {
+            return response.getHeaders().get("ETag").getFirst().toString();
         }
     }
 }

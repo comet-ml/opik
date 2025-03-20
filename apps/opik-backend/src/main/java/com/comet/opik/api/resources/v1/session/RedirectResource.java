@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -43,7 +44,7 @@ public class RedirectResource {
         return Response
                 .seeOther(URI.create(
                         redirectService.projectRedirectUrl(traceId, workspaceName,
-                                new String(Base64.getUrlDecoder().decode(path)))))
+                                new String(Base64.getUrlDecoder().decode(path), StandardCharsets.UTF_8))))
                 .build();
     }
 
@@ -60,7 +61,7 @@ public class RedirectResource {
         return Response
                 .seeOther(URI.create(
                         redirectService.datasetRedirectUrl(datasetId, workspaceName,
-                                new String(Base64.getUrlDecoder().decode(path)))))
+                                new String(Base64.getUrlDecoder().decode(path), StandardCharsets.UTF_8))))
                 .build();
     }
 
@@ -77,7 +78,7 @@ public class RedirectResource {
             @QueryParam("path") @NotNull String path) {
         return Response
                 .seeOther(URI.create(redirectService.experimentsRedirectUrl(datasetId, experimentId, workspaceName,
-                        new String(Base64.getUrlDecoder().decode(path)))))
+                        new String(Base64.getUrlDecoder().decode(path), StandardCharsets.UTF_8))))
                 .build();
     }
 }
