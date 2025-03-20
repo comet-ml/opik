@@ -104,7 +104,7 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
               }
             />
             {keys.map((key) => {
-              const isActive = key === activeLine;
+              const isActive = experimentLabelsMap[key] === activeLine;
               let strokeOpacity = 1;
 
               if (activeLine) {
