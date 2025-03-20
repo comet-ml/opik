@@ -126,6 +126,7 @@ import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANG
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -4677,10 +4678,6 @@ class TracesResourceTest {
                         .doesNotContainAnyElementsOf(unexpectedSpans);
             }
         }
-    }
-
-    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
-        return URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
     }
 
     private void assertIgnoredFieldsSpans(List<Span> actualSpans, List<Span> expectedSpans) {

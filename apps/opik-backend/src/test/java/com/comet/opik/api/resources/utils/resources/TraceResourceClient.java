@@ -13,7 +13,6 @@ import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
@@ -39,6 +38,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -280,10 +280,6 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             }
         }
         return items;
-    }
-
-    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
-        return URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
     }
 
     public ProjectStats getTraceStats(String projectName, UUID projectId, String apiKey, String workspaceName,

@@ -620,7 +620,7 @@ class SpanDAO {
                 AND fsc.feedback_scores_count = 0
                 <endif>
                 <if(stream)>
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
                 ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
                 <endif>
@@ -631,7 +631,7 @@ class SpanDAO {
             GROUP BY
               s.*
             <if(stream)>
-            ORDER BY id DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>
             ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
             <endif>
