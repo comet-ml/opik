@@ -1,8 +1,10 @@
 import React from "react";
 import { Settings2 } from "lucide-react";
+import isEmpty from "lodash/isEmpty";
 
 import {
   LLMAnthropicConfigsType,
+  LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
@@ -18,8 +20,8 @@ import { Button, ButtonProps } from "@/components/ui/button";
 
 import OpenAIModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 import AnthropicModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
-import isEmpty from "lodash/isEmpty";
 import OpenRouterModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenRouterModelConfigs";
+import GeminiModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
@@ -57,6 +59,15 @@ const PromptModelConfigs = ({
       return (
         <OpenRouterModelConfigs
           configs={configs as LLMOpenRouterConfigsType}
+          onChange={onChange}
+        />
+      );
+    }
+
+    if (provider === PROVIDER_TYPE.GEMINI) {
+      return (
+        <GeminiModelConfigs
+          configs={configs as LLMGeminiConfigsType}
           onChange={onChange}
         />
       );

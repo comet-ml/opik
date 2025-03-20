@@ -355,8 +355,6 @@ export class FeedbackDefinitions {
      * @param {string} id
      * @param {FeedbackDefinitions.RequestOptions} requestOptions - Request-specific configuration.
      *
-     * @throws {@link OpikApi.ConflictError}
-     *
      * @example
      *     await client.feedbackDefinitions.deleteFeedbackDefinitionById("id")
      */
@@ -395,15 +393,10 @@ export class FeedbackDefinitions {
         }
 
         if (_response.error.reason === "status-code") {
-            switch (_response.error.statusCode) {
-                case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
-                default:
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-            }
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
         }
 
         switch (_response.error.reason) {
@@ -428,8 +421,6 @@ export class FeedbackDefinitions {
      *
      * @param {OpikApi.BatchDelete} request
      * @param {FeedbackDefinitions.RequestOptions} requestOptions - Request-specific configuration.
-     *
-     * @throws {@link OpikApi.ConflictError}
      *
      * @example
      *     await client.feedbackDefinitions.deleteFeedbackDefinitionsBatch({
@@ -472,15 +463,10 @@ export class FeedbackDefinitions {
         }
 
         if (_response.error.reason === "status-code") {
-            switch (_response.error.statusCode) {
-                case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
-                default:
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                    });
-            }
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+            });
         }
 
         switch (_response.error.reason) {

@@ -26,7 +26,7 @@ const ColoredTag: React.FunctionComponent<ColoredTagProps> = ({
       data-testid={testId}
       className={className}
     >
-      <TooltipWrapper content={label}>
+      <TooltipWrapper content={label} stopClickPropagation>
         <span>{label}</span>
       </TooltipWrapper>
     </Tag>
