@@ -12,7 +12,7 @@ import java.lang.reflect.Method;
 
 @RequiredArgsConstructor
 public class UsageLimitInterceptor implements MethodInterceptor {
-    private final Provider<UsageLimitService> freeTierLimitServiceProvider;
+    private final Provider<UsageLimitService> usageLimitServiceProvider;
     private final Provider<RequestContext> requestContextProvider;
 
     @Override
@@ -20,13 +20,13 @@ public class UsageLimitInterceptor implements MethodInterceptor {
         // get the method being invoked
         Method method = invocation.getMethod();
 
-        // check if the method is annotated with @FreeTierLimited
+        // check if the method is annotated with @UsageLimited
         if (!method.isAnnotationPresent(UsageLimited.class)) {
             return invocation.proceed();
         }
 
         // check if free tier limit is exceeded and if so throw an exception
-        freeTierLimitServiceProvider.get().isQuotaExceeded(requestContextProvider.get())
+        usageLimitServiceProvider.get().isQuotaExceeded(requestContextProvider.get())
                 .ifPresent(msg -> {
                     throw new ClientErrorException(msg, HttpStatus.SC_PAYMENT_REQUIRED);
                 });
