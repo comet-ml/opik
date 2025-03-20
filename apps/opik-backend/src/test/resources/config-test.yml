@@ -163,6 +163,13 @@ rateLimit:
   # Description: Whether or not rate limit is enabled
   enabled: false
 
+# Configuration for usage limit. This is not enabled by default for open source installations.
+# In order to support that, the remote authentication server must contain a `quotas` object in its authentication
+# response.
+usageLimit:
+  # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
+  errorMessage: "You have exceeded the usage limit for this operation."
+
 # Configuration for anonymous usage reporting
 usageReport:
   # Default: false

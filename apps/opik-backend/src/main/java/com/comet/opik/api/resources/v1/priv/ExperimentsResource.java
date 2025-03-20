@@ -20,6 +20,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -237,6 +238,7 @@ public class ExperimentsResource {
     @Operation(operationId = "createExperimentItems", summary = "Create experiment items", description = "Create experiment items", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
     @RateLimited
+    @UsageLimited
     public Response createExperimentItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemsBatch.class))) @NotNull @Valid ExperimentItemsBatch request) {
 

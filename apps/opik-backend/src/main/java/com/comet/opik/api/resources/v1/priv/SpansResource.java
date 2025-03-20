@@ -27,6 +27,7 @@ import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -175,6 +176,7 @@ public class SpansResource {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class)))})
     @RateLimited
+    @UsageLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(Span.View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
@@ -195,6 +197,7 @@ public class SpansResource {
     @Operation(operationId = "createSpans", summary = "Create spans", description = "Create spans", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
+    @UsageLimited
     public Response createSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(Span.View.Write.class) @NotNull @Valid SpanBatch spans) {
 
