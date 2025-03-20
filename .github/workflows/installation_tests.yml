@@ -52,7 +52,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}/tests_end_to_end
           export PYTHONPATH='.'
-          pytest -xvs tests/Installation/test_trace_logging.py
+          pytest -xvs tests/Installation/test_trace_logging.py --browser chromium
 
       - name: Stop Opik
         if: always()
@@ -106,12 +106,12 @@ jobs:
         run: |
           cd ${{ github.workspace }}/tests_end_to_end
           export PYTHONPATH='.'
-          pytest -xvs tests/Installation/test_trace_logging.py
+          pytest -xvs tests/Installation/test_trace_logging.py --browser chromium
 
       - name: Stop Opik
         if: always()
         run: |
-          cd ${{ github.workspace }}/docker-compose
+          cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
   test-docker-compose-readme-default:
@@ -160,12 +160,12 @@ jobs:
         run: |
           cd ${{ github.workspace }}/tests_end_to_end
           export PYTHONPATH='.'
-          pytest -xvs tests/Installation/test_trace_logging.py
+          pytest -xvs tests/Installation/test_trace_logging.py --browser chromium
 
       - name: Stop Opik
         if: always()
         run: |
-          cd ${{ github.workspace }}/docker-compose
+          cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
   test-docker-compose-readme-specific-version:
@@ -215,12 +215,12 @@ jobs:
         run: |
           cd ${{ github.workspace }}/tests_end_to_end
           export PYTHONPATH='.'
-          pytest -xvs tests/Installation/test_trace_logging.py
+          pytest -xvs tests/Installation/test_trace_logging.py --browser chromium
 
       - name: Stop Opik
         if: always()
         run: |
-          cd ${{ github.workspace }}/docker-compose
+          cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
   test-docker-compose-readme-build:
@@ -269,10 +269,10 @@ jobs:
         run: |
           cd ${{ github.workspace }}/tests_end_to_end
           export PYTHONPATH='.'
-          pytest -xvs tests/Installation/test_trace_logging.py
+          pytest -xvs tests/Installation/test_trace_logging.py --browser chromium
 
       - name: Stop Opik
         if: always()
         run: |
-          ${{ github.workspace }}/docker-compose
+          cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
