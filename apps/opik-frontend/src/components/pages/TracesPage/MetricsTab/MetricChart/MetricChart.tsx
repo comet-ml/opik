@@ -36,8 +36,8 @@ import ChartTooltipContent, {
 import { formatDate } from "@/lib/date";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
-import MetricChartLegendContent from "./MetricChartLegendContent";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
+import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
 
 const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
   value;
@@ -227,7 +227,7 @@ const MetricChart = ({
 
           <ChartLegend
             content={
-              <MetricChartLegendContent
+              <ChartHorizontalLegendContent
                 setActiveLine={setActiveLine}
                 chartId={chartId}
               />
@@ -301,6 +301,7 @@ const MetricChart = ({
                   connectNulls
                   strokeWidth={1.5}
                   strokeOpacity={strokeOpacity}
+                  animationDuration={800}
                 />
               );
             })
