@@ -13,8 +13,8 @@ COPY *${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz /images/${PYTHON_CODE_EXECUTOR_A
 
 COPY src ./src
 
-COPY entrypoint.sh .
-RUN chmod u+x entrypoint.sh
+COPY entrypoint.sh gunicorn.conf.py post_start_task.sh ./
+RUN chmod u+x entrypoint.sh post_start_task.sh
 
 EXPOSE 8000
 
@@ -26,6 +26,7 @@ ARG OPIK_VERSION
 ENV PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY="ghcr.io/comet-ml/opik"
 ENV PYTHON_CODE_EXECUTOR_IMAGE_NAME="opik-sandbox-executor-python"
 ENV PYTHON_CODE_EXECUTOR_IMAGE_TAG="${OPIK_VERSION}"
+ENV CREATE_DEMO_DATA="true"
 
 ENTRYPOINT ["tini", "--"]
 CMD ./entrypoint.sh
