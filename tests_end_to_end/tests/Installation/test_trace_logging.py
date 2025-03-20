@@ -37,12 +37,12 @@ def test_trace_logging():
     time.sleep(2)
 
     logger.info("Verifying trace exists")
-    
-    api_client = OpikApi(
-        base_url="http://localhost:5173/api")
 
-    response = api_client.traces.get_traces_by_project(project_name="installation_test_project", page=1, size=1)
+    api_client = OpikApi(base_url="http://localhost:5173/api")
+
+    response = api_client.traces.get_traces_by_project(
+        project_name="installation_test_project", page=1, size=1
+    )
     traces = response.dict()["content"]
 
     print(traces)
-
