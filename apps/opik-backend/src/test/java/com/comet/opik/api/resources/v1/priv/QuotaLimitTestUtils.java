@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.infrastructure.freetierlimit.Quota;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import org.junit.jupiter.params.provider.Arguments;
 
 import java.util.List;

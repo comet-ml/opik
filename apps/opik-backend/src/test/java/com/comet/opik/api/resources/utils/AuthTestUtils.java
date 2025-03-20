@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.utils;
 
-import com.comet.opik.infrastructure.freetierlimit.Quota;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import jakarta.ws.rs.core.HttpHeaders;

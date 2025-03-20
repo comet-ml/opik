@@ -1,11 +1,11 @@
-package com.comet.opik.infrastructure.freetierlimit;
+package com.comet.opik.infrastructure.usagelimit;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
 import org.apache.commons.collections4.ListUtils;
 
 import java.util.Optional;
 
-public class FreeTierLimitService {
+public class UsageLimitService {
     public static final String ERR_LIMIT_EXCEEDED = "You have reached the maximum allowed spans for a free account " +
             "(%s). Please contact sales at https://www.comet.com/site/about-us/contact-us/.";
 

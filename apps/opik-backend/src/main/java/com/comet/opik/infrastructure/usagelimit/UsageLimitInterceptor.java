@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.freetierlimit;
+package com.comet.opik.infrastructure.usagelimit;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Provider;
@@ -11,8 +11,8 @@ import org.apache.hc.core5.http.HttpStatus;
 import java.lang.reflect.Method;
 
 @RequiredArgsConstructor
-public class FreeTierLimitInterceptor implements MethodInterceptor {
-    private final Provider<FreeTierLimitService> freeTierLimitServiceProvider;
+public class UsageLimitInterceptor implements MethodInterceptor {
+    private final Provider<UsageLimitService> freeTierLimitServiceProvider;
     private final Provider<RequestContext> requestContextProvider;
 
     @Override
@@ -21,7 +21,7 @@ public class FreeTierLimitInterceptor implements MethodInterceptor {
         Method method = invocation.getMethod();
 
         // check if the method is annotated with @FreeTierLimited
-        if (!method.isAnnotationPresent(FreeTierLimited.class)) {
+        if (!method.isAnnotationPresent(UsageLimited.class)) {
             return invocation.proceed();
         }
 

@@ -2,7 +2,7 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.infrastructure.RedisConfig;
-import com.comet.opik.infrastructure.freetierlimit.Quota;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
