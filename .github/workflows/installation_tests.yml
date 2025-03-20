@@ -2,7 +2,7 @@ name: Installation Tests
 
 on:
   schedule:
-    - cron: '1 13 * * *'
+    - cron: '0 12 * * *' # runs every day at noon UTC
   workflow_dispatch:
 
 jobs:
@@ -147,7 +147,7 @@ jobs:
       - name: Install via Docker Compose README with specific version
         run: |
           cd deployment/docker-compose
-          export OPIK_VERSION=0.1.10
+          export OPIK_VERSION=1.6.5
           docker compose pull
           docker compose -f docker-compose.yaml up -d
           
