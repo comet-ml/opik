@@ -23,8 +23,11 @@ export const buildWorkspaceNameConfig = (
     withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""
   }`;
 
-export const buildOpikUrlOverrideConfig = (withHighlight = false) =>
-  `${IMPORT_OS_TEMPLATE} \n os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
+export const buildOpikUrlOverrideConfig = (
+  withHighlight = false,
+  prefix = "",
+) =>
+  `${prefix}os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
     BASE_API_URL,
     window.location.origin,
   ).toString()}${withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""}"`;
@@ -37,13 +40,23 @@ type PutConfigInCodeArgs = {
   withHighlight?: boolean;
 };
 
-export const getConfigCode = (
-  workspaceName: string,
-  apiKey?: string,
+type GetConfigCodeArgs = {
+  workspaceName: string;
+  apiKey?: string;
+  shouldMaskApiKey?: boolean;
+  withHighlight?: boolean;
+  shouldImportOS?: boolean;
+};
+
+export const getConfigCode = ({
+  workspaceName,
+  apiKey,
   shouldMaskApiKey = false,
   withHighlight = false,
-) => {
-  if (!apiKey) return buildOpikUrlOverrideConfig(withHighlight);
+  shouldImportOS = false,
+}: GetConfigCodeArgs) => {
+  const importOS = shouldImportOS ? `${IMPORT_OS_TEMPLATE} \n` : "";
+  if (!apiKey) return buildOpikUrlOverrideConfig(withHighlight, importOS);
 
   const apiKeyConfig = buildApiKeyConfig(
     apiKey,
@@ -55,7 +68,7 @@ export const getConfigCode = (
     withHighlight,
   );
 
-  return `${IMPORT_OS_TEMPLATE} \n${apiKeyConfig} \n${workspaceConfig}`;
+  return `${importOS}${apiKeyConfig} \n${workspaceConfig}`;
 };
 
 export const putConfigInCode = ({
@@ -68,12 +81,12 @@ export const putConfigInCode = ({
   let patchedCode = "";
 
   if (apiKey) {
-    const configCode = getConfigCode(
+    const configCode = getConfigCode({
       workspaceName,
       apiKey,
       shouldMaskApiKey,
       withHighlight,
-    );
+    });
 
     patchedCode = code.replace(OPIK_API_KEY_TEMPLATE, configCode);
   } else {

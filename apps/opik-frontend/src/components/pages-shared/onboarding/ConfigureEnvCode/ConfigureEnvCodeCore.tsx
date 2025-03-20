@@ -7,13 +7,19 @@ export type ConfigureEnvCodeCoreProps = {
 };
 const ConfigureEnvCodeCore = ({ apiKey }: ConfigureEnvCodeCoreProps) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const data = getConfigCode({
+    workspaceName,
+    apiKey,
+    shouldMaskApiKey: true,
+    shouldImportOS: true,
+  });
+  const copyData = getConfigCode({
+    workspaceName,
+    apiKey,
+    shouldImportOS: true,
+  });
 
-  return (
-    <CodeHighlighter
-      data={getConfigCode(workspaceName, apiKey, true)}
-      copyData={getConfigCode(workspaceName, apiKey)}
-    />
-  );
+  return <CodeHighlighter data={data} copyData={copyData} />;
 };
 
 export default ConfigureEnvCodeCore;
