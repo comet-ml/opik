@@ -13,7 +13,7 @@ topics_relevance_classifier = topic_restriction.TopicRelevanceClassifier()
 
 
 @guardrails_blueprint.route("/validate-topic", methods=["POST"])
-def validate_topic():
+def validate_topic() -> flask.Response:
     try:
         data = flask.request.get_json()
         validated_request = validators.TopicClassificationRequest(**data)
@@ -34,7 +34,9 @@ def validate_topic():
 
     except pydantic.ValidationError as validation_error:
         logger.warning(f"Validation error: {validation_error.errors()}")
-        return flask.jsonify({"error": "Invalid input", "details": validation_error.errors()}), 400
+        return flask.jsonify(
+            {"error": "Invalid input", "details": validation_error.errors()}
+        ), 400
 
     except Exception as exception:
         logger.error(f"Classification failed: {str(exception)}", exc_info=True)
