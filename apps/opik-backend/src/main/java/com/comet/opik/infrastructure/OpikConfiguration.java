@@ -33,6 +33,9 @@ public class OpikConfiguration extends JobConfiguration {
     private RateLimitConfig rateLimit = new RateLimitConfig();
 
     @Valid @NotNull @JsonProperty
+    private UsageLimitConfig usageLimit = new UsageLimitConfig();
+
+    @Valid @NotNull @JsonProperty
     private MetadataConfig metadata = new MetadataConfig();
 
     @Valid @NotNull @JsonProperty

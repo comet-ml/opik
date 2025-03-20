@@ -136,13 +136,13 @@ import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryPara
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS_SCORES;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.assertSpan;
+import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PARENT_SPAN_IS_MISMATCH;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.domain.SpanService.TRACE_ID_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.infrastructure.usagelimit.UsageLimitService.ERR_LIMIT_EXCEEDED;
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.MIN_FEEDBACK_SCORE_VALUE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -4514,7 +4514,7 @@ class SpansResourceTest {
             try (var actualResponse = spanResourceClient.createSpan(span, API_KEY, workspaceName, expectedStatus)) {
                 if (isLimitReached) {
                     var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
-                            ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
+                            ERR_USAGE_LIMIT_EXCEEDED);
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                     assertThat(actualError).isEqualTo(expectedError);
                 }
@@ -4727,7 +4727,7 @@ class SpansResourceTest {
                 if (isLimitReached) {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
                     var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
-                            ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
+                            ERR_USAGE_LIMIT_EXCEEDED);
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                     assertThat(actualError).isEqualTo(expectedError);
                 } else {
