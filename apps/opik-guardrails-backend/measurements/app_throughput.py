@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 MAX_CONCURRENT_REQUESTS = 4
 
 def send_classification_request(text, topics):
-    url = "http://127.0.0.1:5000/classify"
+    url = "http://127.0.0.1:5000/api/validate-topic"
     payload = {"text": text, "topics": topics}
     
     start_time = time.time()
@@ -151,9 +151,9 @@ def compare_concurrency_levels(text: str, topics: List[str], num_requests: int, 
         print(f"{workers:<10} {throughput:<15.2f} {avg_latency:<15.4f} {p95_latency:<15.4f}")
 
 if __name__ == "__main__":
-    with open("/home/akuzmik/work-repos/opik/apps/opik-guardrails/src/measurements/financial_article.txt", mode="rt") as f:
+    with open("/home/akuzmik/work-repos/opik/apps/opik-guardrails-backend/measurements/financial_article.txt", mode="rt") as f:
         text = f.read()
     topics = ["finance", "healthcare", "art", "transport companies"]
-    num_requests = 20
+    num_requests = 10
     
     run_benchmark(text, topics, num_requests, max_workers=MAX_CONCURRENT_REQUESTS)

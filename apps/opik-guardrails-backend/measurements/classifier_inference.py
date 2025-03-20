@@ -57,7 +57,7 @@ def measure_time_per_classification(text: str, topics: List[str], num_requests: 
     return time_per_classification
 
 if __name__ == "__main__":
-    with open("/home/akuzmik/work-repos/opik/apps/opik-guardrails/src/measurements/financial_article.txt", mode="rt") as f:
+    with open("/home/akuzmik/work-repos/opik/apps/opik-guardrails-backend/measurements/financial_article.txt", mode="rt") as f:
         text = f.read()
     
 #     text = """
