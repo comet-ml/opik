@@ -25,19 +25,20 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   onRunCodeCallback,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { code: codeWithConfig, lines } = putConfigInCode({
+  const { code: codeWithConfig, lines } = putConfigInCode(
     code,
     workspaceName,
     apiKey,
-    shouldMaskApiKey: true,
-    withHighlight: withLineHighlights,
-  });
-  const { code: codeWithConfigToCopy } = putConfigInCode({
+    true,
+    withLineHighlights,
+  );
+  const { code: codeWithConfigToCopy } = putConfigInCode(
     code,
     workspaceName,
     apiKey,
-    withHighlight: withLineHighlights,
-  });
+    false,
+    withLineHighlights,
+  );
 
   const canExecuteCode =
     executionUrl &&

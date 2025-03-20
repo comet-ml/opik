@@ -27,28 +27,12 @@ export const buildOpikUrlOverrideConfig = (withHighlight = false) =>
     window.location.origin,
   ).toString()}${withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""}"`;
 
-type PutConfigInCodeArgs = {
-  code: string;
-  workspaceName: string;
-  apiKey?: string;
-  shouldMaskApiKey?: boolean;
-  withHighlight?: boolean;
-};
-
-type GetConfigCodeArgs = {
-  workspaceName: string;
-  apiKey?: string;
-  shouldMaskApiKey?: boolean;
-  withHighlight?: boolean;
-  shouldImportOS?: boolean;
-};
-
-export const getConfigCode = ({
-  workspaceName,
-  apiKey,
+export const getConfigCode = (
+  workspaceName: string,
+  apiKey?: string,
   shouldMaskApiKey = false,
   withHighlight = false,
-}: GetConfigCodeArgs) => {
+) => {
   if (!apiKey) return buildOpikUrlOverrideConfig(withHighlight);
 
   const apiKeyConfig = buildApiKeyConfig(
@@ -64,22 +48,22 @@ export const getConfigCode = ({
   return `${apiKeyConfig} \n${workspaceConfig}`;
 };
 
-export const putConfigInCode = ({
-  code,
-  workspaceName,
-  apiKey,
-  shouldMaskApiKey,
+export const putConfigInCode = (
+  code: string,
+  workspaceName: string,
+  apiKey?: string,
+  shouldMaskApiKey = false,
   withHighlight = false,
-}: PutConfigInCodeArgs): { code: string; lines: number[] } => {
+): { code: string; lines: number[] } => {
   let patchedCode = "";
 
   if (apiKey) {
-    const configCode = getConfigCode({
+    const configCode = getConfigCode(
       workspaceName,
       apiKey,
       shouldMaskApiKey,
       withHighlight,
-    });
+    );
 
     patchedCode = code.replace(OPIK_API_KEY_TEMPLATE, configCode);
   } else {
