@@ -1,0 +1,211 @@
+name: Installation Tests
+
+on:
+  schedule:
+    - cron: '0 12 * * *' # runs every day at noon UTC
+  workflow_dispatch:
+
+jobs:
+  test-readme-installation:
+    name: Test Main README.md Installation With Pull
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-xdist opik
+
+      - name: Install via README.md instructions
+        run: |
+
+          cd deployment/docker-compose
+          docker compose pull
+          docker compose up --detach
+
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Run trace test
+        run: |
+          cd ${{ github.workspace }}
+          pytest -xvs tests_end_to_end/tests/Installation/test_trace_logging.py
+
+      - name: Stop Opik
+        if: always()
+        run: |
+          cd /tmp/opik-test/deployment/docker-compose
+          docker compose down
+
+  test-docs-installation:
+    name: Test Comet Documentation Installation No Pull First
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-xdist opik
+
+      - name: Install via Documentation instructions
+        run: |
+
+          docker compose up --detach
+          
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Run trace test
+        run: |
+          cd ${{ github.workspace }}
+          pytest -xvs tests_end_to_end/tests/Installation/test_trace_logging.py
+
+      - name: Stop Opik
+        if: always()
+        run: |
+          cd opik/deployment/docker-compose
+          docker compose down
+
+  test-docker-compose-readme-default:
+    name: Test Deployment README Default
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-xdist opik
+
+      - name: Install via Docker Compose README default method
+        run: |
+          cd deployment/docker-compose
+          docker compose pull
+          docker compose -f docker-compose.yaml up -d
+          
+          # Wait for services to be ready
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Run trace test
+        run: |
+          cd ${{ github.workspace }}
+          pytest -xvs tests_end_to_end/tests/Installation/test_trace_logging.py
+
+      - name: Stop Opik
+        if: always()
+        run: |
+          cd deployment/docker-compose
+          docker compose down
+
+  test-docker-compose-readme-specific-version:
+    name: Test Deployment README with Specific Version
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-xdist opik
+
+      - name: Install via Docker Compose README with specific version
+        run: |
+          cd deployment/docker-compose
+          export OPIK_VERSION=1.6.5
+          docker compose pull
+          docker compose -f docker-compose.yaml up -d
+          
+          # Wait for services to be ready
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Run trace test
+        run: |
+          cd ${{ github.workspace }}
+          pytest -xvs tests_end_to_end/tests/Installation/test_trace_logging.py
+
+      - name: Stop Opik
+        if: always()
+        run: |
+          cd deployment/docker-compose
+          docker compose down
+
+  test-docker-compose-readme-build:
+    name: Test Deployment README with Build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-xdist opik
+
+      - name: Install via Docker Compose README with build
+        run: |
+          cd deployment/docker-compose
+          docker compose pull
+          docker compose -f docker-compose.yaml up -d --build
+          
+          # Wait for services to be ready
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Run trace test
+        run: |
+          cd ${{ github.workspace }}
+          pytest -xvs tests_end_to_end/tests/Installation/test_trace_logging.py
+
+      - name: Stop Opik
+        if: always()
+        run: |
+          cd deployment/docker-compose
+          docker compose down

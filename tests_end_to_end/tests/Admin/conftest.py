@@ -22,7 +22,9 @@ def temp_user_with_api_key(page: Page, browser_context, env_config: EnvConfig):
         pytest.skip("ADMIN_API_KEY not set, skipping test")
 
     # Generate random username and password
-    random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=20))
+    random_suffix = "".join(
+        random.choices(string.ascii_lowercase + string.digits, k=20)
+    )
     username = f"temp-user-{random_suffix}"
     password = f"Password123_{random_suffix}"
     email = f"{username}@test.com"
