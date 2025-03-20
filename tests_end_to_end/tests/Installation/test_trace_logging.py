@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 def test_trace_logging():
     """Test that we can log a trace to the local Opik instance."""
     logger.info("Configuring Opik to use local installation")
-    opik.configure(use_local=True)
+    opik.configure(use_local=True, url="http://localhost:5173/")
 
     logger.info("Creating Opik client")
     client = opik.Opik()
