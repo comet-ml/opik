@@ -4,8 +4,6 @@ import { BASE_API_URL } from "@/api/api";
 export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
 export const OPIK_HIGHLIGHT_LINE_TEMPLATE = " # HIGHLIGHTED_LINE";
 
-export const IMPORT_OS_TEMPLATE = "import os";
-
 export const buildApiKeyConfig = (
   apiKey: string,
   masked = false,
@@ -24,7 +22,7 @@ export const buildWorkspaceNameConfig = (
   }`;
 
 export const buildOpikUrlOverrideConfig = (withHighlight = false) =>
-  `${IMPORT_OS_TEMPLATE} \n os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
+  `os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
     BASE_API_URL,
     window.location.origin,
   ).toString()}${withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""}"`;
@@ -55,7 +53,7 @@ export const getConfigCode = (
     withHighlight,
   );
 
-  return `${IMPORT_OS_TEMPLATE} \n${apiKeyConfig} \n${workspaceConfig}`;
+  return `${apiKeyConfig} \n${workspaceConfig}`;
 };
 
 export const putConfigInCode = ({
