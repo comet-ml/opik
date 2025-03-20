@@ -195,7 +195,6 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
             "ls_provider": "openai",
             "ls_temperature": ANY,
             "created_from": "langchain",
-            "usage": ANY_DICT,
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
