@@ -17,9 +17,20 @@ print_usage() {
   echo "If no option is passed, the script will start missing containers and then show the system status."
 }
 
+check_docker_status() {
+  # Ensure Docker is running
+  if ! timeout 3 docker info >/dev/null 2>&1; then
+    echo "❌ Docker is not running or not accessible. Please start Docker first."
+    exit 1
+  fi
+}
+
+
 check_containers_status() {
   local show_output="${1:-false}"
   local all_ok=true
+
+  check_docker_status
 
   for container in "${REQUIRED_CONTAINERS[@]}"; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
@@ -40,6 +51,8 @@ check_containers_status() {
 }
 
 start_missing_containers() {
+  check_docker_status
+
   [[ "$DEBUG_MODE" == true ]] && echo "🔍 Checking required containers..."
   all_running=true
 
@@ -101,12 +114,14 @@ start_missing_containers() {
 }
 
 stop_containers() {
+  check_docker_status
   echo "🛑 Stopping all required containers..."
   docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml stop
   echo "✅ All containers stopped and cleaned up!"
 }
 
 print_banner() {
+  check_docker_status
   frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
   ui_url="http://localhost:${frontend_port:-5173}"
 
