@@ -5091,7 +5091,7 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -5107,6 +5107,7 @@ class TracesResourceTest {
 
             try (var actualResponse = traceResourceClient.callCreateTrace(trace, API_KEY, workspaceName)) {
                 if (isLimitReached) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
                     var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
                             ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
@@ -5115,22 +5116,6 @@ class TracesResourceTest {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
                 }
             }
-        }
-
-        Stream<Arguments> testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation() {
-            return Stream.of(
-                    arguments(null, false),
-                    arguments(List.of(), false),
-                    arguments(List.of(Quota.builder()
-                            .type(Quota.QuotaType.SPAN_COUNT)
-                            .limit(25_000)
-                            .used(24_999)
-                            .build()), false),
-                    arguments(List.of(Quota.builder()
-                            .type(Quota.QuotaType.SPAN_COUNT)
-                            .limit(25_000)
-                            .used(25_000)
-                            .build()), true));
         }
     }
 
@@ -5296,7 +5281,7 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -5313,6 +5298,7 @@ class TracesResourceTest {
             try (var actualResponse = traceResourceClient.callBatchCreateTraces(List.of(trace), API_KEY,
                     workspaceName)) {
                 if (isLimitReached) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
                     var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
                             ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
@@ -5321,22 +5307,6 @@ class TracesResourceTest {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 }
             }
-        }
-
-        Stream<Arguments> testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation() {
-            return Stream.of(
-                    arguments(null, false),
-                    arguments(List.of(), false),
-                    arguments(List.of(Quota.builder()
-                            .type(Quota.QuotaType.SPAN_COUNT)
-                            .limit(25_000)
-                            .used(24_999)
-                            .build()), false),
-                    arguments(List.of(Quota.builder()
-                            .type(Quota.QuotaType.SPAN_COUNT)
-                            .limit(25_000)
-                            .used(25_000)
-                            .build()), true));
         }
     }
 
