@@ -1,8 +1,8 @@
+from typing import Dict, List, Optional
+
+import pydantic
 import torch
 import transformers
-import pydantic
-
-from typing import Dict, List, Optional
 
 MODEL_PATH = "facebook/bart-large-mnli"
 DEVICE = "cuda:0"

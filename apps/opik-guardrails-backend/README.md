@@ -17,3 +17,75 @@ docker run -p 5000:5000 opik-guardrails-backend:latest
 ```
 
 The server will be available at http://localhost:5000
+
+## API Endpoints
+
+### Topic Validation
+
+```bash
+curl -X POST http://localhost:5000/api/validate-topic \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "This text is about artificial intelligence and machine learning.",
+    "topics": ["politics", "religion", "artificial intelligence"],
+    "threshold": 0.5
+  }'
+```
+
+Optional parameters:
+- `topics`: Array of topics to check against (required)
+- `threshold`: Confidence threshold for topic detection (default: 0.5)
+
+Example response:
+```json
+{
+  "validation_passed": false,
+  "relevant_topics_scores": {
+    "artificial intelligence": 0.92
+  },
+  "scores": {
+    "politics": 0.12,
+    "religion": 0.05,
+    "artificial intelligence": 0.92
+  }
+}
+```
+
+### PII Validation
+
+```bash
+curl -X POST http://localhost:5000/api/validate-pii \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "My name is John Doe and my email is john.doe@example.com"
+  }'
+```
+
+Optional parameters:
+- `entities`: Array of specific entity types to detect (if not provided, all supported entity types will be detected). Supported entities can be found here: https://microsoft.github.io/presidio/supported_entities/
+- `language`: Language of the text (default: "en")
+
+
+Example response:
+```json
+{
+  "validation_passed": false,
+  "detected_entities": {
+    "PERSON": [
+      {
+        "start": 11,
+        "end": 19,
+        "score": 0.85,
+        "text": "John Doe"
+      }
+    ],
+    "EMAIL_ADDRESS": [
+      {
+        "start": 33,
+        "end": 52,
+        "score": 1.0,
+        "text": "john.doe@example.com"
+      }
+    ]
+  }
+}

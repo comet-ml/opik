@@ -3,3 +3,5 @@ gunicorn
 torch
 transformers
 accelerate  # for optimized GPU utilization
+presidio-analyzer
+spacy  # Download the en_core_web_lg model with: python -m spacy download en_core_web_lg
