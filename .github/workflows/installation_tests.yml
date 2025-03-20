@@ -20,15 +20,18 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: 3.12
 
       - name: Install Python dependencies
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+          pip install opik
 
       - name: Install via README.md instructions
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
         run: |
-          cd ${{ github.workspace }}/deployment/docker_compose
+          cd ${{ github.workspace }}/deployment/docker-compose
           docker compose pull
           docker compose up --detach
 
@@ -75,10 +78,13 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+          pip install opik
 
       - name: Install via Documentation instructions
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
         run: |
-          cd ${{ github.workspace }}/deployment/docker_compose
+          cd ${{ github.workspace }}/deployment/docker-compose
           docker compose up --detach
 
       - name: Check Docker pods are up (Local)
@@ -125,8 +131,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+          pip install opik
 
       - name: Install via Docker Compose README default method
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose pull
@@ -175,8 +184,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+          pip install opik
 
       - name: Install via Docker Compose README with specific version
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           export OPIK_VERSION=1.6.5
@@ -226,8 +238,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+          pip install opik
 
       - name: Install via Docker Compose README with build
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose pull
