@@ -9,7 +9,6 @@ from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.dspy.callback import OpikCallback
 from ...testlib import (
-    ANY,
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_STRING,
