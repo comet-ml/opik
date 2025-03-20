@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.spans;
 
 import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.resources.utils.TestArgs;
 
 import java.util.List;
 import java.util.Map;
@@ -8,12 +9,6 @@ import java.util.UUID;
 
 public sealed interface SpanPageTestAssertion<T, R>
         permits SpansTestAssertion, SpanStreamTestAssertion, StatsTestAssertion {
-
-    record TestArgs<T>(List<T> all, List<T> expected, List<T> unexpected) {
-        static <T> TestArgs<T> of(List<T> all, List<T> expected, List<T> unexpected) {
-            return new TestArgs<>(all, expected, unexpected);
-        }
-    }
 
     void runTestAndAssert(String projectName,
             UUID projectId,
