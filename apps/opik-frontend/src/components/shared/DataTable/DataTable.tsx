@@ -51,6 +51,7 @@ import {
   STICKY_DIRECTION,
 } from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import useCustomRowClick from "@/components/shared/DataTable/useCustomRowClick";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -108,6 +109,7 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   columnsStatistic?: ColumnsStatistic;
   data: TData[];
+  onRowClick?: (row: TData) => void;
   renderCustomRow?: (
     row: Row<TData>,
     stickyWorkaround?: boolean,
@@ -137,6 +139,7 @@ const DataTable = <TData, TValue>({
   columns,
   columnsStatistic,
   data,
+  onRowClick,
   renderCustomRow,
   getIsCustomRow = () => false,
   activeRowId,
@@ -156,6 +159,7 @@ const DataTable = <TData, TValue>({
   meta,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
+  const isRowClickable = isFunction(onRowClick);
 
   const table = useReactTable({
     data,
@@ -206,6 +210,9 @@ const DataTable = <TData, TValue>({
     },
   });
 
+  const { onClick } = useCustomRowClick<TData>({
+    onRowClick: onRowClick,
+  });
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
@@ -250,6 +257,15 @@ const DataTable = <TData, TValue>({
         key={row.id}
         data-state={row.getIsSelected() && "selected"}
         data-row-active={row.id === activeRowId}
+        data-row-id={row.id}
+        className={cn({
+          "cursor-pointer": isRowClickable,
+        })}
+        {...(isRowClickable && !row.getIsGrouped()
+          ? {
+              onClick: (e) => onClick?.(e, row.original),
+            }
+          : {})}
       >
         {row.getVisibleCells().map((cell) => renderCell(row, cell))}
       </TableRow>

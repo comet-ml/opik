@@ -13,5 +13,6 @@ public record TraceSearchCriteria(
         UUID projectId,
         List<? extends Filter> filters,
         List<SortingField> sortingFields,
+        UUID lastReceivedTraceId,
         boolean truncate) {
 }

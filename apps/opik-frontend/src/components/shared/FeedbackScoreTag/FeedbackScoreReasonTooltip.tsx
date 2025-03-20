@@ -32,6 +32,7 @@ const FeedbackScoreReasonTooltip: React.FC<FeedbackScoreReasonTooltipProps> = ({
         </div>
       }
       delayDuration={100}
+      stopClickPropagation
     >
       {children}
     </TooltipWrapper>

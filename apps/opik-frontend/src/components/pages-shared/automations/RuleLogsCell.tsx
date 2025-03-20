@@ -19,6 +19,7 @@ const RuleLogsCell = (context: CellContext<EvaluatorsRule, string>) => {
       className="items-center justify-end p-0"
     >
       <Link
+        onClick={(event) => event.stopPropagation()}
         to="/$workspaceName/automation-logs"
         params={{ workspaceName }}
         search={{
