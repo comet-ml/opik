@@ -26,6 +26,7 @@ jobs:
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
           pip install opik
+          playwright install chromium
 
       - name: Install via README.md instructions
         env:
@@ -79,6 +80,7 @@ jobs:
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
           pip install opik
+          playwright install chromium
 
       - name: Install via Documentation instructions
         env:
@@ -132,6 +134,7 @@ jobs:
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
           pip install opik
+          playwright install chromium
 
       - name: Install via Docker Compose README default method
         env:
@@ -185,6 +188,7 @@ jobs:
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
           pip install opik
+          playwright install chromium
 
       - name: Install via Docker Compose README with specific version
         env:
@@ -239,6 +243,7 @@ jobs:
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
           pip install opik
+          playwright install chromium
 
       - name: Install via Docker Compose README with build
         env:
