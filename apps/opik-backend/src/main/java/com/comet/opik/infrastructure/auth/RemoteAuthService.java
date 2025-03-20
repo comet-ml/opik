@@ -3,7 +3,7 @@ package com.comet.opik.infrastructure.auth;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
-import com.comet.opik.infrastructure.freetierlimit.Quota;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;

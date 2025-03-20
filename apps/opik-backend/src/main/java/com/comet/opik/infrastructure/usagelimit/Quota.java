@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.freetierlimit;
+package com.comet.opik.infrastructure.usagelimit;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;

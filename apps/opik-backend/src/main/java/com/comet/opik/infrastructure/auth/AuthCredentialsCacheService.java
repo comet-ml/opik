@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.infrastructure.freetierlimit.Quota;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.utils.JsonUtils;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
