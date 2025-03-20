@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -51,7 +53,7 @@ jobs:
       - name: Stop Opik
         if: always()
         run: |
-          cd /tmp/opik-test/deployment/docker-compose
+          cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
   test-docs-installation:
@@ -62,6 +64,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -99,7 +103,7 @@ jobs:
       - name: Stop Opik
         if: always()
         run: |
-          cd opik/deployment/docker-compose
+          cd ${{ github.workspace }}/docker-compose
           docker compose down
 
   test-docker-compose-readme-default:
@@ -110,6 +114,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -147,7 +153,7 @@ jobs:
       - name: Stop Opik
         if: always()
         run: |
-          cd deployment/docker-compose
+          cd ${{ github.workspace }}/docker-compose
           docker compose down
 
   test-docker-compose-readme-specific-version:
@@ -158,6 +164,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -196,7 +204,7 @@ jobs:
       - name: Stop Opik
         if: always()
         run: |
-          cd deployment/docker-compose
+          cd ${{ github.workspace }}/docker-compose
           docker compose down
 
   test-docker-compose-readme-build:
@@ -207,6 +215,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -244,5 +254,5 @@ jobs:
       - name: Stop Opik
         if: always()
         run: |
-          cd deployment/docker-compose
+          ${{ github.workspace }}/docker-compose
           docker compose down
