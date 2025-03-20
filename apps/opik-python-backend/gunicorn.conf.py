@@ -1,6 +1,11 @@
 import subprocess
 import os
 
+accesslog = "-"
+errorlog = "-"
+loglevel = "info"
+capture_output = True
+
 def when_ready(server):
     server.log.info("✔ Gunicorn is ready. Running post-start hook...")
 
