@@ -167,6 +167,8 @@ class RemoteAuthService implements AuthService {
 
     private void setCredentialIntoContext(
             String userName, String workspaceId, String workspaceName, List<Quota> quotas) {
+        log.debug("setting credentials into context, userName: {}, workspaceId: {}, workspaceName: {}, quotas: {}",
+                userName, workspaceId, workspaceName, quotas);
         requestContext.get().setUserName(userName);
         requestContext.get().setWorkspaceId(workspaceId);
         requestContext.get().setWorkspaceName(workspaceName);
