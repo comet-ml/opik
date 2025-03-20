@@ -38,11 +38,13 @@ import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
-import useAllUserWorkspaces from "./useAllUserWorkspaces";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
 import { buildUrl } from "./utils";
+
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 
 const UserMenu = () => {
   const navigate = useNavigate();
@@ -53,11 +55,16 @@ const UserMenu = () => {
   const { data: organizations, isLoading } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
-  const { data: workspaces } = useAllUserWorkspaces({
+
+  const { data: userInvitedWorkspaces } = useUserInvitedWorkspaces({
     enabled: !!user?.loggedIn,
   });
 
-  const workspace = workspaces?.find(
+  const { data: allWorkspaces } = useAllWorkspaces({
+    enabled: !!user?.loggedIn,
+  });
+
+  const workspace = allWorkspaces?.find(
     (workspace) => workspace.workspaceName === workspaceName,
   );
 
@@ -75,7 +82,8 @@ const UserMenu = () => {
     isLoading ||
     !organizations ||
     !userPermissions ||
-    !workspaces
+    !allWorkspaces ||
+    !userInvitedWorkspaces
   ) {
     return null;
   }
@@ -91,13 +99,11 @@ const UserMenu = () => {
   const organization = organizations.find((org) => {
     return org.id === workspace?.organizationId;
   });
-  const organizationWorkspaces = workspaces.filter(
+
+  const organizationUserWorkspaces = userInvitedWorkspaces.filter(
     (workspace) => workspace.organizationId === organization?.id,
   );
-  const teamNames = user.getTeams.teams.map((team) => team.teamName);
-  const organizationWorkspacesAsMember = organizationWorkspaces.filter(
-    (workspace) => teamNames.includes(workspace.workspaceName),
-  );
+
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
   const workspacePermissions = userPermissions.find(
@@ -110,7 +116,7 @@ const UserMenu = () => {
     isOrganizationAdmin || invitePermission?.permissionValue === "true";
 
   const handleChangeOrganization = (newOrganization: Organization) => {
-    const newOrganizationWorkspaces = workspaces.filter(
+    const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
       (workspace) => workspace.organizationId === newOrganization.id,
     );
 
@@ -193,25 +199,24 @@ const UserMenu = () => {
               <DropdownMenuPortal>
                 <DropdownMenuSubContent className="w-60">
                   <div className="max-h-[200px] overflow-auto">
-                    {sortBy(
-                      organizationWorkspacesAsMember,
-                      "workspaceName",
-                    ).map((workspace) => (
-                      <Link
-                        key={workspace.workspaceName}
-                        to={`/${workspace.workspaceName}`}
-                      >
-                        <DropdownMenuCheckboxItem
-                          checked={workspaceName === workspace.workspaceName}
+                    {sortBy(organizationUserWorkspaces, "workspaceName").map(
+                      (workspace) => (
+                        <Link
+                          key={workspace.workspaceName}
+                          to={`/${workspace.workspaceName}`}
                         >
-                          <TooltipWrapper content={workspace.workspaceName}>
-                            <span className="truncate">
-                              {workspace.workspaceName}
-                            </span>
-                          </TooltipWrapper>
-                        </DropdownMenuCheckboxItem>
-                      </Link>
-                    ))}
+                          <DropdownMenuCheckboxItem
+                            checked={workspaceName === workspace.workspaceName}
+                          >
+                            <TooltipWrapper content={workspace.workspaceName}>
+                              <span className="truncate">
+                                {workspace.workspaceName}
+                              </span>
+                            </TooltipWrapper>
+                          </DropdownMenuCheckboxItem>
+                        </Link>
+                      ),
+                    )}
                   </div>
                   <DropdownMenuSeparator />
                   <a

@@ -14,9 +14,9 @@ import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import useAppStore from "@/store/AppStore";
 import useSegment from "./analytics/useSegment";
 import Logo from "./Logo";
-import useAllUserWorkspaces from "./useAllUserWorkspaces";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 
 type WorkspacePreloaderProps = {
   children: React.ReactNode;
@@ -26,9 +26,11 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   children,
 }) => {
   const { data: user, isLoading } = useUser();
-  const { data: workspaces } = useAllUserWorkspaces({
+
+  const { data: allWorkspaces } = useAllWorkspaces({
     enabled: !!user?.loggedIn,
   });
+
   const matchRoute = useMatchRoute();
   const workspaceNameFromURL = useParams({
     strict: false,
@@ -50,12 +52,12 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return null;
   }
 
-  if (!workspaces) {
+  if (!allWorkspaces) {
     return <Loader />;
   }
 
   const workspace = workspaceNameFromURL
-    ? workspaces.find(
+    ? allWorkspaces.find(
         (workspace) => workspace.workspaceName === workspaceNameFromURL,
       )
     : null;
@@ -63,7 +65,9 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   if (workspace) {
     useAppStore.getState().setActiveWorkspaceName(workspace.workspaceName);
   } else {
-    const defaultWorkspace = workspaces.find((workspace) => workspace.default);
+    const defaultWorkspace = allWorkspaces.find(
+      (workspace) => workspace.default,
+    );
 
     if (defaultWorkspace) {
       if (isRootPath) {

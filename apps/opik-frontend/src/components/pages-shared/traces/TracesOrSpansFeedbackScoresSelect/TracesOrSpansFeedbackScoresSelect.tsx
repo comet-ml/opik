@@ -11,6 +11,7 @@ type TracesOrSpansFeedbackScoresSelectProps = {
   onValueChange: (value: string) => void;
   type?: TRACE_DATA_TYPE;
   placeholder?: string;
+  className?: string;
 };
 
 const TracesOrSpansFeedbackScoresSelect: React.FC<
@@ -21,6 +22,7 @@ const TracesOrSpansFeedbackScoresSelect: React.FC<
   onValueChange,
   type = TRACE_DATA_TYPE.traces,
   placeholder = "Select score",
+  className,
 }) => {
   const { data } = useTracesOrSpansScoresColumns(
     {
@@ -43,6 +45,7 @@ const TracesOrSpansFeedbackScoresSelect: React.FC<
       onChange={onValueChange}
       options={options}
       placeholder={placeholder}
+      className={className}
     />
   );
 };

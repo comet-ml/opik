@@ -40,6 +40,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -148,7 +149,6 @@ class TracesResourceTest {
     private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
             "comments", "threadId"};
-    private static final String[] IGNORED_FIELDS_SPANS = SpanResourceClient.IGNORED_FIELDS;
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -157,15 +157,12 @@ class TracesResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
-
-    private final WireMockUtils.WireMockRuntime wireMock;
 
     {
         Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
@@ -3446,8 +3443,9 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
+            traces.set(traces.size() - 1, traces.getLast().toBuilder().feedbackScores(null).build());
             traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
-            traces.forEach(trace -> trace.feedbackScores()
+            traces.subList(0, traces.size() - 1).forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
             var expectedTraces = getExpectedTraces.apply(traces);
             var unexpectedTraces = getUnexpectedTraces.apply(traces);
@@ -4615,13 +4613,13 @@ class TracesResourceTest {
 
             assertThat(actualSpans.size()).isEqualTo(expectedSpans.size());
             assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_SPANS)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedSpans);
             assertIgnoredFieldsSpans(actualSpans, expectedSpans);
 
             if (!unexpectedSpans.isEmpty()) {
                 assertThat(actualSpans)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_SPANS)
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                         .doesNotContainAnyElementsOf(unexpectedSpans);
             }
         }

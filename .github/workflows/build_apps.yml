@@ -16,9 +16,10 @@ on:
         required: false
         description: Version (optional)
         default: ""
-      push_latest:
+      is_release:
         type: boolean
-        description: Push latest tag (optional)
+        required: true
+        description: Is release build
         default: false
   workflow_call:
     inputs:
@@ -27,10 +28,11 @@ on:
         required: true
         description: Version
         default: ""
-      push_latest:
+      is_release:
         type: boolean
-        description: Push latest tag 
-        default: true
+        required: true
+        description: Is release build
+        default: false
 
 jobs:
 
@@ -39,7 +41,6 @@ jobs:
     outputs:
         version: ${{ steps.version.outputs.version }}
         build_from: ${{ steps.version.outputs.build_from }}
-        push_latest: ${{ steps.version.outputs.push_latest }}
     steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
@@ -77,12 +78,6 @@ jobs:
             else
               echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
             fi
-            if [[ ("${{inputs.version}}" != "" && "${{inputs.push_latest}}" == "true") || "${{ github.ref_name }}" == "main" ]]; then
-              echo "push_latest=true" | tee -a $GITHUB_OUTPUT
-            else
-              echo "push_latest=false" | tee -a $GITHUB_OUTPUT
-            fi
-
             
   build-backend:
     needs:
@@ -94,7 +89,7 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: false
       comet_build_args: ""
-      push_latest: ${{needs.set-version.outputs.push_latest}}
+      is_release: ${{ inputs.is_release || false }}
 
   build-sandbox-executor-python:
     needs:
@@ -106,7 +101,7 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: false
       comet_build_args: ""
-      push_latest: ${{needs.set-version.outputs.push_latest}}
+      is_release: ${{ inputs.is_release || false }}
 
   build-python-backend:
     needs:
@@ -119,7 +114,7 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: false
       comet_build_args: ""
-      push_latest: ${{needs.set-version.outputs.push_latest}}
+      is_release: ${{ inputs.is_release || false }}
 
   build-frontend:
     needs:
@@ -131,15 +126,18 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: true
       comet_build_args: "BUILD_MODE=comet"
-      push_latest: ${{needs.set-version.outputs.push_latest}}
+      is_release: ${{ inputs.is_release || false }}
       
   create-git-tag:
+    if: ${{ !(inputs.is_release || false) }}
     needs:
       - set-version
       - build-backend
       - build-frontend
       - build-python-backend
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4

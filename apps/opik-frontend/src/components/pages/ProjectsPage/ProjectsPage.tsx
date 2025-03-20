@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   JsonParam,
   NumberParam,
@@ -182,6 +183,7 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
 ];
 
 const ProjectsPage: React.FunctionComponent = () => {
+  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
@@ -297,6 +299,19 @@ const ProjectsPage: React.FunctionComponent = () => {
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleRowClick = useCallback(
+    (row: ProjectWithStatistic) => {
+      navigate({
+        to: "/$workspaceName/projects/$projectId/traces",
+        params: {
+          projectId: row.id,
+          workspaceName,
+        },
+      });
+    },
+    [navigate, workspaceName],
+  );
+
   const handleNewProjectClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
@@ -337,6 +352,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       <DataTable
         columns={columns}
         data={projects}
+        onRowClick={handleRowClick}
         sortConfig={{
           enabled: true,
           sorting: sortedColumns,
