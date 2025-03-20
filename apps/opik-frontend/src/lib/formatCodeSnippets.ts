@@ -27,6 +27,14 @@ export const buildOpikUrlOverrideConfig = (withHighlight = false) =>
     window.location.origin,
   ).toString()}${withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""}"`;
 
+type PutConfigInCodeArgs = {
+  code: string;
+  workspaceName: string;
+  apiKey?: string;
+  shouldMaskApiKey?: boolean;
+  withHighlight?: boolean;
+};
+
 export const getConfigCode = (
   workspaceName: string,
   apiKey?: string,
@@ -48,13 +56,13 @@ export const getConfigCode = (
   return `${apiKeyConfig} \n${workspaceConfig}`;
 };
 
-export const putConfigInCode = (
-  code: string,
-  workspaceName: string,
-  apiKey?: string,
-  shouldMaskApiKey = false,
+export const putConfigInCode = ({
+  code,
+  workspaceName,
+  apiKey,
+  shouldMaskApiKey,
   withHighlight = false,
-): { code: string; lines: number[] } => {
+}: PutConfigInCodeArgs): { code: string; lines: number[] } => {
   let patchedCode = "";
 
   if (apiKey) {

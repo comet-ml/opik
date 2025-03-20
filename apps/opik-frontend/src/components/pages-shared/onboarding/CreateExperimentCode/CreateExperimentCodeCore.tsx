@@ -11,17 +11,17 @@ const CreateExperimentCodeCore: React.FC<CreateExperimentCodeCoreProps> = ({
   code,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { code: codeWithConfig } = putConfigInCode(
+  const { code: codeWithConfig } = putConfigInCode({
     code,
     workspaceName,
     apiKey,
-    true,
-  );
-  const { code: codeWithConfigToCopy } = putConfigInCode(
+    shouldMaskApiKey: true,
+  });
+  const { code: codeWithConfigToCopy } = putConfigInCode({
     code,
     workspaceName,
     apiKey,
-  );
+  });
 
   return (
     <CodeHighlighter data={codeWithConfig} copyData={codeWithConfigToCopy} />
