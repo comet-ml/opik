@@ -61,8 +61,7 @@ def add_usage_to_metadata(
     if usage is None:
         return metadata
 
-    if metadata is None:
-        metadata = {}
+    metadata = {} if metadata is None else {**metadata}
 
     if isinstance(usage, llm_usage.OpikUsage):
         metadata["usage"] = usage.provider_usage.model_dump(exclude_none=True)
