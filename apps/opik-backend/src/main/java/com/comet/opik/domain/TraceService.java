@@ -92,6 +92,7 @@ public interface TraceService {
 
     Mono<TraceThread> getThreadById(UUID projectId, String threadId);
 
+    Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
 }
 
 @Slf4j
@@ -457,6 +458,19 @@ class TraceServiceImpl implements TraceService {
     public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId) {
         return dao.findThreadById(projectId, threadId)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace Thread", threadId))));
+    }
+
+    @Override
+    public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
+
+        if (criteria.projectId() != null) {
+            return dao.search(limit, criteria);
+        }
+
+        return getProjectByName(criteria.projectName())
+                .map(project -> criteria.toBuilder().projectId(project.id()).build())
+                .flatMapMany(newCriteria -> dao.search(limit, newCriteria))
+                .switchIfEmpty(Flux.empty());
     }
 
 }

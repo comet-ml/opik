@@ -38,7 +38,6 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -71,7 +70,6 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
@@ -133,6 +131,8 @@ import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANG
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -267,7 +267,7 @@ class DatasetsResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
             assertThat(actualResponse.hasEntity()).isFalse();
 
-            var id = TestUtils.getIdFromLocation(actualResponse.getLocation());
+            var id = getIdFromLocation(actualResponse.getLocation());
 
             assertThat(id).isNotNull();
             assertThat(id.version()).isEqualTo(7);
@@ -3054,7 +3054,7 @@ class DatasetsResourceTest {
                 .post(Entity.entity(trace, MediaType.APPLICATION_JSON_TYPE))) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
-            return TestUtils.getIdFromLocation(actualResponse.getLocation());
+            return getIdFromLocation(actualResponse.getLocation());
         }
     }
 
@@ -3066,7 +3066,7 @@ class DatasetsResourceTest {
                 .post(Entity.entity(span, MediaType.APPLICATION_JSON_TYPE))) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
 
-            return TestUtils.getIdFromLocation(actualResponse.getLocation());
+            return getIdFromLocation(actualResponse.getLocation());
         }
     }
 
@@ -4563,12 +4563,6 @@ class DatasetsResourceTest {
                             Operator.CONTAINS.getQueryParamOperator(),
                             RandomStringUtils.randomAlphanumeric(10))));
         }
-    }
-
-    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
-        return CollectionUtils.isEmpty(filters)
-                ? null
-                : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
     }
 
     private DatasetItemPage assertDatasetExperimentPage(UUID datasetId, UUID experimentId,

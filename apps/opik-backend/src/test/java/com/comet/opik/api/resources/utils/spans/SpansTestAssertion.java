@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.spans;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.resources.utils.TestArgs;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.domain.SpanType;
 import lombok.RequiredArgsConstructor;

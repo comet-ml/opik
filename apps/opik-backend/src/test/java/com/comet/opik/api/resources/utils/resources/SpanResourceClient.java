@@ -9,7 +9,6 @@ import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.SpanFilter;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
@@ -22,7 +21,6 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.http.HttpStatus;
@@ -30,13 +28,13 @@ import org.glassfish.jersey.client.ChunkedInput;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamUtils;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -52,7 +50,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     public UUID createSpan(Span span, String apiKey, String workspaceName) {
         try (var response = createSpan(span, apiKey, workspaceName, HttpStatus.SC_CREATED)) {
             assertThat(response.hasEntity()).isFalse();
-            var actualId = TestUtils.getIdFromLocation(response.getLocation());
+            var actualId = getIdFromLocation(response.getLocation());
             if (span.id() != null) {
                 assertThat(actualId).isEqualTo(span.id());
             } else {
@@ -85,7 +83,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
-            return TestUtils.getIdFromLocation(response.getLocation());
+            return getIdFromLocation(response.getLocation());
         }
     }
 
@@ -309,12 +307,6 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
         return actualResponse.readEntity(ProjectStats.class);
-    }
-
-    private String toURLEncodedQueryParam(List<?> filters) {
-        return CollectionUtils.isEmpty(filters)
-                ? null
-                : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
     }
 
 }

@@ -303,7 +303,7 @@ public class SpanService {
     }
 
     @WithSpan
-    public Flux<Span> search(int limit, SpanSearchCriteria criteria) {
+    public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
 
         if (criteria.projectId() != null) {
             return spanDAO.search(limit, criteria);

@@ -1,7 +1,6 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.filter.SpanFilter;
-import com.comet.opik.domain.SpanType;
+import com.comet.opik.api.filter.TraceFilter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -17,17 +16,14 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record SpanSearchStreamRequest(
-        UUID traceId,
+public record TraceSearchStreamRequest(
         String projectName,
         UUID projectId,
-        SpanType type,
-        List<SpanFilter> filters,
-        @Schema(description = "Max number of spans to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
+        List<TraceFilter> filters,
         UUID lastRetrievedId,
+        @Schema(description = "Max number of traces to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
         @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") @DefaultValue("true") boolean truncate) {
 
-    @Override
     public Integer limit() {
         return limit == null ? 500 : limit;
     }
