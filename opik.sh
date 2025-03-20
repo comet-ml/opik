@@ -18,7 +18,7 @@ print_usage() {
 }
 
 check_containers_status() {
-  local show_ouput="${1:-false}"
+  local show_output="${1:-false}"
   local all_ok=true
 
   for container in "${REQUIRED_CONTAINERS[@]}"; do
