@@ -9,6 +9,8 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 public class QuotaLimitTestUtils {
+    public static final String ERR_USAGE_LIMIT_EXCEEDED = "You have exceeded the usage limit for this operation.";
+
     public static Stream<Arguments> quotaLimitsTestProvider() {
         return Stream.of(
                 arguments(null, false),

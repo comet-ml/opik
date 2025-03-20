@@ -114,9 +114,9 @@ import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
-import static com.comet.opik.infrastructure.usagelimit.UsageLimitService.ERR_LIMIT_EXCEEDED;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -2785,7 +2785,7 @@ class ExperimentsResourceTest {
                 if (isLimitReached) {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
                     var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
-                            ERR_LIMIT_EXCEEDED.formatted(quotas.getFirst().limit()));
+                            ERR_USAGE_LIMIT_EXCEEDED);
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                     assertThat(actualError).isEqualTo(expectedError);
                 } else {

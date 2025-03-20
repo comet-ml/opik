@@ -1,13 +1,21 @@
 package com.comet.opik.infrastructure.usagelimit;
 
+import com.comet.opik.infrastructure.UsageLimitConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.inject.Inject;
+import lombok.NonNull;
 import org.apache.commons.collections4.ListUtils;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Optional;
 
 public class UsageLimitService {
-    public static final String ERR_LIMIT_EXCEEDED = "You have reached the maximum allowed spans for a free account " +
-            "(%s). Please contact sales at https://www.comet.com/site/about-us/contact-us/.";
+    private final UsageLimitConfig usageLimitConfig;
+
+    @Inject
+    public UsageLimitService(@NonNull @Config("usageLimit") UsageLimitConfig usageLimitConfig) {
+        this.usageLimitConfig = usageLimitConfig;
+    }
 
     public Optional<String> isQuotaExceeded(RequestContext requestContext) {
         // no quota means it's either a self-hosted installation or pro plan user
@@ -18,14 +26,14 @@ public class UsageLimitService {
         // check if any quota has been reached
         for (Quota quota : requestContext.getQuotas()) {
             if (quota.used() >= quota.limit()) {
-                return Optional.of(getMessage(quota));
+                return Optional.of(getMessage());
             }
         }
 
         return Optional.empty();
     }
 
-    private String getMessage(Quota quota) {
-        return String.format(ERR_LIMIT_EXCEEDED, quota.limit());
+    private String getMessage() {
+        return usageLimitConfig.getErrorMessage();
     }
 }
