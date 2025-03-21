@@ -1,33 +1,35 @@
-from typing import Dict, List, Optional
+from typing import Dict
 
-import pydantic
 import torch
 import transformers
+
+from opik_guardrails import schemas
+
+from . import base_validator
 
 MODEL_PATH = "facebook/bart-large-mnli"
 DEVICE = "cuda:0"
 
 
-class TopicsClassificationResult(pydantic.BaseModel):
-    relevant_topics_scores: Dict[str, float]
+class RestrictedTopicValidationResult(base_validator.ValidationResult):
+    matched_topics_scores: Dict[str, float]
     scores: Dict[str, float]
 
 
-class TopicRelevanceClassifier:
+class RestrictedTopicValidator(base_validator.BaseValidator):
     """A wrapper for the zero-shot classification model."""
 
     def __init__(self) -> None:
         self._classification_pipeline = _load_model(
             model_path=MODEL_PATH, device=DEVICE
         )
-        self._default_threshold = 0.5
 
-    def predict(
-        self, text: str, topics: List[str], threshold: Optional[float]
-    ) -> TopicsClassificationResult:
-        threshold = threshold if threshold is not None else self._default_threshold
-
-        classification_result = self._classification_pipeline(text, topics)
+    def validate(
+        self,
+        text: str,
+        config: schemas.RestrictedTopicValidationConfig,
+    ) -> RestrictedTopicValidationResult:
+        classification_result = self._classification_pipeline(text, config.topics)
         scores = {
             label: score
             for label, score in zip(
@@ -36,11 +38,12 @@ class TopicRelevanceClassifier:
         }
 
         relevant_topics_scores = {
-            label: score for label, score in scores.items() if score >= threshold
+            label: score for label, score in scores.items() if score >= config.threshold
         }
 
-        return TopicsClassificationResult(
-            relevant_topics_scores=relevant_topics_scores,
+        return RestrictedTopicValidationResult(
+            validation_passed=len(relevant_topics_scores) == 0,
+            matched_topics_scores=relevant_topics_scores,
             scores=scores,
         )
 
