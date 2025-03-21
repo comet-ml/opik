@@ -246,15 +246,18 @@ navigation:
       - section: Prompt engineering
         slug: /prompt_engineering
         contents:
+          - page: Prompt optimization
+            path: docs/prompt_engineering/prompt_optimization.mdx
+            slug: prompt_optimization
+          - page: Agent optimization
+            path: docs/prompt_engineering/agent_optimization.mdx
+            slug: agent_optimization
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
             slug: prompt_management
           - page: Opik's MCP server
             path: docs/prompt_engineering/mcp_server.mdx
             slug: mcp_server
-          - page: Managing prompts in code
-            path: docs/prompt_engineering/managing_prompts_in_code.mdx
-            slug: managing_prompts_in_code
           - page: Playground
             path: docs/prompt_engineering/playground.mdx
             slug: playground
@@ -415,4 +418,7 @@ redirects:
     permanent: true
   - source: "/docs/opik/reference/rest_api/opik-rest-api/:slug/:slug"
     destination: "/docs/opik/reference/rest-api/overview"
+    permanent: true
+  - source: "docs/prompt_engineering/managing_prompts_in_code"
+    destination: "/docs/opik/prompt_engineering/prompt_management"
     permanent: true
