@@ -4,16 +4,30 @@ This is the backend service for Opik Guardrails.
 
 ## Running with Docker
 
-```bash
-# Option 1: Pull and run the pre-built image
-docker run -p 5000:5000 ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
+### Prerequisites
 
-# Option 2: Build locally (only needed once)
+To run the Opik Guardrails Backend with Docker, you need to have Docker installed on your system.
+In addition, to use GPU acceleration, you need to have the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed.
+
+### Running the Backend
+
+#### Option 1: Pull and run the pre-built image
+
+```bash
+docker run -p 5000:5000 --gpus all ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
+```
+
+#### Option 2: Build locally (only needed once)
+
+```bash
 cd apps/opik-guardrails-backend
 docker build -t opik-guardrails-backend:latest .
+```
 
-# Option 3: Run a locally built image
-docker run -p 5000:5000 opik-guardrails-backend:latest
+#### Option 3: Run a locally built image
+
+```bash
+docker run -p 5000:5000 --gpus all opik-guardrails-backend:latest
 ```
 
 The server will be available at http://localhost:5000
