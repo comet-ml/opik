@@ -1,50 +1,117 @@
+import atexit
+import concurrent.futures
 import json
 import logging
 import os
+from queue import Queue
+from threading import Lock
 
 import docker
 
 from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
 
+IMAGE_REGISTRY = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY", "ghcr.io/comet-ml/opik")
+IMAGE_NAME = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
+IMAGE_TAG = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
+PRELOADED_CONTAINERS = int(os.getenv("PYTHON_CODE_EXECUTOR_CONTAINERS_NUM", 5))
+EXEC_TIMEOUT = int(os.getenv("PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS", 3))
+LOG_LEVEL = os.getenv("PYTHON_CODE_EXECUTOR_LOG_LEVEL", "INFO").upper()
+
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 logger = logging.getLogger(__name__)
 
-PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY", "ghcr.io/comet-ml/opik")
-PYTHON_CODE_EXECUTOR_IMAGE_NAME = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
-PYTHON_CODE_EXECUTOR_IMAGE_TAG = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
+client = docker.from_env()
+container_pool = Queue()
+container_lock = Lock()
+executor = concurrent.futures.ThreadPoolExecutor()
 
+def preload_containers():
+    if not container_pool.empty():
+        logger.warning("Containers already preloaded. Skipping duplicate initialization.")
+        return
+
+    logger.info(f"Preloading {PRELOADED_CONTAINERS} containers...")
+    for _ in range(PRELOADED_CONTAINERS):
+        create_container()
+
+    # remove containers when application ends
+    atexit.register(cleanup_containers)
+
+def cleanup_containers():
+    while not container_pool.empty():
+        container = container_pool.get()
+        try:
+            # allow 1 second for the container to end by itself
+            logger.info(f"Stopping and removing container {container.id}")
+            container.remove(force=True)
+        except Exception as e:
+                logger.error(f"Failed to remove container {container.id}: {e}")
+
+def create_container():
+    new_container = client.containers.run(
+        image=f"{IMAGE_REGISTRY}/{IMAGE_NAME}:{IMAGE_TAG}",
+        command=["tail", "-f", "/dev/null"], # a never ending process so Docker wont kill the container
+        mem_limit="128mb",
+        cpu_shares=2,
+        detach=True,
+        network_disabled=True,
+        security_opt=["no-new-privileges"],
+    )
+    with container_lock:
+        container_pool.put(new_container)
+
+def get_container():
+    with container_lock:
+        return container_pool.get()
+
+def release_container(container):
+    def async_release():
+        try:
+            logger.debug(f"Stopping container {container.id}. Will create a new one.")
+            container.stop()
+            container.remove()
+            create_container()
+        except Exception as e:
+            logger.error(f"Error replacing container: {e}")
+
+    executor.submit(async_release)
 
 def run_scoring_in_docker_python_container(code, data):
-    client = docker.from_env()
-    try:
-        # TODO: Optimise run latency e.g: pre-allocating containers
-        # Containers runs pulls the image if not available locally
-        container = client.containers.run(
-            image=f"{PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY}/{PYTHON_CODE_EXECUTOR_IMAGE_NAME}:{PYTHON_CODE_EXECUTOR_IMAGE_TAG}",
-            command=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data)],
-            mem_limit="128mb",
-            cpu_shares=2,
-            detach=True,
-            network_disabled=True,
-            security_opt=["no-new-privileges"],
+    def execute_command():
+        return container.exec_run(
+            cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data)],
+            detach=False,
+            stdin=False,
+            tty=False,
         )
-        try:
-            result = container.wait(timeout=3)
-            logs = container.logs().decode("utf-8")
-            status_code = result["StatusCode"]
+
+    container = get_container()
+    try:
+        # Run exec_run() with a timeout using ThreadPoolExecutor
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(execute_command)
+            exec_result = future.result(timeout=EXEC_TIMEOUT)  # Enforce timeout for execution
+
+            logs = exec_result.output.decode("utf-8")
+            status_code = exec_result.exit_code
+
             if status_code == 0:
                 last_line = logs.strip().splitlines()[-1]
-                # TODO: Validate JSON response e.g: schema validation
                 return json.loads(last_line)
             else:
-                logging.warn(f"Execution failed (Code: {status_code}):\n{logs}")
+                logger.warning(f"Execution failed (Code: {status_code}):\n{logs}")
                 try:
                     last_line = logs.strip().splitlines()[-1]
                     return {"code": 400, "error": json.loads(last_line).get("error")}
                 except Exception as e:
                     logger.debug(f"Exception parsing container error logs: {e}")
                     return {"code": 400, "error": "Execution failed: Python code contains an invalid metric"}
-        finally:
-            container.remove()
+    except concurrent.futures.TimeoutError:
+        logger.error(f"Execution timed out in container {container.id}")
+        return {"code": 504, "error": "Server processing exceeded timeout limit."}
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
         return {"code": 500, "error": "An unexpected error occurred"}
+    finally:
+        # async replace container
+        release_container(container)
