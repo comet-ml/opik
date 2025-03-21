@@ -47,7 +47,7 @@ class PIIValidationRequest(pydantic.BaseModel):
 class ValidationDescriptor(pydantic.BaseModel):
     type: ValidationType = pydantic.Field(description="Type of validation to perform")
     config: Dict[str, Any] = pydantic.Field(
-        description="Configuration for the validation"
+        description="Configuration for the validation, must follow the format of the existing validation config types"
     )
 
 
