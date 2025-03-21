@@ -1,4 +1,4 @@
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Dict, Any
 
 import enum
 import pydantic
@@ -46,29 +46,9 @@ class PIIValidationRequest(pydantic.BaseModel):
 
 class ValidationDescriptor(pydantic.BaseModel):
     type: ValidationType = pydantic.Field(description="Type of validation to perform")
-    config: Union[RestrictedTopicValidationConfig, PIIValidationConfig] = (
-        pydantic.Field(description="Configuration for the validation")
+    config: Dict[str, Any] = pydantic.Field(
+        description="Configuration for the validation"
     )
-
-    @pydantic.field_validator("config")
-    def config_type_matches_validation_type(
-        cls,
-        config: Union[RestrictedTopicValidationConfig, PIIValidationConfig],
-        values: Dict[str, Any],
-    ) -> Union[RestrictedTopicValidationConfig, PIIValidationConfig]:
-        if values["type"] == ValidationType.RESTRICTED_TOPIC and not isinstance(
-            config, RestrictedTopicValidationConfig
-        ):
-            raise pydantic.ValidationError(
-                "Topic validation requires RestrictedTopicValidationConfig config"
-            )
-        if values["type"] == ValidationType.PII and not isinstance(
-            config, PIIValidationConfig
-        ):
-            raise pydantic.ValidationError(
-                "PII validation requires PIIValidationConfig config"
-            )
-        return config
 
 
 class GuardrailsValidationRequest(pydantic.BaseModel):

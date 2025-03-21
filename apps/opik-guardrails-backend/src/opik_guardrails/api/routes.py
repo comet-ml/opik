@@ -69,16 +69,22 @@ def validate_pii() -> flask.Response:
 def validate_combined() -> flask.Response:
     try:
         data = flask.request.get_json()
-        validated_request = schemas.GuardrailsValidationRequest(**data)
+        request_with_validated_text_and_type = schemas.GuardrailsValidationRequest(
+            **data
+        )
 
         all_validations_passed = True
         validation_results = []
 
-        for validation_descriptor in validated_request.validations:
+        for validation_descriptor in request_with_validated_text_and_type.validations:
+            validated_config = validation_engine.build_validation_config_from_raw_dict(
+                validation_type=validation_descriptor.type,
+                config_dict=validation_descriptor.config,
+            )
             validation_result = validation_engine.run_validator(
                 validation_type=validation_descriptor.type,
-                text=validated_request.text,
-                config=validation_descriptor.config,
+                text=request_with_validated_text_and_type.text,
+                config=validated_config,
             )
 
             validation_results.append(validation_result)

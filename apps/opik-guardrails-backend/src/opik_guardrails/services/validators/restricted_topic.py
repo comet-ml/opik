@@ -8,9 +8,6 @@ from opik_guardrails import schemas
 
 from . import base_validator
 
-MODEL_PATH = "facebook/bart-large-mnli"
-DEVICE = "cuda:0"
-
 
 class RestrictedTopicValidationDetails(pydantic.BaseModel):
     matched_topics_scores: Dict[str, float]
@@ -21,8 +18,10 @@ class RestrictedTopicValidator(base_validator.BaseValidator):
     """A wrapper for the zero-shot classification model."""
 
     def __init__(self) -> None:
+        self._model_path = "facebook/bart-large-mnli"
+        self._device = "cuda:0"  # TODO: make configurable
         self._classification_pipeline = _load_model(
-            model_path=MODEL_PATH, device=DEVICE
+            model_path=self._model_path, device=self._device
         )
 
     def validate(

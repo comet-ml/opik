@@ -11,8 +11,18 @@ MAX_CONCURRENT_REQUESTS = 4
 
 
 def send_classification_request(text, topics):
-    url = "http://127.0.0.1:5000/api/validate-topic"
-    payload = {"text": text, "topics": topics}
+    url = "http://127.02:5000/api/validate"
+    payload = {
+        "text": text,
+        "validations": [
+            {
+                "type": "restricted_topic",
+                "config": {
+                    "topics": topics,
+                },
+            }
+        ],
+    }
 
     start_time = time.time()
     try:
@@ -61,7 +71,6 @@ def measure_performance(
 
             if "error" in result:
                 errors += 1
-            else:
                 results.append(result["scores"])
 
     end_time = time.time()

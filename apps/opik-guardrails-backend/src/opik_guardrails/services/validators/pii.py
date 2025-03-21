@@ -23,7 +23,6 @@ class PIIValidationDetails(pydantic.BaseModel):
 class PIIValidator(base_validator.BaseValidator):
     def __init__(self) -> None:
         self._analyzer_engine = presidio_analyzer.AnalyzerEngine()
-        self._default_language = "en"
 
     def validate(
         self,
@@ -43,7 +42,7 @@ class PIIValidator(base_validator.BaseValidator):
         results = self._analyzer_engine.analyze(
             text=text,
             entities=config.entities,
-            language=config.language or self._default_language,
+            language=config.language,
         )
 
         grouped_results: Dict[str, List[PIIEntity]] = collections.defaultdict(list)
