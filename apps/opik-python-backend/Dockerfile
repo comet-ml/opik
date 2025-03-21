@@ -13,8 +13,8 @@ COPY *${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz /images/${PYTHON_CODE_EXECUTOR_A
 
 COPY src ./src
 
-COPY entrypoint.sh .
-RUN chmod u+x entrypoint.sh
+COPY entrypoint.sh demo_data_entrypoint.sh ./
+RUN chmod u+x entrypoint.sh demo_data_entrypoint.sh
 
 EXPOSE 8000
 
