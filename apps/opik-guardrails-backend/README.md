@@ -71,7 +71,8 @@ curl -X POST http://localhost:5000/api/validate-pii \
     "text": "My name is John Doe and my email is john.doe@example.com",
     "config": {
       "entities": ["PERSON", "EMAIL_ADDRESS"],
-      "language": "en"
+      "language": "en",
+      "threshold": 0.5
     }
   }'
 ```
@@ -79,8 +80,9 @@ curl -X POST http://localhost:5000/api/validate-pii \
 Parameters:
 - `text`: The text to analyze for PII (required)
 - `config`: Configuration for the PII detection (required)
-  - `entities`: Array of specific entity types to detect (if not provided, all supported entity types will be detected). Supported entities can be found here: https://microsoft.github.io/presidio/supported_entities/
+  - `entities`: Array of specific entity types to detect (if not provided, all supported entity types will be detected). Default entities include: "IP_ADDRESS", "PHONE_NUMBER", "PERSON", "MEDICAL_LICENSE", "URL", "EMAIL_ADDRESS", "IBAN_CODE". Supported entities can be found here: https://microsoft.github.io/presidio/supported_entities/
   - `language`: Language of the text (default: "en")
+  - `threshold`: Confidence threshold for PII detection (default: 0.5)
 
 
 Example response:
@@ -90,7 +92,8 @@ Example response:
   "type": "PII",
   "validation_config": {
     "entities": ["PERSON", "EMAIL_ADDRESS"],
-    "language": "en"
+    "language": "en",
+    "threshold": 0.5
   },
   "validation_details": {
     "detected_entities": {
@@ -123,7 +126,7 @@ This endpoint allows you to perform multiple validations on the same text in a s
 curl -X POST http://localhost:5000/api/validate \
   -H "Content-Type: application/json" \
   -d '{
-    "text": "This text is about artificial intelligence. My name is John Doe.",
+    "text": "This text is about artificial intelligence. My name is John Doe and my email is john.doe@example.com.",
     "validations": [
       {
         "type": "RESTRICTED_TOPIC",
@@ -136,7 +139,8 @@ curl -X POST http://localhost:5000/api/validate \
         "type": "PII",
         "config": {
           "entities": ["PERSON", "EMAIL_ADDRESS"],
-          "language": "en"
+          "language": "en",
+          "threshold": 0.5
         }
       }
     ]
@@ -180,7 +184,8 @@ Example response:
       "type": "PII",
       "validation_config": {
         "entities": ["PERSON", "EMAIL_ADDRESS"],
-        "language": "en"
+        "language": "en",
+        "threshold": 0.5
       },
       "validation_details": {
         "detected_entities": {
@@ -190,6 +195,14 @@ Example response:
               "end": 59,
               "score": 0.85,
               "text": "John Doe"
+            }
+          ],
+          "EMAIL_ADDRESS": [
+            {
+              "start": 73,
+              "end": 92,
+              "score": 1.0,
+              "text": "john.doe@example.com"
             }
           ]
         }
