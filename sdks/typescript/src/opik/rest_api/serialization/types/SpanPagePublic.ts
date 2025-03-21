@@ -13,7 +13,6 @@ export const SpanPagePublic: core.serialization.ObjectSchema<serializers.SpanPag
         size: core.serialization.number().optional(),
         total: core.serialization.number().optional(),
         content: core.serialization.list(SpanPublic).optional(),
-        sortableBy: core.serialization.list(core.serialization.string()).optional(),
     });
 
 export declare namespace SpanPagePublic {
@@ -22,6 +21,5 @@ export declare namespace SpanPagePublic {
         size?: number | null;
         total?: number | null;
         content?: SpanPublic.Raw[] | null;
-        sortableBy?: string[] | null;
     }
 }

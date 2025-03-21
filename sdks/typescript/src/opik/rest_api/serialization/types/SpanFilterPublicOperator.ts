@@ -9,33 +9,8 @@ import * as core from "../../core";
 export const SpanFilterPublicOperator: core.serialization.Schema<
     serializers.SpanFilterPublicOperator.Raw,
     OpikApi.SpanFilterPublicOperator
-> = core.serialization.enum_([
-    "contains",
-    "not_contains",
-    "starts_with",
-    "ends_with",
-    "=",
-    "!=",
-    ">",
-    ">=",
-    "<",
-    "<=",
-    "is_empty",
-    "is_not_empty",
-]);
+> = core.serialization.enum_(["contains", "not_contains", "starts_with", "ends_with", "=", "!=", ">", ">=", "<", "<="]);
 
 export declare namespace SpanFilterPublicOperator {
-    export type Raw =
-        | "contains"
-        | "not_contains"
-        | "starts_with"
-        | "ends_with"
-        | "="
-        | "!="
-        | ">"
-        | ">="
-        | "<"
-        | "<="
-        | "is_empty"
-        | "is_not_empty";
+    export type Raw = "contains" | "not_contains" | "starts_with" | "ends_with" | "=" | "!=" | ">" | ">=" | "<" | "<=";
 }

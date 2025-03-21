@@ -9,5 +9,4 @@ export interface SpanPagePublic {
     size?: number;
     total?: number;
     content?: OpikApi.SpanPublic[];
-    sortableBy?: string[];
 }
