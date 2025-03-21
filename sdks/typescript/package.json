@@ -49,6 +49,7 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
+    "prepare": "npm run build",
     "build": "tsup",
     "watch": "tsup --watch",
     "lint": "eslint '**/*.{ts,tsx}'",
