@@ -4,7 +4,6 @@ import json
 import logging
 import os
 from queue import Queue
-from threading import Lock
 
 import docker
 
@@ -15,14 +14,11 @@ IMAGE_NAME = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor
 IMAGE_TAG = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
 PRELOADED_CONTAINERS = int(os.getenv("PYTHON_CODE_EXECUTOR_CONTAINERS_NUM", 5))
 EXEC_TIMEOUT = int(os.getenv("PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS", 3))
-LOG_LEVEL = os.getenv("PYTHON_CODE_EXECUTOR_LOG_LEVEL", "INFO").upper()
 
-logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 logger = logging.getLogger(__name__)
 
 client = docker.from_env()
 container_pool = Queue()
-container_lock = Lock()
 executor = concurrent.futures.ThreadPoolExecutor()
 
 def preload_containers():
@@ -57,12 +53,7 @@ def create_container():
         network_disabled=True,
         security_opt=["no-new-privileges"],
     )
-    with container_lock:
-        container_pool.put(new_container)
-
-def get_container():
-    with container_lock:
-        return container_pool.get()
+    container_pool.put(new_container)
 
 def release_container(container):
     def async_release():
@@ -85,7 +76,7 @@ def run_scoring_in_docker_python_container(code, data):
             tty=False,
         )
 
-    container = get_container()
+    container = container_pool.get()
     try:
         # Run exec_run() with a timeout using ThreadPoolExecutor
         with concurrent.futures.ThreadPoolExecutor() as executor:
