@@ -17,9 +17,9 @@ class RestrictedTopicValidationDetails(pydantic.BaseModel):
 class RestrictedTopicValidator(base_validator.BaseValidator):
     """A wrapper for the zero-shot classification model."""
 
-    def __init__(self) -> None:
-        self._model_path = "facebook/bart-large-mnli"
-        self._device = "cuda:0"  # TODO: make configurable
+    def __init__(self, model_path: str, device: str) -> None:
+        self._model_path = model_path
+        self._device = device
         self._classification_pipeline = _load_model(
             model_path=self._model_path, device=self._device
         )

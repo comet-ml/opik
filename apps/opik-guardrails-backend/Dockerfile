@@ -1,8 +1,21 @@
-FROM python:3.10-slim
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC
+
+# Install Python and other dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3-pip \
+    python3-dev \
     tini \
     && rm -rf /var/lib/apt/lists/*
+
+# Set Python aliases
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python && \
+    ln -sf /usr/bin/python3.10 /usr/bin/python3
 
 WORKDIR /opt/opik-guardrails-backend
 
@@ -21,6 +34,11 @@ EXPOSE 5000
 
 ARG OPIK_VERSION
 ENV OPIK_VERSION="${OPIK_VERSION}"
+
+# Set CUDA related environment variables
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;9.0"
 
 ENTRYPOINT ["tini", "--"]
 CMD ./entrypoint.sh
