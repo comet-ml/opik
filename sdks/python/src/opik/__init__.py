@@ -1,4 +1,5 @@
-from . import _logging, environment, error_tracking, package_version
+from . import _logging, environment, package_version
+from . import error_tracking
 from .api_objects.dataset import Dataset
 from .api_objects.experiment.experiment_item import (
     ExperimentItemContent,
