@@ -249,6 +249,9 @@ navigation:
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
             slug: prompt_management
+          - page: Opik's MCP server
+            path: docs/prompt_engineering/mcp_server.mdx
+            slug: mcp_server
           - page: Managing prompts in code
             path: docs/prompt_engineering/managing_prompts_in_code.mdx
             slug: managing_prompts_in_code
@@ -267,7 +270,7 @@ navigation:
           - page: Production monitoring
             path: docs/production/production_monitoring.mdx
             slug: /production_monitoring
-          - page: Rules
+          - page: Online Evaluation rules
             path: docs/production/rules.mdx
             slug: rules
           - page: Gateway
