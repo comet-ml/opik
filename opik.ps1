@@ -61,26 +61,34 @@ function Check-ContainersStatus {
 function Start-MissingContainers {
     Check-DockerStatus
 
-    if ($DEBUG_MODE) { Write-Host "🔍 Checking required containers..." }
+    if ($DEBUG_MODE -eq $true) {
+        Write-Host "🔍 Checking required containers..."
+    }
+
     $allRunning = $true
 
     foreach ($container in $REQUIRED_CONTAINERS) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
+
         if ($status -ne "running") {
-            if ($DEBUG_MODE) { Write-Host "🔴 $container is not running (status: $($status -or 'not found'))" }
+            if ($DEBUG_MODE -eq $true) {
+                Write-Host "🔴 $container is not running (status: $($status -or 'not found'))"
+            }
             $allRunning = $false
-        } elseif ($DEBUG_MODE) {
-            Write-Host "✅ $container is already running"
+        } else {
+            if ($DEBUG_MODE -eq $true) {
+                Write-Host "✅ $container is already running"
+            }
         }
     }
 
-    if ($allRunning) {
+    if ($allRunning -eq $true) {
         Write-Host "🚀 All required containers are already running!"
         return
     }
 
     Write-Host "🔄 Starting missing containers..."
-    docker compose -f "$scriptDir/deployment/docker-compose/docker-compose.yaml" up -d
+    docker compose -f "$scriptDir/deployment/docker-compose/docker-compose.yaml" up -d 2>&1 | Where-Object { $_.Trim() -ne "" }
 
     Write-Host "⏳ Waiting for all containers to be running and healthy..."
     $maxRetries = 60
@@ -88,7 +96,9 @@ function Start-MissingContainers {
 
     foreach ($container in $REQUIRED_CONTAINERS) {
         $retries = 0
-        if ($DEBUG_MODE) { Write-Host "⏳ Waiting for $container..." }
+        if ($DEBUG_MODE -eq $true) {
+            Write-Host "⏳ Waiting for $container..."
+        }
 
         while ($true) {
             $status = docker inspect -f '{{.State.Status}}' $container 2>$null
@@ -100,10 +110,14 @@ function Start-MissingContainers {
             }
 
             if ($health -eq "healthy") {
-                if ($DEBUG_MODE) { Write-Host "✅ $container is now running and healthy!" }
+                if ($DEBUG_MODE -eq $true) {
+                    Write-Host "✅ $container is now running and healthy!"
+                }
                 break
             } elseif ($health -eq "starting") {
-                if ($DEBUG_MODE) { Write-Host "⏳ $container is starting... retrying (${retries}s)" }
+                if ($DEBUG_MODE -eq $true) {
+                    Write-Host "⏳ $container is starting... retrying (${retries}s)"
+                }
                 Start-Sleep -Seconds $interval
                 $retries++
                 if ($retries -ge $maxRetries) {
