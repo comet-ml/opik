@@ -58,10 +58,10 @@ services:
     command: server --console-address ":9090" /data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
+      interval: 1s
+      timeout: 10s
       retries: 30
-      start_period: 10s  
+      start_period: 5s  
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
@@ -116,6 +116,12 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
     ports:
       - "3003" # OpenAPI specification port
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health-check"]
+      interval: 1s
+      timeout: 30s
+      retries: 30
+      start_period: 1s
     depends_on:
       mysql:
         condition: service_healthy
@@ -138,7 +144,30 @@ services:
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 3
       PYTHON_CODE_EXECUTOR_LOG_LEVEL: "INFO"
       OPIK_VERSION: ${OPIK_VERSION:-latest}
-      OPIK_REVERSE_PROXY_URL: "http://frontend:5173/api"
+      OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8000/healthcheck"]
+      interval: 1s
+      timeout: 30s
+      retries: 30
+      start_period: 1s
+
+  demo-data-generator:
+    image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
+    build:
+      context: ../../apps/opik-python-backend
+      dockerfile: Dockerfile
+    hostname: demo-data-generator
+    environment:
+      CREATE_DEMO_DATA: ${CREATE_DEMO_DATA:-true}
+      PYTHON_BACKEND_URL: ${PYTHON_BACKEND_URL:-http://python-backend:8000}
+    command: [ "sh", "-c", "./demo_data_entrypoint.sh" ]
+    depends_on:
+      frontend:
+        condition: service_healthy
+      python-backend:
+        condition: service_healthy
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
@@ -156,6 +185,12 @@ services:
     depends_on:
       backend:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 1s
+      timeout: 30s
+      retries: 10
+      start_period: 1s
     environment: 
       OPIK_VERSION: ${OPIK_VERSION:-latest}
 

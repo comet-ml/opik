@@ -29,7 +29,7 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
             headers["authorization"] = f"{comet_api_key}"
 
         url = base_url + message["url"]
-        data = json.dumps(message["payload"]).encode("utf-8")
+        data = json.dumps(message["payload"]).encode("utf-8") if "payload" in message else None
 
         req = urllib.request.Request(url, data=data, method=message["method"])
         for key, value in headers.items():
@@ -38,16 +38,43 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
 
         with urllib.request.urlopen(req) as response:
             status_code = response.getcode()
-            logger.info(status_code, message["method"], url)
-    except Exception as e:
-        logger.error(e)
-
+            logger.info("Got response status %s, from method %s on url %s", status_code, message["method"], url)
+            body = response.read()
+            if body:
+                data = json.loads(body)
+            else:
+                data = None
+            return data, status_code
+    except urllib.error.HTTPError as e:
+        if e.code >= 500:
+            raise e
+        logger.error("Got error %s, from method %s on url %s", e.code, message["method"], url)
+        return None, e.code
+    
 def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
+
+    name = "User feedback"
+    params = {
+        "name": name
+    }
+    request = {
+        "url": f"/v1/private/feedback-definitions?{urllib.parse.urlencode(params)}",
+        "method": "GET"
+    }
+
+    data, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+
+    if status_code == 200 and data["content"]:
+        for definition in data["content"]:
+            if definition["name"] == name:
+                logger.info("Feedback definition already exists")
+                return
+
     request = {
         "url": "/v1/private/feedback-definitions",
         "method": "POST",
         "payload": {
-            "name": "User feedback",
+            "name": name,
             "description": "Feedback provided by the user",
             "type": "categorical",
             "details": {
@@ -61,6 +88,18 @@ def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
 
     make_http_request(base_url, request, workspace_name, comet_api_key)
 
+def project_exists(base_url, workspace_name, comet_api_key, project_name):
+    request = {
+        "url": "/v1/private/projects/retrieve",
+        "method": "POST",
+        "payload": {
+            "name": project_name,
+        },
+    }
+
+    _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+    return status_code == 200
+
 def get_new_uuid(old_id):
     """
     The demo_data has the IDs hardcoded in, to preserve the relationships between the traces and spans.
@@ -73,12 +112,16 @@ def get_new_uuid(old_id):
         UUID_MAP[old_id] = new_id
     return new_id
 
-def create_demo_data(base_url: str, workspace_name, comet_api_key):
+def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key):
     client: opik.Opik = None
-
     try:
+        project_name = "Demo evaluation"
+        if project_exists(base_url, workspace_name, comet_api_key, project_name):
+            logger.info("%s project already exists", project_name)
+            return
+        
         client = opik.Opik(
-            project_name="Demo evaluation",
+            project_name=project_name,
             workspace=workspace_name,
             host=base_url,
             api_key=comet_api_key,
@@ -99,37 +142,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
                 new_parent_span_id = get_new_uuid(span["parent_span_id"])
                 span["parent_span_id"] = new_parent_span_id
             client.span(**span)
-
-        client.flush()
-        client.end()
-
-        # Demo traces and spans
-        # We have a simple chatbot application built using llama-index.
-        # We gave it the content of Opik documentation as context, and then asked it a few questions.
-
-        client = opik.Opik(
-            project_name="Demo chatbot 🤖",
-            workspace=workspace_name,
-            host=base_url,
-            api_key=comet_api_key,
-            _use_batching=True,
-        )
-
-        for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(trace["id"])
-            trace["id"] = new_id
-            client.trace(**trace)
-
-        for span in sorted(demo_spans, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(span["id"])
-            span["id"] = new_id
-            new_trace_id = get_new_uuid(span["trace_id"])
-            span["trace_id"] = new_trace_id
-            if "parent_span_id" in span:
-                new_parent_span_id = get_new_uuid(span["parent_span_id"])
-                span["parent_span_id"] = new_parent_span_id
-            client.span(**span)
-
+        
         # Prompts
         # We now create 3 versions of a Q&A prompt. The final version is from llama-index.
 
@@ -208,7 +221,49 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
 
         experiment.insert(experiment_items)
 
-        create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
+    except Exception as e:
+        logger.error(e)
+    finally:
+        # Close the client
+        if client:
+            client.flush()
+            client.end()
+
+def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
+    client: opik.Opik = None
+
+    try:
+        project_name = "Demo chatbot 🤖"
+        if project_exists(base_url, workspace_name, comet_api_key, project_name):
+            logger.info("%s project already exists", project_name)
+            return
+
+        # Demo traces and spans
+        # We have a simple chatbot application built using llama-index.
+        # We gave it the content of Opik documentation as context, and then asked it a few questions.
+
+        client = opik.Opik(
+            project_name=project_name,
+            workspace=workspace_name,
+            host=base_url,
+            api_key=comet_api_key,
+            _use_batching=True,
+        )
+
+        for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
+            new_id = get_new_uuid(trace["id"])
+            trace["id"] = new_id
+            client.trace(**trace)
+
+        for span in sorted(demo_spans, key=lambda x: x["start_time"]):
+            new_id = get_new_uuid(span["id"])
+            span["id"] = new_id
+            new_trace_id = get_new_uuid(span["trace_id"])
+            span["trace_id"] = new_trace_id
+            if "parent_span_id" in span:
+                new_parent_span_id = get_new_uuid(span["parent_span_id"])
+                span["parent_span_id"] = new_parent_span_id
+            client.span(**span)
 
     except Exception as e:
         logger.error(e)
@@ -217,3 +272,16 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
         if client:
             client.flush()
             client.end()
+
+def create_demo_data(base_url: str, workspace_name, comet_api_key):
+
+    try:        
+        create_demo_evaluation_project(base_url, workspace_name, comet_api_key)
+
+        create_demo_chatbot_project(base_url, workspace_name, comet_api_key)
+
+        create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
+
+        logger.info("Demo data created successfully")
+    except Exception as e:
+        logger.error(e)
