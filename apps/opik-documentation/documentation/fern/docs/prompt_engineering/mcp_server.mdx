@@ -1,0 +1,130 @@
+Opik's [MCP server](https://github.com/comet-ml/opik-mcp) allows you to integrate
+your IDE with Opik not just for prompt management bit also to access and
+analyze traces.
+
+## Setting up the MCP server
+
+<Tabs>
+    <Tab title="Cursor">
+    To integrate with Cursor IDE, open to the Cursor settings page and navigate
+    to the Features tab. If you scroll down to the MCP section you will see the
+    button `+ Add new MCP server` that will allow you to add the Opik MCP server.
+
+    Once the New MCP server modal is open, select command as the server type and
+    enter the command: `npx -y opik-mcp --apiKey YOUR_API_KEY`.
+
+    <Frame>
+        <img src="/img/prompt_engineering/cursor_add_mcp_server.png" />
+    </Frame>
+
+    Once the MCP server is available, you not test it out by asking Cursor:
+    `What is the latest trace available in Opik ?`
+
+    <Tip>
+    If you are using a self-hosted version of Opik, you will need to specify
+    the argument `apiBaseUrl` while removing the `--apiKey` argument:
+    `npx -y opik-mcp --apiBaseUrl http://localhost:5173/api`
+    </Tip>
+
+    </Tab>
+    <Tab title="Windsurf">
+    To install the Opik MCP server, you will need to navigate to the Windsurf settings
+    page and in the MCP servers section, click on the `Add server` button. Here
+    you will need to click on the `Add custom server` button:
+
+    <Frame>
+        <img src="/img/prompt_engineering/windsurf_add_custom_server.png" />
+    </Frame>
+
+    Once the `mcp_config.json` file is created, you can configure the Opik server
+    by adding the following (make sure to update the API key placeholder with your
+    key):
+
+    ```json title="mcp_config.json"
+    {
+        "mcpServers": {
+        "opik": {
+            "command": "npx",
+            "args": [
+            "-y",
+            "opik-mcp",
+            "--apiKey",
+            "YOUR_API_KEY"
+            ]
+        }
+        }
+    }
+    ```
+
+    <Tip>
+    If you are using a self-hosted version of Opik, you will need to specify
+    the argument `apiBaseUrl` as `http://localhost:5173/api` while removing the
+    `--apiKey` argument.
+    </Tip>
+
+    Once the MCP server is available, you not test it out by asking Windsurf:
+    `What is the latest trace available in Opik ?`
+
+    </Tab>
+    <Tab title="Manual">
+    You can manually run the Opik MCP server by running:
+
+    ```bash
+    npx -y opik-mcp --transport sse --apiKey YOUR_API_KEY
+    ```
+
+    You can then access the Opik MCP server through the `sse` endpoint.
+    </Tab>
+
+</Tabs>
+
+## Using the MCP server
+
+The Opik MCP server includes a number of different tools that include project
+management, querying prompts and traces and fetching project metrics. We will
+focus here on querying prompts and traces as this is the most common way of
+using the Opik MCP server.
+
+### Prompt management
+
+You can access and save Opik prompts using the MCP server. You can do this by
+asking questions such as:
+
+> What prompts are available in the Opik prompt library ?
+
+> What is the most recent version of the "demo" Opik prompt ?
+
+> Save the following text as a new prompt in Opik called "example prompt"
+
+### Managing traces
+
+You can access traces stored in Opik from the MCP server, this is especially
+useful if you want to analyze traces stored in Opik to determine how to
+improve your agent or LLM chain.
+
+To get started, you can ask questions such as:
+
+> What was the output of the most recent traces in Opik ?
+
+> How many traces have been logged to the "demo data" Opik project ?
+
+You can also go one step further and use the traces logged to Opik to improve
+your prompts. One technique that works well involves first fetching traces and
+then asking the LLM to suggest an improvement based on these traces. while
+how to achieve this can vary from MCP client to MCP client, the following
+questions have worked well:
+
+> Based on the 10 most recent traces stored in the "demo data" Opik project,
+> suggest some improvements to the orchestrator prompt.
+
+> Search for the most recent traces with high hallucination scores in the "demo
+> data" Opik project and create a new prompt template.
+
+### Example conversation
+
+Below is an example conversation one of our user had in Cursor that allowed them
+to improve their LLM Agent utilizing the Opik MCP server:
+
+<Frame>
+  <img src="/img/prompt_engineering/mcp_example.png" />
+</Frame>
