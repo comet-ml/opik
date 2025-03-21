@@ -16,11 +16,17 @@ def send_classification_request(text, topics):
         "text": text,
         "validations": [
             {
-                "type": "restricted_topic",
+                "type": "RESTRICTED_TOPIC",
                 "config": {
                     "topics": topics,
                 },
-            }
+            },
+            {
+                "type": "PII",
+                "config": {
+                    "language": "en",
+                },
+            },
         ],
     }
 
@@ -153,7 +159,7 @@ def run_benchmark(text: str, topics: List[str], num_requests: int, max_workers: 
     if "error" in result:
         print(f"Error in test request: {result['error']}")
         return
-    print(json.dumps(result["scores"], indent=4))
+    print(json.dumps(result, indent=4))
 
     # Run the full benchmark
     results, stats = measure_performance(text, topics, num_requests, max_workers)

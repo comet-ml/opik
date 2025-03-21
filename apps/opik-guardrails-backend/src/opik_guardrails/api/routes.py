@@ -23,7 +23,7 @@ def validate_topic() -> flask.Response:
             validated_request.config,
         )
 
-        response = validation_result.model_dump()
+        response = validation_result.model_dump(serialize_as_any=True)
 
         return flask.jsonify(response), 200
 
@@ -50,7 +50,7 @@ def validate_pii() -> flask.Response:
             validated_request.config,
         )
 
-        response = validation_result.model_dump()
+        response = validation_result.model_dump(serialize_as_any=True)
 
         return flask.jsonify(response), 200
 
@@ -87,7 +87,9 @@ def validate_combined() -> flask.Response:
                 config=validated_config,
             )
 
-            validation_results.append(validation_result)
+            validation_results.append(
+                validation_result.model_dump(serialize_as_any=True)
+            )
 
             if not validation_result.validation_passed:
                 all_validations_passed = False

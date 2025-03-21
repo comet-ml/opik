@@ -24,10 +24,21 @@ class RestrictedTopicValidationConfig(ValidationConfig):
 
 class PIIValidationConfig(ValidationConfig):
     entities: Optional[List[str]] = pydantic.Field(
-        None,
+        [
+            "IP_ADDRESS",
+            "PHONE_NUMBER",
+            "PERSON",
+            "MEDICAL_LICENSE",
+            "URL",
+            "EMAIL_ADDRESS",
+            "IBAN_CODE",
+        ],
         description="Optional list of entity types to detect. If not provided, all supported entity types will be detected.",
     )
     language: str = pydantic.Field("en", description="Language of the text")
+    threshold: float = pydantic.Field(
+        0.5, description="A threshold value for PII detector"
+    )
 
 
 class RestrictedTopicValidationRequest(pydantic.BaseModel):

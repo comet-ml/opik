@@ -48,6 +48,8 @@ class PIIValidator(base_validator.BaseValidator):
         grouped_results: Dict[str, List[PIIEntity]] = collections.defaultdict(list)
         for result in results:
             entity_type = result.entity_type
+            if result.score < config.threshold:
+                continue
             grouped_results[entity_type].append(
                 PIIEntity(
                     start=result.start,

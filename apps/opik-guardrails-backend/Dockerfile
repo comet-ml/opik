@@ -9,6 +9,9 @@ WORKDIR /opt/opik-guardrails-backend
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Download spaCy model for PII detection
+RUN python -m spacy download en_core_web_lg
+
 COPY src ./src
 
 COPY entrypoint.sh .
