@@ -48,6 +48,7 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
       <HoverCardContent
         className="w-[320px] bg-popover-gray p-0"
         collisionPadding={24}
+        onClick={(event) => event.stopPropagation()}
       >
         <div
           className="relative size-full max-h-[40vh] max-w-[320px] overflow-auto p-1 pb-0"

@@ -19,7 +19,7 @@ const FeedbackScoreValueCell = (
       tableMetadata={context.table.options.meta}
       className="gap-1.5"
     >
-      <TooltipWrapper content={computedValue}>
+      <TooltipWrapper content={computedValue} stopClickPropagation>
         <span className="truncate direction-alternate">{computedValue}</span>
       </TooltipWrapper>
     </CellWrapper>

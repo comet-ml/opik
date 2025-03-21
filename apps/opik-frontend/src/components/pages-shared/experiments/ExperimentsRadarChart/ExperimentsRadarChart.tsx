@@ -16,10 +16,10 @@ import {
 import React, { useCallback, useMemo, useState } from "react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis } from "recharts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import ExperimentRadarChartLegendContent from "./ExperimentRadarChartLegendContent";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { RadarDataPoint } from "@/types/chart";
-import { ExperimentLabelsMap } from "@/components/pages/CompareExperimentsDetails/hooks/useCompareExperimentsChartsData";
+import { ExperimentLabelsMap } from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
+import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
 
 interface ExperimentsRadarChartProps {
   name: string;
@@ -51,9 +51,7 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
       const { name } = payload[0].payload;
 
       return (
-        <>
-          <div className="comet-body-xs-accented truncate pb-1.5">{name}</div>
-        </>
+        <div className="comet-body-xs-accented truncate pb-1.5">{name}</div>
       );
     },
     [],
@@ -106,7 +104,7 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
               }
             />
             {keys.map((key) => {
-              const isActive = key === activeLine;
+              const isActive = experimentLabelsMap[key] === activeLine;
               let strokeOpacity = 1;
 
               if (activeLine) {
@@ -129,9 +127,10 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
             })}
             <ChartLegend
               content={
-                <ExperimentRadarChartLegendContent
+                <ChartHorizontalLegendContent
                   setActiveLine={setActiveLine}
                   chartId={chartId}
+                  containerClassName="mt-6 pt-0 flex size-full max-h-[34px] justify-center overflow-auto"
                 />
               }
             />
