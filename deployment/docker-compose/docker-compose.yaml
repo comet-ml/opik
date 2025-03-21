@@ -141,7 +141,7 @@ services:
     environment:
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
       OPIK_VERSION: ${OPIK_VERSION:-latest}
-      OPIK_REVERSE_PROXY_URL: "http://frontend:5173/api"
+      OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8000/healthcheck"]
       interval: 1s
@@ -158,6 +158,7 @@ services:
     hostname: demo-data-generator
     environment:
       CREATE_DEMO_DATA: ${CREATE_DEMO_DATA:-true}
+      PYTHON_BACKEND_URL: ${PYTHON_BACKEND_URL:-http://python-backend:8000}
     command: [ "sh", "-c", "./demo_data_entrypoint.sh" ]
     depends_on:
       frontend:
