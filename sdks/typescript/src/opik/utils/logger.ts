@@ -30,5 +30,5 @@ export const disableLogger = () => {
 };
 
 setLoggerLevel(
-  (process.env.OPIK_LOG_LEVEL as keyof typeof logLevels) || "INFO"
+  "INFO"
 );
