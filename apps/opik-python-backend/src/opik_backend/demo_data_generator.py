@@ -29,7 +29,7 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
             headers["authorization"] = f"{comet_api_key}"
 
         url = base_url + message["url"]
-        data = json.dumps(message["payload"]).encode("utf-8")
+        data = json.dumps(message["payload"]).encode("utf-8") if "payload" in message else None
 
         req = urllib.request.Request(url, data=data, method=message["method"])
         for key, value in headers.items():
@@ -52,11 +52,29 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
         return None, e.code
     
 def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
+
+    name = "User feedback"
+    params = {
+        "name": name
+    }
+    request = {
+        "url": f"/v1/private/feedback-definitions?{urllib.parse.urlencode(params)}",
+        "method": "GET"
+    }
+
+    data, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+
+    if status_code == 200 and data["content"]:
+        for definition in data["content"]:
+            if definition["name"] == name:
+                logger.info("Feedback definition already exists")
+                return
+
     request = {
         "url": "/v1/private/feedback-definitions",
         "method": "POST",
         "payload": {
-            "name": "User feedback",
+            "name": name,
             "description": "Feedback provided by the user",
             "type": "categorical",
             "details": {

@@ -117,7 +117,7 @@ services:
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthcheck"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health-check"]
       interval: 1s
       timeout: 30s
       retries: 30
