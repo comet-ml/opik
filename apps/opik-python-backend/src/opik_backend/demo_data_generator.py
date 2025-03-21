@@ -38,7 +38,7 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
 
         with urllib.request.urlopen(req) as response:
             status_code = response.getcode()
-            logger.info(status_code, message["method"], url)
+            logger.info("Got response status %s, from method %s on url %s", status_code, message["method"], url)
             body = response.read()
             if body:
                 data = json.loads(body)
@@ -48,6 +48,7 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
     except urllib.error.HTTPError as e:
         if e.code >= 500:
             raise e
+        logger.error("Got error %s, from method %s on url %s", e.code, message["method"], url)
         return None, e.code
     
 def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
@@ -96,11 +97,13 @@ def get_new_uuid(old_id):
 def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key):
     client: opik.Opik = None
     try:
-        if project_exists(base_url, workspace_name, comet_api_key, "Demo evaluation"):
+        project_name = "Demo evaluation"
+        if project_exists(base_url, workspace_name, comet_api_key, project_name):
+            logger.info("%s project already exists", project_name)
             return
         
         client = opik.Opik(
-            project_name="Demo evaluation",
+            project_name=project_name,
             workspace=workspace_name,
             host=base_url,
             api_key=comet_api_key,
@@ -212,7 +215,9 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
     client: opik.Opik = None
 
     try:
-        if project_exists(base_url, workspace_name, comet_api_key, "Demo chatbot 🤖"):
+        project_name = "Demo chatbot 🤖"
+        if project_exists(base_url, workspace_name, comet_api_key, project_name):
+            logger.info("%s project already exists", project_name)
             return
 
         # Demo traces and spans
@@ -220,7 +225,7 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
         # We gave it the content of Opik documentation as context, and then asked it a few questions.
 
         client = opik.Opik(
-            project_name="Demo chatbot 🤖",
+            project_name=project_name,
             workspace=workspace_name,
             host=base_url,
             api_key=comet_api_key,
