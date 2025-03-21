@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import { ColumnPinningState } from "@tanstack/react-table";
 import find from "lodash/find";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -9,6 +10,8 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
 import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
 import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
@@ -19,6 +22,11 @@ import {
 } from "@/components/pages/CompareExperimentsPage/helpers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-feedback-scores-columns-width";
+
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: ["name"],
+  right: [],
+};
 
 export const DEFAULT_COLUMNS: ColumnData<FeedbackScoreData>[] = [
   {
@@ -102,19 +110,31 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
   }
 
   return (
-    <div className="pb-6">
-      <div className="mb-6 flex items-center justify-end gap-8">
+    <>
+      <PageBodyStickyContainer
+        className="-mt-4 flex items-center justify-end gap-8 pb-6 pt-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />
         </div>
-      </div>
+      </PageBodyStickyContainer>
       <DataTable
         columns={columns}
         data={rows}
         resizeConfig={resizeConfig}
+        columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        TableWrapper={PageBodyStickyTableWrapper}
+        stickyHeader
       />
-    </div>
+      <PageBodyStickyContainer
+        className="pb-6"
+        direction="horizontal"
+        limitWidth
+      />
+    </>
   );
 };
 

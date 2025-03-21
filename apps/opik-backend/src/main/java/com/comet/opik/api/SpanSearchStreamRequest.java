@@ -23,7 +23,7 @@ public record SpanSearchStreamRequest(
         UUID projectId,
         SpanType type,
         List<SpanFilter> filters,
-        @Min(1) @Max(2000) Integer limit,
+        @Schema(description = "Max number of spans to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
         UUID lastRetrievedId,
         @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") @DefaultValue("true") boolean truncate) {
 

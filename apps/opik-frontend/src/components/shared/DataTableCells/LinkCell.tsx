@@ -38,13 +38,16 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
       className="group py-1"
     >
       {value ? (
-        <TooltipWrapper content={value}>
+        <TooltipWrapper content={value} stopClickPropagation>
           <div className="flex max-w-full items-center">
             <Button
               variant="tableLink"
               size="sm"
               className="block truncate px-0 leading-8"
-              onClick={() => callback(context.row.original)}
+              onClick={(event) => {
+                event.stopPropagation();
+                callback(context.row.original);
+              }}
             >
               {value}
             </Button>

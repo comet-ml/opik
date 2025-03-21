@@ -31,8 +31,8 @@
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.12.0</wiremock.version>
         <redisson.version>3.45.0</redisson.version>
-        <opentelmetry.version>2.13.0</opentelmetry.version>
-        <aws.java.sdk.version>2.30.21</aws.java.sdk.version>
+        <opentelmetry.version>2.14.0</opentelmetry.version>
+        <aws.java.sdk.version>2.31.1</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -271,6 +271,11 @@
             <groupId>io.opentelemetry.proto</groupId>
             <artifactId>opentelemetry-proto</artifactId>
             <version>1.5.0-alpha</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>3.1.0</version>
         </dependency>
 
 

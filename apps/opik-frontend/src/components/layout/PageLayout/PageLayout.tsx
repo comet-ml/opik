@@ -12,7 +12,7 @@ const PageLayout = () => {
   return (
     <section
       className={cn(
-        "relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden",
+        "relative flex h-screen min-h-0 w-screen min-w-0 flex-col",
         {
           "comet-expanded": expanded,
         },

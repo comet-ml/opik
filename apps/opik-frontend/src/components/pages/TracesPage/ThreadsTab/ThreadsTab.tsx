@@ -40,6 +40,8 @@ import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { formatDate } from "@/lib/date";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
@@ -318,8 +320,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   }
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+    <>
+      <PageBodyStickyContainer
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search as string}
@@ -366,10 +372,11 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
         </div>
-      </div>
+      </PageBodyStickyContainer>
       <DataTable
         columns={columns}
         data={rows}
+        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -380,8 +387,14 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        TableWrapper={PageBodyStickyTableWrapper}
+        stickyHeader
       />
-      <div className="py-4">
+      <PageBodyStickyContainer
+        className="py-4"
+        direction="horizontal"
+        limitWidth
+      >
         <DataTablePagination
           page={page as number}
           pageChange={setPage}
@@ -389,7 +402,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           sizeChange={setSize}
           total={data?.total ?? 0}
         ></DataTablePagination>
-      </div>
+      </PageBodyStickyContainer>
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}
@@ -410,7 +423,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         hasNextRow={hasNext}
         onRowChange={handleRowChange}
       />
-    </div>
+    </>
   );
 };
 

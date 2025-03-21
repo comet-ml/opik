@@ -104,6 +104,7 @@ interface TraceDAO {
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
 
+    Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -401,6 +402,21 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_id
             )
+            <if(feedback_scores_empty_filters)>
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
             SELECT
                   t.id as id,
                   t.workspace_id as workspace_id,
@@ -433,8 +449,12 @@ class TraceDAOImpl implements TraceDAO {
                  <if(trace_aggregation_filters)>
                  LEFT JOIN spans_agg s ON t.id = s.trace_id
                  <endif>
+                 <if(feedback_scores_empty_filters)>
+                    LEFT JOIN fsc ON fsc.entity_id = traces.id
+                 <endif>
                  WHERE workspace_id = :workspace_id
                  AND project_id = :project_id
+                 <if(last_received_trace_id)> AND id \\< :last_received_trace_id <endif>
                  <if(filters)> AND <filters> <endif>
                  <if(feedback_scores_filters)>
                  AND id IN (
@@ -456,9 +476,12 @@ class TraceDAOImpl implements TraceDAO {
                  <if(trace_aggregation_filters)>
                  AND <trace_aggregation_filters>
                  <endif>
+                 <if(feedback_scores_empty_filters)>
+                 AND fsc.feedback_scores_count = 0
+                 <endif>
                  ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
                  LIMIT 1 BY id
-                 LIMIT :limit OFFSET :offset
+                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
              ) AS t
              LEFT JOIN spans_agg AS s ON t.id = s.trace_id
              LEFT JOIN comments_agg AS c ON t.id = c.entity_id
@@ -491,6 +514,21 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
+            <if(feedback_scores_empty_filters)>
+             WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
             SELECT
                 count(id) as count
             FROM (
@@ -508,6 +546,9 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
                     FROM traces
+                    <if(feedback_scores_empty_filters)>
+                    LEFT JOIN fsc ON fsc.entity_id = traces.id
+                    <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(filters)> AND <filters> <endif>
@@ -527,6 +568,9 @@ class TraceDAOImpl implements TraceDAO {
                         GROUP BY entity_id
                         HAVING <feedback_scores_filters>
                     )
+                    <endif>
+                    <if(feedback_scores_empty_filters)>
+                    AND fsc.feedback_scores_count = 0
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -739,6 +783,21 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_id
             )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
             SELECT
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
@@ -760,6 +819,9 @@ class TraceDAOImpl implements TraceDAO {
                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
                         NULL) as duration
                 FROM traces
+                <if(feedback_scores_empty_filters)>
+                    LEFT JOIN fsc ON fsc.entity_id = traces.id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(filters)> AND <filters> <endif>
@@ -787,6 +849,9 @@ class TraceDAOImpl implements TraceDAO {
                     FROM spans_agg
                     WHERE <trace_aggregation_filters>
                 )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                AND fsc.feedback_scores_count = 0
                 <endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -1254,7 +1319,12 @@ class TraceDAOImpl implements TraceDAO {
 
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
+
+        int offset = (page - 1) * size;
+
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+
+        template.add("offset", offset);
 
         var finalTemplate = template;
         Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
@@ -1264,7 +1334,7 @@ class TraceDAOImpl implements TraceDAO {
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
-                .bind("offset", (page - 1) * size);
+                .bind("offset", offset);
         bindSearchCriteria(traceSearchCriteria, statement);
 
         Segment segment = startSegment("traces", "Clickhouse", "find");
@@ -1300,7 +1370,12 @@ class TraceDAOImpl implements TraceDAO {
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
                             .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                            .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
+                                    feedbackScoreIsEmptyFilters));
                 });
+        Optional.ofNullable(traceSearchCriteria.lastReceivedTraceId())
+                .ifPresent(lastReceivedTraceId -> template.add("last_received_trace_id", lastReceivedTraceId));
         return template;
     }
 
@@ -1311,7 +1386,10 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 });
+        Optional.ofNullable(traceSearchCriteria.lastReceivedTraceId())
+                .ifPresent(lastReceivedTraceId -> statement.bind("last_received_trace_id", lastReceivedTraceId));
     }
 
     @Override
@@ -1611,6 +1689,40 @@ class TraceDAOImpl implements TraceDAO {
                     .singleOrEmpty()
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    @Override
+    public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
+        return asyncTemplate.stream(connection -> findTraceStream(limit, criteria, connection))
+                .flatMap(this::mapToDto)
+                .buffer(limit > 100 ? limit / 2 : limit)
+                .concatWith(Mono.just(List.of()))
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(this::enhanceWithFeedbackLogs)
+                .flatMap(Flux::fromIterable);
+    }
+
+    private Flux<? extends Result> findTraceStream(int limit, @NonNull TraceSearchCriteria criteria,
+            Connection connection) {
+        log.info("Searching traces by '{}'", criteria);
+
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+
+        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", criteria.projectId())
+                .bind("limit", limit);
+
+        bindSearchCriteria(criteria, statement);
+
+        Segment segment = startSegment("traces", "Clickhouse", "findTraceStream");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> {
+                    log.info("Closing trace search stream");
+                    endSegment(segment);
+                });
     }
 
 }

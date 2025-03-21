@@ -1,9 +1,9 @@
 <h1 align="center" style="border-bottom: none">
     <div>
         <a href="https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=header_img&utm_campaign=opik"><picture>
-            <source media="(prefers-color-scheme: dark)" srcset="/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
-            <source media="(prefers-color-scheme: light)" srcset="/apps/opik-documentation/documentation/static/img/opik-logo.svg">
-            <img alt="Comet Opik logo" src="/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
+            <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
+            <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg">
+            <img alt="Comet Opik logo" src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
         </picture></a>
         <br>
         Opik
@@ -90,9 +90,9 @@ docker compose pull
 
 # Start the Opik platform
 docker compose up --detach
-
-# You can now visit http://localhost:5173 on your browser!
 ```
+
+You can now visit [localhost:5173](http://localhost:5173) on your browser!
 
 For more information about the different deployment options, please see our deployment guides:
 

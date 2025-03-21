@@ -177,6 +177,7 @@ export const generateGroupedCellDef = <TData, TValue>(
 export const renderCustomRow = (
   row: Row<GroupedExperiment>,
   setGroupLimit: OnChangeFn<Record<string, number>>,
+  applyStickyWorkaround?: boolean,
 ) => {
   if (row.getIsGrouped()) {
     const cells = row.getVisibleCells();
@@ -191,7 +192,11 @@ export const renderCustomRow = (
           key={cell.id}
           data-cell-id={cell.id}
           style={{
-            ...getCommonPinningStyles(cell.column),
+            ...getCommonPinningStyles(
+              cell.column,
+              false,
+              applyStickyWorkaround,
+            ),
             left: "0",
             boxShadow: undefined,
           }}
