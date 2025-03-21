@@ -44,13 +44,20 @@ Example response:
 ```json
 {
   "validation_passed": false,
-  "relevant_topics_scores": {
-    "artificial intelligence": 0.92
+  "type": "RESTRICTED_TOPIC",
+  "validation_config": {
+    "topics": ["politics", "religion", "artificial intelligence"],
+    "threshold": 0.5
   },
-  "scores": {
-    "politics": 0.12,
-    "religion": 0.05,
-    "artificial intelligence": 0.92
+  "validation_details": {
+    "matched_topics_scores": {
+      "artificial intelligence": 0.92
+    },
+    "scores": {
+      "politics": 0.12,
+      "religion": 0.05,
+      "artificial intelligence": 0.92
+    }
   }
 }
 ```
@@ -80,64 +87,70 @@ Example response:
 ```json
 {
   "validation_passed": false,
-  "detected_entities": {
-    "PERSON": [
-      {
-        "start": 11,
-        "end": 19,
-        "score": 0.85,
-        "text": "John Doe"
-      }
-    ],
-    "EMAIL_ADDRESS": [
-      {
-        "start": 33,
-        "end": 52,
-        "score": 1.0,
-        "text": "john.doe@example.com"
-      }
-    ]
+  "type": "PII",
+  "validation_config": {
+    "entities": ["PERSON", "EMAIL_ADDRESS"],
+    "language": "en"
+  },
+  "validation_details": {
+    "detected_entities": {
+      "PERSON": [
+        {
+          "start": 11,
+          "end": 19,
+          "score": 0.85,
+          "text": "John Doe"
+        }
+      ],
+      "EMAIL_ADDRESS": [
+        {
+          "start": 33,
+          "end": 52,
+          "score": 1.0,
+          "text": "john.doe@example.com"
+        }
+      ]
+    }
   }
 }
 ```
 
 ### Combined Validation
 
-This endpoint allows you to perform multiple validations in a single request.
+This endpoint allows you to perform multiple validations on the same text in a single request.
 
 ```bash
 curl -X POST http://localhost:5000/api/validate \
   -H "Content-Type: application/json" \
   -d '{
+    "text": "This text is about artificial intelligence. My name is John Doe.",
     "validations": [
       {
-        "type": "topic",
+        "type": "RESTRICTED_TOPIC",
         "config": {
           "topics": ["politics", "religion", "artificial intelligence"],
           "threshold": 0.5
-        },
-        "text": "This text is about artificial intelligence and machine learning."
+        }
       },
       {
-        "type": "pii",
+        "type": "PII",
         "config": {
           "entities": ["PERSON", "EMAIL_ADDRESS"],
           "language": "en"
-        },
-        "text": "My name is John Doe and my email is john.doe@example.com"
+        }
       }
     ]
   }'
 ```
 
 Parameters:
-- `validations`: Array of validation configurations (required)
+- `text`: The text to validate (required)
+- `validations`: Array of validation instructions (required)
   - Each validation requires:
-    - `type`: Type of validation to perform ("topic" or "pii")
+    - `type`: Type of validation to perform (`RESTRICTED_TOPIC` or `PII`)
     - `config`: Configuration specific to the validation type
-      - For "topic" type: A TopicClassificationConfig object
-      - For "pii" type: A PIIDetectionConfig object
-    - `text`: The text to validate for this specific validation
+      - For `RESTRICTED_TOPIC` type: A RestrictedTopicValidationConfig object
+      - For `PII` type: A PIIValidationConfig object
 
 Example response:
 ```json
@@ -145,31 +158,43 @@ Example response:
   "validation_passed": false,
   "validations": [
     {
-      "type": "topic",
       "validation_passed": false,
-      "relevant_topics_scores": {
-        "politics": 0.78,
-        "artificial intelligence": 0.85
+      "type": "RESTRICTED_TOPIC",
+      "validation_config": {
+        "topics": ["politics", "religion", "artificial intelligence"],
+        "threshold": 0.5
       },
-      "scores": {
-        "politics": 0.78,
-        "religion": 0.12,
-        "artificial intelligence": 0.85
+      "validation_details": {
+        "matched_topics_scores": {
+          "artificial intelligence": 0.85
+        },
+        "scores": {
+          "politics": 0.12,
+          "religion": 0.05,
+          "artificial intelligence": 0.85
+        }
       }
     },
     {
-      "type": "pii",
       "validation_passed": false,
-      "detected_entities": {
-        "PERSON": [
-          {
-            "start": 11,
-            "end": 19,
-            "score": 0.85,
-            "text": "John Doe"
-          }
-        ]
+      "type": "PII",
+      "validation_config": {
+        "entities": ["PERSON", "EMAIL_ADDRESS"],
+        "language": "en"
+      },
+      "validation_details": {
+        "detected_entities": {
+          "PERSON": [
+            {
+              "start": 51,
+              "end": 59,
+              "score": 0.85,
+              "text": "John Doe"
+            }
+          ]
+        }
       }
     }
   ]
 }
+```

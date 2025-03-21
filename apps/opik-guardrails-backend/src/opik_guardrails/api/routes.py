@@ -5,17 +5,10 @@ import pydantic
 
 from opik_guardrails import schemas
 from opik_guardrails.services import validation_engine
-from opik_guardrails.services.validators import pii as pii_validator
-from opik_guardrails.services.validators import (
-    restricted_topic as restricted_topic_validator,
-)
 
 LOGGER = logging.getLogger(__name__)
 
 guardrails_blueprint = flask.Blueprint("api", __name__, url_prefix="/api")
-
-topics_relevance_classifier = restricted_topic_validator.RestrictedTopicValidator()
-pii_detector = pii_validator.PIIValidator()
 
 
 @guardrails_blueprint.route("/validate-topic", methods=["POST"])
@@ -25,7 +18,7 @@ def validate_topic() -> flask.Response:
         validated_request = schemas.RestrictedTopicValidationRequest(**data)
 
         validation_result = validation_engine.run_validator(
-            schemas.ValidatorType.RESTRICTED_TOPIC,
+            schemas.ValidationType.RESTRICTED_TOPIC,
             validated_request.text,
             validated_request.config,
         )
@@ -52,7 +45,7 @@ def validate_pii() -> flask.Response:
         validated_request = schemas.PIIValidationRequest(**data)
 
         validation_result = validation_engine.run_validator(
-            schemas.ValidatorType.PII,
+            schemas.ValidationType.PII,
             validated_request.text,
             validated_request.config,
         )
@@ -81,11 +74,11 @@ def validate_combined() -> flask.Response:
         all_validations_passed = True
         validation_results = []
 
-        for validation_request in validated_request.validations:
+        for validation_descriptor in validated_request.validations:
             validation_result = validation_engine.run_validator(
-                validation_request.type,
-                validation_request.text,
-                validation_request.config,
+                validation_type=validation_descriptor.type,
+                text=validated_request.text,
+                config=validation_descriptor.config,
             )
 
             validation_results.append(validation_result)

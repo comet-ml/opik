@@ -1,5 +1,6 @@
 from typing import Dict
 
+import pydantic
 import torch
 import transformers
 
@@ -11,7 +12,7 @@ MODEL_PATH = "facebook/bart-large-mnli"
 DEVICE = "cuda:0"
 
 
-class RestrictedTopicValidationResult(base_validator.ValidationResult):
+class RestrictedTopicValidationDetails(pydantic.BaseModel):
     matched_topics_scores: Dict[str, float]
     scores: Dict[str, float]
 
@@ -28,7 +29,7 @@ class RestrictedTopicValidator(base_validator.BaseValidator):
         self,
         text: str,
         config: schemas.RestrictedTopicValidationConfig,
-    ) -> RestrictedTopicValidationResult:
+    ) -> base_validator.ValidationResult:
         classification_result = self._classification_pipeline(text, config.topics)
         scores = {
             label: score
@@ -41,10 +42,14 @@ class RestrictedTopicValidator(base_validator.BaseValidator):
             label: score for label, score in scores.items() if score >= config.threshold
         }
 
-        return RestrictedTopicValidationResult(
+        return base_validator.ValidationResult(
             validation_passed=len(relevant_topics_scores) == 0,
-            matched_topics_scores=relevant_topics_scores,
-            scores=scores,
+            validation_details=RestrictedTopicValidationDetails(
+                matched_topics_scores=relevant_topics_scores,
+                scores=scores,
+            ),
+            type=schemas.ValidationType.RESTRICTED_TOPIC,
+            validation_config=config,
         )
 
 

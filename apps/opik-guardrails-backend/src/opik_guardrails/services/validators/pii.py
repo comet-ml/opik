@@ -16,7 +16,7 @@ class PIIEntity(pydantic.BaseModel):
     text: str
 
 
-class PIIValidationResult(base_validator.ValidationResult):
+class PIIValidationDetails(pydantic.BaseModel):
     detected_entities: Dict[str, List[PIIEntity]]
 
 
@@ -29,7 +29,7 @@ class PIIValidator(base_validator.BaseValidator):
         self,
         text: str,
         config: schemas.PIIValidationConfig,
-    ) -> PIIValidationResult:
+    ) -> base_validator.ValidationResult:
         """
         Detect PII in the given text.
 
@@ -58,7 +58,9 @@ class PIIValidator(base_validator.BaseValidator):
                 )
             )
 
-        return PIIValidationResult(
+        return base_validator.ValidationResult(
             validation_passed=len(results) == 0,
-            detected_entities=grouped_results,
+            validation_details=PIIValidationDetails(detected_entities=grouped_results),
+            type=schemas.ValidationType.PII,
+            validation_config=config,
         )

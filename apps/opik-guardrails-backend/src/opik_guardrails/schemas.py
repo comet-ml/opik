@@ -4,14 +4,12 @@ import enum
 import pydantic
 
 
-class ValidatorType(str, enum.Enum):
+class ValidationType(str, enum.Enum):
     PII = "PII"
     RESTRICTED_TOPIC = "RESTRICTED_TOPIC"
 
 
 class ValidationConfig(pydantic.BaseModel):
-    """Base model for validation configurations."""
-
     pass
 
 
@@ -46,9 +44,8 @@ class PIIValidationRequest(pydantic.BaseModel):
     )
 
 
-class ValidationRequest(pydantic.BaseModel):
-    type: ValidatorType = pydantic.Field(description="Type of validation to perform")
-    text: str = pydantic.Field(description="Text to validate")
+class ValidationDescriptor(pydantic.BaseModel):
+    type: ValidationType = pydantic.Field(description="Type of validation to perform")
     config: Union[RestrictedTopicValidationConfig, PIIValidationConfig] = (
         pydantic.Field(description="Configuration for the validation")
     )
@@ -59,13 +56,13 @@ class ValidationRequest(pydantic.BaseModel):
         config: Union[RestrictedTopicValidationConfig, PIIValidationConfig],
         values: Dict[str, Any],
     ) -> Union[RestrictedTopicValidationConfig, PIIValidationConfig]:
-        if values["type"] == ValidatorType.RESTRICTED_TOPIC and not isinstance(
+        if values["type"] == ValidationType.RESTRICTED_TOPIC and not isinstance(
             config, RestrictedTopicValidationConfig
         ):
             raise pydantic.ValidationError(
                 "Topic validation requires RestrictedTopicValidationConfig config"
             )
-        if values["type"] == ValidatorType.PII and not isinstance(
+        if values["type"] == ValidationType.PII and not isinstance(
             config, PIIValidationConfig
         ):
             raise pydantic.ValidationError(
@@ -75,6 +72,7 @@ class ValidationRequest(pydantic.BaseModel):
 
 
 class GuardrailsValidationRequest(pydantic.BaseModel):
-    validations: List[ValidationRequest] = pydantic.Field(
+    text: str = pydantic.Field(description="The text to validate")
+    validations: List[ValidationDescriptor] = pydantic.Field(
         min_items=1, description="List of validations to perform"
     )
