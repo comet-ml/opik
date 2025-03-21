@@ -33,7 +33,6 @@ def execute_evaluator_python():
     if data is None:
         abort(400, "Field 'data' is missing in the request")
 
-    #response = old_runner.run_scoring_in_docker_python_container(code, data)
     response = run_scoring_in_docker_python_container(code, data)
     if "error" in response:
         abort(response["code"], response["error"])
