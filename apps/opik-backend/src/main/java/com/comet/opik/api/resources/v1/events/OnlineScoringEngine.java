@@ -54,6 +54,8 @@ public class OnlineScoringEngine {
     static final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
     static final String DEFAULT_SCHEMA_NAME = "scoring_schema";
 
+    static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
      * Trace variables and with the proper structured output format.
@@ -62,11 +64,10 @@ public class OnlineScoringEngine {
      * @param trace the sampled Trace to be scored
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
-    public static ChatRequest prepareLlmRequest(@NotNull LlmAsJudgeCode evaluatorCode,
-            Trace trace) {
+    public static ChatRequest prepareLlmRequest(
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace) {
         var responseFormat = toResponseFormat(evaluatorCode.schema());
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace);
-
         return ChatRequest.builder()
                 .messages(renderedMessages)
                 .responseFormat(responseFormat)
@@ -84,38 +85,19 @@ public class OnlineScoringEngine {
      * @param trace            the trace with value to use to replace template variables
      * @return a list of AI messages, with templates rendered
      */
-    static List<ChatMessage> renderMessages(List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap,
-            Trace trace) {
+    static List<ChatMessage> renderMessages(
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
         // prepare the map of replacements to use in all messages
-        var parsedVariables = toVariableMapping(variablesMap);
-
-        // extract the actual value from the Trace
-        var replacements = parsedVariables.stream().map(mapper -> {
-            var traceSection = switch (mapper.traceSection()) {
-                case INPUT -> trace.input();
-                case OUTPUT -> trace.output();
-                case METADATA -> trace.metadata();
-            };
-
-            return mapper.toBuilder()
-                    .valueToReplace(extractFromJson(traceSection, mapper.jsonPath()))
-                    .build();
-        })
-                .filter(mapper -> mapper.valueToReplace() != null)
-                .collect(
-                        Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
-
+        var replacements = toReplacements(variablesMap, trace);
         // render the message templates from evaluator rule
         return templateMessages.stream()
                 .map(templateMessage -> {
                     // will convert all '{{key}}' into 'value'
-                    var renderedMessage = TemplateParseUtils.render(templateMessage.content(), replacements,
-                            PromptType.MUSTACHE);
-
+                    var renderedMessage = TemplateParseUtils.render(
+                            templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
                         case USER -> UserMessage.from(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
-
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
                             yield null;
@@ -124,6 +106,28 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
+        var parsedVariables = toVariableMapping(variables);
+        // extract the actual value from the Trace
+        return parsedVariables.stream().map(mapper -> {
+            var traceSection = switch (mapper.traceSection()) {
+                case INPUT -> trace.input();
+                case OUTPUT -> trace.output();
+                case METADATA -> trace.metadata();
+                case null -> null;
+            };
+            // if no trace section, there's no replacement and the literal value is taken
+            var valueToReplace = traceSection != null
+                    ? extractFromJson(traceSection, mapper.jsonPath())
+                    : mapper.valueToReplace;
+            return mapper.toBuilder()
+                    .valueToReplace(valueToReplace)
+                    .build();
+        }).filter(mapper -> mapper.valueToReplace() != null)
+                .collect(
+                        Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
     }
 
     /**
@@ -137,15 +141,15 @@ public class OnlineScoringEngine {
                 .map(mapper -> {
                     var templateVariable = mapper.getKey();
                     var tracePath = mapper.getValue();
-
                     var builder = MessageVariableMapping.builder().variableName(templateVariable);
-
                     // check if its input/output/metadata variable and fix the json path
                     Arrays.stream(TraceSection.values())
                             .filter(traceSection -> tracePath.startsWith(traceSection.prefix))
                             .findFirst()
-                            .ifPresent(traceSection -> builder.traceSection(traceSection)
-                                    .jsonPath("$." + tracePath.substring(traceSection.prefix.length())));
+                            .ifPresentOrElse(traceSection -> builder.traceSection(traceSection)
+                                    .jsonPath("$." + tracePath.substring(traceSection.prefix.length())),
+                                    // if not a trace section, it's a literal value to replace
+                                    () -> builder.valueToReplace(tracePath));
 
                     return builder.build();
                 })
@@ -153,12 +157,10 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    final ObjectMapper objectMapper = new ObjectMapper();
-
-    String extractFromJson(JsonNode json, String path) {
+    static String extractFromJson(JsonNode json, String path) {
         try {
-            // JsonPath didnt work with JsonNode, even explicitly using JacksonJsonProvider, so we convert to a Map
-            var forcedObject = objectMapper.convertValue(json, Map.class);
+            // JsonPath didn't work with JsonNode, even explicitly using JacksonJsonProvider, so we convert to a Map
+            var forcedObject = OBJECT_MAPPER.convertValue(json, Map.class);
             return JsonPath.parse(forcedObject).read(path);
         } catch (Exception e) {
             log.debug("Couldn't find path '{}' inside json {}: {}", path, json, e.getMessage());
@@ -194,13 +196,9 @@ public class OnlineScoringEngine {
 
                 ))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
         var allPropertyNames = structuredFields.keySet().stream().toList();
-
         var schemaBuilder = JsonObjectSchema.builder().required(allPropertyNames).properties(structuredFields).build();
-
         var jsonSchema = JsonSchema.builder().name(DEFAULT_SCHEMA_NAME).rootElement(schemaBuilder).build();
-
         return ResponseFormat.builder()
                 .type(ResponseFormatType.JSON)
                 .jsonSchema(jsonSchema)
@@ -209,10 +207,9 @@ public class OnlineScoringEngine {
 
     public static List<FeedbackScoreBatchItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {
         var content = chatResponse.aiMessage().text();
-
         JsonNode structuredResponse;
         try {
-            structuredResponse = objectMapper.readTree(content);
+            structuredResponse = OBJECT_MAPPER.readTree(content);
             if (!structuredResponse.isObject()) {
                 log.info("ChatResponse content returned into an empty JSON result");
                 return Collections.emptyList();
@@ -221,37 +218,30 @@ public class OnlineScoringEngine {
             log.error("parsing LLM response into a JSON: {}", content, e);
             return Collections.emptyList();
         }
-
-        var spliterator = Spliterators.spliteratorUnknownSize(structuredResponse.fields(),
-                Spliterator.ORDERED | Spliterator.NONNULL);
-
+        var spliterator = Spliterators.spliteratorUnknownSize(
+                structuredResponse.fields(), Spliterator.ORDERED | Spliterator.NONNULL);
         return StreamSupport.stream(spliterator, false)
                 .map(scoreMetric -> {
                     var scoreName = scoreMetric.getKey();
                     var scoreNested = scoreMetric.getValue();
-
                     if (scoreNested == null || scoreNested.isMissingNode() || !scoreNested.has(SCORE_FIELD_NAME)) {
                         log.info("No score found for '{}' score in {}", scoreName, scoreNested);
                         return null;
                     }
-
                     var resultBuilder = FeedbackScoreBatchItem.builder()
                             .name(scoreName)
                             .reason(scoreNested.path(REASON_FIELD_NAME).asText())
                             .source(ScoreSource.ONLINE_SCORING);
-
                     var actualScore = scoreNested.path(SCORE_FIELD_NAME);
                     if (actualScore.isBoolean()) {
                         resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
                     } else {
                         resultBuilder.value(actualScore.decimalValue());
                     }
-
                     return resultBuilder.build();
                 })
                 .filter(Objects::nonNull)
                 .toList();
-
     }
 
     @AllArgsConstructor
@@ -264,7 +254,7 @@ public class OnlineScoringEngine {
     }
 
     @Builder(toBuilder = true)
-    public record MessageVariableMapping(TraceSection traceSection, String variableName, String jsonPath,
-            String valueToReplace) {
+    public record MessageVariableMapping(
+            TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) {
     }
 }
