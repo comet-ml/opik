@@ -28,13 +28,11 @@ component:
       enabled: false
     backendConfigMap:
       enabled: true
-    initContainers:
+    initContainers:          
     - name: wait-for-clickhouse-service
-      image: stefanevinance/wait-for-200
-      env:
-        - name: URL
-          value: http://clickhouse-opik-clickhouse:8123
-
+      image: curlimages/curl:8.12.1
+      command: ["/bin/sh", "-c"]
+      args: ['while [ $(curl -ksw "%{http_code}" "http://clickhouse-opik-clickhouse:8123" -o /dev/null) -ne 200 ]; do sleep 5; echo "Clickhouse is not available. Waiting for the Clickhouse..."; done']
     # livenessProbe:
     #   path: /health-check?name=all&type=alive
     #   port:  8080
