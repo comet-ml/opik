@@ -291,11 +291,13 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String SELECT_BY_ID = """
+  private static final String SELECT_BY_ID =
+      """
             SELECT
                 t.*,
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
+                COUNT(s.id) AS span_count,
                 groupUniqArrayArray(c.comments_array) as comments
             FROM (
                 SELECT
@@ -314,10 +316,11 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     usage,
-                    total_estimated_cost
+                    total_estimated_cost,
+                    id
                 FROM spans
                 WHERE workspace_id = :workspace_id
-                AND trace_id = :id
+                  AND trace_id = :id
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
@@ -365,7 +368,6 @@ class TraceDAOImpl implements TraceDAO {
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count
-
                 FROM (
                     SELECT
                         workspace_id,
