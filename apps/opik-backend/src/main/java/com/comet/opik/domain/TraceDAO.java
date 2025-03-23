@@ -295,6 +295,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_ID = """
             SELECT
                 t.*,
+                t.id as id,
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
@@ -1223,47 +1224,62 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Publisher<Trace> mapToDto(Result result) {
-        return result.map((row, rowMetadata) -> Trace.builder()
-                .id(row.get("id", UUID.class))
-                .projectId(row.get("project_id", UUID.class))
-                .name(row.get("name", String.class))
-                .startTime(row.get("start_time", Instant.class))
-                .endTime(row.get("end_time", Instant.class))
-                .input(Optional.ofNullable(row.get("input", String.class))
-                        .filter(it -> !it.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
-                        .orElse(null))
-                .output(Optional.ofNullable(row.get("output", String.class))
-                        .filter(it -> !it.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
-                        .orElse(null))
-                .metadata(Optional.ofNullable(row.get("metadata", String.class))
-                        .filter(it -> !it.isBlank())
-                        .map(JsonUtils::getJsonNodeFromString)
-                        .orElse(null))
-                .tags(Optional.of(Arrays.stream(row.get("tags", String[].class))
-                        .collect(Collectors.toSet()))
-                        .filter(it -> !it.isEmpty())
-                        .orElse(null))
-                .comments(getComments(row.get("comments", List[].class)))
-                .spanCount(row.get("span_count", Integer.class))
-                .usage(row.get("usage", Map.class))
-                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
-                        ? null
-                        : row.get("total_estimated_cost", BigDecimal.class))
-                .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
-                        .orElse(null))
-                .createdAt(row.get("created_at", Instant.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .duration(row.get("duration", Double.class))
-                .threadId(Optional.ofNullable(row.get("thread_id", String.class))
-                        .filter(StringUtils::isNotEmpty)
-                        .orElse(null))
-                .build());
+
+        return result.map((row, rowMetadata) -> {
+            System.out.println("Printing all columns with values");
+            rowMetadata.getColumnMetadatas().forEach(col -> {
+                String name = col.getName();
+                System.out.println("Column name: " + name);
+                try {
+                    Object value = row.get(name, Object.class);
+                    System.out.println("  Value: " + value);
+                } catch (Exception e) {
+                    System.out.println("  Error accessing: " + e.getMessage());
+                }
+            });
+            return Trace.builder()
+                    .id(row.get("id", UUID.class))
+                    .projectId(row.get("project_id", UUID.class))
+                    .name(row.get("name", String.class))
+                    .startTime(row.get("start_time", Instant.class))
+                    .endTime(row.get("end_time", Instant.class))
+                    .input(Optional.ofNullable(row.get("input", String.class))
+                            .filter(it -> !it.isBlank())
+                            .map(JsonUtils::getJsonNodeFromString)
+                            .orElse(null))
+                    .output(Optional.ofNullable(row.get("output", String.class))
+                            .filter(it -> !it.isBlank())
+                            .map(JsonUtils::getJsonNodeFromString)
+                            .orElse(null))
+                    .metadata(Optional.ofNullable(row.get("metadata", String.class))
+                            .filter(it -> !it.isBlank())
+                            .map(JsonUtils::getJsonNodeFromString)
+                            .orElse(null))
+                    .tags(Optional.of(Arrays.stream(row.get("tags", String[].class))
+                            .collect(Collectors.toSet()))
+                            .filter(it -> !it.isEmpty())
+                            .orElse(null))
+                    .comments(getComments(row.get("comments", List[].class)))
+                    .spanCount(row.get("span_count", Integer.class))
+                    .usage(row.get("usage", Map.class))
+                    .totalEstimatedCost(
+                            row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
+                                    ? null
+                                    : row.get("total_estimated_cost", BigDecimal.class))
+                    .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
+                            .orElse(null))
+                    .createdAt(row.get("created_at", Instant.class))
+                    .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                    .createdBy(row.get("created_by", String.class))
+                    .lastUpdatedBy(row.get("last_updated_by", String.class))
+                    .duration(row.get("duration", Double.class))
+                    .threadId(Optional.ofNullable(row.get("thread_id", String.class))
+                            .filter(StringUtils::isNotEmpty)
+                            .orElse(null))
+                    .build();
+        });
     }
 
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {
