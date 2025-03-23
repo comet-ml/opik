@@ -292,8 +292,7 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-  private static final String SELECT_BY_ID =
-      """
+    private static final String SELECT_BY_ID = """
             SELECT
                 t.*,
                 sumMap(s.usage) as usage,
