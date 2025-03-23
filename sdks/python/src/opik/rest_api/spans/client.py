@@ -15,7 +15,6 @@ from ..types.span_write_type import SpanWriteType
 from ..types.json_node_write import JsonNodeWrite
 from ..types.error_info_write import ErrorInfoWrite
 from ..core.serialization import convert_and_respect_annotation_metadata
-from ..errors.conflict_error import ConflictError
 from ..types.span_write import SpanWrite
 from ..types.span_public import SpanPublic
 from ..errors.not_found_error import NotFoundError
@@ -215,7 +214,6 @@ class SpansClient:
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
-        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SpanPagePublic:
         """
@@ -238,8 +236,6 @@ class SpansClient:
         filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
-
-        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -271,7 +267,6 @@ class SpansClient:
                 "type": type,
                 "filters": filters,
                 "truncate": truncate,
-                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -411,16 +406,6 @@ class SpansClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
-            if _response.status_code == 409:
-                raise ConflictError(
-                    typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    )
-                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -1447,7 +1432,6 @@ class AsyncSpansClient:
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
-        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SpanPagePublic:
         """
@@ -1470,8 +1454,6 @@ class AsyncSpansClient:
         filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
-
-        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1511,7 +1493,6 @@ class AsyncSpansClient:
                 "type": type,
                 "filters": filters,
                 "truncate": truncate,
-                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -1658,16 +1639,6 @@ class AsyncSpansClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
-            if _response.status_code == 409:
-                raise ConflictError(
-                    typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    )
-                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)

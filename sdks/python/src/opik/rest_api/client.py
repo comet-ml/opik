@@ -5,7 +5,6 @@ from .environment import OpikApiEnvironment
 import httpx
 from .core.client_wrapper import SyncClientWrapper
 from .system_usage.client import SystemUsageClient
-from .attachments.client import AttachmentsClient
 from .check.client import CheckClient
 from .automation_rule_evaluators.client import AutomationRuleEvaluatorsClient
 from .chat_completions.client import ChatCompletionsClient
@@ -19,14 +18,12 @@ from .prompts.client import PromptsClient
 from .spans.client import SpansClient
 from .traces.client import TracesClient
 from .workspaces.client import WorkspacesClient
-from .redirect.client import RedirectClient
 from .core.request_options import RequestOptions
 from .core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from .core.api_error import ApiError
 from .core.client_wrapper import AsyncClientWrapper
 from .system_usage.client import AsyncSystemUsageClient
-from .attachments.client import AsyncAttachmentsClient
 from .check.client import AsyncCheckClient
 from .automation_rule_evaluators.client import AsyncAutomationRuleEvaluatorsClient
 from .chat_completions.client import AsyncChatCompletionsClient
@@ -40,7 +37,6 @@ from .prompts.client import AsyncPromptsClient
 from .spans.client import AsyncSpansClient
 from .traces.client import AsyncTracesClient
 from .workspaces.client import AsyncWorkspacesClient
-from .redirect.client import AsyncRedirectClient
 
 
 class OpikApi:
@@ -110,7 +106,6 @@ class OpikApi:
             timeout=_defaulted_timeout,
         )
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
-        self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = CheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AutomationRuleEvaluatorsClient(
             client_wrapper=self._client_wrapper
@@ -134,7 +129,6 @@ class OpikApi:
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
         self.workspaces = WorkspacesClient(client_wrapper=self._client_wrapper)
-        self.redirect = RedirectClient(client_wrapper=self._client_wrapper)
 
     def is_alive(
         self, *, request_options: typing.Optional[RequestOptions] = None
@@ -290,7 +284,6 @@ class AsyncOpikApi:
             timeout=_defaulted_timeout,
         )
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
-        self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AsyncAutomationRuleEvaluatorsClient(
             client_wrapper=self._client_wrapper
@@ -314,7 +307,6 @@ class AsyncOpikApi:
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
         self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)
-        self.redirect = AsyncRedirectClient(client_wrapper=self._client_wrapper)
 
     async def is_alive(
         self, *, request_options: typing.Optional[RequestOptions] = None

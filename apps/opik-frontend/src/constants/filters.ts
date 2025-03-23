@@ -175,5 +175,13 @@ export const OPERATORS_MAP: Record<
       label: "<=",
       value: "<=",
     },
+    {
+      label: "is empty",
+      value: "is_empty",
+    },
+    {
+      label: "is not empty",
+      value: "is_not_empty",
+    },
   ],
 };

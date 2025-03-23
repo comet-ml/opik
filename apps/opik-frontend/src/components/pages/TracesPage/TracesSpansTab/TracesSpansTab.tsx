@@ -653,6 +653,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         columns={columns}
         columnsStatistic={columnsStatistic}
         data={rows}
+        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         selectionConfig={{

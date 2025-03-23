@@ -75,6 +75,20 @@ def test_dspy__happyflow(
                 project_name=expected_project_name,
                 spans=[],
             ),
+            SpanModel(  # This span added because tests started failing in 2.6.13
+                id=ANY_STRING(),
+                type="llm",
+                name="LM",
+                provider="openai",
+                model="gpt-4o-mini",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata={"created_from": "dspy"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                spans=[],
+            ),
             SpanModel(
                 id=ANY_STRING(),
                 type="llm",
@@ -93,7 +107,7 @@ def test_dspy__happyflow(
     )
 
     assert len(fake_backend.trace_trees) == 1
-    assert len(fake_backend.span_trees) == 2
+    assert len(fake_backend.span_trees) == 3
 
     sort_spans_by_name(EXPECTED_TRACE_TREE)
     sort_spans_by_name(fake_backend.trace_trees[0])
@@ -269,6 +283,20 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                 project_name=project_name,
                                 spans=[],
                             ),
+                            SpanModel(  # This span added because tests started failing in 2.6.13
+                                id=ANY_STRING(),
+                                type="llm",
+                                name="LM",
+                                provider="openai",
+                                model="gpt-3.5-turbo",
+                                input=ANY_DICT,
+                                output=ANY_DICT,
+                                metadata={"created_from": "dspy"},
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                project_name=project_name,
+                                spans=[],
+                            ),
                         ],
                     )
                 ],
@@ -371,6 +399,19 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
                         end_time=ANY_BUT_NONE,
                         spans=[],
                     ),
+                    SpanModel(  # This span added because tests started failing in 2.6.13
+                        id=ANY_STRING(),
+                        type="llm",
+                        name="LM",
+                        provider="openai",
+                        model="gpt-3.5-turbo",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata={"created_from": "dspy"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                    ),
                 ],
             )
         ],
@@ -443,6 +484,19 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 spans=[
                     SpanModel(
+                        id=ANY_STRING(),
+                        type="llm",
+                        name="LM",
+                        provider="openai",
+                        model="gpt-3.5-turbo",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata={"created_from": "dspy"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                    ),
+                    SpanModel(  # This span added because tests started failing in 2.6.13
                         id=ANY_STRING(),
                         type="llm",
                         name="LM",

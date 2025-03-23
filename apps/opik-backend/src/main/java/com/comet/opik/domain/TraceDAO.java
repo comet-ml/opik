@@ -104,6 +104,7 @@ interface TraceDAO {
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
 
+    Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -459,6 +460,7 @@ class TraceDAOImpl implements TraceDAO {
                  <endif>
                  WHERE workspace_id = :workspace_id
                  AND project_id = :project_id
+                 <if(last_received_trace_id)> AND id \\< :last_received_trace_id <endif>
                  <if(filters)> AND <filters> <endif>
                  <if(feedback_scores_filters)>
                  AND id IN (
@@ -485,7 +487,7 @@ class TraceDAOImpl implements TraceDAO {
                  <endif>
                  ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
                  LIMIT 1 BY id
-                 LIMIT :limit OFFSET :offset
+                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
              ) AS t
              LEFT JOIN spans_agg AS s ON t.id = s.trace_id
              LEFT JOIN comments_agg AS c ON t.id = c.entity_id
@@ -1324,7 +1326,12 @@ class TraceDAOImpl implements TraceDAO {
 
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
+
+        int offset = (page - 1) * size;
+
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+
+        template.add("offset", offset);
 
         var finalTemplate = template;
         Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
@@ -1334,7 +1341,7 @@ class TraceDAOImpl implements TraceDAO {
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
-                .bind("offset", (page - 1) * size);
+                .bind("offset", offset);
         bindSearchCriteria(traceSearchCriteria, statement);
 
         Segment segment = startSegment("traces", "Clickhouse", "find");
@@ -1374,6 +1381,8 @@ class TraceDAOImpl implements TraceDAO {
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
                 });
+        Optional.ofNullable(traceSearchCriteria.lastReceivedTraceId())
+                .ifPresent(lastReceivedTraceId -> template.add("last_received_trace_id", lastReceivedTraceId));
         return template;
     }
 
@@ -1386,6 +1395,8 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 });
+        Optional.ofNullable(traceSearchCriteria.lastReceivedTraceId())
+                .ifPresent(lastReceivedTraceId -> statement.bind("last_received_trace_id", lastReceivedTraceId));
     }
 
     @Override
@@ -1685,6 +1696,40 @@ class TraceDAOImpl implements TraceDAO {
                     .singleOrEmpty()
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    @Override
+    public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
+        return asyncTemplate.stream(connection -> findTraceStream(limit, criteria, connection))
+                .flatMap(this::mapToDto)
+                .buffer(limit > 100 ? limit / 2 : limit)
+                .concatWith(Mono.just(List.of()))
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(this::enhanceWithFeedbackLogs)
+                .flatMap(Flux::fromIterable);
+    }
+
+    private Flux<? extends Result> findTraceStream(int limit, @NonNull TraceSearchCriteria criteria,
+            Connection connection) {
+        log.info("Searching traces by '{}'", criteria);
+
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+
+        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+
+        var statement = connection.createStatement(template.render())
+                .bind("project_id", criteria.projectId())
+                .bind("limit", limit);
+
+        bindSearchCriteria(criteria, statement);
+
+        Segment segment = startSegment("traces", "Clickhouse", "findTraceStream");
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                .doFinally(signalType -> {
+                    log.info("Closing trace search stream");
+                    endSegment(segment);
+                });
     }
 
 }
