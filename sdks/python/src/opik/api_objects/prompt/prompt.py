@@ -46,7 +46,7 @@ class Prompt:
 
         # TODO: synchronize names? Template and prompt.
         # prompt is actually a prompt template.
-        self._template = prompt_template.PromptTemplate(new_instance.prompt)
+        self._template = prompt_template.PromptTemplate(template=new_instance.prompt, type=type)
         self._name = new_instance.name
         self._commit = new_instance.commit
         self._metadata = new_instance.metadata
@@ -108,7 +108,8 @@ class Prompt:
         prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
 
         prompt._name = name
-        prompt._template = prompt_template.PromptTemplate(prompt_version.template)
+        prompt._template = prompt_template.PromptTemplate(template=prompt_version.template,
+                                                          type=prompt_version.type or "mustache")
         prompt._commit = prompt_version.commit
         prompt._metadata = prompt_version.metadata
         prompt._type = prompt_version.type
