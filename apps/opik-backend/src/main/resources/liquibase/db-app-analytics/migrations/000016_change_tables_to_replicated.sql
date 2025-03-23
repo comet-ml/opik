@@ -252,7 +252,7 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB
 ORDER BY (workspace_id, container_id, entity_type, entity_id, file_name);
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1;
 
---changeset liyaka:change-tables-to-replicated-17 id:migrate-attachments
+--changeset liyaka:change-tables-to-replicated-18 id:migrate-attachments
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.attachments;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments DETACH PARTITION tuple();
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments SYNC SETTINGS max_table_size_to_drop = 0;
