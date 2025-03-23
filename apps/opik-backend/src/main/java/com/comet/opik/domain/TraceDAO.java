@@ -1243,7 +1243,7 @@ class TraceDAOImpl implements TraceDAO {
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
                 .tags(Optional.of(Arrays.stream(row.get("tags", String[].class))
-                                .collect(Collectors.toSet()))
+                        .collect(Collectors.toSet()))
                         .filter(it -> !it.isEmpty())
                         .orElse(null))
                 .comments(getComments(row.get("comments", List[].class)))
