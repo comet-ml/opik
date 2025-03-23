@@ -38,6 +38,7 @@ from .experiment import rest_operations as experiment_rest_operations
 from .prompt import Prompt
 from .prompt.client import PromptClient
 from .trace import migration as trace_migration
+from opik.rest_api.types import PromptVersionDetailType
 
 LOGGER = logging.getLogger(__name__)
 
@@ -968,6 +969,7 @@ class Opik:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
+        type: PromptVersionDetailType = 'mustache',
     ) -> Prompt:
         """
         Creates a new prompt with the given name and template.
@@ -985,7 +987,8 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt and the status code is not 409.
         """
         prompt_client = PromptClient(self._rest_client)
-        return prompt_client.create_prompt(name=name, prompt=prompt, metadata=metadata)
+        return prompt_client.create_prompt(name=name,
+         prompt=prompt, metadata=metadata, type=type)
 
     def get_prompt(
         self,

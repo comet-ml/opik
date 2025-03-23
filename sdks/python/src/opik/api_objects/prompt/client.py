@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
-from opik.rest_api.types import prompt_version_detail
+from opik.rest_api.types import prompt_version_detail, PromptVersionDetailType
 
 from . import prompt as opik_prompt
 
@@ -16,6 +16,7 @@ class PromptClient:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]],
+        type: PromptVersionDetailType= 'mustache',
     ) -> opik_prompt.Prompt:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -33,9 +34,10 @@ class PromptClient:
             prompt_version is None
             or prompt_version.template != prompt
             or prompt_version.metadata != metadata
+            or prompt_version.type != type
         ):
             prompt_version = self._create_new_version(
-                name=name, prompt=prompt, metadata=metadata
+                name=name, prompt=prompt, type=type, metadata=metadata
             )
 
         prompt_obj = opik_prompt.Prompt.from_fern_prompt_version(
@@ -48,11 +50,13 @@ class PromptClient:
         self,
         name: str,
         prompt: str,
+        type: PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
     ) -> prompt_version_detail.PromptVersionDetail:
         new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
             template=prompt,
             metadata=metadata,
+            type=type,
         )
         new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(
