@@ -198,10 +198,8 @@ def test_prompt__type_persists_in_get(opik_client: opik.Opik):
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
 
-    # Create prompt with custom type
     opik_client.create_prompt(name=prompt_name, prompt=prompt_template, type="jinja2")
 
-    # Get the prompt and verify type persists
     retrieved_prompt = opik_client.get_prompt(name=prompt_name)
     assert retrieved_prompt is not None
     assert retrieved_prompt.type == "jinja2"
@@ -215,14 +213,12 @@ def test_prompt__type_in_new_version(opik_client: opik.Opik):
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
 
-    # Create initial version with default type
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
     )
     assert prompt.type == "mustache"
 
-    # Create new version with different type
     new_prompt = opik_client.create_prompt(
         name=prompt_name, prompt=prompt_template + "-v2", type="jinja2"
     )
