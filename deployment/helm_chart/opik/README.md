@@ -136,9 +136,10 @@ Call opik api on http://localhost:5173/api
 | component.backend.image.repository | string | `"opik-backend"` |  |
 | component.backend.image.tag | string | `"latest"` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
-| component.backend.initContainers[0].env[0].name | string | `"URL"` |  |
-| component.backend.initContainers[0].env[0].value | string | `"http://clickhouse-opik-clickhouse:8123"` |  |
-| component.backend.initContainers[0].image | string | `"stefanevinance/wait-for-200"` |  |
+| component.backend.initContainers[0].args[0] | string | `"while [ $(curl -ksw \"%{http_code}\" \"http://clickhouse-opik-clickhouse:8123\" -o /dev/null) -ne 200 ]; do sleep 5; echo \"Clickhouse is not available. Waiting for the Clickhouse...\"; done"` |  |
+| component.backend.initContainers[0].command[0] | string | `"/bin/sh"` |  |
+| component.backend.initContainers[0].command[1] | string | `"-c"` |  |
+| component.backend.initContainers[0].image | string | `"curlimages/curl:8.12.1"` |  |
 | component.backend.initContainers[0].name | string | `"wait-for-clickhouse-service"` |  |
 | component.backend.replicaCount | int | `1` |  |
 | component.backend.run_migration | bool | `true` |  |
