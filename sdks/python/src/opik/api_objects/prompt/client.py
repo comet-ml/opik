@@ -16,7 +16,7 @@ class PromptClient:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]],
-        type: PromptVersionDetailType= 'mustache',
+        type: PromptVersionDetailType = "mustache",
     ) -> opik_prompt.Prompt:
         """
         Creates the prompt detail for the given prompt name and template.

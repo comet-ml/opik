@@ -229,8 +229,9 @@ def _build_prompt_evaluation_task(
                 {
                     "role": message["role"],
                     "content": prompt_template.PromptTemplate(
-                        message["content"], validate_placeholders=False,
-                        type=prompt_variables.get("type", "mustache")
+                        message["content"],
+                        validate_placeholders=False,
+                        type=prompt_variables.get("type", "mustache"),
                     ).format(**prompt_variables),
                 }
             )

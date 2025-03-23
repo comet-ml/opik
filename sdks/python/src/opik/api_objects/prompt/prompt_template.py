@@ -5,18 +5,19 @@ import jinja2
 from opik import exceptions
 from opik.rest_api.types import PromptVersionDetailType
 
+
 class PromptTemplate:
-    def __init__(self, 
-                template: str, 
-                validate_placeholders: bool = True,
-                type: PromptVersionDetailType = "mustache") -> None:
-        
+    def __init__(
+        self,
+        template: str,
+        validate_placeholders: bool = True,
+        type: PromptVersionDetailType = "mustache",
+    ) -> None:
         self._template = template
         self._type = type
         self._validate_placeholders = validate_placeholders
 
     def format(self, **kwargs: Any) -> str:
-
         if self._type == "mustache":
             template = self._template
             placeholders = _extract_mustache_placeholder_keys(self._template)
@@ -31,7 +32,7 @@ class PromptTemplate:
                 template = template.replace(f"{{{{{key}}}}}", str(value))
 
         elif self._type == "jinja2":
-            template = jinja2.Template(self._template).render(**kwargs)  
+            template = jinja2.Template(self._template).render(**kwargs)
 
         return template
 

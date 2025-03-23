@@ -172,7 +172,7 @@ def test_prompt__create_with_default_type(opik_client: opik.Opik):
         prompt=prompt_template,
     )
 
-    assert prompt.type == 'mustache'  # Verify default type
+    assert prompt.type == "mustache"  # Verify default type
     assert prompt.name == prompt_name
     assert prompt.prompt == prompt_template
 
@@ -184,12 +184,10 @@ def test_prompt__create_with_custom_type(opik_client: opik.Opik):
     prompt_template = f"some-prompt-text-{unique_identifier}"
 
     prompt = opik_client.create_prompt(
-        name=prompt_name,
-        prompt=prompt_template,
-        type = "jinja2"
+        name=prompt_name, prompt=prompt_template, type="jinja2"
     )
 
-    assert prompt.type == 'jinja2'
+    assert prompt.type == "jinja2"
     assert prompt.name == prompt_name
     assert prompt.prompt == prompt_template
 
@@ -201,16 +199,12 @@ def test_prompt__type_persists_in_get(opik_client: opik.Opik):
     prompt_template = f"some-prompt-text-{unique_identifier}"
 
     # Create prompt with custom type
-    created_prompt = opik_client.create_prompt(
-        name=prompt_name,
-        prompt=prompt_template,
-        type='jinja2'
-    )
+    opik_client.create_prompt(name=prompt_name, prompt=prompt_template, type="jinja2")
 
     # Get the prompt and verify type persists
     retrieved_prompt = opik_client.get_prompt(name=prompt_name)
     assert retrieved_prompt is not None
-    assert retrieved_prompt.type == 'jinja2'
+    assert retrieved_prompt.type == "jinja2"
     assert retrieved_prompt.name == prompt_name
     assert retrieved_prompt.prompt == prompt_template
 
@@ -226,15 +220,15 @@ def test_prompt__type_in_new_version(opik_client: opik.Opik):
         name=prompt_name,
         prompt=prompt_template,
     )
-    assert prompt.type == 'mustache'
+    assert prompt.type == "mustache"
 
     # Create new version with different type
     new_prompt = opik_client.create_prompt(
-        name=prompt_name,
-        prompt=prompt_template + "-v2",
-        type='jinja2'
+        name=prompt_name, prompt=prompt_template + "-v2", type="jinja2"
     )
 
-    assert new_prompt.type == 'jinja2'
+    assert new_prompt.type == "jinja2"
     assert new_prompt.__internal_api__prompt_id__ == prompt.__internal_api__prompt_id__
-    assert new_prompt.__internal_api__version_id__ != prompt.__internal_api__version_id__
+    assert (
+        new_prompt.__internal_api__version_id__ != prompt.__internal_api__version_id__
+    )
