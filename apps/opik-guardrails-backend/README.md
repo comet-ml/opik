@@ -20,11 +20,12 @@ docker build -t opik-guardrails-backend:latest .
 
 #### Option 2: Run the image
 
+With GPU support
 ```bash
-# With GPU support
 docker run -p 5000:5000 --gpus all opik-guardrails-backend:latest
-
-# Without GPU (CPU only)
+```
+Without GPU (CPU only)
+```bash
 docker run -p 5000:5000 opik-guardrails-backend:latest
 ```
 

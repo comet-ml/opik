@@ -26,6 +26,9 @@ RUN pip install -r requirements.txt
 # Download spaCy model for PII detection
 RUN python -m spacy download en_core_web_lg
 
+# Download transformer model for restricted topic validation
+RUN python -c "from transformers import AutoModelForSequenceClassification, AutoTokenizer; AutoModelForSequenceClassification.from_pretrained('facebook/bart-large-mnli'); AutoTokenizer.from_pretrained('facebook/bart-large-mnli')"
+
 COPY opik_guardrails ./opik_guardrails
 COPY entrypoint.sh .
 
@@ -41,4 +44,4 @@ RUN chmod u+x entrypoint.sh
 EXPOSE 5000
 
 ENTRYPOINT ["tini", "--"]
-CMD ./entrypoint.sh
+CMD ["./entrypoint.sh"]
