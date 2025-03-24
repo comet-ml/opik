@@ -9,6 +9,7 @@ import lombok.Data;
 public class RequestContext {
 
     public static final String WORKSPACE_HEADER = "Comet-Workspace";
+    public static final String WORKSPACE_QUERY_PARAM = "workspace_name";
     public static final String USER_NAME = "userName";
     public static final String WORKSPACE_NAME = "workspaceName";
     public static final String SESSION_COOKIE = "sessionToken";

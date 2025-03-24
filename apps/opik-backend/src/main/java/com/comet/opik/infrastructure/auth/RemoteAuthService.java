@@ -12,6 +12,7 @@ import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ import java.util.Optional;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
 import static com.comet.opik.api.ReactServiceErrorResponse.NOT_ALLOWED_TO_ACCESS_WORKSPACE;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_PARAM;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -50,10 +52,11 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public void authenticate(HttpHeaders headers, Cookie sessionToken, String path) {
+    public void authenticate(HttpHeaders headers, Cookie sessionToken, UriInfo uriInfo) {
+        String path = uriInfo.getRequestUri().getPath();
         var currentWorkspaceName = Optional.ofNullable(headers.getHeaderString(RequestContext.WORKSPACE_HEADER))
-                .orElse("");
-        if (currentWorkspaceName.isBlank()) {
+                .orElseGet(() -> uriInfo.getQueryParameters().getFirst(WORKSPACE_QUERY_PARAM));
+        if (StringUtils.isBlank(currentWorkspaceName)) {
             log.warn("Workspace name is missing");
             throw new ClientErrorException(MISSING_WORKSPACE, Response.Status.FORBIDDEN);
         }
