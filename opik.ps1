@@ -1,4 +1,4 @@
-# opik.ps1
+﻿# opik.ps1
 
 [CmdletBinding()]
 param (
@@ -8,9 +8,7 @@ param (
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-$PSDefaultParameterValues['Get-Content:Encoding'] = 'utf8'
-
+$originalDir = Get-Location
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 $REQUIRED_CONTAINERS = @(
@@ -19,7 +17,8 @@ $REQUIRED_CONTAINERS = @(
     "opik-python-backend-1",
     "opik-redis-1",
     "opik-frontend-1",
-    "opik-backend-1"
+    "opik-backend-1",
+    "opik-minio-1"
 )
 
 function Show-Usage {
@@ -101,7 +100,8 @@ function Start-MissingContainers {
     }
 
     Write-Host '[INFO] Starting missing containers...'
-    docker compose -f "$scriptDir/deployment/docker-compose/docker-compose.yaml" up -d | Where-Object { $_.Trim() -ne '' }
+    Set-Location -Path "$scriptDir\deployment\docker-compose"
+    docker compose up -d | Where-Object { $_.Trim() -ne '' }
 
     Write-Host '[INFO] Waiting for all containers to be running and healthy...'
     $maxRetries = 60
@@ -115,8 +115,8 @@ function Start-MissingContainers {
             $status = docker inspect -f '{{.State.Status}}' $container 2>$null
             $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
 
-            if (-not $health) {
-                $health = 'no health check defined'
+            if (-not $health) { 
+                $health = 'no health check defined' 
             }
 
             if ($status -ne 'running') {
@@ -143,13 +143,16 @@ function Start-MissingContainers {
     }
 
     Write-Host '[OK] All required containers are now running!'
+    Set-Location -Path $originalDir
 }
 
 function Stop-Containers {
     Test-DockerStatus
     Write-Host '[INFO] Stopping all required containers...'
-    docker compose -f "$scriptDir/deployment/docker-compose/docker-compose.yaml" stop
+    Set-Location -Path "$scriptDir\deployment\docker-compose"
+    docker compose stop
     Write-Host '[OK] All containers stopped and cleaned up!'
+    Set-Location -Path $originalDir
 }
 
 function Show-Banner {
