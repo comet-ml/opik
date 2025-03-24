@@ -27,7 +27,6 @@ RUN pip install -r requirements.txt
 RUN python -m spacy download en_core_web_lg
 
 COPY opik_guardrails ./opik_guardrails
-COPY __init__.py .
 COPY entrypoint.sh .
 
 ARG OPIK_VERSION
