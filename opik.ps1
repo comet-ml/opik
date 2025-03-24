@@ -1,5 +1,16 @@
 # opik.ps1
 
+[CmdletBinding()]
+param (
+    [string]$option = ''
+)
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+$PSDefaultParameterValues['Get-Content:Encoding'] = 'utf8'
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 $REQUIRED_CONTAINERS = @(
@@ -11,224 +22,219 @@ $REQUIRED_CONTAINERS = @(
     "opik-backend-1"
 )
 
-function Print-Usage {
-    Write-Host "Usage: opik.ps1 [OPTION]"
-    Write-Host ""
-    Write-Host "Options:"
-    Write-Host "  --verify    Check if all containers are healthy"
-    Write-Host "  --info      Display welcome system status, only if all containers are running"
-    Write-Host "  --stop      Stop all containers and clean up"
-    Write-Host "  --debug     Enable debug mode (verbose output)"
-    Write-Host "  --help      Show this help message"
-    Write-Host ""
-    Write-Host "If no option is passed, the script will start missing containers and then show the system status."
+function Show-Usage {
+    Write-Host 'Usage: opik.ps1 [OPTION]'
+    Write-Host ''
+    Write-Host 'Options:'
+    Write-Host '  --verify    Check if all containers are healthy'
+    Write-Host '  --info      Display welcome system status, only if all containers are running'
+    Write-Host '  --stop      Stop all containers and clean up'
+    Write-Host '  --debug     Enable debug mode (verbose output)'
+    Write-Host '  --help      Show this help message'
+    Write-Host ''
+    Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
 }
 
-function Check-DockerStatus {
+function Test-DockerStatus {
     try {
-        docker info | Out-Null
+        $dockerInfo = docker info 2>&1
+        if ($dockerInfo -match "error during connect") {
+            Write-Host '[ERROR] Docker is not running or is not accessible. Please start Docker first.'
+            exit 1
+        }
     } catch {
-        Write-Host "❌ Docker is not running or not accessible. Please start Docker first."
+        Write-Host '[ERROR] Failed to communicate with Docker. Please check if Docker is running and accessible.'
         exit 1
     }
 }
 
-function Check-ContainersStatus {
+
+function Test-ContainersStatus {
+    [CmdletBinding()]
     param (
         [bool]$ShowOutput = $false
     )
-    Check-DockerStatus
+    Test-DockerStatus
     $allOk = $true
 
     foreach ($container in $REQUIRED_CONTAINERS) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
         $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
 
-        if ($status -ne "running") {
-            Write-Host "❌ $container is not running (status=$status)"
+        if ([string]::IsNullOrEmpty($status)) { $status = 'not found' }
+
+        if ($status -ne 'running') {
+            Write-Host "[ERROR] $container is not running (status=$status)"
             $allOk = $false
-        } elseif ($health -and $health -ne "healthy") {
-            Write-Host "❌ $container is running but not healthy (health=$health)"
+        } elseif ($health -and $health -ne 'healthy') {
+            Write-Host "[ERROR] $container is running but not healthy (health=$health)"
             $allOk = $false
         } elseif ($ShowOutput) {
-            Write-Host "✅ $container is running and healthy"
+            Write-Host "[OK] $container is running and healthy"
         }
     }
 
-    if (-not $allOk) { return $false } else { return $true }
+    return $allOk
 }
 
 function Start-MissingContainers {
-    Check-DockerStatus
+    Test-DockerStatus
 
-    if ($DEBUG_MODE -eq $true) {
-        Write-Host "🔍 Checking required containers..."
-    }
-
+    if ($DEBUG_MODE) { Write-Host '[DEBUG] Checking required containers...' }
     $allRunning = $true
 
     foreach ($container in $REQUIRED_CONTAINERS) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
+        $resolvedStatus = if ($status) { $status } else { 'not found' }
 
-        if ($status -ne "running") {
-            if ($DEBUG_MODE -eq $true) {
-                Write-Host "🔴 $container is not running (status: $($status -or 'not found'))"
-            }
+        if ($status -ne 'running') {
+            if ($DEBUG_MODE) { Write-Host "[WARN] $container is not running (status: $resolvedStatus)" }
             $allRunning = $false
-        } else {
-            if ($DEBUG_MODE -eq $true) {
-                Write-Host "✅ $container is already running"
-            }
+        } elseif ($DEBUG_MODE) {
+            Write-Host "[OK] $container is already running"
         }
     }
 
-    if ($allRunning -eq $true) {
-        Write-Host "🚀 All required containers are already running!"
+    if ($allRunning) {
+        Write-Host '[OK] All required containers are already running!'
         return
     }
 
-    Write-Host "🔄 Starting missing containers..."
-    docker compose -f "$scriptDir/deployment/docker-compose/docker-compose.yaml" up -d 2>&1 | Where-Object { $_.Trim() -ne "" }
+    Write-Host '[INFO] Starting missing containers...'
+    docker compose -f "$scriptDir/deployment/docker-compose/docker-compose.yaml" up -d | Where-Object { $_.Trim() -ne '' }
 
-    Write-Host "⏳ Waiting for all containers to be running and healthy..."
+    Write-Host '[INFO] Waiting for all containers to be running and healthy...'
     $maxRetries = 60
     $interval = 1
 
     foreach ($container in $REQUIRED_CONTAINERS) {
         $retries = 0
-        if ($DEBUG_MODE -eq $true) {
-            Write-Host "⏳ Waiting for $container..."
-        }
+        if ($DEBUG_MODE) { Write-Host "[DEBUG] Waiting for $container..." }
 
         while ($true) {
             $status = docker inspect -f '{{.State.Status}}' $container 2>$null
             $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
 
-            if ($status -ne "running") {
-                Write-Host "❌ $container failed to start (status: $status)"
+            if (-not $health) {
+                $health = 'no health check defined'
+            }
+
+            if ($status -ne 'running') {
+                Write-Host "[ERROR] $container failed to start (status: $status)"
                 break
             }
 
-            if ($health -eq "healthy") {
-                if ($DEBUG_MODE -eq $true) {
-                    Write-Host "✅ $container is now running and healthy!"
-                }
+            if ($health -eq 'healthy') {
+                if ($DEBUG_MODE) { Write-Host "[OK] $container is now running and healthy!" }
                 break
-            } elseif ($health -eq "starting") {
-                if ($DEBUG_MODE -eq $true) {
-                    Write-Host "⏳ $container is starting... retrying (${retries}s)"
-                }
+            } elseif ($health -eq 'starting') {
+                if ($DEBUG_MODE) { Write-Host "[INFO] $container is starting... retrying (${retries}s)" }
                 Start-Sleep -Seconds $interval
                 $retries++
                 if ($retries -ge $maxRetries) {
-                    Write-Host "⚠️  $container is still not healthy after ${maxRetries}s"
+                    Write-Host "[WARN] $container is still not healthy after ${maxRetries}s"
                     break
                 }
             } else {
-                Write-Host "❌ $container health state is '$health'"
+                Write-Host "[INFO] $container health state is '$health'"
                 break
             }
         }
     }
 
-    Write-Host "✅ All required containers are now running!"
+    Write-Host '[OK] All required containers are now running!'
 }
 
 function Stop-Containers {
-    Check-DockerStatus
-    Write-Host "🛑 Stopping all required containers..."
+    Test-DockerStatus
+    Write-Host '[INFO] Stopping all required containers...'
     docker compose -f "$scriptDir/deployment/docker-compose/docker-compose.yaml" stop
-    Write-Host "✅ All containers stopped and cleaned up!"
+    Write-Host '[OK] All containers stopped and cleaned up!'
 }
 
-function Print-Banner {
-    Check-DockerStatus
+function Show-Banner {
+    Test-DockerStatus
     $frontendPort = docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>$null
-    $uiUrl = "http://localhost:$($frontendPort -or 5173)"
+    if (-not $frontendPort) { $frontendPort = 5173 }
+    $uiUrl = "http://localhost:$frontendPort"
 
-    Write-Host ""
-    Write-Host "╔═════════════════════════════════════════════════════════════════╗"
-    Write-Host "║                                                                 ║"
-    Write-Host "║                  🚀 OPIK PLATFORM 🚀                            ║"
-    Write-Host "║                                                                 ║"
-    Write-Host "╠═════════════════════════════════════════════════════════════════╣"
-    Write-Host "║                                                                 ║"
-    Write-Host "║  ✅ All services started successfully!                          ║"
-    Write-Host "║                                                                 ║"
-    Write-Host "║  📊 Access the UI:                                              ║"
-    Write-Host "║     $uiUrl                                                      ║"
-    Write-Host "║                                                                 ║"
-    Write-Host "║  🛠️  Configure the Python SDK:                                   ║"
-    Write-Host "║     `opik configure`                                            ║"
-    Write-Host "║                                                                 ║"
-    Write-Host "║  📚 Documentation: https://www.comet.com/docs/opik/             ║"
-    Write-Host "║                                                                 ║"
-    Write-Host "║  💬 Need help? Join our community: https://chat.comet.com       ║"
-    Write-Host "║                                                                 ║"
-    Write-Host "╚═════════════════════════════════════════════════════════════════╝"
+    Write-Host ''
+    Write-Host '╔═════════════════════════════════════════════════════════════════╗'
+    Write-Host '║                                                                 ║'
+    Write-Host '║                     OPIK PLATFORM                               ║'
+    Write-Host '║                                                                 ║'
+    Write-Host '╠═════════════════════════════════════════════════════════════════╣'
+    Write-Host '║                                                                 ║'
+    Write-Host '║  All services started successfully!                             ║'
+    Write-Host '║                                                                 ║'
+    Write-Host '║  Access the UI:                                                 ║'
+    Write-Host "║     $uiUrl                                       ║"
+    Write-Host '║                                                                 ║'
+    Write-Host '║  Configure the Python SDK:                                      ║'
+    Write-Host '║     opik configure                                              ║'
+    Write-Host '║                                                                 ║'
+    Write-Host '║  Documentation: https://www.comet.com/docs/opik/                ║'
+    Write-Host '║                                                                 ║'
+    Write-Host '║  Need help? Join our community: https://chat.comet.com          ║'
+    Write-Host '║                                                                 ║'
+    Write-Host '╚═════════════════════════════════════════════════════════════════╝'
 }
 
-# Default: no debug
 $DEBUG_MODE = $false
 
-# Main logic
-param (
-    [string]$option = ""
-)
-
 switch ($option) {
-    "--verify" {
-        Write-Host "🔍 Verifying container health..."
-        $result = Check-ContainersStatus $true
+    '--verify' {
+        Write-Host '[INFO] Verifying container health...'
+        $result = Test-ContainersStatus -ShowOutput:$true
         if ($result) { exit 0 } else { exit 1 }
     }
-    "--info" {
-        Write-Host "ℹ️  Checking if all containers are up before displaying system status..."
-        if (Check-ContainersStatus $true) {
-            Print-Banner
+    '--info' {
+        Write-Host '[INFO] Checking if all containers are up before displaying system status...'
+        if (Test-ContainersStatus -ShowOutput:$true) {
+            Show-Banner
             exit 0
         } else {
-            Write-Host "⚠️  Some containers are not running/healthy. Please run 'opik.ps1' to start them."
+            Write-Host '[WARN] Some containers are not running/healthy. Please run ".\opik.ps1 --verify".'
             exit 1
         }
     }
-    "--stop" {
+    '--stop' {
         Stop-Containers
         exit 0
     }
-    "--help" {
-        Print-Usage
+    '--help' {
+        Show-Usage
         exit 0
     }
-    "--debug" {
+    '--debug' {
         $DEBUG_MODE = $true
-        Write-Host "🐞 Debug mode enabled."
-        Write-Host "🔍 Checking container status and starting missing ones..."
+        Write-Host '[DEBUG] Debug mode enabled.'
+        Write-Host '[DEBUG] Checking container status and starting missing ones...'
         Start-MissingContainers
         Start-Sleep -Seconds 2
-        Write-Host "🔄 Re-checking container status..."
-        if (Check-ContainersStatus $true) {
-            Print-Banner
+        Write-Host '[DEBUG] Re-checking container status...'
+        if (Test-ContainersStatus -ShowOutput:$true) {
+            Show-Banner
         } else {
-            Write-Host "⚠️  Some containers are still not healthy. Please check manually using 'opik.ps1 --verify'"
+            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
             exit 1
         }
     }
-    "" {
-        Write-Host "🔍 Checking container status and starting missing ones..."
+    '' {
+        Write-Host '[INFO] Checking container status and starting missing ones...'
         Start-MissingContainers
         Start-Sleep -Seconds 2
-        Write-Host "🔄 Re-checking container status..."
-        if (Check-ContainersStatus $true) {
-            Print-Banner
+        Write-Host '[INFO] Re-checking container status...'
+        if (Test-ContainersStatus -ShowOutput:$true) {
+            Show-Banner
         } else {
-            Write-Host "⚠️  Some containers are still not healthy. Please check manually using 'opik.ps1 --verify'"
+            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
             exit 1
         }
     }
     Default {
-        Write-Host "❌ Unknown option: $option"
-        Print-Usage
+        Write-Host "[ERROR] Unknown option: $option"
+        Show-Usage
         exit 1
     }
 }
