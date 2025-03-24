@@ -43,7 +43,6 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -622,7 +621,10 @@ class AutomationRuleEvaluatorsResourceTest {
                         .header(WORKSPACE_HEADER, workspaceName)
                         .get()) {
                     if (isAuthorized) {
-                        assertLogResponse(actualResponse, id, trace);
+                        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                        assertThat(actualResponse.hasEntity()).isTrue();
+                        var actualEntity = actualResponse.readEntity(LogPage.class);
+                        assertLogResponse(actualEntity, id, trace);
                     } else {
                         assertThat(actualResponse.getStatusInfo().getStatusCode())
                                 .isEqualTo(HttpStatus.SC_UNAUTHORIZED);
@@ -905,15 +907,8 @@ class AutomationRuleEvaluatorsResourceTest {
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             Awaitility.await().untilAsserted(() -> {
-                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .path(id.toString())
-                        .path("logs")
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                        .get()) {
-                    assertLogResponse(actualResponse, id, trace);
-                }
+                var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(logPage, id, trace);
             });
         }
 
@@ -955,15 +950,8 @@ class AutomationRuleEvaluatorsResourceTest {
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             Awaitility.await().untilAsserted(() -> {
-                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .path(id.toString())
-                        .path("logs")
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                        .get()) {
-                    assertLogResponse(actualResponse, id, trace);
-                }
+                var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(logPage, id, trace);
             });
         }
     }
@@ -1023,18 +1011,13 @@ class AutomationRuleEvaluatorsResourceTest {
         assertThat(actualRuleEvaluator.getLastUpdatedAt()).isAfter(expectedRuleEvaluator.getLastUpdatedAt());
     }
 
-    private void assertLogResponse(Response actualResponse, UUID id, Trace trace) {
-        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-        assertThat(actualResponse.hasEntity()).isTrue();
+    private void assertLogResponse(LogPage logPage, UUID id, Trace trace) {
+        assertThat(logPage.content()).hasSize(4);
+        assertThat(logPage.total()).isEqualTo(4);
+        assertThat(logPage.size()).isEqualTo(4);
+        assertThat(logPage.page()).isEqualTo(1);
 
-        var actualEntity = actualResponse.readEntity(LogPage.class);
-
-        assertThat(actualEntity.content()).hasSize(4);
-        assertThat(actualEntity.total()).isEqualTo(4);
-        assertThat(actualEntity.size()).isEqualTo(4);
-        assertThat(actualEntity.page()).isEqualTo(1);
-
-        assertThat(actualEntity.content())
+        assertThat(logPage.content())
                 .allSatisfy(log -> {
                     assertThat(log.timestamp()).isBetween(trace.createdAt(), Instant.now());
                     assertThat(log.ruleId()).isEqualTo(id);
@@ -1042,16 +1025,16 @@ class AutomationRuleEvaluatorsResourceTest {
                     assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
                 });
 
-        assertThat(actualEntity.content())
+        assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "Scores for traceId '.*' stored successfully:\\n\\n.*"));
-        assertThat(actualEntity.content())
+        assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "Received response for traceId '.*':\\n\\n.*"));
-        assertThat(actualEntity.content())
+        assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "(?s)Sending traceId '.*' to .* using the following input:\\n\\n.*"));
-        assertThat(actualEntity.content())
+        assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "Evaluating traceId '.*' sampled by rule '.*'"));
     }

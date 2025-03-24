@@ -50,11 +50,12 @@ public class OnlineScoringEngine {
 
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
-    static final String SCORE_FIELD_DESCRIPTION = "the score for ";
-    static final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
-    static final String DEFAULT_SCHEMA_NAME = "scoring_schema";
 
-    static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String SCORE_FIELD_DESCRIPTION = "the score for ";
+    private static final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
+    private static final String DEFAULT_SCHEMA_NAME = "scoring_schema";
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -108,7 +109,7 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
+    public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
         var parsedVariables = toVariableMapping(variables);
         // extract the actual value from the Trace
         return parsedVariables.stream().map(mapper -> {
@@ -157,7 +158,7 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    static String extractFromJson(JsonNode json, String path) {
+    private static String extractFromJson(JsonNode json, String path) {
         try {
             // JsonPath didn't work with JsonNode, even explicitly using JacksonJsonProvider, so we convert to a Map
             var forcedObject = OBJECT_MAPPER.convertValue(json, Map.class);
@@ -245,7 +246,7 @@ public class OnlineScoringEngine {
     }
 
     @AllArgsConstructor
-    public enum TraceSection {
+    enum TraceSection {
         INPUT("input."),
         OUTPUT("output."),
         METADATA("metadata.");
@@ -254,7 +255,7 @@ public class OnlineScoringEngine {
     }
 
     @Builder(toBuilder = true)
-    public record MessageVariableMapping(
+    record MessageVariableMapping(
             TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) {
     }
 }

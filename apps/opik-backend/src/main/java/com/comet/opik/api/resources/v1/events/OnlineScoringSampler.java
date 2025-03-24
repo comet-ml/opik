@@ -26,12 +26,12 @@ import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Random;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * This service listens for Traces creation server in-memory event (via EventBus). When it happens, it fetches
@@ -45,8 +45,7 @@ public class OnlineScoringSampler {
 
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final RedissonReactiveClient redisClient;
-
-    private final Random random = new Random();
+    private final SecureRandom secureRandom;
     private final Logger userFacingLogger;
     private final Map<AutomationRuleEvaluatorType, OnlineScoringConfig.StreamConfiguration> streamConfigurations;
 
@@ -54,10 +53,10 @@ public class OnlineScoringSampler {
     public OnlineScoringSampler(@Config("onlineScoring") @NonNull OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull EventBus eventBus,
-            @NonNull AutomationRuleEvaluatorService ruleEvaluatorService) {
+            @NonNull AutomationRuleEvaluatorService ruleEvaluatorService) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.redisClient = redisClient;
-        eventBus.register(this);
+        secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
         streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {
@@ -71,7 +70,11 @@ public class OnlineScoringSampler {
                     }
                 })
                 .filter(Objects::nonNull)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+        // Register at the end, only after successful instantiation.
+        // TODO: this registration should be de-coupled from instantiation in the future.
+        //  Multiple occurrences happen in the codebase.
+        eventBus.register(this);
     }
 
     /**
@@ -96,46 +99,42 @@ public class OnlineScoringSampler {
             log.info("Fetching evaluators for '{}' traces, project '{}' on workspace '{}'",
                     traces.size(), projectId, tracesBatch.workspaceId());
 
-            List<AutomationRuleEvaluatorLlmAsJudge> evaluatorsLlmAsJudge = ruleEvaluatorService.findAll(projectId,
-                    tracesBatch.workspaceId(), AutomationRuleEvaluatorType.LLM_AS_JUDGE);
-            List<AutomationRuleEvaluatorUserDefinedMetricPython> evaluatorsUserDefinedMetricPython = ruleEvaluatorService
-                    .findAll(projectId, tracesBatch.workspaceId(),
-                            AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+            List<? extends AutomationRuleEvaluator<?>> evaluators = ruleEvaluatorService.findAll(
+                    projectId, tracesBatch.workspaceId());
 
             // Important to set the workspaceId for logging purposes
             try (MDC.MDCCloseable logScope = MDC.putCloseable(UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name());
                     MDC.MDCCloseable scope = MDC.putCloseable("workspace_id", tracesBatch.workspaceId())) {
 
-                Stream.concat(evaluatorsLlmAsJudge.stream(), evaluatorsUserDefinedMetricPython.stream())
-                        .forEach(evaluator -> {
-                            // samples traces for this rule
-                            var samples = traces.stream().filter(trace -> shouldSampleTrace(evaluator, trace));
-                            switch (evaluator.getType()) {
-                                case LLM_AS_JUDGE -> {
-                                    var messages = samples
-                                            .map(trace -> toLlmAsJudgeMessage(tracesBatch,
-                                                    (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
-                                            .toList();
-                                    logSampledTrace(tracesBatch, evaluator, messages);
-                                    enqueueInRedis(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
-                                }
-                                case USER_DEFINED_METRIC_PYTHON -> {
-                                    var messages = samples
-                                            .map(trace -> toScoreUserDefinedMetricPython(tracesBatch,
-                                                    (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
-                                            .toList();
-                                    logSampledTrace(tracesBatch, evaluator, messages);
-                                    enqueueInRedis(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
-                                }
-                                default -> log.warn("No process defined for evaluator type '{}'", evaluator.getType());
-                            }
-                        });
+                evaluators.parallelStream().forEach(evaluator -> {
+                    // samples traces for this rule
+                    var samples = traces.stream().filter(trace -> shouldSampleTrace(evaluator, trace));
+                    switch (evaluator.getType()) {
+                        case LLM_AS_JUDGE -> {
+                            var messages = samples
+                                    .map(trace -> toLlmAsJudgeMessage(tracesBatch,
+                                            (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
+                                    .toList();
+                            logSampledTrace(tracesBatch, evaluator, messages);
+                            enqueueInRedis(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                        }
+                        case USER_DEFINED_METRIC_PYTHON -> {
+                            var messages = samples
+                                    .map(trace -> toScoreUserDefinedMetricPython(tracesBatch,
+                                            (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
+                                    .toList();
+                            logSampledTrace(tracesBatch, evaluator, messages);
+                            enqueueInRedis(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                        }
+                        default -> log.warn("No process defined for evaluator type '{}'", evaluator.getType());
+                    }
+                });
             }
         });
     }
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?> evaluator, Trace trace) {
-        var shouldBeSampled = random.nextFloat() < evaluator.getSamplingRate();
+        var shouldBeSampled = secureRandom.nextFloat() < evaluator.getSamplingRate();
         if (!shouldBeSampled) {
             try (var ruleScope = MDC.putCloseable("rule_id", evaluator.getId().toString());
                     var traceScope = MDC.putCloseable("trace_id", trace.id().toString())) {
