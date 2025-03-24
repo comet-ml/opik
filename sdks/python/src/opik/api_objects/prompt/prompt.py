@@ -1,9 +1,9 @@
 import copy
 from typing import Any, Dict, Optional
 
-
-from opik.rest_api.types import PromptVersionDetail, PromptVersionDetailType
-from . import prompt_template
+from opik.rest_api.types import PromptVersionDetail
+from .prompt_template import PromptTemplate
+from .types import PromptType
 
 
 class Prompt:
@@ -16,7 +16,7 @@ class Prompt:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
-        type: PromptVersionDetailType = "mustache",
+        type: PromptType = PromptType.MUSTACHE,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -46,9 +46,7 @@ class Prompt:
 
         # TODO: synchronize names? Template and prompt.
         # prompt is actually a prompt template.
-        self._template = prompt_template.PromptTemplate(
-            template=new_instance.prompt, type=type
-        )
+        self._template = PromptTemplate(template=new_instance.prompt, type=type)
         self._name = new_instance.name
         self._commit = new_instance.commit
         self._metadata = new_instance.metadata
@@ -80,7 +78,7 @@ class Prompt:
         return copy.deepcopy(self._metadata)
 
     @property
-    def type(self) -> PromptVersionDetailType:
+    def type(self) -> PromptType:
         """The prompt type of the prompt."""
         return self._type
 
@@ -110,8 +108,9 @@ class Prompt:
         prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
 
         prompt._name = name
-        prompt._template = prompt_template.PromptTemplate(
-            template=prompt_version.template, type=prompt_version.type or "mustache"
+        prompt._template = PromptTemplate(
+            template=prompt_version.template,
+            type=PromptType(prompt_version.type) or PromptType.MUSTACHE,
         )
         prompt._commit = prompt_version.commit
         prompt._metadata = prompt_version.metadata

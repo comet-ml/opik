@@ -35,10 +35,9 @@ from . import (
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
-from .prompt import Prompt
+from .prompt import Prompt, PromptType
 from .prompt.client import PromptClient
 from .trace import migration as trace_migration
-from opik.rest_api.types import PromptVersionDetailType
 
 LOGGER = logging.getLogger(__name__)
 
@@ -969,7 +968,7 @@ class Opik:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
-        type: PromptVersionDetailType = "mustache",
+        type: PromptType = PromptType.MUSTACHE,
     ) -> Prompt:
         """
         Creates a new prompt with the given name and template.

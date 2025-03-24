@@ -3,7 +3,7 @@ from typing import Any, Set
 import jinja2
 
 from opik import exceptions
-from opik.rest_api.types import PromptVersionDetailType
+from .types import PromptType
 
 
 class PromptTemplate:
@@ -11,28 +11,32 @@ class PromptTemplate:
         self,
         template: str,
         validate_placeholders: bool = True,
-        type: PromptVersionDetailType = "mustache",
+        type: PromptType = PromptType.MUSTACHE,
     ) -> None:
         self._template = template
         self._type = type
         self._validate_placeholders = validate_placeholders
 
     def format(self, **kwargs: Any) -> str:
-        if self._type == "mustache":
-            template = self._template
-            placeholders = _extract_mustache_placeholder_keys(self._template)
-            kwargs_keys: Set[str] = set(kwargs.keys())
+        match self._type:
+            case PromptType.MUSTACHE:
+                template = self._template
+                placeholders = _extract_mustache_placeholder_keys(self._template)
+                kwargs_keys: Set[str] = set(kwargs.keys())
 
-            if kwargs_keys != placeholders and self._validate_placeholders:
-                raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
-                    prompt_placeholders=placeholders, format_arguments=kwargs_keys
-                )
+                if kwargs_keys != placeholders and self._validate_placeholders:
+                    raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
+                        prompt_placeholders=placeholders, format_arguments=kwargs_keys
+                    )
 
-            for key, value in kwargs.items():
-                template = template.replace(f"{{{{{key}}}}}", str(value))
+                for key, value in kwargs.items():
+                    template = template.replace(f"{{{{{key}}}}}", str(value))
 
-        elif self._type == "jinja2":
-            template = jinja2.Template(self._template).render(**kwargs)
+            case PromptType.JINJA2:
+                template = jinja2.Template(self._template).render(**kwargs)
+
+            case _:
+                template = self._template
 
         return template
 

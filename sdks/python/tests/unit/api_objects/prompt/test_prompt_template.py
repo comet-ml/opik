@@ -1,5 +1,6 @@
 import pytest
 from opik.api_objects.prompt import prompt_template
+from opik.api_objects.prompt.types import PromptType
 from opik import exceptions
 
 
@@ -78,7 +79,7 @@ def test_prompt__format__some_placeholders_dont_have_corresponding_format_argume
 def test_prompt__format_jinja2__happyflow():
     PROMPT_TEMPLATE = "Hi, my name is {{ name }}, I live in {{ city }}."
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type="jinja2")
+    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
 
     result = tested.format(name="Harry", city="London")
     assert result == "Hi, my name is Harry, I live in London."
@@ -93,7 +94,7 @@ def test_prompt__format_jinja2__with_control_flow():
     {% endif %}
     """
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type="jinja2")
+    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
 
     wizard_result = tested.format(name="Harry", city="London", is_wizard=True)
     assert "Harry is a wizard who lives in London." in wizard_result.strip()
@@ -110,7 +111,7 @@ def test_prompt__format_jinja2__with_loops():
     {% endfor %}
     """
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type="jinja2")
+    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
 
     result = tested.format(name="Harry", friends=["Ron", "Hermione", "Neville"])
 
@@ -123,7 +124,7 @@ def test_prompt__format_jinja2__with_loops():
 def test_prompt__format_jinja2__with_filters():
     PROMPT_TEMPLATE = "{{ name | upper }} lives in {{ city | lower }}."
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type="jinja2")
+    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
 
     result = tested.format(name="Harry", city="LONDON")
     assert result == "HARRY lives in london."
