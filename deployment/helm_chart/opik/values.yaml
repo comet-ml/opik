@@ -66,6 +66,9 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
+      AWS_ACCESS_KEY_ID: THAAIOSFODNN7EXAMPLE # rootUser for minio
+      AWS_SECRET_ACCESS_KEY: LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY # rootPassword for minio
+      S3_URL: "http://opik-minio:9000"
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -203,6 +206,25 @@ mysql:
       CREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';
       GRANT ALL ON `opik`.* TO 'opik'@'%';
       FLUSH PRIVILEGES;
+
+minio:
+  enabled: true
+  mode: standalone
+  disableWebUI: true
+  persistence:
+    enabled: true
+    size: 50Gi
+  auth:
+    rootUser: "THAAIOSFODNN7EXAMPLE"
+    rootPassword: "LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  provisioning:
+    enabled: true
+    extraCommands: 
+      - mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4
+      - mc mb --ignore-existing s3/public
+      - mc anonymous set download s3/public/
+  fullnameOverride: opik-minio
+
 
 redis:
   enabled: true
