@@ -43,10 +43,10 @@
       "import": "./dist/vercel/index.js",
       "require": "./dist/vercel/index.cjs"
     },
-    "./lang-chain": {
-      "types": "./dist/lang-chain/index.d.ts",
-      "import": "./dist/lang-chain/index.js",
-      "require": "./dist/lang-chain/index.cjs"
+    "./langchain": {
+      "types": "./dist/langchain/index.d.ts",
+      "import": "./dist/langchain/index.js",
+      "require": "./dist/langchain/index.cjs"
     }
   },
   "main": "dist/index.cjs",
