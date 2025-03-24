@@ -8,11 +8,14 @@ dependencies:
 - name: redis
   repository: https://charts.bitnami.com/bitnami
   version: 18.19.2
+- name: minio
+  repository: https://charts.bitnami.com/bitnami
+  version: 15.0.7
 - name: altinity-clickhouse-operator
   repository: https://docs.altinity.com/clickhouse-operator/
   version: 0.23.7
 - name: common
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 2.29.0
-digest: sha256:0f823c2e6559110ba3b340131758755ddd0f8f50322365f955a84e5edf8f7e1c
-generated: "2025-01-21T13:33:37.106551+02:00"
+  version: 2.30.0
+digest: sha256:7ef84a9d344ddf44749104ad2c26147c9eaa2211b27d97f33b1a0a909244c796
+generated: "2025-03-23T20:34:13.466785+02:00"
