@@ -26,12 +26,9 @@ RUN pip install -r requirements.txt
 # Download spaCy model for PII detection
 RUN python -m spacy download en_core_web_lg
 
-COPY src ./src
-
+COPY opik_guardrails ./opik_guardrails
+COPY __init__.py .
 COPY entrypoint.sh .
-RUN chmod u+x entrypoint.sh
-
-EXPOSE 5000
 
 ARG OPIK_VERSION
 ENV OPIK_VERSION="${OPIK_VERSION}"
@@ -40,6 +37,9 @@ ENV OPIK_VERSION="${OPIK_VERSION}"
 ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;9.0"
+
+RUN chmod u+x entrypoint.sh
+EXPOSE 5000
 
 ENTRYPOINT ["tini", "--"]
 CMD ./entrypoint.sh
