@@ -3,7 +3,7 @@ import datetime
 import functools
 import json
 import logging
-from typing import Any, Dict, Iterable, List, Optional, TypeVar, Union
+from typing import Any, Dict, Iterable, List, Optional, Type, TypeVar, Union
 
 import httpx
 
@@ -42,7 +42,7 @@ from .trace import migration as trace_migration
 
 LOGGER = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class Opik:
@@ -911,8 +911,7 @@ class Opik:
             )
 
             new_spans = self._read_and_parse_stream(
-                stream=page_spans_stream,
-                item_class=span_public.SpanPublic
+                stream=page_spans_stream, item_class=span_public.SpanPublic
             )
             if len(new_spans) == 0:
                 break
@@ -924,15 +923,14 @@ class Opik:
     def _read_and_parse_stream(
         self,
         stream: Iterable[bytes],
-        item_class: T,
+        item_class: Type[T],
     ) -> List[T]:
-        result: List[item_class] = []
+        result: List[T] = []
 
         # last record in chunk may be incomplete, we will use this buffer to concatenate strings
         buffer = b""
 
         for chunk in stream:
-
             buffer += chunk
             lines = buffer.split(b"\n")
 
@@ -956,20 +954,21 @@ class Opik:
     def _parse_stream_line(
         self,
         line: bytes,
-        item_class: T,
+        item_class: Type[T],
     ) -> Optional[T]:
-
         try:
-            item_dict = json.loads(line.decode('utf-8'))
+            item_dict = json.loads(line.decode("utf-8"))
             item_obj = item_class(**item_dict)
             return item_obj
 
-        except (json.JSONDecodeError) as e:
+        except json.JSONDecodeError as e:
             LOGGER.error(f"Error decoding span: {e}")
         except (TypeError, ValueError) as e:
             LOGGER.error(f"Error parsing span: {e}")
         except Exception as e:
-            print(f"Error decoding or parsing span: {e}")
+            LOGGER.error(f"Error decoding or parsing span: {e}")
+
+        return None
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
