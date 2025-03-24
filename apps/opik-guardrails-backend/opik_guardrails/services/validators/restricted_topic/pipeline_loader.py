@@ -1,13 +1,18 @@
 import transformers
 import torch
+import os
 
 
-def load_pipeline(model_path: str, device: str) -> transformers.Pipeline:
+def load_pipeline() -> transformers.Pipeline:
     # TODO: make sure everything is downloaded and the pipeline is ready-to-use.
-    # Also make a first test call?
+
+    model_path = "facebook/bart-large-mnli"
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+        device = os.getenv("OPIK_GUARDRAILS_DEVICE", "cuda:0")
+    else:
+        device = "cpu"
 
     torch_dtype = (
         torch.float16

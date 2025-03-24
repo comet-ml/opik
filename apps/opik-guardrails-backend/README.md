@@ -38,13 +38,13 @@ The Opik Guardrails Backend is configured to automatically detect and use NVIDIA
 
 You can configure GPU usage with the following environment variables:
 
-- `OPIK_DEVICE`: Specifies the device to use for model inference. Default is `cuda:0` if GPU is available, otherwise falls back to `cpu`.
+- `OPIK_GUARDRAILS_DEVICE`: Specifies the device to use for model inference. Default is `cuda:0` if GPU is available, otherwise falls back to `cpu`.
 - `CUDA_VISIBLE_DEVICES`: Controls which GPUs are visible to the container (https://docs.nvidia.com/deploy/topics/topic_5_2_1.html).
 
 Example with custom device configuration:
 
 ```bash
-docker run -p 5000:5000 --gpus all -e OPIK_DEVICE=cuda:1 opik-guardrails-backend:latest
+docker run -p 5000:5000 --gpus all -e OPIK_GUARDRAILS_DEVICE=cuda:1 opik-guardrails-backend:latest
 ```
 
 #### Automatic Fallback
