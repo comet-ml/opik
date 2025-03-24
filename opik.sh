@@ -2,7 +2,7 @@
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1")
+REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1")
 
 print_usage() {
   echo "Usage: opik.sh [OPTION]"
@@ -19,7 +19,7 @@ print_usage() {
 
 check_docker_status() {
   # Ensure Docker is running
-  if ! timeout 3 docker info >/dev/null 2>&1; then
+  if ! docker info >/dev/null 2>&1; then
     echo "❌ Docker is not running or not accessible. Please start Docker first."
     exit 1
   fi
@@ -73,7 +73,8 @@ start_missing_containers() {
   fi
 
   echo "🔄 Starting missing containers..."
-  docker compose -f "$script_dir/deployment/docker-compose/docker-compose.yaml" up -d
+  cd "$script_dir/deployment/docker-compose"
+  docker compose up -d
 
   echo "⏳ Waiting for all containers to be running and healthy..."
   max_retries=60
@@ -116,7 +117,8 @@ start_missing_containers() {
 stop_containers() {
   check_docker_status
   echo "🛑 Stopping all required containers..."
-  docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml stop
+  cd "$script_dir/deployment/docker-compose"
+  docker compose stop
   echo "✅ All containers stopped and cleaned up!"
 }
 
