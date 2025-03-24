@@ -65,6 +65,7 @@ component:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+      PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
     envFrom:
       - configMapRef:
           name: opik-backend

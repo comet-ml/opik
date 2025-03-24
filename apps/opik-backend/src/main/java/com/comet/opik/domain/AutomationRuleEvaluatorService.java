@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorCriteria;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
-import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
@@ -53,8 +52,7 @@ public interface AutomationRuleEvaluatorService {
     AutomationRuleEvaluatorPage find(UUID projectId, @NonNull String workspaceId,
             String name, int page, int size);
 
-    <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
-            AutomationRuleEvaluatorType automationRuleEvaluatorType);
+    <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(@NonNull UUID projectId, @NonNull String workspaceId);
 
     Mono<LogPage> getLogs(LogCriteria criteria);
 }
@@ -71,7 +69,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull AutomationRuleEvaluatorLogsDAO logsDAO;
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-'+ $inputRuleEvaluator.type")
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public <E, T extends AutomationRuleEvaluator<E>> T save(@NonNull T inputRuleEvaluator,
             @NonNull UUID projectId,
             @NonNull String workspaceId,
@@ -128,7 +126,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-*'", keyUsesPatternMatching = true)
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
             @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate<?> evaluatorUpdate) {
 
@@ -198,7 +196,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-*'", keyUsesPatternMatching = true)
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");
@@ -258,16 +256,13 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @Cacheable(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-'+  $type", returnType = AutomationRuleEvaluator.class, wrapperType = List.class)
+    @Cacheable(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId", returnType = AutomationRuleEvaluator.class, wrapperType = List.class)
     public <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(
-            @NonNull UUID projectId, @NonNull String workspaceId, @NonNull AutomationRuleEvaluatorType type) {
-        log.debug("Finding AutomationRuleEvaluators with type '{}' in projectId '{}' and workspaceId '{}'", type,
-                projectId, workspaceId);
-
+            @NonNull UUID projectId, @NonNull String workspaceId) {
+        log.info("Finding AutomationRuleEvaluators, projectId '{}', workspaceId '{}'", projectId, workspaceId);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var criteria = AutomationRuleEvaluatorCriteria.builder().type(type).build();
-
+            var criteria = AutomationRuleEvaluatorCriteria.builder().build();
             return dao.find(workspaceId, projectId, criteria)
                     .stream()
                     .map(evaluator -> switch (evaluator) {
@@ -277,7 +272,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                             (T) AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                     })
                     .toList();
-
         });
     }
 
