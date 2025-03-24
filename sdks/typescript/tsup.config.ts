@@ -6,6 +6,7 @@ export default defineConfig([
     entry: {
       index: "src/opik/index.ts",
       "vercel/index": "src/opik/integrations/vercel/index.ts",
+      "lang-chain/index": "src/opik/integrations/lang-chain/index.ts",
     },
     format: ["cjs", "esm"],
     outDir: "dist",
