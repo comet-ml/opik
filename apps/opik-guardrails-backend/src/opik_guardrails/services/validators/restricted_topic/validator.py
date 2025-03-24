@@ -1,12 +1,10 @@
 from typing import Dict
 
 import pydantic
-import torch
-import transformers
-
 from opik_guardrails import schemas
 
-from . import base_validator
+from .. import base_validator
+import transformers
 
 
 class RestrictedTopicValidationDetails(pydantic.BaseModel):
@@ -17,18 +15,14 @@ class RestrictedTopicValidationDetails(pydantic.BaseModel):
 class RestrictedTopicValidator(base_validator.BaseValidator):
     """A wrapper for the zero-shot classification model."""
 
-    def __init__(self, model_path: str, device: str) -> None:
-        self._model_path = model_path
-        self._device = device
-        self._classification_pipeline = _load_model(
-            model_path=self._model_path, device=self._device
-        )
+    def __init__(self, pipeline: transformers.Pipeline) -> None:
+        self._classification_pipeline = pipeline
 
     def validate(
         self,
         text: str,
         config: schemas.RestrictedTopicValidationConfig,
-    ) -> base_validator.ValidationResult:
+    ) -> schemas.ValidationResult:
         classification_result = self._classification_pipeline(text, config.topics)
         scores = {
             label: score
@@ -41,7 +35,7 @@ class RestrictedTopicValidator(base_validator.BaseValidator):
             label: score for label, score in scores.items() if score >= config.threshold
         }
 
-        return base_validator.ValidationResult(
+        return schemas.ValidationResult(
             validation_passed=len(relevant_topics_scores) == 0,
             validation_details=RestrictedTopicValidationDetails(
                 matched_topics_scores=relevant_topics_scores,
@@ -50,34 +44,3 @@ class RestrictedTopicValidator(base_validator.BaseValidator):
             type=schemas.ValidationType.RESTRICTED_TOPIC,
             validation_config=config,
         )
-
-
-def _load_model(model_path: str, device: str) -> transformers.Pipeline:
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-    torch_dtype = (
-        torch.float16
-        if (torch.cuda.is_available() and device != "cpu")
-        else torch.float32
-    )
-
-    model: torch.nn.Module = (
-        transformers.AutoModelForSequenceClassification.from_pretrained(
-            model_path,
-            torch_dtype=torch_dtype,
-            device_map=device,
-        )
-    )
-    model.eval()
-
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_path)
-
-    classifier = transformers.pipeline(
-        task="zero-shot-classification",
-        model=model,
-        tokenizer=tokenizer,
-        multi_label=True,
-    )
-
-    return classifier

@@ -1,12 +1,12 @@
 import collections
 from typing import Dict, List
 
-import presidio_analyzer
 import pydantic
+import presidio_analyzer
 
 from opik_guardrails import schemas
 
-from . import base_validator
+from .. import base_validator
 
 
 class PIIEntity(pydantic.BaseModel):
@@ -21,14 +21,14 @@ class PIIValidationDetails(pydantic.BaseModel):
 
 
 class PIIValidator(base_validator.BaseValidator):
-    def __init__(self) -> None:
-        self._analyzer_engine = presidio_analyzer.AnalyzerEngine()
+    def __init__(self, engine: presidio_analyzer.AnalyzerEngine) -> None:
+        self._analyzer_engine = engine
 
     def validate(
         self,
         text: str,
         config: schemas.PIIValidationConfig,
-    ) -> base_validator.ValidationResult:
+    ) -> schemas.ValidationResult:
         """
         Detect PII in the given text.
 
@@ -59,7 +59,7 @@ class PIIValidator(base_validator.BaseValidator):
                 )
             )
 
-        return base_validator.ValidationResult(
+        return schemas.ValidationResult(
             validation_passed=len(results) == 0,
             validation_details=PIIValidationDetails(detected_entities=grouped_results),
             type=schemas.ValidationType.PII,

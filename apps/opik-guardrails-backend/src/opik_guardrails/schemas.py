@@ -67,3 +67,10 @@ class GuardrailsValidationRequest(pydantic.BaseModel):
     validations: List[ValidationDescriptor] = pydantic.Field(
         min_items=1, description="List of validations to perform"
     )
+
+
+class ValidationResult(pydantic.BaseModel):
+    validation_passed: bool
+    type: ValidationType
+    validation_config: ValidationConfig
+    validation_details: pydantic.BaseModel

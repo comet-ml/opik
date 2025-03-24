@@ -1,12 +1,10 @@
 from typing import Dict, Any, Type
 
-import os
-
 from opik_guardrails import schemas
 
+from .validators import pii
+from .validators import restricted_topic
 from .validators import base_validator
-from .validators import pii as pii_validator
-from .validators import restricted_topic as restricted_topic_validator
 
 
 _VALIDATION_CONFIG_TYPES_MAPPING: Dict[
@@ -18,13 +16,8 @@ _VALIDATION_CONFIG_TYPES_MAPPING: Dict[
 
 
 _VALIDATORS_MAPPING: Dict[schemas.ValidationType, base_validator.BaseValidator] = {
-    schemas.ValidationType.PII: pii_validator.PIIValidator(),
-    schemas.ValidationType.RESTRICTED_TOPIC: restricted_topic_validator.RestrictedTopicValidator(
-        model_path="facebook/bart-large-mnli",
-        device=os.environ.get(
-            "OPIK_GUARDRAILS_DEVICE", "cuda:0"
-        ),  # todo: implement proper config, support multiple devices
-    ),
+    schemas.ValidationType.PII: pii.construct_pii_validator(),
+    schemas.ValidationType.RESTRICTED_TOPIC: restricted_topic.construct_restricted_topic_validator(),
 }
 
 
@@ -32,7 +25,7 @@ def run_validator(
     validation_type: schemas.ValidationType,
     text: str,
     config: schemas.ValidationConfig,
-) -> base_validator.ValidationResult:
+) -> schemas.ValidationResult:
     return _VALIDATORS_MAPPING[validation_type].validate(text, config)
 
 
