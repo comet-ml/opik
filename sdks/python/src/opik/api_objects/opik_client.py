@@ -1,8 +1,9 @@
 import atexit
 import datetime
 import functools
+import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, TypeVar, Union
 
 import httpx
 
@@ -40,6 +41,8 @@ from .prompt.client import PromptClient
 from .trace import migration as trace_migration
 
 LOGGER = logging.getLogger(__name__)
+
+T = TypeVar('T')
 
 
 class Opik:
@@ -887,29 +890,86 @@ class Opik:
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output or metadata
         """
-        page_size = 100
         spans: List[span_public.SpanPublic] = []
 
         filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
 
-        page = 1
-        while len(spans) < max_results:
-            page_spans = self._rest_client.spans.get_spans_by_project(
-                project_name=project_name or self._project_name,
-                trace_id=trace_id,
-                filters=filters,
-                page=page,
-                size=page_size,
-                truncate=truncate,
-            )
+        max_results = 2_500
 
-            if len(page_spans.content) == 0:
-                break
+        page_spans_stream = self._rest_client.spans.search_spans(
+            trace_id=trace_id,
+            project_name=project_name or self._project_name,
+            filters=filters,
+            limit=max_results,
+            truncate=truncate,
+        )
 
-            spans.extend(page_spans.content)
-            page += 1
+        spans = self._read_and_parse_stream(
+            stream=page_spans_stream,
+            item_class=span_public.SpanPublic
+        )
 
         return spans[:max_results]
+
+    def _read_and_parse_stream(
+        self,
+        stream: Iterable[bytes],
+        item_class: T,
+    ) -> List[T]:
+        result: List[item_class] = []
+
+        # last record in chunk may be incomplete, we will use this buffer to concatenate strings
+        buffer = b""
+
+        for chunk in stream:
+
+            buffer += chunk
+            lines = buffer.split(b"\n")
+
+            # last record in chunk may be incomplete
+            for i, line in enumerate(lines[:-1]):
+                item = self._parse_stream_line(line=line, item_class=item_class)
+                if item is not None:
+                    result.append(item)
+
+            # Keep the last potentially incomplete line in buffer
+            buffer = lines[-1]
+
+        # Process any remaining data in the buffer after the stream ends
+        if buffer:
+            item = self._parse_stream_line(line=buffer, item_class=item_class)
+            if item is not None:
+                result.append(item)
+
+        return result
+
+    def _parse_stream_line(
+        self,
+        line: bytes,
+        item_class: T,
+    ) -> Optional[T]:
+        print(line)
+
+        try:
+            # Decode the bytes into a dictionary
+            item_dict = json.loads(line.decode('utf-8'))
+
+            # Parse the dictionary to a SpanPublic object
+            item_obj = item_class(**item_dict)
+            # print(item_obj)
+            return item_obj
+
+        except (json.JSONDecodeError) as e:
+            print(f"Error decoding or parsing span: {e}")
+        except (TypeError, ValueError) as e:
+            # todo remove - this is only for broken dev data
+            if not isinstance(item_dict["input"], dict):
+                print("Broken data found!")
+                return None
+
+            print(f"Error decoding or parsing span: {e}")
+        except Exception as e:
+            print(f"Error decoding or parsing span: {e}")
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
