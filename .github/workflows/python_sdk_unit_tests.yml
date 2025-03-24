@@ -63,7 +63,7 @@ jobs:
 
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
-        if: always()
+        if: failure()
         with:
           action_fail: true
           files: ${{ github.workspace }}/test_results.xml
