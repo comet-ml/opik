@@ -22,12 +22,15 @@ import os
 %pip install --upgrade --quiet pydantic-ai logfire 'logfire[httpx]'
 
 # Configure the logging to Opik Cloud
-os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://www.comet.com/opik/api/v1/private/otel"
-os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=zM3yInQnF0q3mvYf40Ef6aOLp,Comet-Workspace=default" # Make sure to replace your API key
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = (
+    "https://www.comet.com/opik/api/v1/private/otel"
+)
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = (
+    "Authorization=your-api-key,Comet-Workspace=default"  # Make sure to replace your API key
+)
 
 # If you are using a self-hosted instance, you can use:
 # os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:5173/api/v1/private/otel"
-
 ```
 
 Now that everything is configured correctly, we can enable the logging:
@@ -65,12 +68,12 @@ import os
 
 from pydantic_ai import Agent
 
-agent = Agent(  
-    'openai:gpt-4o',
-    system_prompt='Be concise, reply with one sentence.',  
+agent = Agent(
+    "openai:gpt-4o",
+    system_prompt="Be concise, reply with one sentence.",
 )
 
-result = agent.run_sync('Where does "hello world" come from?')  
+result = agent.run_sync('Where does "hello world" come from?')
 print(result.data)
 ```
 
