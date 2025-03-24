@@ -11,26 +11,45 @@ In addition, to use GPU acceleration, you need to have the [NVIDIA Container Too
 
 ### Running the Backend
 
-#### Option 1: Pull and run the pre-built image
-
-```bash
-docker run -p 5000:5000 --gpus all ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
-```
-
-#### Option 2: Build locally (only needed once)
+#### Option 1: Build locally (only needed once)
 
 ```bash
 cd apps/opik-guardrails-backend
 docker build -t opik-guardrails-backend:latest .
 ```
 
-#### Option 3: Run a locally built image
+#### Option 2: Run the image
 
 ```bash
+# With GPU support
 docker run -p 5000:5000 --gpus all opik-guardrails-backend:latest
+
+# Without GPU (CPU only)
+docker run -p 5000:5000 opik-guardrails-backend:latest
 ```
 
 The server will be available at http://localhost:5000
+
+### GPU Support
+
+The Opik Guardrails Backend is configured to automatically detect and use NVIDIA GPUs if available. The container uses NVIDIA CUDA 12.1.1 with cuDNN 8 on Ubuntu 22.04 as its base image.
+
+#### Environment Variables
+
+You can configure GPU usage with the following environment variables:
+
+- `OPIK_DEVICE`: Specifies the device to use for model inference. Default is `cuda:0` if GPU is available, otherwise falls back to `cpu`.
+- `CUDA_VISIBLE_DEVICES`: Controls which GPUs are visible to the container (https://docs.nvidia.com/deploy/topics/topic_5_2_1.html).
+
+Example with custom device configuration:
+
+```bash
+docker run -p 5000:5000 --gpus all -e OPIK_DEVICE=cuda:1 opik-guardrails-backend:latest
+```
+
+#### Automatic Fallback
+
+The service will automatically detect if CUDA is available at startup. If no GPU is available or the NVIDIA Container Toolkit is not properly configured, it will fall back to CPU mode without requiring any configuration changes.
 
 ## API Endpoints
 
