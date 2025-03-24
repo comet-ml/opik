@@ -99,11 +99,11 @@ services:
       ANALYTICS_DB_PROTOCOL: "HTTP"
       ANALYTICS_DB_HOST: "clickhouse"
       ANALYTICS_DB_PORT: 8123
-      ANALYTICS_DB_USERNAME: opik
       ANALYTICS_DB_DATABASE_NAME: opik
+      ANALYTICS_DB_USERNAME: opik
+      ANALYTICS_DB_PASS: opik
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
-      ANALYTICS_DB_PASS: opik
       OPIK_OTEL_SDK_ENABLED: false
       OTEL_VERSION: 2.12.0
       OTEL_PROPAGATORS: "tracecontext,baggage,b3"
@@ -114,6 +114,7 @@ services:
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
+      PYTHON_EVALUATOR_URL: http://python-backend:8000
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:
