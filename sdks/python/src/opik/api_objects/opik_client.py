@@ -894,22 +894,32 @@ class Opik:
 
         filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
 
-        max_results = 2_500
+        # this is the constant for maximum object sent from backend side
+        max_endpoint_batch_size = 2_000
 
-        page_spans_stream = self._rest_client.spans.search_spans(
-            trace_id=trace_id,
-            project_name=project_name or self._project_name,
-            filters=filters,
-            limit=max_results,
-            truncate=truncate,
-        )
+        while len(spans) < max_results:
+            spans_amount_left = max_results - len(spans)
+            current_batch_size = min(spans_amount_left, max_endpoint_batch_size)
 
-        spans = self._read_and_parse_stream(
-            stream=page_spans_stream,
-            item_class=span_public.SpanPublic
-        )
+            page_spans_stream = self._rest_client.spans.search_spans(
+                trace_id=trace_id,
+                project_name=project_name or self._project_name,
+                filters=filters,
+                limit=current_batch_size,
+                truncate=truncate,
+                last_retrieved_id=spans[-1].id if len(spans) > 0 else None,
+            )
 
-        return spans[:max_results]
+            new_spans = self._read_and_parse_stream(
+                stream=page_spans_stream,
+                item_class=span_public.SpanPublic
+            )
+            if len(new_spans) == 0:
+                break
+
+            spans.extend(new_spans)
+
+        return spans
 
     def _read_and_parse_stream(
         self,
@@ -927,7 +937,7 @@ class Opik:
             lines = buffer.split(b"\n")
 
             # last record in chunk may be incomplete
-            for i, line in enumerate(lines[:-1]):
+            for line in lines[:-1]:
                 item = self._parse_stream_line(line=line, item_class=item_class)
                 if item is not None:
                     result.append(item)
@@ -948,26 +958,16 @@ class Opik:
         line: bytes,
         item_class: T,
     ) -> Optional[T]:
-        print(line)
 
         try:
-            # Decode the bytes into a dictionary
             item_dict = json.loads(line.decode('utf-8'))
-
-            # Parse the dictionary to a SpanPublic object
             item_obj = item_class(**item_dict)
-            # print(item_obj)
             return item_obj
 
         except (json.JSONDecodeError) as e:
-            print(f"Error decoding or parsing span: {e}")
+            LOGGER.error(f"Error decoding span: {e}")
         except (TypeError, ValueError) as e:
-            # todo remove - this is only for broken dev data
-            if not isinstance(item_dict["input"], dict):
-                print("Broken data found!")
-                return None
-
-            print(f"Error decoding or parsing span: {e}")
+            LOGGER.error(f"Error parsing span: {e}")
         except Exception as e:
             print(f"Error decoding or parsing span: {e}")
 
