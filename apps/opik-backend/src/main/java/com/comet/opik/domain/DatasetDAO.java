@@ -142,12 +142,13 @@ public interface DatasetDAO {
                 AND id NOT IN (
                     SELECT id
                     FROM datasets
-                    WHERE workspace_id = :workspace_id
+                    WHERE workspace_id = :demo_workspace_id
                     AND name IN (<excluded_names>)
                 )
                 GROUP BY workspace_id, created_by
             """)
-    List<BiInformationResponse.BiInformation> getDatasetsBIInformation(@Bind("workspace_id") String workspaceId,
+    List<BiInformationResponse.BiInformation> getDatasetsBIInformation(
+            @Bind("demo_workspace_id") String demoWorkspaceId,
             @BindList("excluded_names") List<String> excludedNames);
 
     @SqlUpdate("CREATE TEMPORARY TABLE experiment_dataset_ids_<table_name> (id CHAR(36) PRIMARY KEY)")

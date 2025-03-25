@@ -483,7 +483,7 @@ class ExperimentDAO {
             AND id NOT IN (
                 SELECT id
                 FROM experiments
-                WHERE workspace_id = :workspace_id
+                WHERE workspace_id = :demo_workspace_id
                 AND name IN :excluded_names
             )
             GROUP BY workspace_id, created_by
@@ -767,7 +767,7 @@ class ExperimentDAO {
 
     private Publisher<? extends Result> getBiDailyData(Connection connection) {
         return connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
-                .bind("workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
+                .bind("demo_workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
                 .bind("excluded_names", DemoData.EXPERIMENTS)
                 .execute();
     }
@@ -848,7 +848,7 @@ class ExperimentDAO {
     public Mono<Long> getDailyCreatedCount() {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
-                        .bind("workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
+                        .bind("demo_workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
                         .bind("excluded_names", DemoData.EXPERIMENTS)
                         .execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_count", Long.class)))
