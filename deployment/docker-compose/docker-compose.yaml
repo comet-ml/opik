@@ -141,6 +141,9 @@ services:
     privileged: true # Required for Docker-in-Docker, so it can launch containers
     environment:
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
+      PYTHON_CODE_EXECUTOR_CONTAINERS_NUM: 5
+      PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 3
+      PYTHON_CODE_EXECUTOR_LOG_LEVEL: "INFO"
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
     healthcheck:
