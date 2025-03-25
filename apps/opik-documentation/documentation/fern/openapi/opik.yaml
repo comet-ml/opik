@@ -6940,6 +6940,10 @@ components:
         total_estimated_cost:
           type: number
           readOnly: true
+        span_count:
+          type: integer
+          format: int32
+          readOnly: true
         duration:
           type: number
           description: Duration in milliseconds as a decimal number to support sub-millisecond
@@ -7092,6 +7096,10 @@ components:
             $ref: "#/components/schemas/Comment_Public"
         total_estimated_cost:
           type: number
+          readOnly: true
+        span_count:
+          type: integer
+          format: int32
           readOnly: true
         duration:
           type: number
