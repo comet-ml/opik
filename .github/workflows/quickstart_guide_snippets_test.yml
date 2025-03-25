@@ -75,8 +75,6 @@ jobs:
 
             - name: Check app is up via the UI (Local)
               run: |
-                cd ${{ github.workspace }}/tests_end_to_end
-                export PYTHONPATH='.'
                 pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
             
             - name: Run suite
@@ -89,6 +87,8 @@ jobs:
                 AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
                 ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
               run: |
+                cd ${{ github.workspace }}/tests_end_to_end
+                export PYTHONPATH='.'
                 allurectl watch -- pytest -s tests/QuickstartGuide --alluredir="${ALLURE_RESULTS}"
 
             - name: Stop Opik server (Local)
