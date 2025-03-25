@@ -12,12 +12,12 @@ except ImportError:
 
 class ROUGE(base_metric.BaseMetric):
     """
-    A metric that computes the ROUGE score between an output and reference string.
-
-    This metric uses the `evaluate` and `rouge-score` libraries to compute the ROUGE score.
+    A metric that computes the ROUGE, or Recall-Oriented Understudy for Gisting Evaluation score between an output and reference string mainly used for evaluating text summarization.
+    ROUGE is case insensitive, meaning that upper case letters are treated the same way as lower case letters.
+    This metrics is a wrapper around the Google Research reimplementation of ROUGE, which is based on the `evaluate` and `rouge-score` libraries.
 
     Args:
-        name: The name of the metric. Defaults to "rouge_1_metric".
+        name: The name of the metric. Defaults to "rouge_metric".
         track: Whether to track the metric. Defaults to True.
 
     Example:
