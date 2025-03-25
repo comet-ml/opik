@@ -36,6 +36,8 @@ servers:
 tags:
 - name: System usage
   description: System usage related resource
+- name: Attachments
+  description: Attachments related resources
 - name: Check
   description: Access check resources
 - name: Automation rule evaluators
@@ -50,8 +52,6 @@ tags:
   description: Feedback definitions related resources
 - name: LlmProviderKey
   description: LLM Provider Key
-- name: OpenTelemetry Ingestion
-  description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -60,8 +60,8 @@ tags:
   description: Span related resources
 - name: Traces
   description: Trace related resources
-- name: Workspaces
-  description: Workspace related resources
+- name: Redirect
+  description: Redirects for SDK generated links
 paths:
   /v1/internal/usage/bi-datasets:
     get:
@@ -91,6 +91,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/workspace-span-counts:
+    get:
+      tags:
+      - System usage
+      summary: Get spans count on previous day for all available workspaces
+      description: Get spans count on previous day for all available workspaces
+      operationId: getSpansCountForWorkspaces
+      responses:
+        "200":
+          description: SpanCountResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpansCountResponse"
   /v1/internal/usage/bi-traces:
     get:
       tags:
@@ -119,6 +133,121 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TraceCountResponse"
+  /v1/private/attachment/upload-complete:
+    post:
+      tags:
+      - Attachments
+      summary: Start multipart attachment upload
+      description: Start multipart attachment upload
+      operationId: startMultiPartUpload
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteMultipartUploadRequest"
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/attachment/upload-start:
+    post:
+      tags:
+      - Attachments
+      summary: Start multipart attachment upload
+      description: Start multipart attachment upload
+      operationId: startMultiPartUpload_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartMultipartUploadRequest"
+      responses:
+        "200":
+          description: MultipartUploadResponse
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartMultipartUploadResponse"
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/attachment/upload:
+    put:
+      tags:
+      - Attachments
+      summary: Upload attachment to MinIO
+      description: Upload attachment to MinIO
+      operationId: uploadAttachment
+      parameters:
+      - name: file_name
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: project_name
+        in: query
+        schema:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+      - name: mime_type
+        in: query
+        schema:
+          type: string
+      - name: entity_type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - trace
+          - span
+      - name: entity_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: object
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/auth:
     post:
       tags:
@@ -134,6 +263,32 @@ paths:
       responses:
         "204":
           description: No Content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/auth/workspace:
+    get:
+      tags:
+      - Check
+      summary: User's default workspace name
+      description: User's default workspace name
+      operationId: getWorkspaceName
+      responses:
+        "200":
+          description: Authentication resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceNameHolder"
         "401":
           description: Bad Request
           content:
@@ -215,7 +370,6 @@ paths:
       parameters:
       - name: project_id
         in: query
-        required: true
         schema:
           type: string
           format: uuid
@@ -302,189 +456,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LogPage"
-  /v1/private/automations/projects/{projectId}/evaluators:
-    get:
-      tags:
-      - Automation rule evaluators
-      summary: Find project Evaluators Deprecated
-      description: Find project Evaluators Deprecated
-      operationId: findEvaluatorsDeprecated
-      parameters:
-      - name: projectId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      responses:
-        "200":
-          description: Evaluators resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AutomationRuleEvaluatorPage_Public"
-      deprecated: true
-    post:
-      tags:
-      - Automation rule evaluators
-      summary: Create automation rule evaluator Deprecated
-      description: Create automation rule evaluator Deprecated
-      operationId: createAutomationRuleEvaluatorDeprecated
-      parameters:
-      - name: projectId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
-      responses:
-        "201":
-          description: Created
-          headers:
-            Location:
-              required: true
-              style: simple
-              schema:
-                type: string
-              example: "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}"
-      deprecated: true
-  /v1/private/automations/projects/{projectId}/evaluators/delete:
-    post:
-      tags:
-      - Automation rule evaluators
-      summary: Delete automation rule evaluators Deprecated
-      description: Delete automation rule evaluators batch Deprecated
-      operationId: deleteAutomationRuleEvaluatorBatchDeprecated
-      parameters:
-      - name: projectId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchDelete"
-      responses:
-        "204":
-          description: No Content
-      deprecated: true
-  /v1/private/automations/projects/{projectId}/evaluators/{id}:
-    get:
-      tags:
-      - Automation rule evaluators
-      summary: Get automation rule evaluator by id Deprecated
-      description: Get automation rule by id Deprecated
-      operationId: getEvaluatorByIdDeprecated
-      parameters:
-      - name: projectId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Automation Rule resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
-      deprecated: true
-    patch:
-      tags:
-      - Automation rule evaluators
-      summary: update Automation Rule Evaluator by id Deprecated
-      description: update Automation Rule Evaluator by id Deprecated
-      operationId: updateAutomationRuleEvaluatorDeprecated
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: projectId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
-      responses:
-        "204":
-          description: No content
-      deprecated: true
-  /v1/private/automations/projects/{projectId}/evaluators/{id}/logs:
-    get:
-      tags:
-      - Automation rule evaluators
-      summary: Get automation rule evaluator logs by id Deprecated
-      description: Get automation rule evaluator logs by id Deprecated
-      operationId: getEvaluatorLogsByIdDeprecated
-      parameters:
-      - name: projectId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1000
-      responses:
-        "200":
-          description: Automation rule evaluator logs resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LogPage"
-      deprecated: true
   /v1/private/chat/completions:
     post:
       tags:
@@ -1233,6 +1204,12 @@ paths:
       responses:
         "204":
           description: No Content
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/feedback-definitions/delete:
     post:
       tags:
@@ -1248,6 +1225,12 @@ paths:
       responses:
         "204":
           description: No Content
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/llm-provider-key/delete:
     post:
       tags:
@@ -1376,21 +1359,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/otel/v1/traces:
-    post:
-      tags:
-      - OpenTelemetry Ingestion
-      operationId: receiveTraces
-      requestBody:
-        content:
-          application/x-protobuf:
-            schema:
-              type: object
-      responses:
-        default:
-          description: default response
-          content:
-            '*/*': {}
   /v1/private/projects:
     get:
       tags:
@@ -2100,6 +2068,10 @@ paths:
         schema:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Spans resource
@@ -2128,6 +2100,12 @@ paths:
               schema:
                 type: string
               example: "${basePath}/v1/private/spans/{spanId}"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/spans/batch:
     post:
       tags:
@@ -2854,6 +2832,43 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/search:
+    post:
+      tags:
+      - Traces
+      summary: Search traces
+      description: Search traces
+      operationId: searchTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceSearchStreamRequest_Public"
+      responses:
+        "200":
+          description: Traces stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                  - $ref: "#/components/schemas/Trace_Public"
+                  - $ref: "#/components/schemas/ErrorMessage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/traces/comments/{commentId}:
     patch:
       tags:
@@ -2878,21 +2893,126 @@ paths:
           description: No Content
         "404":
           description: Not found
-  /v1/private/workspaces/metadata:
+  /v1/session/redirect/datasets:
     get:
       tags:
-      - Workspaces
-      summary: Get workspace metadata
-      operationId: getWorkspaceMetadata
+      - Redirect
+      summary: Create dataset redirect url
+      description: Create dataset redirect url
+      operationId: datasetsRedirect
+      parameters:
+      - name: dataset_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: workspace_name
+        in: query
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
-          description: Workspace metadata
+        "303":
+          description: Redirect
+        "400":
+          description: Bad Request
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: "#/components/schemas/WorkspaceMetadata"
+                $ref: "#/components/schemas/ErrorMessage"
         "404":
-          description: Workspace not found
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/session/redirect/experiments:
+    get:
+      tags:
+      - Redirect
+      summary: Create experiment redirect url
+      description: Create experiment redirect url
+      operationId: experimentsRedirect
+      parameters:
+      - name: dataset_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: workspace_name
+        in: query
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "303":
+          description: Redirect
+        "400":
+          description: Bad Request
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/session/redirect/projects:
+    get:
+      tags:
+      - Redirect
+      summary: Create project redirect url
+      description: Create project redirect url
+      operationId: projectsRedirect
+      parameters:
+      - name: trace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: workspace_name
+        in: query
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "303":
+          description: Redirect
+        "400":
+          description: Bad Request
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /is-alive/ping:
     get:
       operationId: isAlive
@@ -2928,6 +3048,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BiInformation"
+    SpansCountResponse:
+      type: object
+      properties:
+        workspaces_spans_count:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceSpansCount"
+    WorkspaceSpansCount:
+      type: object
+      properties:
+        workspace:
+          type: string
+        span_count:
+          type: integer
+          format: int32
     TraceCountResponse:
       type: object
       properties:
@@ -2953,8 +3088,109 @@ components:
           type: string
         details:
           type: string
+    CompleteMultipartUploadRequest:
+      required:
+      - entity_id
+      - entity_type
+      - file_name
+      - file_size
+      - upload_id
+      - uploaded_file_parts
+      type: object
+      properties:
+        file_name:
+          type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        entity_type:
+          type: string
+          enum:
+          - trace
+          - span
+        entity_id:
+          type: string
+          format: uuid
+        container_id:
+          type: string
+          format: uuid
+          readOnly: true
+        file_size:
+          type: integer
+          format: int64
+        mime_type:
+          type: string
+        upload_id:
+          type: string
+        uploaded_file_parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MultipartUploadPart"
+    MultipartUploadPart:
+      required:
+      - e_tag
+      - part_number
+      type: object
+      properties:
+        e_tag:
+          type: string
+        part_number:
+          type: integer
+          format: int32
+    StartMultipartUploadResponse:
+      required:
+      - pre_sign_urls
+      - upload_id
+      type: object
+      properties:
+        upload_id:
+          type: string
+        pre_sign_urls:
+          type: array
+          items:
+            type: string
+    StartMultipartUploadRequest:
+      required:
+      - entity_id
+      - entity_type
+      - file_name
+      - num_of_file_parts
+      - path
+      type: object
+      properties:
+        file_name:
+          type: string
+        num_of_file_parts:
+          type: integer
+          format: int32
+        mime_type:
+          type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        entity_type:
+          type: string
+          enum:
+          - trace
+          - span
+        entity_id:
+          type: string
+          format: uuid
+        container_id:
+          type: string
+          format: uuid
+          readOnly: true
+        path:
+          type: string
     AuthDetailsHolder:
       type: object
+    WorkspaceNameHolder:
+      type: object
+      properties:
+        workspace_name:
+          type: string
     AutomationRuleEvaluator:
       required:
       - code
@@ -2969,6 +3205,9 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
+          readOnly: true
         name:
           type: string
         sampling_rate:
@@ -2990,15 +3229,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -3146,15 +3385,15 @@ components:
           format: float
         code:
           type: object
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -3276,6 +3515,9 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
+          readOnly: true
         name:
           type: string
         sampling_rate:
@@ -3297,15 +3539,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -3430,6 +3672,9 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
+          readOnly: true
         name:
           type: string
         sampling_rate:
@@ -3451,15 +3696,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -3526,15 +3771,15 @@ components:
         project_id:
           type: string
           format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6398,6 +6643,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Span_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     AvgValueStat_Public:
       type: object
       allOf:
@@ -6529,6 +6778,8 @@ components:
           - '>='
           - <
           - <=
+          - is_empty
+          - is_not_empty
         key:
           type: string
         value:
@@ -6558,7 +6809,9 @@ components:
           maximum: 2000
           minimum: 1
           type: integer
+          description: Max number of spans to be streamed
           format: int32
+          default: 500
         last_retrieved_id:
           type: string
           format: uuid
@@ -6927,6 +7180,56 @@ components:
           type: array
           items:
             type: string
+    TraceFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceSearchStreamRequest_Public:
+      type: object
+      properties:
+        project_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Public"
+        last_retrieved_id:
+          type: string
+          format: uuid
+        limit:
+          maximum: 2000
+          minimum: 1
+          type: integer
+          description: Max number of traces to be streamed
+          format: int32
+          default: 500
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
     TraceUpdate:
       type: object
       properties:
@@ -6957,8 +7260,3 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
-    WorkspaceMetadata:
-      type: object
-      properties:
-        trace_dynamic_sorting_enabled:
-          type: boolean
