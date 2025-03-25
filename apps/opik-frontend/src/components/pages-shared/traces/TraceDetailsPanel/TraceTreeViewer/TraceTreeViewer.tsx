@@ -37,6 +37,7 @@ type SpanWithMetadata = Omit<Span, "type"> & {
   maxEndTime?: number;
   maxDuration?: number;
   hasError?: boolean;
+  isInSearch?: boolean;
 };
 
 type TreeData = Record<string, TreeItem<SpanWithMetadata>>;
@@ -113,8 +114,16 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     [search, filters, noSearch],
   );
 
-  const filteredTraceSpans = useMemo(() => {
-    if (noSearch) return traceSpans;
+  const { filteredTraceSpans, searchIds } = useMemo(() => {
+    const retVal: {
+      searchIds: Set<string>;
+      filteredTraceSpans: Span[] | null;
+    } = {
+      searchIds: new Set(),
+      filteredTraceSpans: traceSpans,
+    };
+
+    if (noSearch) return retVal;
 
     const [dataMap, searchIds] = constructDataMapAndSearchIds(
       trace,
@@ -123,12 +132,16 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     );
     const parentIds = addAllParentIds(searchIds, dataMap);
 
-    return searchIds.size === 0
-      ? null
-      : traceSpans.filter(
-          (traceSpan) =>
-            searchIds.has(traceSpan.id) || parentIds.has(traceSpan.id),
-        );
+    retVal.searchIds = searchIds;
+    retVal.filteredTraceSpans =
+      searchIds.size === 0
+        ? null
+        : traceSpans.filter(
+            (traceSpan) =>
+              searchIds.has(traceSpan.id) || parentIds.has(traceSpan.id),
+          );
+
+    return retVal;
   }, [trace, traceSpans, predicate, noSearch]);
 
   const treeData = useMemo(() => {
@@ -163,6 +176,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
           duration: trace.duration,
           name: trace.name,
           hasError: Boolean(trace.error_info),
+          isInSearch: searchIds.has(trace.id),
         },
       },
     };
@@ -184,6 +198,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
               duration: span.duration,
               startTimestamp: new Date(span.start_time).getTime(),
               hasError: Boolean(span.error_info),
+              isInSearch: searchIds.has(span.id),
             },
             isFolder: true,
             index: span.id,
@@ -204,7 +219,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     });
 
     return retVal;
-  }, [trace, filteredTraceSpans]);
+  }, [filteredTraceSpans, trace, searchIds]);
 
   const viewState = useMemo(
     () => ({

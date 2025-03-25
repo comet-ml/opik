@@ -54,6 +54,18 @@
     padding: 8px 24px 8px 16px;
     height: 100%;
 
+    &.search {
+      &:after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 2px;
+        background: blue;
+      }
+    }
+
     .detailsContainerWithArrow {
       width: var(--details-container-width, 65%);
       min-width: 100px;

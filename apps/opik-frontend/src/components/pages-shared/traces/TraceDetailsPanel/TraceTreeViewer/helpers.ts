@@ -75,8 +75,8 @@ const getData = (field: FILTER_FIELDS, data: Trace | Span) => {
     case FILTER_FIELDS.INPUT:
     case FILTER_FIELDS.OUTPUT:
     case FILTER_FIELDS.METADATA:
-      return data[field]
-        ? JSON.stringify(data.metadata).toLowerCase().toLowerCase()
+      return get(data, field, false)
+        ? JSON.stringify(get(data, field, "")).toLowerCase()
         : "";
   }
 };
