@@ -66,7 +66,7 @@ public class AuthCredentialsCacheServiceTest {
                 arguments(named("null quotas", null)),
                 arguments(named("empty quotas", List.of())),
                 arguments(named("valid quotas", List.of(Quota.builder()
-                        .type(Quota.QuotaType.SPAN_COUNT)
+                        .type(Quota.QuotaType.OPIK_SPAN_COUNT)
                         .limit(25_000)
                         .used(24_999)
                         .build()))));
