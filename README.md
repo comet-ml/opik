@@ -83,25 +83,25 @@ On Linux or Mac do:
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
-# Move into the project directory
+# Navigate to the repository
 cd opik
 
 # Start the Opik platform
 ./opik.sh
 ```
 
-On windonw do:
+On Windows do:
 ```powershell
-
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
-# Move into the project directory
+# Navigate to the repository
 cd opik
 
 # Start the Opik platform
 powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
 ```
+
 Use the `--help` or `--info` options to troubleshoot issues.
 
 Once all is up and running, you can now visit [localhost:5173](http://localhost:5173) on your browser!
