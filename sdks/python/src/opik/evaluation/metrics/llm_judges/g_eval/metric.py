@@ -192,15 +192,14 @@ class GEval(base_metric.BaseMetric):
                 linear_probs_sum += linear_prob
                 weighted_score_sum += linear_prob * score
 
-            
             if linear_probs_sum != 0.0:
                 final_score: float = weighted_score_sum / linear_probs_sum / 10
             else:
                 # Handle cases where we can't find any matching tokens in the top_log_probs
                 if not log_probs_token.isdecimal():
                     raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)
-                
-                final_score : float = int(log_probs_token) / 10
+
+                final_score = int(log_probs_token) / 10
 
             if not (0.0 <= final_score <= 1.0):
                 raise ValueError
