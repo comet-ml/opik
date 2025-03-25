@@ -34,6 +34,7 @@ const RuleRowActionsCell: React.FC<CellContext<EvaluatorsRule, unknown>> = (
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className="justify-end p-0"
+      stopClickPropagation
     >
       <AddEditRuleDialog
         key={`add-${resetKeyRef.current}`}
@@ -58,11 +59,7 @@ const RuleRowActionsCell: React.FC<CellContext<EvaluatorsRule, unknown>> = (
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          className="w-52"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
             onClick={() => {
               setOpen(2);
