@@ -5,12 +5,22 @@ import {
   TreeItem,
   TreeItemIndex,
 } from "react-complex-tree";
-import { BASE_TRACE_DATA_TYPE, Span, Trace } from "@/types/traces";
+
+import {
+  addAllParentIds,
+  constructDataMapAndSearchIds,
+  searchFunction,
+  getSpansWithLevel,
+  TreeItemWidthObject,
+} from "./helpers";
 import { treeRenderers } from "./treeRenderers";
+import { BASE_TRACE_DATA_TYPE, Span, Trace } from "@/types/traces";
 import { getTextWidth } from "@/lib/utils";
 import { SPANS_COLORS_MAP, TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import { Button } from "@/components/ui/button";
 import useDeepMemo from "@/hooks/useDeepMemo";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import NoData from "@/components/shared/NoData/NoData";
 
 type SpanWithMetadata = Omit<Span, "type"> & {
   type: BASE_TRACE_DATA_TYPE;
@@ -22,6 +32,7 @@ type SpanWithMetadata = Omit<Span, "type"> & {
   maxEndTime?: number;
   maxDuration?: number;
   hasError?: boolean;
+  isInSearch?: boolean;
 };
 
 type TreeData = Record<string, TreeItem<SpanWithMetadata>>;
@@ -33,36 +44,13 @@ type TraceTreeViewerProps = {
   onSelectRow: (id: string) => void;
 };
 
-type ItemWidthObject = {
-  id: string;
-  name: string;
-  parentId?: string;
-  children: ItemWidthObject[];
-  level?: number;
-};
-
-const getSpansWithLevel = (
-  item: ItemWidthObject,
-  accumulator: ItemWidthObject[] = [],
-  level = 0,
-) => {
-  accumulator.push({
-    ...item,
-    level,
-  });
-
-  if (item.children) {
-    item.children.forEach((i) => getSpansWithLevel(i, accumulator, level + 1));
-  }
-  return accumulator;
-};
-
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   trace,
   spans,
   rowId,
   onSelectRow,
 }) => {
+  const [search, setSearch] = useState("");
   const traceSpans = useMemo(() => spans ?? [], [spans]);
 
   const [expandedTraceSpans, setExpandedTraceSpans] = useState<TreeItemIndex[]>(
@@ -92,7 +80,50 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trace.id, spanIds]);
 
+  const noSearch = !search;
+
+  const predicate = useCallback(
+    (data: Span | Trace) => {
+      if (!search) return true;
+      const searchValue = search.toLowerCase();
+      return searchValue ? searchFunction(searchValue, data) : true;
+    },
+    [search],
+  );
+
+  const { filteredTraceSpans, searchIds } = useMemo(() => {
+    const retVal: {
+      searchIds: Set<string>;
+      filteredTraceSpans: Span[] | null;
+    } = {
+      searchIds: new Set(),
+      filteredTraceSpans: traceSpans,
+    };
+
+    if (noSearch) return retVal;
+
+    const [dataMap, searchIds] = constructDataMapAndSearchIds(
+      trace,
+      traceSpans,
+      predicate,
+    );
+    const parentIds = addAllParentIds(searchIds, dataMap);
+
+    retVal.searchIds = searchIds;
+    retVal.filteredTraceSpans =
+      searchIds.size === 0
+        ? null
+        : traceSpans.filter(
+            (traceSpan) =>
+              searchIds.has(traceSpan.id) || parentIds.has(traceSpan.id),
+          );
+
+    return retVal;
+  }, [trace, traceSpans, predicate, noSearch]);
+
   const treeData = useMemo(() => {
+    if (!filteredTraceSpans) return null;
+
     const sharedData = {
       maxStartTime: new Date(trace.start_time).getTime(),
       maxEndTime: new Date(trace.end_time).getTime(),
@@ -122,11 +153,12 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
           duration: trace.duration,
           name: trace.name,
           hasError: Boolean(trace.error_info),
+          isInSearch: searchIds.has(trace.id),
         },
       },
     };
 
-    const retVal = traceSpans
+    const retVal = filteredTraceSpans
       .sort((s1, s2) => s1.start_time.localeCompare(s2.start_time))
       .reduce<TreeData>((accumulator, span: Span) => {
         const spanColor = SPANS_COLORS_MAP[span.type];
@@ -143,6 +175,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
               duration: span.duration,
               startTimestamp: new Date(span.start_time).getTime(),
               hasError: Boolean(span.error_info),
+              isInSearch: searchIds.has(span.id),
             },
             isFolder: true,
             index: span.id,
@@ -151,7 +184,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
         };
       }, acc);
 
-    traceSpans.forEach((span: Span) => {
+    filteredTraceSpans.forEach((span: Span) => {
       const directParentKey = span.parent_span_id;
 
       if (!directParentKey) {
@@ -163,7 +196,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     });
 
     return retVal;
-  }, [trace, traceSpans]);
+  }, [filteredTraceSpans, trace, searchIds]);
 
   const viewState = useMemo(
     () => ({
@@ -177,13 +210,13 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
 
   const maxWidth = useMemo(() => {
     const map: Record<string, number | undefined> = {};
-    const list: ItemWidthObject[] = traceSpans.map((s) => ({
+    const list: TreeItemWidthObject[] = traceSpans.map((s) => ({
       id: s.id,
       name: s.name || "",
       parentId: s.parent_span_id,
       children: [],
     }));
-    const rootElement: ItemWidthObject = {
+    const rootElement: TreeItemWidthObject = {
       id: trace.id,
       name: trace.name,
       children: [],
@@ -232,49 +265,75 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
 
   return (
     <div
-      className="size-full max-w-full overflow-auto py-4"
+      className="relative size-full max-w-full overflow-auto pb-4"
       style={
         {
           "--details-container-width": `${maxWidth}px`,
         } as React.CSSProperties
       }
     >
-      <div className="min-w-[400px] max-w-full overflow-x-hidden">
-        <div className="flex flex-row items-end gap-2 px-6 py-2">
+      <div className="mt-4 min-w-[400px] max-w-full">
+        <div className="mt-2 flex flex-row items-end gap-2 px-6">
           <div className="comet-title-s">Trace spans</div>
           <div className="comet-body-s pb-[3px] text-muted-slate">
             <div>{traceSpans.length} spans</div>
           </div>
         </div>
-        <div className="px-4 py-2">
-          <Button onClick={toggleExpandAll} variant="ghost" size="sm">
-            {isAllExpended ? "Collapse all" : "Expand all"}
-          </Button>
+        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 bg-white px-6 pb-4 pt-3">
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search}
+              setSearchText={setSearch}
+              placeholder="Search by all fields"
+              dimension="sm"
+            ></SearchInput>
+          </div>
+          <div className="flex items-center gap-2">
+            {noSearch && (
+              <Button
+                onClick={toggleExpandAll}
+                variant="ghost"
+                size="sm"
+                className="-mr-3"
+              >
+                {isAllExpended ? "Collapse all" : "Expand all"}
+              </Button>
+            )}
+          </div>
         </div>
 
-        <ControlledTreeEnvironment
-          items={treeData}
-          onFocusItem={(item) => onSelectRow(item.index as string)}
-          viewState={viewState}
-          onExpandItem={(item) =>
-            setExpandedTraceSpans((prev) => [...prev, item.index])
-          }
-          onCollapseItem={(item) =>
-            setExpandedTraceSpans(
-              expandedTraceSpans.filter(
-                (expandedItemIndex) => expandedItemIndex !== item.index,
-              ),
-            )
-          }
-          renderDepthOffset={treeRenderers.renderDepthOffset}
-          renderTreeContainer={treeRenderers.renderTreeContainer}
-          renderItemsContainer={treeRenderers.renderItemsContainer}
-          renderItem={treeRenderers.renderItem}
-          renderItemArrow={treeRenderers.renderItemArrow}
-          getItemTitle={(item) => item.data.name}
-        >
-          <Tree treeId="trace-view" rootItem={"root"} treeLabel="Trace tree" />
-        </ControlledTreeEnvironment>
+        {treeData ? (
+          <ControlledTreeEnvironment
+            items={treeData}
+            onFocusItem={(item) => onSelectRow(item.index as string)}
+            viewState={viewState}
+            onExpandItem={(item) =>
+              setExpandedTraceSpans((prev) => [...prev, item.index])
+            }
+            onCollapseItem={(item) =>
+              setExpandedTraceSpans(
+                expandedTraceSpans.filter(
+                  (expandedItemIndex) => expandedItemIndex !== item.index,
+                ),
+              )
+            }
+            renderDepthOffset={treeRenderers.renderDepthOffset}
+            renderTreeContainer={treeRenderers.renderTreeContainer}
+            renderItemsContainer={treeRenderers.renderItemsContainer}
+            renderItem={treeRenderers.renderItem}
+            renderItemArrow={treeRenderers.renderItemArrow}
+            getItemTitle={(item) => item.data.name}
+            canSearch={false}
+          >
+            <Tree
+              treeId="trace-view"
+              rootItem={"root"}
+              treeLabel="Trace tree"
+            />
+          </ControlledTreeEnvironment>
+        ) : (
+          <NoData message="No search results" icon={null} />
+        )}
       </div>
     </div>
   );
