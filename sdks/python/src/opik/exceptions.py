@@ -64,6 +64,12 @@ class GuardrailValidationFailed(OpikException):
         validation_results: List["schemas.ValidationResult"],
         failed_validations: List["schemas.ValidationResult"],
     ):
+        self.message = message
         self.validation_results = validation_results
         self.failed_validations = failed_validations
         super().__init__(message)
+
+    def __str__(self) -> str:
+        return (
+            f"{self.message}. Failed validations: {self.failed_validations}\n"
+        )
