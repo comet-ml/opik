@@ -16,20 +16,43 @@ Before running the installation, make sure you have Docker and Docker Compose in
 
 ## Installation
 
-To install Opik, you will need to clone the Opik repository and run the `docker-compose.yaml` file:
+To install Opik, you will need to clone the Opik repository and run the following commands:
 
+<Tabs>
+ <Tab value="Linux / Mac" title="Linux / Mac">
 ```bash
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
-# Navigate to the opik/deployment/docker-compose directory
-cd opik/deployment/docker-compose
+# Navigate to the opik folder
+
+cd opik
 
 # Start the Opik platform
-docker compose up --detach
-```
+
+./opik.sh
+
+````
 
 Opik will now be available at [http://localhost:5173](http://localhost:5173)
+</Tab>
+<Tab value="Windows" title="Windows">
+
+```powershell
+# Clone the Opik repository
+git clone https://github.com/comet-ml/opik.git
+
+# Navigate to the opik folder
+cd opik
+
+# Start the Opik platform
+powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+````
+
+Opik will now be available at [http://localhost:5173](http://localhost:5173)
+
+</Tab>
+</Tabs>
 
 <Tip>
 In order to use the Opik Python SDK with your local Opik instance, you will need to run:
@@ -54,54 +77,85 @@ This will create a `~/.opik.config` file that will store the URL of your local O
 
 All the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.
 
-## Starting, stopping
+## Stopping the Opik platform
 
-<Note>All the `docker compose` commands should be run from the `opik/deployment/docker-compose` directory.</Note>
+You can stop the Opik server by running the following commands:
 
-The `docker compose up` command can be used to install, start and upgrade Opik:
-
-```bash
-# Start, upgrade or restart the Opik platform
-docker compose up --detach
-```
-
-To stop Opik, you can run:
+<Tabs>
+ <Tab value="Linux / Mac" title="Linux / Mac">
 
 ```bash
-# Stop the Opik platform
-docker compose down
+# Ensure you are running this command for the root of the Opik repository you cloned
+./opik.sh --stop
 ```
 
-**Note:** You can safely start and stop the Opik platform without losing any data.
+</Tab>
+ <Tab value="Windows" title="Windows">
 
-## Upgrading Opik
+```powershell
+# Ensure you are running this command for the root of the Opik repository you cloned
+powershell -ExecutionPolicy ByPass -c ".\opik.ps1 --stop"
+```
 
-To upgrade Opik, you can run the following command:
+</Tab>
+</Tabs>
+
+**Note:** You can safely stop the Opik platform without losing any data.
+
+## Upgrading and restarting the Opik platform
+
+To upgrade or restart the Opik platform, you can simply run the `opik` script again:
+
+<Tabs>
+ <Tab value="Linux / Mac" title="Linux / Mac">
 
 ```bash
-# Navigate to the opik/deployment/docker-compose directory
-cd opik/deployment/docker-compose
-
-# Update the repository to pull the most recent docker compose file
-git pull
-
-# Update the docker compose image to get the most recent version of Opik
-docker compose pull
-
-# Restart the Opik platform with the latest changes
-docker compose up --detach
+# Ensure you are running this command for the root of the Opik repository you cloned
+./opik.sh
 ```
+
+</Tab>
+ <Tab value="Windows" title="Windows">
+
+```powershell
+# Ensure you are running this command for the root of the Opik repository you cloned
+powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+```
+
+</Tab>
+</Tabs>
 
 <Tip>
   Since the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik.
   You can also safely start and stop the Opik platform without losing any data.
 </Tip>
 
-## Removing Opik
+## Advanced configuration - Docker compose
+
+Using Docker Compose directly instead of using the `opik.sh` or `opik.ps1`
+scripts provides you with some additional options.
+
+### Starting Opik with Docker Compose
+
+Instead of using the `opik.sh` or `opik.ps1` scripts, you can also run The
+`docker compose` command directly:
+
+```bash
+# Navigate to the opik/deployment/docker-compose directory
+cd opik/deployment/docker-compose
+
+# Start, upgrade or restart the Opik platform
+docker compose up --detach
+```
+
+### Uninstalling Opik
 
 To remove Opik, you will need to remove the Opik containers and volumes:
 
 ```bash
+# Navigate to docker compose folder
+cd deployment/docker-compose
+
 # Remove the Opik containers and volumes
 docker compose down --volumes
 ```
@@ -111,11 +165,10 @@ docker compose down --volumes
   this option unless you are sure that you will not need any of the data stored in the Opik platform.
 </Warning>
 
-## Advanced configuration
-
 ### Running a specific version of Opik
 
-You can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:
+You can run a specific version of Opik by setting the `OPIK_VERSION` environment
+variable:
 
 ```bash
 OPIK_VERSION=latest docker compose up
