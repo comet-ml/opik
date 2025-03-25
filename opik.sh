@@ -67,11 +67,6 @@ start_missing_containers() {
     fi
   done
 
-  if [ "$all_running" = true ]; then
-    echo "🚀 All required containers are already running!"
-    return
-  fi
-
   echo "🔄 Starting missing containers..."
   cd "$script_dir/deployment/docker-compose"
   docker compose up -d
@@ -110,8 +105,6 @@ start_missing_containers() {
       fi
     done
   done
-
-  echo "✅ All required containers are now running!"
 }
 
 stop_containers() {
@@ -130,7 +123,7 @@ print_banner() {
   echo ""
   echo "╔═════════════════════════════════════════════════════════════════╗"
   echo "║                                                                 ║"
-  echo "║                  🚀 OPIK PLATFORM 🚀                            ║"
+  echo "║                       🚀 OPIK PLATFORM 🚀                       ║"
   echo "║                                                                 ║"
   echo "╠═════════════════════════════════════════════════════════════════╣"
   echo "║                                                                 ║"
@@ -140,6 +133,8 @@ print_banner() {
   echo "║     $ui_url                                       ║"
   echo "║                                                                 ║"
   echo "║  🛠️  Configure the Python SDK:                                   ║"
+  echo "║     \$ python --version                                          ║"
+  echo "║     \$ pip install opik                                          ║"
   echo "║     \$ opik configure                                            ║"
   echo "║                                                                 ║"
   echo "║  📚 Documentation: https://www.comet.com/docs/opik/             ║"
@@ -165,7 +160,7 @@ case "$1" in
       print_banner
       exit 0
     else
-      echo "⚠️  Some containers are not running/healthy. Please run 'opik.sh' to start them."
+      echo "⚠️  Some containers are not running/healthy. Please run './opik.sh' to start them."
       exit 1
     fi
     ;;
@@ -187,7 +182,7 @@ case "$1" in
     if check_containers_status; then
       print_banner
     else
-      echo "⚠️  Some containers are still not healthy. Please check manually using 'opik.sh --verify'"
+      echo "⚠️  Some containers are still not healthy. Please check manually using './opik.sh --verify'"
       exit 1
     fi
     ;;
@@ -199,7 +194,7 @@ case "$1" in
     if check_containers_status "true"; then
       print_banner
     else
-      echo "⚠️  Some containers are still not healthy. Please check manually using 'opik.sh --verify'"
+      echo "⚠️  Some containers are still not healthy. Please check manually using './opik.sh --verify'"
       exit 1
     fi
     ;;
