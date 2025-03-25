@@ -13,6 +13,8 @@ registry: &registry ghcr.io/comet-ml/opik
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
 
+demoDataJob: true
+
 component:
   backend:
     enabled: true
@@ -33,13 +35,13 @@ component:
       image: curlimages/curl:8.12.1
       command: ["/bin/sh", "-c"]
       args: ['while [ $(curl -ksw "%{http_code}" "http://clickhouse-opik-clickhouse:8123" -o /dev/null) -ne 200 ]; do sleep 5; echo "Clickhouse is not available. Waiting for the Clickhouse..."; done']
-    # livenessProbe:
-    #   path: /health-check?name=all&type=alive
-    #   port:  8080
-    # readinessProbe:
-    #   path: /health-check?name=all&type=ready
-    #   port:  8080
-    #   initialDelaySeconds: 20
+    livenessProbe:
+      path: /health-check?name=all&type=alive
+      port:  8080
+    readinessProbe:
+      path: /health-check?name=all&type=ready
+      port:  8080
+      initialDelaySeconds: 20
 
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
@@ -135,7 +137,14 @@ component:
     ingress:
       enabled: false
 
-    
+    livenessProbe:
+      path: /health-check
+      port:  8080
+    readinessProbe:
+      path: /health-check
+      port:  8080
+      initialDelaySeconds: 20
+
   frontend:
     enabled: true
     serviceAccount: 
