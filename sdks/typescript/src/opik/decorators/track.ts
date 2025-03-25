@@ -4,7 +4,9 @@ import { logger } from "@/utils/logger";
 import { SpanType } from "@/rest_api/api/types/SpanType";
 import { Span } from "@/tracer/Span";
 import { Trace } from "@/tracer/Trace";
-import { AsyncLocalStorage } from "node:async_hooks";
+// import { AsyncLocalStorage } from "node:async_hooks";
+/* tslint:disable */
+/* eslint-disable */
 
 type TrackContext =
   | {
@@ -15,7 +17,13 @@ type TrackContext =
 
 const DEFAULT_TRACK_NAME = "track.decorator";
 
-const trackStorage = new AsyncLocalStorage<TrackContext>();
+//
+const trackStorage = {
+  getStore: () => ({
+    span: undefined,
+    trace: undefined,
+  }),
+};
 
 export const getTrackContext = (): Required<TrackContext> | undefined => {
   const { span, trace } = trackStorage.getStore() || {};
@@ -179,67 +187,9 @@ function executeTrack<T extends (...args: any[]) => any>(
     projectName?: string;
     type?: SpanType;
   } = {},
-  originalFn: T
+  originalFn: T,
 ): T {
-  const wrappedFn = function (this: any, ...args: any[]): ReturnType<T> {
-    const context = trackStorage.getStore();
-    const { span, trace } = logSpan({
-      name: name ?? (originalFn.name || DEFAULT_TRACK_NAME),
-      parentSpan: context?.span,
-      projectName,
-      trace: context?.trace,
-      type,
-    });
-    const isRootSpan = !context;
-    const fnThis = this as any;
-
-    return trackStorage.run({ span, trace }, () => {
-      try {
-        logStart({ args, span, trace: isRootSpan ? trace : undefined });
-
-        const result = originalFn.apply(fnThis, args);
-
-        if (isPromise(result)) {
-          return result.then(
-            (res: any) => {
-              logSuccess({
-                span,
-                result: res,
-                trace: isRootSpan ? trace : undefined,
-              });
-              return res;
-            },
-            (err) => {
-              logError({
-                span,
-                error: err,
-                trace: isRootSpan ? trace : undefined,
-              });
-
-              throw err;
-            }
-          ) as ReturnType<T>;
-        }
-
-        logSuccess({
-          span,
-          result,
-          trace: isRootSpan ? trace : undefined,
-        });
-
-        return result;
-      } catch (error) {
-        logError({
-          span,
-          error,
-          trace: isRootSpan ? trace : undefined,
-        });
-        throw error;
-      }
-    });
-  };
-
-  return wrappedFn as T;
+  return (() => {}) as T;
 }
 
 type TrackOptions = {
@@ -252,7 +202,7 @@ type OriginalFunction = (...args: any[]) => any;
 
 export function track(
   optionsOrOriginalFunction: TrackOptions | OriginalFunction,
-  originalFunction?: OriginalFunction
+  originalFunction?: OriginalFunction,
 ) {
   if (typeof optionsOrOriginalFunction === "function") {
     return executeTrack({}, optionsOrOriginalFunction);
