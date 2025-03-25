@@ -3,6 +3,7 @@ from . import guard
 from .. import schemas
 import functools
 
+
 class PII(guard.Guard):
     """
     Guard that validates text for personally identifiable information (PII).
@@ -13,7 +14,7 @@ class PII(guard.Guard):
         blocked_entities: Optional[List[str]] = None,
         language: str = "en",
         threshold: float = 0.5,
-    ):
+    ) -> None:
         """
         Initialize a PII guard.
 

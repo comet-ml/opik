@@ -3,6 +3,7 @@ from . import guard
 from .. import schemas
 import functools
 
+
 class Topic(guard.Guard):
     """
     Guard that validates text against a list of topics.
@@ -15,7 +16,7 @@ class Topic(guard.Guard):
         allowed_topics: Optional[List[str]] = None,
         restricted_topics: Optional[List[str]] = None,
         threshold: float = 0.5,
-    ):
+    ) -> None:
         """
         Initialize a Topic guard.
 
@@ -24,8 +25,11 @@ class Topic(guard.Guard):
             restricted_topics: List of topics that are restricted (text must not match any)
             threshold: Confidence threshold for topic detection (default: 0.5)
 
+        Raises:
+            ValueError: If both allowed_topics and restricted_topics are None
+
         Note:
-            At least one of allowed_topics or restricted_topics must be provided, but not both.
+            At least one of allowed_topics or restricted_topics must be provided.
         """
         if allowed_topics is None and restricted_topics is None:
             raise ValueError("Must specify either allowed_topics or restricted_topics")
