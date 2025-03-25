@@ -70,6 +70,4 @@ class GuardrailValidationFailed(OpikException):
         super().__init__(message)
 
     def __str__(self) -> str:
-        return (
-            f"{self.message}. Failed validations: {self.failed_validations}\n"
-        )
+        return f"{self.message}. Failed validations: {self.failed_validations}\n"
