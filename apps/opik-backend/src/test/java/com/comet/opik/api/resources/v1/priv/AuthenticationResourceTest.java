@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AuthDetailsHolder;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.WorkspaceNameHolder;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -242,11 +243,11 @@ class AuthenticationResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
                 if (expectedStatus == 200) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-                    assertThat(actualResponse.readEntity(String.class)).isEqualTo(workspaceName);
+                    assertThat(actualResponse.readEntity(WorkspaceNameHolder.class).workspaceName())
+                            .isEqualTo(workspaceName);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                     assertThat(actualError.getMessage()).isEqualTo(expectedErrorMessage);
                 }
