@@ -39,29 +39,37 @@ def preload_containers():
     # remove containers when application ends
     atexit.register(cleanup_containers)
 
-def ensure_container_pool_filled():
-    def running_containers():
-        return client.containers.list(filters={
-            "label": f"managed_by={instance_id}",
-            "status": "running"
-        })
+def running_containers():
+    return client.containers.list(filters={
+        "label": f"managed_by={instance_id}",
+        "status": "running"
+    })
 
+def ensure_container_pool_filled():
     with container_pool_creation_lock:
         while len(running_containers()) < PRELOADED_CONTAINERS:
             logger.warning(f"not enough containers running; creating more...")
             create_container()
 
-
 def cleanup_containers():
+    # First: remove containers from the pool
     while not container_pool.empty():
         try:
             container = container_pool.get(timeout=EXEC_TIMEOUT)
-            # allow 1 second for the container to end by itself
             logger.info(f"Stopping and removing container {container.id}")
             container.stop(timeout=1)
             container.remove(force=True)
         except Exception as e:
-            logger.error(f"Failed to remove container due to {e}. Retrying.")
+            logger.error(f"Failed to remove container from pool due to {e}. Retrying.")
+
+    # Then: find and clean up any zombie running containers owned by this instance
+    for container in running_containers():
+        try:
+            logger.info(f"Cleaning up untracked container {container.id}")
+            container.stop(timeout=1)
+            container.remove(force=True)
+        except Exception as e:
+            logger.error(f"Failed to remove zombie container {container.id}: {e}")
 
 def create_container():
     new_container = client.containers.run(
