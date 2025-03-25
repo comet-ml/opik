@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from . import guard
 from .. import schemas
-
+import functools
 
 class PII(guard.Guard):
     """
@@ -26,6 +26,7 @@ class PII(guard.Guard):
         self._language = language
         self._threshold = threshold
 
+    @functools.lru_cache()
     def get_validation_configs(self) -> List[Dict[str, Any]]:
         """
         Get the validation configuration for PII detection.
