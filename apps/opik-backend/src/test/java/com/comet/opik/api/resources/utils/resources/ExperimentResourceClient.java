@@ -7,6 +7,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
@@ -63,14 +64,17 @@ public class ExperimentResourceClient {
     }
 
     public void createExperimentItem(Set<ExperimentItem> experimentItems, String apiKey, String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var response = callCreateExperimentItem(experimentItems, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callCreateExperimentItem(Set<ExperimentItem> experimentItems, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new ExperimentItemsBatch(experimentItems)))) {
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-        }
+                .post(Entity.json(new ExperimentItemsBatch(experimentItems)));
     }
 }

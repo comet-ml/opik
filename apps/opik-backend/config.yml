@@ -211,6 +211,12 @@ rateLimit:
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation Please try again later."
 
+# Configuration for usage limit. This is not enabled by default for open source installations.
+# In order to support that, the remote authentication server must contain a `quotas` object in its authentication
+# response.
+usageLimit:
+  # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
+  errorMessage: ${USAGE_LIMIT_ERROR_MESSAGE:-You have exceeded the usage limit for this operation.}
 
 # Configuration for anonymous usage reporting
 usageReport:
