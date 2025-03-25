@@ -16,12 +16,12 @@ public class QuotaLimitTestUtils {
                 arguments(null, false),
                 arguments(List.of(), false),
                 arguments(List.of(Quota.builder()
-                        .type(Quota.QuotaType.SPAN_COUNT)
+                        .type(Quota.QuotaType.OPIK_SPAN_COUNT)
                         .limit(25_000)
                         .used(24_999)
                         .build()), false),
                 arguments(List.of(Quota.builder()
-                        .type(Quota.QuotaType.SPAN_COUNT)
+                        .type(Quota.QuotaType.OPIK_SPAN_COUNT)
                         .limit(25_000)
                         .used(25_000)
                         .build()), true));
