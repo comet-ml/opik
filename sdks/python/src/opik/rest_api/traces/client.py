@@ -23,6 +23,9 @@ from ..errors.not_found_error import NotFoundError
 from ..types.trace_thread import TraceThread
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
+from ..types.trace_filter_public import TraceFilterPublic
+from ..errors.bad_request_error import BadRequestError
+from ..errors.unauthorized_error import UnauthorizedError
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -1213,6 +1216,101 @@ class TracesClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def search_traces(
+        self,
+        *,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[bytes]:
+        """
+        Search traces
+
+        Parameters
+        ----------
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
+
+        last_retrieved_id : typing.Optional[str]
+
+        limit : typing.Optional[int]
+            Max number of traces to be streamed
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.Iterator[bytes]
+            Traces stream or error during process
+        """
+        with self._client_wrapper.httpx_client.stream(
+            "v1/private/traces/search",
+            method="POST",
+            json={
+                "project_name": project_name,
+                "project_id": project_id,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters,
+                    annotation=typing.Sequence[TraceFilterPublic],
+                    direction="write",
+                ),
+                "last_retrieved_id": last_retrieved_id,
+                "limit": limit,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    for _chunk in _response.iter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                _response.read()
+                if _response.status_code == 400:
+                    raise BadRequestError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                if _response.status_code == 401:
+                    raise UnauthorizedError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def update_trace_comment(
         self,
@@ -2624,6 +2722,101 @@ class AsyncTracesClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def search_traces(
+        self,
+        *,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Search traces
+
+        Parameters
+        ----------
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
+
+        last_retrieved_id : typing.Optional[str]
+
+        limit : typing.Optional[int]
+            Max number of traces to be streamed
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.AsyncIterator[bytes]
+            Traces stream or error during process
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            "v1/private/traces/search",
+            method="POST",
+            json={
+                "project_name": project_name,
+                "project_id": project_id,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters,
+                    annotation=typing.Sequence[TraceFilterPublic],
+                    direction="write",
+                ),
+                "last_retrieved_id": last_retrieved_id,
+                "limit": limit,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                await _response.aread()
+                if _response.status_code == 400:
+                    raise BadRequestError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                if _response.status_code == 401:
+                    raise UnauthorizedError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def update_trace_comment(
         self,
