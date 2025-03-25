@@ -1,0 +1,99 @@
+name: Quickstart Guide Snippets Tests
+env:
+  OPIK_SENTRY_ENABLE: False
+  ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
+  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
+  ALLURE_ENDPOINT: https://comet.testops.cloud/
+  ALLURE_PROJECT_ID: 1
+  ALLURE_RESULTS: allure-results
+on:
+    workflow_dispatch:
+        inputs:
+            ALLURE_JOB_RUN_ID:
+                description: ALLURE_JOB_RUN_ID service parameter. Leave blank.
+            ALLURE_USERNAME:
+                description: ALLURE_USERNAME service parameter. Leave blank.
+                
+    pull_request:
+      paths:
+        - 'sdks/code_generation/fern/openapi/openapi.yaml'
+        - 'tests_end_to_end/**'
+    
+    
+    push:
+        branches:
+            'andrei/opik-1267/automation-for-quickstart-guide-snippets'
+
+run-name: Quickstart Guide Snippets Tests
+
+jobs:
+    run_tests:
+        name: "Quickstart Guide Snippets Tests"
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repo
+              uses: actions/checkout@v4
+              with:
+                ref: ${{ github.ref }}
+            
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: 3.12
+
+            - name: Install Opik
+              run: pip install opik
+
+            - name: Install Test Dependencies
+              run: |
+                pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+                pip install allure-pytest
+                playwright install
+          
+            - name: Install allurectl
+              uses: allure-framework/setup-allurectl@v1
+
+            - name: Install Opik (Local)
+              env:
+                OPIK_USAGE_REPORT_ENABLED: false
+              run: |
+                cd ${{ github.workspace }}/deployment/docker-compose
+                docker compose up -d --build
+                
+            - name: Check Docker pods are up (Local)
+              run: |
+                chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+                ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+              shell: bash
+
+            - name: Check backend health (Local)
+              run: |
+                chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
+                ./tests_end_to_end/installer_utils/check_backend.sh
+              shell: bash
+
+            - name: Check app is up via the UI (Local)
+              run: |
+                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
+            
+            - name: Run suite
+              env:
+                OPIK_BASE_URL: http://localhost:5173
+                OPIK_TEST_WORKSPACE: default
+                OPIK_TEST_PROJECT_NAME: Quickstart
+                OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+                AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+              run: |
+                allurectl watch -- pytest -s tests/QuickstartGuide --alluredir="${ALLURE_RESULTS}"
+
+            - name: Stop Opik server (Local)
+              if: always()
+              run: |
+                cd ${{ github.workspace }}/deployment/docker-compose
+                docker compose down
+                cd -
+
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
