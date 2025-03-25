@@ -33,7 +33,7 @@ def test_validate_with_no_matched_topics__validation_passed():
             "topics": ["finance", "healthcare", "politics"],
             "threshold": 0.7,
         },
-        "type": schemas.ValidationType.RESTRICTED_TOPIC,
+        "type": schemas.ValidationType.TOPIC_MATCH,
     }
 
 
@@ -62,7 +62,7 @@ def test_validate_with_matched_topics__validation_failed():
             "topics": ["finance", "healthcare", "politics"],
             "threshold": 0.7,
         },
-        "type": schemas.ValidationType.RESTRICTED_TOPIC,
+        "type": schemas.ValidationType.TOPIC_MATCH,
     }
 
 
@@ -85,7 +85,7 @@ def test_validate_with_custom_threshold__validation_failed():
             "scores": {"healthcare": 0.35},
         },
         "validation_config": {"topics": ["healthcare"], "threshold": 0.3},
-        "type": schemas.ValidationType.RESTRICTED_TOPIC,
+        "type": schemas.ValidationType.TOPIC_MATCH,
     }
 
 
@@ -108,7 +108,7 @@ def test_validate_with_default_threshold__validation_failed():
             "scores": {"finance": 0.51},
         },
         "validation_config": {"topics": ["finance"], "threshold": 0.5},
-        "type": schemas.ValidationType.RESTRICTED_TOPIC,
+        "type": schemas.ValidationType.TOPIC_MATCH,
     }
 
 
@@ -142,5 +142,5 @@ def test_multiple_topics_with_mixed_matches__validation_failed():
             "topics": ["finance", "healthcare", "politics", "technology"],
             "threshold": 0.6,
         },
-        "type": schemas.ValidationType.RESTRICTED_TOPIC,
+        "type": schemas.ValidationType.TOPIC_MATCH,
     }

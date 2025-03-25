@@ -6,14 +6,14 @@ import pydantic
 
 class ValidationType(str, enum.Enum):
     PII = "PII"
-    RESTRICTED_TOPIC = "RESTRICTED_TOPIC"
+    TOPIC_MATCH = "TOPIC_MATCH"
 
 
 class ValidationConfig(pydantic.BaseModel):
     pass
 
 
-class RestrictedTopicValidationConfig(ValidationConfig):
+class TopicMatchValidationConfig(ValidationConfig):
     topics: List[str] = pydantic.Field(
         min_items=1, description="A list of topics to check"
     )
@@ -41,10 +41,10 @@ class PIIValidationConfig(ValidationConfig):
     )
 
 
-class RestrictedTopicValidationRequest(pydantic.BaseModel):
+class TopicMatchValidationRequest(pydantic.BaseModel):
     text: str = pydantic.Field(description="The text to classify")
-    config: RestrictedTopicValidationConfig = pydantic.Field(
-        description="Configuration for the topic classification"
+    config: TopicMatchValidationConfig = pydantic.Field(
+        description="Configuration for the topic matching"
     )
 
 

@@ -199,13 +199,13 @@ def compare_concurrency_levels(
         )
 
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     # Get the directory where the script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
     # Construct the path to financial_article.txt in the same directory
     article_path = os.path.join(script_dir, "financial_article.txt")
-    
+
     with open(
         article_path,
         mode="rt",

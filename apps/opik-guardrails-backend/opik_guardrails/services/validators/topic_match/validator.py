@@ -7,12 +7,12 @@ from .. import base_validator
 import transformers
 
 
-class RestrictedTopicValidationDetails(pydantic.BaseModel):
+class TopicMatchValidationDetails(pydantic.BaseModel):
     matched_topics_scores: Dict[str, float]
     scores: Dict[str, float]
 
 
-class RestrictedTopicValidator(base_validator.BaseValidator):
+class TopicMatchValidator(base_validator.BaseValidator):
     """A wrapper for the zero-shot classification model."""
 
     def __init__(self, pipeline: transformers.Pipeline) -> None:
@@ -21,7 +21,7 @@ class RestrictedTopicValidator(base_validator.BaseValidator):
     def validate(
         self,
         text: str,
-        config: schemas.RestrictedTopicValidationConfig,
+        config: schemas.TopicMatchValidationConfig,
     ) -> schemas.ValidationResult:
         classification_result = self._classification_pipeline(text, config.topics)
         scores = {
@@ -31,16 +31,16 @@ class RestrictedTopicValidator(base_validator.BaseValidator):
             )
         }
 
-        relevant_topics_scores = {
+        matched_topics_scores = {
             label: score for label, score in scores.items() if score >= config.threshold
         }
 
         return schemas.ValidationResult(
-            validation_passed=len(relevant_topics_scores) == 0,
-            validation_details=RestrictedTopicValidationDetails(
-                matched_topics_scores=relevant_topics_scores,
+            validation_passed=len(matched_topics_scores) == 0,
+            validation_details=TopicMatchValidationDetails(
+                matched_topics_scores=matched_topics_scores,
                 scores=scores,
             ),
-            type=schemas.ValidationType.RESTRICTED_TOPIC,
+            type=schemas.ValidationType.TOPIC_MATCH,
             validation_config=config,
         )

@@ -15,10 +15,10 @@ guardrails_blueprint = flask.Blueprint("api", __name__, url_prefix="/api")
 def validate_topic() -> flask.Response:
     try:
         data = flask.request.get_json()
-        validated_request = schemas.RestrictedTopicValidationRequest(**data)
+        validated_request = schemas.TopicMatchValidationRequest(**data)
 
         validation_result = validation_engine.run_validator(
-            schemas.ValidationType.RESTRICTED_TOPIC,
+            schemas.ValidationType.TOPIC_MATCH,
             validated_request.text,
             validated_request.config,
         )
@@ -34,8 +34,8 @@ def validate_topic() -> flask.Response:
         ), 400
 
     except Exception as exception:
-        LOGGER.error(f"Classification failed: {str(exception)}", exc_info=True)
-        flask.abort(500, description=f"Classification failed: {str(exception)}")
+        LOGGER.error(f"Topic match validation failed: {str(exception)}", exc_info=True)
+        flask.abort(500, description=f"Topic match validation failed: {str(exception)}")
 
 
 @guardrails_blueprint.route("/validate-pii", methods=["POST"])
