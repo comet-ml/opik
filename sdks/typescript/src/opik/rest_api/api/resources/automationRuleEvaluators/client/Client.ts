@@ -136,17 +136,16 @@ export class AutomationRuleEvaluators {
     /**
      * Create automation rule evaluator
      *
-     * @param {OpikApi.AutomationRuleEvaluatorWrite} request
+     * @param {unknown} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
      *     await client.automationRuleEvaluators.createAutomationRuleEvaluator({
-     *         type: "llm_as_judge",
-     *         code: {}
+     *         "key": "value"
      *     })
      */
     public async createAutomationRuleEvaluator(
-        request: OpikApi.AutomationRuleEvaluatorWrite,
+        request?: unknown,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<void> {
         const _response = await core.fetcher({
@@ -170,7 +169,7 @@ export class AutomationRuleEvaluators {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.AutomationRuleEvaluatorWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: request,
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
@@ -297,7 +296,7 @@ export class AutomationRuleEvaluators {
         id: string,
         request: OpikApi.GetEvaluatorByIdRequest = {},
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<OpikApi.AutomationRuleEvaluatorPublic> {
+    ): Promise<unknown> {
         const { projectId } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -332,12 +331,7 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.AutomationRuleEvaluatorPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return _response.body;
         }
 
         if (_response.error.reason === "status-code") {
@@ -368,18 +362,17 @@ export class AutomationRuleEvaluators {
      * Update Automation Rule Evaluator by id
      *
      * @param {string} id
-     * @param {OpikApi.AutomationRuleEvaluatorUpdate} request
+     * @param {unknown} request
      * @param {AutomationRuleEvaluators.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
      *     await client.automationRuleEvaluators.updateAutomationRuleEvaluator("id", {
-     *         type: "llm_as_judge",
-     *         code: {}
+     *         "key": "value"
      *     })
      */
     public async updateAutomationRuleEvaluator(
         id: string,
-        request: OpikApi.AutomationRuleEvaluatorUpdate,
+        request?: unknown,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<void> {
         const _response = await core.fetcher({
@@ -403,7 +396,7 @@ export class AutomationRuleEvaluators {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.AutomationRuleEvaluatorUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: request,
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
