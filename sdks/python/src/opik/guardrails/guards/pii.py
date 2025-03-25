@@ -8,7 +8,12 @@ class PII(guard.Guard):
     Guard that validates text for personally identifiable information (PII).
     """
 
-    def __init__(self, blocked_entities: Optional[List[str]] = None):
+    def __init__(
+        self,
+        blocked_entities: Optional[List[str]] = None,
+        language: str = "en",
+        threshold: float = 0.5,
+    ):
         """
         Initialize a PII guard.
 
@@ -18,6 +23,8 @@ class PII(guard.Guard):
             Supported entities can be found here: https://microsoft.github.io/presidio/supported_entities/
         """
         self._blocked_entities = blocked_entities
+        self._language = language
+        self._threshold = threshold
 
     def get_validation_configs(self) -> List[Dict[str, Any]]:
         """
@@ -29,6 +36,10 @@ class PII(guard.Guard):
         return [
             {
                 "type": schemas.ValidationType.PII,
-                "config": {"blocked_entities": self._blocked_entities},
+                "config": {
+                    "blocked_entities": self._blocked_entities,
+                    "language": self._language,
+                    "threshold": self._threshold,
+                },
             }
         ]
