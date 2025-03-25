@@ -59,4 +59,11 @@ jobs:
           pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt -r ./unit/test_requirements.txt
 
       - name: Running SDK Unit Tests
-        run: python -m pytest --cov=src/opik -vv tests/unit/
+        run: python -m pytest --cov=src/opik -vv tests/unit/ --junitxml=${{ github.workspace }}/test_results.xml
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: failure()
+        with:
+          action_fail: true
+          files: ${{ github.workspace }}/test_results.xml
