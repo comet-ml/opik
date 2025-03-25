@@ -83,6 +83,8 @@ On Linux or Mac do:
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
+# Move into the project directory
+cd opik
 
 # Start the Opik platform
 ./opik.sh
@@ -94,6 +96,10 @@ On windonw do:
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
+# Move into the project directory
+cd opik
+
+# Start the Opik platform
 powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
 ```
 Use the `--help` or `--info` options to troubleshoot issues.
