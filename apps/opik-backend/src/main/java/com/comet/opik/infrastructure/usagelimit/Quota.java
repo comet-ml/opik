@@ -6,6 +6,6 @@ import lombok.Builder;
 @Builder
 public record Quota(int limit, int used, @NotNull QuotaType type) {
     public enum QuotaType {
-        SPAN_COUNT
+        OPIK_SPAN_COUNT
     }
 }
