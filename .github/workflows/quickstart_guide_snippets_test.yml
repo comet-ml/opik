@@ -75,6 +75,8 @@ jobs:
 
             - name: Check app is up via the UI (Local)
               run: |
+                cd ${{ github.workspace }}/tests_end_to_end
+                export PYTHONPATH='.'
                 pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
             
             - name: Run suite
