@@ -1,4 +1,7 @@
-from typing import Set
+from typing import Set, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opik.guardrails import schemas
 
 
 class OpikException(Exception):
@@ -50,3 +53,17 @@ class ExperimentNotFound(OpikException):
 
 class DatasetNotFound(OpikException):
     pass
+
+
+class GuardrailValidationFailed(OpikException):
+    """Exception raised when a guardrail validation fails."""
+
+    def __init__(
+        self,
+        message: str,
+        validation_results: List["schemas.ValidationResult"],
+        failed_validations: List["schemas.ValidationResult"],
+    ):
+        self.validation_results = validation_results
+        self.failed_validations = failed_validations
+        super().__init__(message)
