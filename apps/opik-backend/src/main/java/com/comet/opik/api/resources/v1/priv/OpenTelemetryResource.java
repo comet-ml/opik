@@ -6,6 +6,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -24,6 +25,8 @@ import java.util.List;
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+// TODO: Hiding The Open API definition for this resource as it's breaking Fern auto-generated classes.
+@Hidden
 @Tag(name = "OpenTelemetry Ingestion", description = "Resource to ingest Traces and Spans via OpenTelemetry")
 public class OpenTelemetryResource {
 
