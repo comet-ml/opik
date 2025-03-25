@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.within;
 
 public class TraceAssertions {
 
-    private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
+    public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
             "duration", "comments", "threadId"};
 

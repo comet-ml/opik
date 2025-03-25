@@ -127,6 +127,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -148,10 +149,6 @@ class TracesResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
-    private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
-            "duration",
-            "comments", "threadId"};
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
