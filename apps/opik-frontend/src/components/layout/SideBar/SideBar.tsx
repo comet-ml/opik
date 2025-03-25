@@ -390,8 +390,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         size="icon-2xs"
         onClick={() => setExpanded((s) => !s)}
         className={cn(
-          "absolute -right-3 top-2 hidden rounded-full z-50",
-          expanded ? "group-hover:flex" : "flex",
+          "absolute -right-3 top-2 hidden rounded-full z-50 group-hover:flex",
         )}
       >
         {expanded ? <ChevronLeft /> : <ChevronRight />}
