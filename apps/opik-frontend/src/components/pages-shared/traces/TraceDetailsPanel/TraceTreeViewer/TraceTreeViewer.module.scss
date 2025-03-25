@@ -15,7 +15,7 @@
     left: -10000px;
     top: 0;
     background: hsl(var(--border));
-    z-index: 10;
+    z-index: 5;
   }
 
   :global {
@@ -53,6 +53,16 @@
     display: flex;
     padding: 8px 24px 8px 16px;
     height: 100%;
+
+    &.search:after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 2px;
+      background: #2563eb;
+    }
 
     .detailsContainerWithArrow {
       width: var(--details-container-width, 65%);

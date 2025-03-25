@@ -1,8 +1,9 @@
 import React from "react";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
 import { InputProps } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const SEARCH_TEXT_DELAY = 300;
@@ -32,7 +33,7 @@ export const SearchInput = ({
         <Search className="size-3.5 text-muted-slate" />
       </div>
       <DebounceInput
-        className="pl-8"
+        className="px-8"
         delay={SEARCH_TEXT_DELAY}
         onValueChange={setSearchText as (value: unknown) => void}
         placeholder={placeholder}
@@ -42,6 +43,17 @@ export const SearchInput = ({
         dimension={dimension}
         data-testid="search-input"
       />
+      {searchText !== "" && (
+        <div className="absolute right-1 top-1/2 -translate-y-1/2">
+          <Button
+            variant="minimal"
+            size="icon-xs"
+            onClick={() => setSearchText("")}
+          >
+            <X />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
