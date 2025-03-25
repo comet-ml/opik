@@ -94,7 +94,7 @@ interface TraceDAO {
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
 
-    Mono<Long> getDailyTraces();
+    Mono<Long> getDailyTraces(List<UUID> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
 
@@ -498,6 +498,7 @@ class TraceDAOImpl implements TraceDAO {
                      COUNT(DISTINCT id) as trace_count
                  FROM traces
                  WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+                 <if(excluded_project_ids)>AND project_id NOT IN :excluded_project_ids<endif>
                  GROUP BY workspace_id
             ;
             """;
@@ -1479,8 +1480,7 @@ class TraceDAOImpl implements TraceDAO {
     @WithSpan
     public Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
 
-        var statement = connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID);
-
+        var statement = connection.createStatement(new ST(TRACE_COUNT_BY_WORKSPACE_ID).render());
         return Mono.from(statement.execute())
                 .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
                         .workspace(row.get("workspace_id", String.class))
@@ -1522,10 +1522,24 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Long> getDailyTraces() {
+    public Mono<Long> getDailyTraces(@NonNull List<UUID> excludedProjectIds) {
+        ST sql = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+
+        if (!excludedProjectIds.isEmpty()) {
+            sql.add("excluded_project_ids", excludedProjectIds);
+        }
+
         return asyncTemplate
                 .nonTransaction(
-                        connection -> Mono.from(connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID).execute()))
+                        connection -> {
+                            Statement statement = connection.createStatement(sql.render());
+
+                            if (!excludedProjectIds.isEmpty()) {
+                                statement.bind("excluded_project_ids", excludedProjectIds);
+                            }
+
+                            return Mono.from(statement.execute());
+                        })
                 .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("trace_count", Long.class)))
                 .reduce(0L, Long::sum);
     }
