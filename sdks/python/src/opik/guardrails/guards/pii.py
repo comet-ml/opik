@@ -37,7 +37,7 @@ class PII(guard.Guard):
             {
                 "type": schemas.ValidationType.PII,
                 "config": {
-                    "blocked_entities": self._blocked_entities,
+                    "entities": self._blocked_entities,
                     "language": self._language,
                     "threshold": self._threshold,
                 },
