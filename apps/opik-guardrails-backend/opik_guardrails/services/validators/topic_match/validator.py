@@ -35,8 +35,14 @@ class TopicMatchValidator(base_validator.BaseValidator):
             label: score for label, score in scores.items() if score >= config.threshold
         }
 
+        passed = (
+            len(matched_topics_scores) == 0
+            if config.mode == "restrict"
+            else len(matched_topics_scores) > 0
+        )
+
         return schemas.ValidationResult(
-            validation_passed=len(matched_topics_scores) == 0,
+            validation_passed=passed,
             validation_details=TopicMatchValidationDetails(
                 matched_topics_scores=matched_topics_scores,
                 scores=scores,

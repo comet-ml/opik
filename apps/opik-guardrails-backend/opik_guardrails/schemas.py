@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 
 import enum
 import pydantic
@@ -19,6 +19,9 @@ class TopicMatchValidationConfig(ValidationConfig):
     )
     threshold: float = pydantic.Field(
         0.5, description="A threshold value for classifier"
+    )
+    mode: Literal["restrict", "allow"] = pydantic.Field(
+        description="Mode for topic matching"
     )
 
 

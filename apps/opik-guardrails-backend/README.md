@@ -63,7 +63,8 @@ curl -X POST http://localhost:5000/api/validate-topic \
     "text": "This text is about artificial intelligence and machine learning.",
     "config": {
       "topics": ["politics", "religion", "artificial intelligence"],
-      "threshold": 0.5
+      "threshold": 0.5,
+      "mode": "restrict"
     }
   }'
 ```
@@ -73,15 +74,19 @@ Parameters:
 - `config`: Configuration for the topic classification (required)
   - `topics`: Array of topics to check against (required)
   - `threshold`: Confidence threshold for topic detection (default: 0.5)
+  - `mode`: Mode for topic matching, either "restrict" or "allow" (required)
+    - `restrict`: Validation passes if NONE of the topics match (used for content filtering)
+    - `allow`: Validation passes if at least one of the topics matches (used for content classification)
 
 Example response:
 ```json
 {
   "validation_passed": false,
-  "type": "RESTRICTED_TOPIC",
+  "type": "TOPIC_MATCH",
   "validation_config": {
     "topics": ["politics", "religion", "artificial intelligence"],
-    "threshold": 0.5
+    "threshold": 0.5,
+    "mode": "restrict"
   },
   "validation_details": {
     "matched_topics_scores": {
@@ -163,10 +168,11 @@ curl -X POST http://localhost:5000/api/validate \
     "text": "This text is about artificial intelligence. My name is John Doe and my email is john.doe@example.com.",
     "validations": [
       {
-        "type": "RESTRICTED_TOPIC",
+        "type": "TOPIC_MATCH",
         "config": {
           "topics": ["politics", "religion", "artificial intelligence"],
-          "threshold": 0.5
+          "threshold": 0.5,
+          "mode": "restrict"
         }
       },
       {
@@ -185,9 +191,9 @@ Parameters:
 - `text`: The text to validate (required)
 - `validations`: Array of validation instructions (required)
   - Each validation requires:
-    - `type`: Type of validation to perform (`RESTRICTED_TOPIC` or `PII`)
+    - `type`: Type of validation to perform (`TOPIC_MATCH` or `PII`)
     - `config`: Configuration specific to the validation type
-      - For `RESTRICTED_TOPIC` type: A RestrictedTopicValidationConfig object
+      - For `TOPIC_MATCH` type: A TopicMatchValidationConfig object
       - For `PII` type: A PIIValidationConfig object
 
 Example response:
@@ -197,10 +203,11 @@ Example response:
   "validations": [
     {
       "validation_passed": false,
-      "type": "RESTRICTED_TOPIC",
+      "type": "TOPIC_MATCH",
       "validation_config": {
         "topics": ["politics", "religion", "artificial intelligence"],
-        "threshold": 0.5
+        "threshold": 0.5,
+        "mode": "restrict"
       },
       "validation_details": {
         "matched_topics_scores": {

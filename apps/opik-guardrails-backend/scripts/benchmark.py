@@ -17,9 +17,10 @@ def send_classification_request(text, topics):
         "text": text,
         "validations": [
             {
-                "type": "RESTRICTED_TOPIC",
+                "type": "TOPIC_MATCH",
                 "config": {
                     "topics": topics,
+                    "mode": "restrict",
                 },
             },
             {
