@@ -377,6 +377,7 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
+
         return template.stream(dao::countTracesPerWorkspace)
                 .collectList()
                 .flatMap(items -> Mono.just(
@@ -416,7 +417,14 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
-        return dao.getDailyTraces();
+        Mono<List<UUID>> projects = Mono
+                .fromCallable(() -> projectService.findByNames(ProjectService.DEFAULT_WORKSPACE_ID, DemoData.PROJECTS)
+                        .stream()
+                        .map(Project::id)
+                        .toList())
+                .subscribeOn(Schedulers.boundedElastic());
+
+        return projects.switchIfEmpty(Mono.just(List.of())).flatMap(dao::getDailyTraces);
     }
 
     @Override
