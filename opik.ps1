@@ -94,11 +94,6 @@ function Start-MissingContainers {
         }
     }
 
-    if ($allRunning) {
-        Write-Host '[OK] All required containers are already running!'
-        return
-    }
-
     Write-Host '[INFO] Starting missing containers...'
     Set-Location -Path "$scriptDir\deployment\docker-compose"
     docker compose up -d | Where-Object { $_.Trim() -ne '' }
@@ -164,21 +159,23 @@ function Show-Banner {
     Write-Host ''
     Write-Host '╔═════════════════════════════════════════════════════════════════╗'
     Write-Host '║                                                                 ║'
-    Write-Host '║                     OPIK PLATFORM                               ║'
+    Write-Host '║                       🚀 OPIK PLATFORM 🚀                       ║'
     Write-Host '║                                                                 ║'
     Write-Host '╠═════════════════════════════════════════════════════════════════╣'
     Write-Host '║                                                                 ║'
-    Write-Host '║  All services started successfully!                             ║'
+    Write-Host '║  ✅ All services started successfully!                          ║'
     Write-Host '║                                                                 ║'
-    Write-Host '║  Access the UI:                                                 ║'
+    Write-Host '║  📊 Access the UI:                                              ║'
     Write-Host "║     $uiUrl                                       ║"
     Write-Host '║                                                                 ║'
-    Write-Host '║  Configure the Python SDK:                                      ║'
-    Write-Host '║     opik configure                                              ║'
+    Write-Host '║  🛠️  Configure the Python SDK:                                   ║'
+    Write-Host '║    - Be sure Python 3.x is installed and available via PATH     ║'
+    Write-Host '║    - `pip install opik` # (or `py -m pip install opik`)         ║'
+    Write-Host '║    - `opik configure`                                           ║'
     Write-Host '║                                                                 ║'
-    Write-Host '║  Documentation: https://www.comet.com/docs/opik/                ║'
+    Write-Host '║  📚 Documentation: https://www.comet.com/docs/opik/             ║'
     Write-Host '║                                                                 ║'
-    Write-Host '║  Need help? Join our community: https://chat.comet.com          ║'
+    Write-Host '║  💬 Need help? Join our community: https://chat.comet.com       ║'
     Write-Host '║                                                                 ║'
     Write-Host '╚═════════════════════════════════════════════════════════════════╝'
 }
