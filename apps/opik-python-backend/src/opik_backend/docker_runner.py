@@ -4,6 +4,8 @@ import json
 import logging
 import os
 from queue import Queue
+from threading import Lock
+from uuid6 import uuid7  # or uuid6 if preferred
 
 import docker
 
@@ -19,7 +21,13 @@ logger = logging.getLogger(__name__)
 
 client = docker.from_env()
 container_pool = Queue()
+container_pool_creation_lock = Lock()
 executor = concurrent.futures.ThreadPoolExecutor()
+
+instance_id = str(uuid7())
+container_labels={
+    "managed_by": instance_id,
+}
 
 def preload_containers():
     if not container_pool.empty():
@@ -27,21 +35,33 @@ def preload_containers():
         return
 
     logger.info(f"Preloading {PRELOADED_CONTAINERS} containers...")
-    for _ in range(PRELOADED_CONTAINERS):
-        create_container()
-
+    ensure_container_pool_filled()
     # remove containers when application ends
     atexit.register(cleanup_containers)
 
+def ensure_container_pool_filled():
+    def running_containers():
+        return client.containers.list(filters={
+            "label": f"managed_by={instance_id}",
+            "status": "running"
+        })
+
+    with container_pool_creation_lock:
+        while len(running_containers()) < PRELOADED_CONTAINERS:
+            logger.warning(f"not enough containers running; creating more...")
+            create_container()
+
+
 def cleanup_containers():
     while not container_pool.empty():
-        container = container_pool.get()
         try:
+            container = container_pool.get(timeout=EXEC_TIMEOUT)
             # allow 1 second for the container to end by itself
             logger.info(f"Stopping and removing container {container.id}")
+            container.stop(timeout=1)
             container.remove(force=True)
         except Exception as e:
-                logger.error(f"Failed to remove container {container.id}: {e}")
+            logger.error(f"Failed to remove container due to {e}. Retrying.")
 
 def create_container():
     new_container = client.containers.run(
@@ -52,6 +72,7 @@ def create_container():
         detach=True,
         network_disabled=True,
         security_opt=["no-new-privileges"],
+        labels=container_labels
     )
     container_pool.put(new_container)
 
@@ -59,13 +80,21 @@ def release_container(container):
     def async_release():
         try:
             logger.debug(f"Stopping container {container.id}. Will create a new one.")
-            container.stop()
-            container.remove()
+            container.stop(timeout=1)
+            container.remove(force=True)
             create_container()
         except Exception as e:
             logger.error(f"Error replacing container: {e}")
 
     executor.submit(async_release)
+
+def get_container():
+    while True:
+        try:
+            return container_pool.get(timeout=EXEC_TIMEOUT)
+        except Exception as e:
+            logger.warning(f"Couldn't get a container to execute after waiting for {EXEC_TIMEOUT}s. Ensuring we have enough and trying again.")
+            ensure_container_pool_filled()
 
 def run_scoring_in_docker_python_container(code, data):
     def execute_command():
@@ -76,7 +105,7 @@ def run_scoring_in_docker_python_container(code, data):
             tty=False,
         )
 
-    container = container_pool.get()
+    container = get_container()
     try:
         # Run exec_run() with a timeout using ThreadPoolExecutor
         with concurrent.futures.ThreadPoolExecutor() as executor:
