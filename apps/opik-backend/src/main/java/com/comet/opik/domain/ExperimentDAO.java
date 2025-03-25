@@ -474,13 +474,19 @@ class ExperimentDAO {
             """;
 
     private static final String EXPERIMENT_DAILY_BI_INFORMATION = """
-                SELECT
-                     workspace_id,
-                     created_by AS user,
-                     COUNT(DISTINCT id) AS experiment_count
+            SELECT
+                 workspace_id,
+                 created_by AS user,
+                 COUNT(DISTINCT id) AS experiment_count
+            FROM experiments
+            WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+            AND id NOT IN (
+                SELECT id
                 FROM experiments
-                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                GROUP BY workspace_id,created_by
+                WHERE workspace_id = :workspace_id
+                AND name IN :excluded_names
+            )
+            GROUP BY workspace_id, created_by
             ;
             """;
 
@@ -760,8 +766,10 @@ class ExperimentDAO {
     }
 
     private Publisher<? extends Result> getBiDailyData(Connection connection) {
-        var statement = connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION);
-        return statement.execute();
+        return connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
+                .bind("workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
+                .bind("excluded_names", DemoData.EXPERIMENTS)
+                .execute();
     }
 
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
@@ -839,7 +847,10 @@ class ExperimentDAO {
 
     public Mono<Long> getDailyCreatedCount() {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION).execute())
+                .flatMapMany(connection -> connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
+                        .bind("workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
+                        .bind("excluded_names", DemoData.EXPERIMENTS)
+                        .execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_count", Long.class)))
                 .reduce(0L, Long::sum);
     }

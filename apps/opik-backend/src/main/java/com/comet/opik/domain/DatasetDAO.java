@@ -135,11 +135,20 @@ public interface DatasetDAO {
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<DatasetLastExperimentCreated> datasets);
 
-    @SqlQuery("SELECT workspace_id, created_by AS user, COUNT(DISTINCT id) AS count " +
-            "FROM datasets " +
-            "WHERE created_at BETWEEN DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND CURDATE() " +
-            "GROUP BY workspace_id,created_by")
-    List<BiInformationResponse.BiInformation> getDatasetsBIInformation();
+    @SqlQuery("""
+                SELECT workspace_id, created_by AS user, COUNT(DISTINCT id) AS count
+                FROM datasets
+                WHERE created_at BETWEEN DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND CURDATE()
+                AND id NOT IN (
+                    SELECT id
+                    FROM datasets
+                    WHERE workspace_id = :workspace_id
+                    AND name IN (<excluded_names>)
+                )
+                GROUP BY workspace_id, created_by
+            """)
+    List<BiInformationResponse.BiInformation> getDatasetsBIInformation(@Bind("workspace_id") String workspaceId,
+            @BindList("excluded_names") List<String> excludedNames);
 
     @SqlUpdate("CREATE TEMPORARY TABLE experiment_dataset_ids_<table_name> (id CHAR(36) PRIMARY KEY)")
     void createTempTable(@Define("table_name") String tableName);
