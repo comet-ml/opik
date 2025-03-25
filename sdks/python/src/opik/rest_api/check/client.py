@@ -5,11 +5,12 @@ from ..core.client_wrapper import SyncClientWrapper
 from ..types.auth_details_holder import AuthDetailsHolder
 from ..core.request_options import RequestOptions
 from ..errors.unauthorized_error import UnauthorizedError
-from ..types.error_message import ErrorMessage
 from ..core.pydantic_utilities import parse_obj_as
 from ..errors.forbidden_error import ForbiddenError
+from ..types.error_message import ErrorMessage
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from ..types.workspace_name_holder import WorkspaceNameHolder
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -65,9 +66,74 @@ class CheckClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
                         ErrorMessage,
                         parse_obj_as(
                             type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def get_workspace_name(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> WorkspaceNameHolder:
+        """
+        User's default workspace name
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceNameHolder
+            Authentication resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.check.get_workspace_name()
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/auth/workspace",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    WorkspaceNameHolder,
+                    parse_obj_as(
+                        type_=WorkspaceNameHolder,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -145,9 +211,82 @@ class AsyncCheckClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
                         ErrorMessage,
                         parse_obj_as(
                             type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def get_workspace_name(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> WorkspaceNameHolder:
+        """
+        User's default workspace name
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceNameHolder
+            Authentication resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.check.get_workspace_name()
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/auth/workspace",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    WorkspaceNameHolder,
+                    parse_obj_as(
+                        type_=WorkspaceNameHolder,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )

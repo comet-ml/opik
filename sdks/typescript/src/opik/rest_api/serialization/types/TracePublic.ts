@@ -33,6 +33,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         ),
         comments: core.serialization.list(CommentPublic).optional(),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+        spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
         duration: core.serialization.number().optional(),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     });
@@ -57,6 +58,7 @@ export declare namespace TracePublic {
         feedback_scores?: FeedbackScorePublic.Raw[] | null;
         comments?: CommentPublic.Raw[] | null;
         total_estimated_cost?: number | null;
+        span_count?: number | null;
         duration?: number | null;
         thread_id?: string | null;
     }

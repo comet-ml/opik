@@ -30,6 +30,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore).optional()),
     comments: core.serialization.list(Comment).optional(),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+    spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
     duration: core.serialization.number().optional(),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
 });
@@ -55,6 +56,7 @@ export declare namespace Trace {
         feedback_scores?: FeedbackScore.Raw[] | null;
         comments?: Comment.Raw[] | null;
         total_estimated_cost?: number | null;
+        span_count?: number | null;
         duration?: number | null;
         thread_id?: string | null;
     }

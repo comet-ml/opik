@@ -30,6 +30,7 @@ class TracePublic(UniversalBaseModel):
     feedback_scores: typing.Optional[typing.List[FeedbackScorePublic]] = None
     comments: typing.Optional[typing.List[CommentPublic]] = None
     total_estimated_cost: typing.Optional[float] = None
+    span_count: typing.Optional[int] = None
     duration: typing.Optional[float] = pydantic.Field(default=None)
     """
     Duration in milliseconds as a decimal number to support sub-millisecond precision

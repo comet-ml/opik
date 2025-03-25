@@ -15,6 +15,7 @@ from ..core.serialization import convert_and_respect_annotation_metadata
 from ..types.feedback_public import FeedbackPublic
 from ..core.jsonable_encoder import jsonable_encoder
 from ..types.feedback_update import FeedbackUpdate
+from ..errors.conflict_error import ConflictError
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -112,14 +113,14 @@ class FeedbackDefinitionsClient:
 
         Examples
         --------
-        from Opik import FeedbackCreate_Categorical, OpikApi
+        from Opik import FeedbackCreate_Numerical, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
         client.feedback_definitions.create_feedback_definition(
-            request=FeedbackCreate_Categorical(),
+            request=FeedbackCreate_Numerical(),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -213,7 +214,7 @@ class FeedbackDefinitionsClient:
 
         Examples
         --------
-        from Opik import FeedbackUpdate_Categorical, OpikApi
+        from Opik import FeedbackUpdate_Numerical, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
@@ -221,7 +222,7 @@ class FeedbackDefinitionsClient:
         )
         client.feedback_definitions.update_feedback_definition(
             id="id",
-            request=FeedbackUpdate_Categorical(),
+            request=FeedbackUpdate_Numerical(),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -278,6 +279,16 @@ class FeedbackDefinitionsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
+            if _response.status_code == 409:
+                raise ConflictError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -327,6 +338,16 @@ class FeedbackDefinitionsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
+            if _response.status_code == 409:
+                raise ConflictError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -434,7 +455,7 @@ class AsyncFeedbackDefinitionsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi, FeedbackCreate_Categorical
+        from Opik import AsyncOpikApi, FeedbackCreate_Numerical
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -444,7 +465,7 @@ class AsyncFeedbackDefinitionsClient:
 
         async def main() -> None:
             await client.feedback_definitions.create_feedback_definition(
-                request=FeedbackCreate_Categorical(),
+                request=FeedbackCreate_Numerical(),
             )
 
 
@@ -551,7 +572,7 @@ class AsyncFeedbackDefinitionsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi, FeedbackUpdate_Categorical
+        from Opik import AsyncOpikApi, FeedbackUpdate_Numerical
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -562,7 +583,7 @@ class AsyncFeedbackDefinitionsClient:
         async def main() -> None:
             await client.feedback_definitions.update_feedback_definition(
                 id="id",
-                request=FeedbackUpdate_Categorical(),
+                request=FeedbackUpdate_Numerical(),
             )
 
 
@@ -630,6 +651,16 @@ class AsyncFeedbackDefinitionsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
+            if _response.status_code == 409:
+                raise ConflictError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
@@ -687,6 +718,16 @@ class AsyncFeedbackDefinitionsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return
+            if _response.status_code == 409:
+                raise ConflictError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)

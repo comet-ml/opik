@@ -10,6 +10,7 @@ export interface SpanSearchStreamRequestPublic {
     projectId?: string;
     type?: OpikApi.SpanSearchStreamRequestPublicType;
     filters?: OpikApi.SpanFilterPublic[];
+    /** Max number of spans to be streamed */
     limit?: number;
     lastRetrievedId?: string;
     /** Truncate image included in either input, output or metadata */

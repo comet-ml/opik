@@ -202,7 +202,7 @@ export class Spans {
         request: OpikApi.GetSpansByProjectRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): Promise<OpikApi.SpanPagePublic> {
-        const { page, size, projectName, projectId, traceId, type: type_, filters, truncate } = request;
+        const { page, size, projectName, projectId, traceId, type: type_, filters, truncate, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -236,6 +236,10 @@ export class Spans {
 
         if (truncate != null) {
             _queryParams["truncate"] = truncate.toString();
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
         }
 
         const _response = await core.fetcher({
@@ -302,6 +306,8 @@ export class Spans {
      * @param {OpikApi.SpanWrite} request
      * @param {Spans.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.ConflictError}
+     *
      * @example
      *     await client.spans.createSpan({
      *         traceId: "trace_id",
@@ -343,10 +349,15 @@ export class Spans {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-            });
+            switch (_response.error.statusCode) {
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
         }
 
         switch (_response.error.reason) {
