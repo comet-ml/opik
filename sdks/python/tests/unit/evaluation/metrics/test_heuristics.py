@@ -1,7 +1,12 @@
 import pytest
 
 from opik.exceptions import MetricComputationError
-from opik.evaluation.metrics.heuristics import equals, levenshtein_ratio, regex_match
+from opik.evaluation.metrics.heuristics import (
+    equals,
+    levenshtein_ratio,
+    regex_match,
+    rouge,
+)
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU, CorpusBLEU
 
@@ -77,6 +82,29 @@ def test_sentence_bleu_score(candidate, reference, expected_min, expected_max):
     assert expected_min <= result.value <= expected_max, (
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected sentence BLEU in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,expected_min,expected_max",
+    [
+        # Perfect match => ROUGE~1.0
+        (
+            "The quick brown fox jumps over the lazy dog",
+            "The quick brown fox jumps over the lazy dog",
+            0.99,
+            1.01,
+        ),
+    ],
+)
+def test_rouge1_score(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE(rouge_type="rouge1")
+    result = metric.score(output=candidate, reference=reference)
+    assert isinstance(result, ScoreResult)
+
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
 
 

@@ -16,7 +16,7 @@ class ROUGE(base_metric.BaseMetric):
 
     References:
         - https://github.com/google-research/google-research/tree/master/rouge
-        - https://huggingface.co/spaces/evaluate-metric/rouge 
+        - https://huggingface.co/spaces/evaluate-metric/rouge
 
     Args:
         name: The name of the metric. Defaults to "rouge_metric".
@@ -48,7 +48,7 @@ class ROUGE(base_metric.BaseMetric):
         rouge_type: str = "rouge1",
         use_stemmer: bool = False,
         split_summaries: bool = False,
-        tokenizer: Any | None = None
+        tokenizer: Any | None = None,
     ):
         super().__init__(name=name, track=track)
 
@@ -58,17 +58,18 @@ class ROUGE(base_metric.BaseMetric):
                 "Install via `pip install rouge-score`."
             )
 
-        valid_rouge_types = {'rouge1', 'rouge2', 'rougeL', 'rougeLsum'}
+        valid_rouge_types = {"rouge1", "rouge2", "rougeL", "rougeLsum"}
         if rouge_type not in valid_rouge_types:
             raise MetricComputationError(
-                f"Invalid rouge_type '{rouge_type}'. Must be one of {valid_rouge_types}.")
+                f"Invalid rouge_type '{rouge_type}'. Must be one of {valid_rouge_types}."
+            )
 
         self._rouge_type = rouge_type
         self._rouge = rouge_scorer.RougeScorer(
             [rouge_type],
             use_stemmer=use_stemmer,
             split_summaries=split_summaries,
-            tokenizer=tokenizer
+            tokenizer=tokenizer,
         )
 
     def score(
@@ -86,7 +87,10 @@ class ROUGE(base_metric.BaseMetric):
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
         Returns:
-            score_result.ScoreResult: A ScoreResult object with the ROUGE score.
+            score_result.ScoreResult with:
+              - `value`: The ROUGE score (float).
+              - `name`: The metric name.
+              - `reason`: A short explanation (e.g. "rouge1 score: 0.91").
 
         Raises:
             MetricComputationError:
@@ -101,14 +105,11 @@ class ROUGE(base_metric.BaseMetric):
                 raise MetricComputationError("Reference is empty.")
         else:
             if len(reference) != 1:
-                raise MetricComputationError(
-                    "Reference strings are in multiple lists."
-                )
+                raise MetricComputationError("Reference strings are in multiple lists.")
 
             for ref_str in reference:
                 if not ref_str.strip():
-                    raise MetricComputationError(
-                        "Encountered empty reference.")
+                    raise MetricComputationError("Encountered empty reference.")
 
         rouge_score_type = self._rouge_type
         results = self._rouge.score(reference, output)
