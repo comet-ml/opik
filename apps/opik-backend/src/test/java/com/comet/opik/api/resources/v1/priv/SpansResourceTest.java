@@ -4808,6 +4808,31 @@ class SpansResourceTest {
                 assertThat(actualError.getMessage()).isEqualTo(expectedError);
             }
         }
+
+        @Test
+        void getSpanById_expectProjectNameToExist() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .build();
+
+            var spanId = spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            var actual = spanResourceClient.getById(spanId, workspaceName, apiKey);
+
+            assertThat(actual.projectName()).isNotBlank();
+            assertThat(actual.projectName()).isEqualTo(projectName);
+        }
     }
 
     @Nested
