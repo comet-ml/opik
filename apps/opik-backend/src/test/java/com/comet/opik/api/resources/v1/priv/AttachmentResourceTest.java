@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Project;
+import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
+import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
@@ -174,8 +176,21 @@ class AttachmentResourceTest {
         AttachmentUtilsTest.verifyPage(page, expectedPage);
 
         // To verify the link, we download attachment using that link
-        var downloadedFileData = attachmentResourceClient.downloadFileExternal(page.content().get(0).link());
+        String downloadLink = page.content().get(0).link();
+        var downloadedFileData = attachmentResourceClient.downloadFileExternal(downloadLink, 200);
         assertThat(downloadedFileData).isEqualTo(fileData);
+
+        // Delete attachment and verify it's not available
+        DeleteAttachmentsRequest deleteAttachmentsRequest = AttachmentUtilsTest.prepareDeleteRequest(startUploadRequest,
+                project.id());
+        attachmentResourceClient.deleteAttachments(deleteAttachmentsRequest, apiKey, workspaceName, 204);
+
+        page = attachmentResourceClient.attachmentList(project.id(), startUploadRequest.entityType(),
+                startUploadRequest.entityId(), UUID.randomUUID().toString(), apiKey, workspaceName, 200);
+        AttachmentUtilsTest.verifyPage(page, Attachment.AttachmentPage.empty(1));
+
+        // Try to download deleted file, should fail
+        attachmentResourceClient.downloadFileExternal(downloadLink, 404);
     }
 
     @Test
