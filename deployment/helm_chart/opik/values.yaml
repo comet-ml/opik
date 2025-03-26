@@ -137,14 +137,6 @@ component:
     ingress:
       enabled: false
 
-    livenessProbe:
-      path: /health-check
-      port:  8080
-    readinessProbe:
-      path: /health-check
-      port:  8080
-      initialDelaySeconds: 20
-
   frontend:
     enabled: true
     serviceAccount: 
