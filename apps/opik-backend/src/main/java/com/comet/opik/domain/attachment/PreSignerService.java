@@ -7,8 +7,10 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.UploadPartRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
 import java.net.URL;
@@ -19,6 +21,8 @@ import java.util.List;
 @ImplementedBy(PreSignerServiceImpl.class)
 public interface PreSignerService {
     List<String> generatePresignedUrls(String key, Integer totalParts, String uploadId);
+
+    String presignDownloadUrl(String key);
 }
 
 @Slf4j
@@ -58,5 +62,22 @@ class PreSignerServiceImpl implements PreSignerService {
         }
 
         return urls;
+    }
+
+    @Override
+    public String presignDownloadUrl(String key) {
+        // Create a request to get an object
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(s3Config.getS3BucketName())
+                .key(key)
+                .build();
+
+        // Generate the pre-signed URL
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofSeconds(s3Config.getPreSignUrlTimeoutSec())) // URL expires in 10 minutes
+                .getObjectRequest(getObjectRequest)
+                .build();
+
+        return preSigner.presignGetObject(presignRequest).url().toString();
     }
 }

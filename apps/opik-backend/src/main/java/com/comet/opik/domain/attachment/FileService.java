@@ -17,32 +17,36 @@ import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-@ImplementedBy(FileUploadServiceImpl.class)
-public interface FileUploadService {
+@ImplementedBy(FileServiceImpl.class)
+public interface FileService {
     CreateMultipartUploadResponse createMultipartUpload(String key, String contentType);
 
     CompleteMultipartUploadResponse completeMultipartUpload(String key, String uploadId,
             List<MultipartUploadPart> parts);
 
     PutObjectResponse upload(String key, byte[] data, String contentType);
+
+    InputStream download(String key);
 }
 
 @Slf4j
 @Singleton
-class FileUploadServiceImpl implements FileUploadService {
+class FileServiceImpl implements FileService {
 
     private final S3Client s3Client;
     private final S3Config s3Config;
 
     @Inject
-    public FileUploadServiceImpl(@NonNull @Config("s3Config") S3Config s3Config,
+    public FileServiceImpl(@NonNull @Config("s3Config") S3Config s3Config,
             @NonNull S3Client s3Client) {
         this.s3Config = s3Config;
         this.s3Client = s3Client;
@@ -96,5 +100,15 @@ class FileUploadServiceImpl implements FileUploadService {
                 .build();
 
         return s3Client.putObject(putRequest, RequestBody.fromBytes(data));
+    }
+
+    @Override
+    public InputStream download(String key) {
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(s3Config.getS3BucketName())
+                .key(key)
+                .build();
+
+        return s3Client.getObject(getObjectRequest);
     }
 }

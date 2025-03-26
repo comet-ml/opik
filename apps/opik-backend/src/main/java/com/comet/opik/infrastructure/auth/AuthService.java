@@ -7,6 +7,7 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
@@ -14,7 +15,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.*;
 
 public interface AuthService {
 
-    void authenticate(HttpHeaders headers, Cookie sessionToken, String path);
+    void authenticate(HttpHeaders headers, Cookie sessionToken, UriInfo uriInfo);
     void authenticateSession(Cookie sessionToken);
 }
 
@@ -24,7 +25,7 @@ class AuthServiceImpl implements AuthService {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
-    public void authenticate(HttpHeaders headers, Cookie sessionToken, String path) {
+    public void authenticate(HttpHeaders headers, Cookie sessionToken, UriInfo uriInfo) {
 
         var currentWorkspaceName = WorkspaceUtils.getWorkspaceName(headers.getHeaderString(WORKSPACE_HEADER));
 
