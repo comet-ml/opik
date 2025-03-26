@@ -1,7 +1,9 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
 import jakarta.ws.rs.client.Client;
@@ -9,7 +11,12 @@ import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.io.IOUtils;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,6 +71,30 @@ public class AttachmentResourceClient {
         }
     }
 
+    public Attachment.AttachmentPage attachmentList(UUID projectId, EntityType entityType, UUID entityId, String path,
+            String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("list")
+                .queryParam("path", path)
+                .queryParam("project_id", projectId)
+                .queryParam("entity_type", entityType.getValue())
+                .queryParam("entity_id", entityId)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == 200) {
+                return actualResponse.readEntity(Attachment.AttachmentPage.class);
+            }
+
+            return null;
+        }
+    }
+
     public void uploadAttachment(AttachmentInfo attachmentInfo, byte[] data,
             String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -78,6 +109,26 @@ public class AttachmentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .put(Entity.entity(data, MediaType.APPLICATION_OCTET_STREAM))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public void downloadAttachment(String fileName, UUID projectId, String mimeType, EntityType entityType,
+            UUID entityId,
+            String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("download")
+                .queryParam("file_name", fileName)
+                .queryParam("container_id", projectId)
+                .queryParam("mime_type", mimeType)
+                .queryParam("entity_type", entityType.getValue())
+                .queryParam("entity_id", entityId)
+                .request()
+                .accept(mimeType)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
         }
@@ -101,6 +152,28 @@ public class AttachmentResourceClient {
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .put(Entity.entity(data, "*/*"))) {
             return response.getHeaders().get("ETag").getFirst().toString();
+        }
+    }
+
+    public byte[] downloadFile(String url, String apiKey) throws IOException {
+        try (var response = client.target(url)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .get()) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
+            InputStream inputStream = response.readEntity(InputStream.class);
+
+            return IOUtils.toByteArray(inputStream);
+        }
+    }
+
+    public byte[] downloadFileExternal(String url) throws IOException {
+        try (var response = externatClient.target(url)
+                .request()
+                .get()) {
+            InputStream inputStream = response.readEntity(InputStream.class);
+
+            return IOUtils.toByteArray(inputStream);
         }
     }
 }
