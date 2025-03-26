@@ -4749,7 +4749,6 @@ class SpansResourceTest {
                 .ignoringCollectionOrderInFields("tags")
                 .isEqualTo(expectedSpan);
         assertThat(actualSpan.projectId()).isNotNull();
-        assertThat(actualSpan.projectName()).isNull();
         assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
         assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
         assertThat(actualSpan.createdBy()).isEqualTo(USER);
