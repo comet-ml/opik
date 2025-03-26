@@ -1,3 +1,5 @@
+export * as attachments from "./attachments";
+export * from "./attachments/types";
 export * as feedbackDefinitions from "./feedbackDefinitions";
 export * from "./feedbackDefinitions/types";
 export * as llmProviderKey from "./llmProviderKey";
@@ -10,6 +12,7 @@ export * as spans from "./spans";
 export * from "./spans/types";
 export * as experiments from "./experiments";
 export * as traces from "./traces";
+export * from "./attachments/client/requests";
 export * as chatCompletions from "./chatCompletions";
 export * from "./chatCompletions/client/requests";
 export * as datasets from "./datasets";

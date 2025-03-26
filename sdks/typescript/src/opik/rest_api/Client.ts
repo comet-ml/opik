@@ -7,6 +7,7 @@ import * as core from "./core";
 import urlJoin from "url-join";
 import * as errors from "./errors/index";
 import { SystemUsage } from "./api/resources/systemUsage/client/Client";
+import { Attachments } from "./api/resources/attachments/client/Client";
 import { Check } from "./api/resources/check/client/Client";
 import { AutomationRuleEvaluators } from "./api/resources/automationRuleEvaluators/client/Client";
 import { ChatCompletions } from "./api/resources/chatCompletions/client/Client";
@@ -14,12 +15,11 @@ import { Datasets } from "./api/resources/datasets/client/Client";
 import { Experiments } from "./api/resources/experiments/client/Client";
 import { FeedbackDefinitions } from "./api/resources/feedbackDefinitions/client/Client";
 import { LlmProviderKey } from "./api/resources/llmProviderKey/client/Client";
-import { OpenTelemetryIngestion } from "./api/resources/openTelemetryIngestion/client/Client";
 import { Projects } from "./api/resources/projects/client/Client";
 import { Prompts } from "./api/resources/prompts/client/Client";
 import { Spans } from "./api/resources/spans/client/Client";
 import { Traces } from "./api/resources/traces/client/Client";
-import { Workspaces } from "./api/resources/workspaces/client/Client";
+import { Redirect } from "./api/resources/redirect/client/Client";
 
 export declare namespace OpikApiClient {
     export interface Options {
@@ -50,6 +50,7 @@ export declare namespace OpikApiClient {
 
 export class OpikApiClient {
     protected _systemUsage: SystemUsage | undefined;
+    protected _attachments: Attachments | undefined;
     protected _check: Check | undefined;
     protected _automationRuleEvaluators: AutomationRuleEvaluators | undefined;
     protected _chatCompletions: ChatCompletions | undefined;
@@ -57,17 +58,20 @@ export class OpikApiClient {
     protected _experiments: Experiments | undefined;
     protected _feedbackDefinitions: FeedbackDefinitions | undefined;
     protected _llmProviderKey: LlmProviderKey | undefined;
-    protected _openTelemetryIngestion: OpenTelemetryIngestion | undefined;
     protected _projects: Projects | undefined;
     protected _prompts: Prompts | undefined;
     protected _spans: Spans | undefined;
     protected _traces: Traces | undefined;
-    protected _workspaces: Workspaces | undefined;
+    protected _redirect: Redirect | undefined;
 
     constructor(protected readonly _options: OpikApiClient.Options = {}) {}
 
     public get systemUsage(): SystemUsage {
         return (this._systemUsage ??= new SystemUsage(this._options));
+    }
+
+    public get attachments(): Attachments {
+        return (this._attachments ??= new Attachments(this._options));
     }
 
     public get check(): Check {
@@ -98,10 +102,6 @@ export class OpikApiClient {
         return (this._llmProviderKey ??= new LlmProviderKey(this._options));
     }
 
-    public get openTelemetryIngestion(): OpenTelemetryIngestion {
-        return (this._openTelemetryIngestion ??= new OpenTelemetryIngestion(this._options));
-    }
-
     public get projects(): Projects {
         return (this._projects ??= new Projects(this._options));
     }
@@ -118,8 +118,8 @@ export class OpikApiClient {
         return (this._traces ??= new Traces(this._options));
     }
 
-    public get workspaces(): Workspaces {
-        return (this._workspaces ??= new Workspaces(this._options));
+    public get redirect(): Redirect {
+        return (this._redirect ??= new Redirect(this._options));
     }
 
     /**

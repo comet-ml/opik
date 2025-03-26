@@ -88,7 +88,12 @@ export const treeRenderers: TreeRenderProps = {
           }}
           onFocus={props.context.interactiveElementProps.onFocus}
         >
-          <div className={cn(styles.chainItemContainer)}>
+          <div
+            className={cn(
+              styles.chainItemContainer,
+              props.item.data.isInSearch && styles.search,
+            )}
+          >
             <div className={styles.detailsContainerWithArrow}>
               {generateStubCells(props.depth)}
               {props.arrow}

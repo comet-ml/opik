@@ -54,6 +54,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -127,6 +128,8 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
+import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -148,9 +151,6 @@ class TracesResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
-    private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
-            "comments", "threadId"};
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -5088,6 +5088,33 @@ class TracesResourceTest {
             getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var trace = createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callCreateTrace(trace, API_KEY, workspaceName)) {
+                if (isLimitReached) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+                }
+            }
+        }
     }
 
     @Nested
@@ -5249,6 +5276,35 @@ class TracesResourceTest {
             getAndAssertPage(TEST_WORKSPACE, projectName, null, List.of(), List.of(), expectedTraces.reversed(),
                     List.of(),
                     API_KEY);
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var trace = createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(List.of(trace), API_KEY,
+                    workspaceName)) {
+                if (isLimitReached) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                }
+            }
         }
     }
 

@@ -94,7 +94,7 @@ interface TraceDAO {
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
 
-    Mono<Long> getDailyTraces();
+    Mono<Long> getDailyTraces(List<UUID> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
 
@@ -295,8 +295,10 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_ID = """
             SELECT
                 t.*,
+                t.id as id,
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
+                COUNT(s.id) AS span_count,
                 groupUniqArrayArray(c.comments_array) as comments
             FROM (
                 SELECT
@@ -315,10 +317,11 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     usage,
-                    total_estimated_cost
+                    total_estimated_cost,
+                    id
                 FROM spans
                 WHERE workspace_id = :workspace_id
-                AND trace_id = :id
+                  AND trace_id = :id
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
@@ -364,12 +367,14 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    COUNT(DISTINCT id) as span_count
                 FROM (
                     SELECT
                         workspace_id,
                         project_id,
                         trace_id,
+                        id,
                         usage,
                         total_estimated_cost
                     FROM spans
@@ -437,7 +442,8 @@ class TraceDAOImpl implements TraceDAO {
                   t.thread_id as thread_id,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
-                  groupUniqArrayArray(c.comments_array) as comments
+                  groupUniqArrayArray(c.comments_array) as comments,
+                  max(s.span_count) AS span_count
              FROM (
                  SELECT
                      *,
@@ -498,6 +504,7 @@ class TraceDAOImpl implements TraceDAO {
                      COUNT(DISTINCT id) as trace_count
                  FROM traces
                  WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+                 <if(excluded_project_ids)>AND project_id NOT IN :excluded_project_ids<endif>
                  GROUP BY workspace_id
             ;
             """;
@@ -1241,6 +1248,7 @@ class TraceDAOImpl implements TraceDAO {
                         .filter(it -> !it.isEmpty())
                         .orElse(null))
                 .comments(getComments(row.get("comments", List[].class)))
+                .spanCount(row.get("span_count", Integer.class))
                 .usage(row.get("usage", Map.class))
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                         ? null
@@ -1479,8 +1487,7 @@ class TraceDAOImpl implements TraceDAO {
     @WithSpan
     public Flux<WorkspaceTraceCount> countTracesPerWorkspace(Connection connection) {
 
-        var statement = connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID);
-
+        var statement = connection.createStatement(new ST(TRACE_COUNT_BY_WORKSPACE_ID).render());
         return Mono.from(statement.execute())
                 .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
                         .workspace(row.get("workspace_id", String.class))
@@ -1522,10 +1529,24 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Long> getDailyTraces() {
+    public Mono<Long> getDailyTraces(@NonNull List<UUID> excludedProjectIds) {
+        ST sql = new ST(TRACE_COUNT_BY_WORKSPACE_ID);
+
+        if (!excludedProjectIds.isEmpty()) {
+            sql.add("excluded_project_ids", excludedProjectIds);
+        }
+
         return asyncTemplate
                 .nonTransaction(
-                        connection -> Mono.from(connection.createStatement(TRACE_COUNT_BY_WORKSPACE_ID).execute()))
+                        connection -> {
+                            Statement statement = connection.createStatement(sql.render());
+
+                            if (!excludedProjectIds.isEmpty()) {
+                                statement.bind("excluded_project_ids", excludedProjectIds);
+                            }
+
+                            return Mono.from(statement.execute());
+                        })
                 .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("trace_count", Long.class)))
                 .reduce(0L, Long::sum);
     }

@@ -9,8 +9,8 @@ from ..types.project_page_public import ProjectPagePublic
 from ..core.pydantic_utilities import parse_obj_as
 from .types.provider_api_key_write_provider import ProviderApiKeyWriteProvider
 from ..errors.unauthorized_error import UnauthorizedError
-from ..types.error_message import ErrorMessage
 from ..errors.forbidden_error import ForbiddenError
+from ..types.error_message import ErrorMessage
 from ..types.provider_api_key_public import ProviderApiKeyPublic
 from ..core.jsonable_encoder import jsonable_encoder
 from ..errors.not_found_error import NotFoundError
@@ -177,9 +177,9 @@ class LlmProviderKeyClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -316,9 +316,9 @@ class LlmProviderKeyClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -530,9 +530,9 @@ class AsyncLlmProviderKeyClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -685,9 +685,9 @@ class AsyncLlmProviderKeyClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )

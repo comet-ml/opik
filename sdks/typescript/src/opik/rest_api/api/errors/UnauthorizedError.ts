@@ -3,10 +3,9 @@
  */
 
 import * as errors from "../../errors/index";
-import * as OpikApi from "../index";
 
 export class UnauthorizedError extends errors.OpikApiError {
-    constructor(body: OpikApi.ErrorMessage) {
+    constructor(body?: unknown) {
         super({
             message: "UnauthorizedError",
             statusCode: 401,

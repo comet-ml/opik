@@ -13,6 +13,7 @@ type CellWrapperProps<TData> = {
   tableMetadata?: TableMeta<TData>;
   className?: string;
   dataCellWrapper?: boolean;
+  stopClickPropagation?: boolean;
 };
 
 const CellWrapper = <TData,>({
@@ -21,6 +22,7 @@ const CellWrapper = <TData,>({
   tableMetadata,
   className,
   dataCellWrapper = true,
+  stopClickPropagation = false,
 }: CellWrapperProps<TData>) => {
   const { type } = metadata || {};
   const { rowHeight, rowHeightStyle } = tableMetadata || {};
@@ -39,12 +41,16 @@ const CellWrapper = <TData,>({
     <div
       className={cn(
         "flex size-full py-2 px-3",
+        stopClickPropagation && "cursor-auto",
         verticalAlignClass,
         horizontalAlignClass,
         className,
       )}
       style={rowHeightStyle}
       data-cell-wrapper={dataCellWrapper}
+      {...(stopClickPropagation && {
+        onClick: (event) => event.stopPropagation(),
+      })}
     >
       {children}
     </div>

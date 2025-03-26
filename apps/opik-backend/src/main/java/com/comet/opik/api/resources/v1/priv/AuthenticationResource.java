@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AuthDetailsHolder;
+import com.comet.opik.api.WorkspaceNameHolder;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.swagger.v3.oas.annotations.Operation;
@@ -54,7 +55,7 @@ public class AuthenticationResource {
     @GET
     @Path("workspace")
     @Operation(operationId = "getWorkspaceName", summary = "User's default workspace name", description = "User's default workspace name", responses = {
-            @ApiResponse(responseCode = "200", description = "Authentication resource", content = @Content(schema = @Schema(implementation = String.class))),
+            @ApiResponse(responseCode = "200", description = "Authentication resource", content = @Content(schema = @Schema(implementation = WorkspaceNameHolder.class))),
             @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
@@ -65,6 +66,9 @@ public class AuthenticationResource {
 
         log.info("User '{}' has workspaceName '{}', workspaceid '{}'", userName, workspaceName, workspaceId);
 
-        return Response.ok().entity(workspaceName).build();
+        return Response.ok().entity(WorkspaceNameHolder.builder()
+                .workspaceName(workspaceName)
+                .build())
+                .build();
     }
 }

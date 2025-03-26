@@ -153,6 +153,7 @@ from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
 from .message import Message
+from .multipart_upload_part import MultipartUploadPart
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
 from .numerical_feedback_definition_public import NumericalFeedbackDefinitionPublic
@@ -217,12 +218,16 @@ from .span_public_type import SpanPublicType
 from .span_type import SpanType
 from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
+from .spans_count_response import SpansCountResponse
+from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
 from .tool import Tool
 from .tool_call import ToolCall
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
+from .trace_filter_public import TraceFilterPublic
+from .trace_filter_public_operator import TraceFilterPublicOperator
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
 from .trace_thread import TraceThread
@@ -232,7 +237,8 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
-from .workspace_metadata import WorkspaceMetadata
+from .workspace_name_holder import WorkspaceNameHolder
+from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 
 __all__ = [
@@ -369,6 +375,7 @@ __all__ = [
     "LogItemLevel",
     "LogPage",
     "Message",
+    "MultipartUploadPart",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
     "NumericalFeedbackDefinitionPublic",
@@ -429,12 +436,16 @@ __all__ = [
     "SpanType",
     "SpanWrite",
     "SpanWriteType",
+    "SpansCountResponse",
+    "StartMultipartUploadResponse",
     "StreamOptions",
     "Tool",
     "ToolCall",
     "Trace",
     "TraceBatch",
     "TraceCountResponse",
+    "TraceFilterPublic",
+    "TraceFilterPublicOperator",
     "TracePagePublic",
     "TracePublic",
     "TraceThread",
@@ -444,6 +455,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
-    "WorkspaceMetadata",
+    "WorkspaceNameHolder",
+    "WorkspaceSpansCount",
     "WorkspaceTraceCount",
 ]

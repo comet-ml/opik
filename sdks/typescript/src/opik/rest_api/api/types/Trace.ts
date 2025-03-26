@@ -25,6 +25,7 @@ export interface Trace {
     feedbackScores?: OpikApi.FeedbackScore[];
     comments?: OpikApi.Comment[];
     totalEstimatedCost?: number;
+    spanCount?: number;
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
     duration?: number;
     threadId?: string;

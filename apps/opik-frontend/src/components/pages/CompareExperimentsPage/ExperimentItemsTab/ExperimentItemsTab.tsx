@@ -34,6 +34,7 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
+import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -677,6 +678,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
+        TableBody={DataTableVirtualBody}
         stickyHeader
         meta={meta}
       />
