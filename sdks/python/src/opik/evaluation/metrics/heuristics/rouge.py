@@ -3,18 +3,20 @@ from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
 try:
-    import evaluate
-    import rouge_score
+    from rouge_score import rouge_scorer
 except ImportError:
-    evaluate = None
-    rouge_score = None
+    rouge_scorer = None
 
 
 class ROUGE(base_metric.BaseMetric):
     """
     A metric that computes the ROUGE, or Recall-Oriented Understudy for Gisting Evaluation score between an output and reference string mainly used for evaluating text summarization.
     ROUGE is case insensitive, meaning that upper case letters are treated the same way as lower case letters.
-    This metrics is a wrapper around the Google Research reimplementation of ROUGE, which is based on the `evaluate` and `rouge-score` libraries.
+    This metrics is a wrapper around the Google Research reimplementation of ROUGE, which is based on the `rouge-score` library.
+
+    References:
+        - https://github.com/google-research/google-research/tree/master/rouge
+        - https://huggingface.co/spaces/evaluate-metric/rouge 
 
     Args:
         name: The name of the metric. Defaults to "rouge_metric".
@@ -23,7 +25,10 @@ class ROUGE(base_metric.BaseMetric):
                     - "rouge1": unigram (1-gram) based scoring
                     - "rouge2": bigram (2-gram) based scoring
                     - "rougeL": Longest common subsequence based scoring
-                    - "rougeLSum": splits text using "\n"
+                    - "rougeLSum": splits text using '\\n'"
+        use_stemmer: Whether to use stemming when computing ROUGE. Defaults to False.
+        split_summaries: Whether to split summaries into sentences. Defaults to False.
+        tokenizer: A tokenizer to use when splitting summaries into sentences. Defaults to None.
 
     Example:
         >>> from opik.evaluation.metrics import ROUGE
@@ -40,14 +45,17 @@ class ROUGE(base_metric.BaseMetric):
         self,
         name: str = "rouge_metric",
         track: bool = True,
-        rouge_type: str = "rouge1"
+        rouge_type: str = "rouge1",
+        use_stemmer: bool = False,
+        split_summaries: bool = False,
+        tokenizer: Any | None = None
     ):
         super().__init__(name=name, track=track)
 
-        if evaluate is None or rouge_score is None:
+        if rouge_scorer is None:
             raise ImportError(
-                "`evaluate and rouge-score` libraries are required for ROUGE score calculation. "
-                "Install via `pip install evaluate rouge-score`."
+                "`rouge-score` libraries are required for ROUGE score calculation. "
+                "Install via `pip install rouge-score`."
             )
 
         valid_rouge_types = {'rouge1', 'rouge2', 'rougeL', 'rougeLsum'}
@@ -55,8 +63,13 @@ class ROUGE(base_metric.BaseMetric):
             raise MetricComputationError(
                 f"Invalid rouge_type '{rouge_type}'. Must be one of {valid_rouge_types}.")
 
-        self._rouge = evaluate.load('rouge')
         self._rouge_type = rouge_type
+        self._rouge = rouge_scorer.RougeScorer(
+            [rouge_type],
+            use_stemmer=use_stemmer,
+            split_summaries=split_summaries,
+            tokenizer=tokenizer
+        )
 
     def score(
         self,
@@ -98,9 +111,8 @@ class ROUGE(base_metric.BaseMetric):
                         "Encountered empty reference.")
 
         rouge_score_type = self._rouge_type
-        results = self._rouge.compute(
-            predictions=[output], references=[reference], rouge_type=[rouge_score_type])
-        rouge_f1_value = results[rouge_score_type].item()
+        results = self._rouge.score(reference, output)
+        rouge_f1_value = results[rouge_score_type].fmeasure
 
         return score_result.ScoreResult(
             value=rouge_f1_value,
