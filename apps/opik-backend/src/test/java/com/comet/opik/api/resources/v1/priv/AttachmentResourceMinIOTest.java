@@ -21,12 +21,12 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentUtilsTest;
-import com.comet.opik.utils.ProjectUtilsTest;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -117,9 +117,11 @@ class AttachmentResourceMinIOTest {
     private String baseURI;
     private String baseURIEncoded;
     private TransactionTemplate mySqlTemplate;
+    private ProjectService projectService;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate, ProjectService projectService)
+            throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -133,6 +135,7 @@ class AttachmentResourceMinIOTest {
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.baseURIEncoded = Base64.getUrlEncoder().withoutPadding().encodeToString(baseURI.getBytes());
         this.mySqlTemplate = mySqlTemplate;
+        this.projectService = projectService;
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
@@ -158,8 +161,8 @@ class AttachmentResourceMinIOTest {
         byte[] fileData = uploadResult.getRight();
 
         // To verify that the file was uploaded we get the list of attachments
-        Project project = ProjectUtilsTest
-                .findProjectByNames(mySqlTemplate, WORKSPACE_ID, List.of(startUploadRequest.projectName())).get(0);
+        Project project = projectService.findByNames(WORKSPACE_ID, List.of(startUploadRequest.projectName()))
+                .getFirst();
         var page = attachmentResourceClient.attachmentList(project.id(), startUploadRequest.entityType(),
                 startUploadRequest.entityId(), baseURIEncoded, API_KEY, TEST_WORKSPACE, 200);
 
@@ -198,8 +201,7 @@ class AttachmentResourceMinIOTest {
                 API_KEY,
                 TEST_WORKSPACE);
 
-        Project project = ProjectUtilsTest
-                .findProjectByNames(mySqlTemplate, WORKSPACE_ID, List.of(trace.projectName())).get(0);
+        Project project = projectService.findByNames(WORKSPACE_ID, List.of(trace.projectName())).getFirst();
 
         // Upload attachment for trace
         var traceAttachmentUploadResult = uploadFile(trace.projectName(), EntityType.TRACE, traceId);
