@@ -2,27 +2,12 @@ import { Serialized } from "@langchain/core/load/serializable";
 import { Generation, ChatGeneration } from "@langchain/core/outputs";
 import { BaseMessage, ToolMessage } from "@langchain/core/messages";
 import { ChainValues } from "@langchain/core/utils/types";
-
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue = JsonPrimitive | JsonArray | JsonObject;
-type JsonArray = JsonValue[];
-type JsonObject = { [key: string]: JsonValue };
-
-interface ContentContainer {
-  content?: unknown;
-}
-
-interface MessageContainer {
-  messages?: unknown[] | unknown;
-}
-
-interface ValueContainer {
-  value?: unknown;
-}
-
-interface KwargsContainer {
-  kwargs?: unknown;
-}
+import {
+  ContentContainer,
+  KwargsContainer,
+  MessageContainer,
+  ValueContainer,
+} from "./types";
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;

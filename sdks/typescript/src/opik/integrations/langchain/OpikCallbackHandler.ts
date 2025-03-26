@@ -151,7 +151,7 @@ export class OpikCallbackHandler
   }: EndTracingArgs) {
     let errorInfo;
     if (error) {
-      logger.info(`End tracing because of error ${error.message}`);
+      logger.debug(`End tracing because of error ${error.message}`);
       errorInfo = {
         message: error.message,
         exceptionType: error.name,
