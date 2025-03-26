@@ -91,14 +91,7 @@ export class Check {
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                    );
+                    throw new OpikApi.UnauthorizedError(_response.error.body);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -142,7 +135,7 @@ export class Check {
      * @example
      *     await client.check.getWorkspaceName()
      */
-    public async getWorkspaceName(requestOptions?: Check.RequestOptions): Promise<string> {
+    public async getWorkspaceName(requestOptions?: Check.RequestOptions): Promise<OpikApi.WorkspaceNameHolder> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -170,7 +163,7 @@ export class Check {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.check.getWorkspaceName.Response.parseOrThrow(_response.body, {
+            return serializers.WorkspaceNameHolder.parseOrThrow(_response.body, {
                 unrecognizedObjectKeys: "passthrough",
                 allowUnrecognizedUnionMembers: true,
                 allowUnrecognizedEnumValues: true,
@@ -181,14 +174,7 @@ export class Check {
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                    );
+                    throw new OpikApi.UnauthorizedError(_response.error.body);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {

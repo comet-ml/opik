@@ -593,7 +593,7 @@ class SpanDAO {
                 <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
-                <if(last_received_span_id)> AND id > :last_received_span_id <endif>
+                <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -617,7 +617,7 @@ class SpanDAO {
                 AND fsc.feedback_scores_count = 0
                 <endif>
                 <if(stream)>
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
                 ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
                 <endif>
@@ -627,7 +627,9 @@ class SpanDAO {
             LEFT JOIN comments_final AS c ON s.id = c.entity_id
             GROUP BY
               s.*
-            <if(!last_received_span_id)>
+            <if(stream)>
+            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+            <else>
             ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
             <endif>
             SETTINGS join_algorithm='full_sorting_merge'

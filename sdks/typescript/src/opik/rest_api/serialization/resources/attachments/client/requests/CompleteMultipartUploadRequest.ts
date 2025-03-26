@@ -13,11 +13,11 @@ export const CompleteMultipartUploadRequest: core.serialization.Schema<
     OpikApi.CompleteMultipartUploadRequest
 > = core.serialization.object({
     fileName: core.serialization.property("file_name", core.serialization.string()),
-    mimeType: core.serialization.property("mime_type", core.serialization.string()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     entityType: core.serialization.property("entity_type", CompleteMultipartUploadRequestEntityType),
     entityId: core.serialization.property("entity_id", core.serialization.string()),
-    containerId: core.serialization.property("container_id", core.serialization.string()),
     fileSize: core.serialization.property("file_size", core.serialization.number()),
+    mimeType: core.serialization.property("mime_type", core.serialization.string().optional()),
     uploadId: core.serialization.property("upload_id", core.serialization.string()),
     uploadedFileParts: core.serialization.property("uploaded_file_parts", core.serialization.list(MultipartUploadPart)),
 });
@@ -25,11 +25,11 @@ export const CompleteMultipartUploadRequest: core.serialization.Schema<
 export declare namespace CompleteMultipartUploadRequest {
     export interface Raw {
         file_name: string;
-        mime_type: string;
+        project_name?: string | null;
         entity_type: CompleteMultipartUploadRequestEntityType.Raw;
         entity_id: string;
-        container_id: string;
         file_size: number;
+        mime_type?: string | null;
         upload_id: string;
         uploaded_file_parts: MultipartUploadPart.Raw[];
     }

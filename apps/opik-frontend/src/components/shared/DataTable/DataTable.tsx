@@ -22,7 +22,6 @@ import isBoolean from "lodash/isBoolean";
 
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -32,6 +31,9 @@ import DataTableColumnResizer from "@/components/shared/DataTable/DataTableColum
 import DataTableWrapper, {
   DataTableWrapperProps,
 } from "@/components/shared/DataTable/DataTableWrapper";
+import DataTableBody, {
+  DataTableBodyProps,
+} from "@/components/shared/DataTable/DataTableBody";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
@@ -51,6 +53,7 @@ import {
   STICKY_DIRECTION,
 } from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import useCustomRowClick from "@/components/shared/DataTable/useCustomRowClick";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -108,6 +111,7 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   columnsStatistic?: ColumnsStatistic;
   data: TData[];
+  onRowClick?: (row: TData) => void;
   renderCustomRow?: (
     row: Row<TData>,
     stickyWorkaround?: boolean,
@@ -127,6 +131,7 @@ interface DataTableProps<TData, TValue> {
   autoWidth?: boolean;
   stickyHeader?: boolean;
   TableWrapper?: React.FC<DataTableWrapperProps>;
+  TableBody?: React.FC<DataTableBodyProps<TData>>;
   meta?: Omit<
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
@@ -137,6 +142,7 @@ const DataTable = <TData, TValue>({
   columns,
   columnsStatistic,
   data,
+  onRowClick,
   renderCustomRow,
   getIsCustomRow = () => false,
   activeRowId,
@@ -152,10 +158,12 @@ const DataTable = <TData, TValue>({
   noData,
   autoWidth = false,
   TableWrapper = DataTableWrapper,
+  TableBody = DataTableBody,
   stickyHeader = false,
   meta,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
+  const isRowClickable = isFunction(onRowClick);
 
   const table = useReactTable({
     data,
@@ -206,6 +214,9 @@ const DataTable = <TData, TValue>({
     },
   });
 
+  const { onClick } = useCustomRowClick<TData>({
+    onRowClick: onRowClick,
+  });
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
@@ -250,6 +261,15 @@ const DataTable = <TData, TValue>({
         key={row.id}
         data-state={row.getIsSelected() && "selected"}
         data-row-active={row.id === activeRowId}
+        data-row-id={row.id}
+        className={cn({
+          "cursor-pointer": isRowClickable,
+        })}
+        {...(isRowClickable && !row.getIsGrouped()
+          ? {
+              onClick: (e) => onClick?.(e, row.original),
+            }
+          : {})}
       >
         {row.getVisibleCells().map((cell) => renderCell(row, cell))}
       </TableRow>
@@ -301,6 +321,22 @@ const DataTable = <TData, TValue>({
       >
         {flexRender(cell.column.columnDef.cell, cell.getContext())}
       </TableCell>
+    );
+  };
+
+  const renderNoData = () => {
+    return (
+      <TableRow data-testid="no-data-row">
+        <TableCell colSpan={columns.length}>
+          {noData ? (
+            noData
+          ) : (
+            <div className="flex h-28 items-center justify-center text-muted-slate">
+              No results
+            </div>
+          )}
+        </TableCell>
+      </TableRow>
     );
   };
 
@@ -363,23 +399,11 @@ const DataTable = <TData, TValue>({
             );
           })}
         </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map(renderRow)
-          ) : (
-            <TableRow data-testid="no-data-row">
-              <TableCell colSpan={columns.length}>
-                {noData ? (
-                  noData
-                ) : (
-                  <div className="flex h-28 items-center justify-center text-muted-slate">
-                    No results
-                  </div>
-                )}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
+        <TableBody
+          table={table}
+          renderRow={renderRow}
+          renderNoData={renderNoData}
+        />
       </Table>
     </TableWrapper>
   );

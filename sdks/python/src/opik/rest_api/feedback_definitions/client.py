@@ -113,14 +113,14 @@ class FeedbackDefinitionsClient:
 
         Examples
         --------
-        from Opik import FeedbackCreate_Categorical, OpikApi
+        from Opik import FeedbackCreate_Numerical, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
         client.feedback_definitions.create_feedback_definition(
-            request=FeedbackCreate_Categorical(),
+            request=FeedbackCreate_Numerical(),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -214,7 +214,7 @@ class FeedbackDefinitionsClient:
 
         Examples
         --------
-        from Opik import FeedbackUpdate_Categorical, OpikApi
+        from Opik import FeedbackUpdate_Numerical, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
@@ -222,7 +222,7 @@ class FeedbackDefinitionsClient:
         )
         client.feedback_definitions.update_feedback_definition(
             id="id",
-            request=FeedbackUpdate_Categorical(),
+            request=FeedbackUpdate_Numerical(),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -455,7 +455,7 @@ class AsyncFeedbackDefinitionsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi, FeedbackCreate_Categorical
+        from Opik import AsyncOpikApi, FeedbackCreate_Numerical
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -465,7 +465,7 @@ class AsyncFeedbackDefinitionsClient:
 
         async def main() -> None:
             await client.feedback_definitions.create_feedback_definition(
-                request=FeedbackCreate_Categorical(),
+                request=FeedbackCreate_Numerical(),
             )
 
 
@@ -572,7 +572,7 @@ class AsyncFeedbackDefinitionsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi, FeedbackUpdate_Categorical
+        from Opik import AsyncOpikApi, FeedbackUpdate_Numerical
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -583,7 +583,7 @@ class AsyncFeedbackDefinitionsClient:
         async def main() -> None:
             await client.feedback_definitions.update_feedback_definition(
                 id="id",
-                request=FeedbackUpdate_Categorical(),
+                request=FeedbackUpdate_Numerical(),
             )
 
 

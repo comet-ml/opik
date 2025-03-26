@@ -1,6 +1,6 @@
 import React, { MouseEventHandler, useState } from "react";
 import isNumber from "lodash/isNumber";
-import { Link, useMatchRoute } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 
 import {
   Book,
@@ -9,13 +9,14 @@ import {
   GraduationCap,
   LayoutGrid,
   LucideIcon,
-  PanelLeftClose,
   MessageCircleQuestion,
   FileTerminal,
   LucideHome,
   Blocks,
   Bolt,
   Brain,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -169,7 +170,6 @@ interface GetItemElement {
   content: React.ReactElement;
   workspaceName: string;
   linkClasses: string;
-  linkClickHandler: (event: React.MouseEvent<HTMLAnchorElement>) => void;
 }
 
 const getItemElementByType = ({
@@ -177,17 +177,11 @@ const getItemElementByType = ({
   content,
   workspaceName,
   linkClasses,
-  linkClickHandler,
 }: GetItemElement) => {
   if (item.type === MENU_ITEM_TYPE.router) {
     return (
       <li key={item.id} className="flex">
-        <Link
-          to={item.path}
-          params={{ workspaceName }}
-          className={linkClasses}
-          onClick={linkClickHandler as never}
-        >
+        <Link to={item.path} params={{ workspaceName }} className={linkClasses}>
           {content}
         </Link>
       </li>
@@ -229,14 +223,8 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
   const [openQuickstart, setOpenQuickstart] = useState(false);
 
-  const matchRoute = useMatchRoute();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const LogoComponent = usePluginsStore((state) => state.Logo);
-
-  const isHomePath = matchRoute({
-    to: HOME_PATH,
-    fuzzy: true,
-  });
 
   const { data: projectData } = useProjectsList(
     {
@@ -328,20 +316,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   ];
 
-  const linkClickHandler = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    const target = event.currentTarget;
-    const isActive = target.getAttribute("data-status") === "active";
-    if (isActive) {
-      setExpanded(true);
-    }
-  };
-
-  const logoClickHandler = () => {
-    if (isHomePath) {
-      setExpanded((state) => !state);
-    }
-  };
-
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
   ) : (
@@ -377,7 +351,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         content,
         workspaceName,
         linkClasses,
-        linkClickHandler,
       });
 
       if (expanded) {
@@ -410,30 +383,35 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     });
   };
 
+  const renderExpandCollapseButton = () => {
+    return (
+      <Button
+        variant="outline"
+        size="icon-2xs"
+        onClick={() => setExpanded((s) => !s)}
+        className={cn(
+          "absolute -right-3 top-2 hidden rounded-full z-50 group-hover:flex",
+        )}
+      >
+        {expanded ? <ChevronLeft /> : <ChevronRight />}
+      </Button>
+    );
+  };
+
   return (
     <>
-      <aside className="comet-sidebar-width h-full border-r transition-all">
+      <aside className="comet-sidebar-width group h-full border-r transition-all">
         <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
           <Link
             to={HOME_PATH}
             className="absolute left-[18px] z-10 block"
             params={{ workspaceName }}
-            onClick={logoClickHandler}
           >
             {logo}
           </Link>
-          {expanded && (
-            <Button
-              className="absolute right-2.5"
-              size="icon"
-              variant="minimal"
-              onClick={() => setExpanded(false)}
-            >
-              <PanelLeftClose className="size-4" />
-            </Button>
-          )}
         </div>
-        <div className="flex h-[calc(100%-var(--header-height))] flex-col justify-between px-3 py-4">
+        <div className="relative flex h-[calc(100%-var(--header-height))] flex-col justify-between px-3 py-4">
+          {renderExpandCollapseButton()}
           <ul className="flex flex-col gap-1">{renderGroups(MENU_ITEMS)}</ul>
           <div className="flex flex-col gap-4">
             <Separator />

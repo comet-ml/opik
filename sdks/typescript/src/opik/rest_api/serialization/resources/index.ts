@@ -10,7 +10,6 @@ export * as prompts from "./prompts";
 export * from "./prompts/types";
 export * as spans from "./spans";
 export * from "./spans/types";
-export * as check from "./check";
 export * as experiments from "./experiments";
 export * as traces from "./traces";
 export * from "./attachments/client/requests";

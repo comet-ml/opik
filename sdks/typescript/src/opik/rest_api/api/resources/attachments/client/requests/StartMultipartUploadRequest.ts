@@ -8,18 +8,19 @@ import * as OpikApi from "../../../../index";
  * @example
  *     {
  *         fileName: "file_name",
- *         mimeType: "mime_type",
  *         numOfFileParts: 1,
  *         entityType: "trace",
  *         entityId: "entity_id",
- *         containerId: "container_id"
+ *         path: "path"
  *     }
  */
 export interface StartMultipartUploadRequest {
     fileName: string;
-    mimeType: string;
     numOfFileParts: number;
+    mimeType?: string;
+    /** If null, the default project is used */
+    projectName?: string;
     entityType: OpikApi.StartMultipartUploadRequestEntityType;
     entityId: string;
-    containerId: string;
+    path: string;
 }

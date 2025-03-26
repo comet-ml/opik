@@ -1109,6 +1109,7 @@ class SpansClient:
         filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
 
         limit : typing.Optional[int]
+            Max number of spans to be streamed
 
         last_retrieved_id : typing.Optional[str]
 
@@ -2435,6 +2436,7 @@ class AsyncSpansClient:
         filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
 
         limit : typing.Optional[int]
+            Max number of spans to be streamed
 
         last_retrieved_id : typing.Optional[str]
 

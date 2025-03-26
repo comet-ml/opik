@@ -12,20 +12,22 @@ export const StartMultipartUploadRequest: core.serialization.Schema<
     OpikApi.StartMultipartUploadRequest
 > = core.serialization.object({
     fileName: core.serialization.property("file_name", core.serialization.string()),
-    mimeType: core.serialization.property("mime_type", core.serialization.string()),
     numOfFileParts: core.serialization.property("num_of_file_parts", core.serialization.number()),
+    mimeType: core.serialization.property("mime_type", core.serialization.string().optional()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     entityType: core.serialization.property("entity_type", StartMultipartUploadRequestEntityType),
     entityId: core.serialization.property("entity_id", core.serialization.string()),
-    containerId: core.serialization.property("container_id", core.serialization.string()),
+    path: core.serialization.string(),
 });
 
 export declare namespace StartMultipartUploadRequest {
     export interface Raw {
         file_name: string;
-        mime_type: string;
         num_of_file_parts: number;
+        mime_type?: string | null;
+        project_name?: string | null;
         entity_type: StartMultipartUploadRequestEntityType.Raw;
         entity_id: string;
-        container_id: string;
+        path: string;
     }
 }

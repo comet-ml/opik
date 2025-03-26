@@ -6,8 +6,10 @@ from .complete_multipart_upload_request_entity_type import (
 from .start_multipart_upload_request_entity_type import (
     StartMultipartUploadRequestEntityType,
 )
+from .upload_attachment_request_entity_type import UploadAttachmentRequestEntityType
 
 __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "StartMultipartUploadRequestEntityType",
+    "UploadAttachmentRequestEntityType",
 ]

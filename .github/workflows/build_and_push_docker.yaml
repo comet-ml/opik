@@ -49,7 +49,7 @@ jobs:
           if: inputs.image == 'opik-python-backend'
           run: |
             docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
-            docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > opik-sandbox-executor-python.tar.gz
+            docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
             
         - name: Login to GHCR
           uses: docker/login-action@v3

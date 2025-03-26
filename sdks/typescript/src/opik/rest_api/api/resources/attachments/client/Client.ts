@@ -54,10 +54,8 @@ export class Attachments {
      * @example
      *     await client.attachments.startMultiPartUpload({
      *         fileName: "file_name",
-     *         mimeType: "mime_type",
      *         entityType: "trace",
      *         entityId: "entity_id",
-     *         containerId: "container_id",
      *         fileSize: 1000000,
      *         uploadId: "upload_id",
      *         uploadedFileParts: [{
@@ -104,14 +102,7 @@ export class Attachments {
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                    );
+                    throw new OpikApi.UnauthorizedError(_response.error.body);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -158,11 +149,10 @@ export class Attachments {
      * @example
      *     await client.attachments.startMultiPartUpload1({
      *         fileName: "file_name",
-     *         mimeType: "mime_type",
      *         numOfFileParts: 1,
      *         entityType: "trace",
      *         entityId: "entity_id",
-     *         containerId: "container_id"
+     *         path: "path"
      *     })
      */
     public async startMultiPartUpload1(
@@ -208,14 +198,7 @@ export class Attachments {
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                    );
+                    throw new OpikApi.UnauthorizedError(_response.error.body);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -242,6 +225,116 @@ export class Attachments {
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
                     "Timeout exceeded when calling POST /v1/private/attachment/upload-start.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
+     * Upload attachment to MinIO
+     *
+     * @param {OpikApi.UploadAttachmentRequest} request
+     * @param {Attachments.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.ForbiddenError}
+     *
+     * @example
+     *     await client.attachments.uploadAttachment({
+     *         fileName: "file_name",
+     *         entityType: "trace",
+     *         entityId: "entity_id",
+     *         body: {
+     *             "key": "value"
+     *         }
+     *     })
+     */
+    public async uploadAttachment(
+        request: OpikApi.UploadAttachmentRequest,
+        requestOptions?: Attachments.RequestOptions,
+    ): Promise<void> {
+        const { fileName, projectName, mimeType, entityType, entityId, body: _body } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        _queryParams["file_name"] = fileName;
+        if (projectName != null) {
+            _queryParams["project_name"] = projectName;
+        }
+
+        if (mimeType != null) {
+            _queryParams["mime_type"] = mimeType;
+        }
+
+        _queryParams["entity_type"] = serializers.UploadAttachmentRequestEntityType.jsonOrThrow(entityType, {
+            unrecognizedObjectKeys: "strip",
+        });
+        _queryParams["entity_id"] = entityId;
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/attachment/upload",
+            ),
+            method: "PUT",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            body: serializers.attachments.uploadAttachment.Request.jsonOrThrow(_body, {
+                unrecognizedObjectKeys: "strip",
+            }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 401:
+                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                case 403:
+                    throw new OpikApi.ForbiddenError(
+                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
+                            unrecognizedObjectKeys: "passthrough",
+                            allowUnrecognizedUnionMembers: true,
+                            allowUnrecognizedEnumValues: true,
+                            breadcrumbsPrefix: ["response"],
+                        }),
+                    );
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PUT /v1/private/attachment/upload.",
                 );
             case "unknown":
                 throw new errors.OpikApiError({

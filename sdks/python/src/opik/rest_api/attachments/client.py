@@ -9,15 +9,18 @@ from ..types.multipart_upload_part import MultipartUploadPart
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.unauthorized_error import UnauthorizedError
-from ..types.error_message import ErrorMessage
 from ..core.pydantic_utilities import parse_obj_as
 from ..errors.forbidden_error import ForbiddenError
+from ..types.error_message import ErrorMessage
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from .types.start_multipart_upload_request_entity_type import (
     StartMultipartUploadRequestEntityType,
 )
 from ..types.start_multipart_upload_response import StartMultipartUploadResponse
+from .types.upload_attachment_request_entity_type import (
+    UploadAttachmentRequestEntityType,
+)
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -32,13 +35,13 @@ class AttachmentsClient:
         self,
         *,
         file_name: str,
-        mime_type: str,
         entity_type: CompleteMultipartUploadRequestEntityType,
         entity_id: str,
-        container_id: str,
         file_size: int,
         upload_id: str,
         uploaded_file_parts: typing.Sequence[MultipartUploadPart],
+        project_name: typing.Optional[str] = OMIT,
+        mime_type: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -48,19 +51,20 @@ class AttachmentsClient:
         ----------
         file_name : str
 
-        mime_type : str
-
         entity_type : CompleteMultipartUploadRequestEntityType
 
         entity_id : str
-
-        container_id : str
 
         file_size : int
 
         upload_id : str
 
         uploaded_file_parts : typing.Sequence[MultipartUploadPart]
+
+        project_name : typing.Optional[str]
+            If null, the default project is used
+
+        mime_type : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -79,10 +83,8 @@ class AttachmentsClient:
         )
         client.attachments.start_multi_part_upload(
             file_name="file_name",
-            mime_type="mime_type",
             entity_type="trace",
             entity_id="entity_id",
-            container_id="container_id",
             file_size=1000000,
             upload_id="upload_id",
             uploaded_file_parts=[
@@ -98,11 +100,11 @@ class AttachmentsClient:
             method="POST",
             json={
                 "file_name": file_name,
-                "mime_type": mime_type,
+                "project_name": project_name,
                 "entity_type": entity_type,
                 "entity_id": entity_id,
-                "container_id": container_id,
                 "file_size": file_size,
+                "mime_type": mime_type,
                 "upload_id": upload_id,
                 "uploaded_file_parts": convert_and_respect_annotation_metadata(
                     object_=uploaded_file_parts,
@@ -122,9 +124,9 @@ class AttachmentsClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -148,11 +150,12 @@ class AttachmentsClient:
         self,
         *,
         file_name: str,
-        mime_type: str,
         num_of_file_parts: int,
         entity_type: StartMultipartUploadRequestEntityType,
         entity_id: str,
-        container_id: str,
+        path: str,
+        mime_type: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> StartMultipartUploadResponse:
         """
@@ -162,15 +165,18 @@ class AttachmentsClient:
         ----------
         file_name : str
 
-        mime_type : str
-
         num_of_file_parts : int
 
         entity_type : StartMultipartUploadRequestEntityType
 
         entity_id : str
 
-        container_id : str
+        path : str
+
+        mime_type : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+            If null, the default project is used
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -190,11 +196,10 @@ class AttachmentsClient:
         )
         client.attachments.start_multi_part_upload_1(
             file_name="file_name",
-            mime_type="mime_type",
             num_of_file_parts=1,
             entity_type="trace",
             entity_id="entity_id",
-            container_id="container_id",
+            path="path",
         )
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -202,11 +207,12 @@ class AttachmentsClient:
             method="POST",
             json={
                 "file_name": file_name,
-                "mime_type": mime_type,
                 "num_of_file_parts": num_of_file_parts,
+                "mime_type": mime_type,
+                "project_name": project_name,
                 "entity_type": entity_type,
                 "entity_id": entity_id,
-                "container_id": container_id,
+                "path": path,
             },
             headers={
                 "content-type": "application/json",
@@ -226,9 +232,101 @@ class AttachmentsClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
                         ErrorMessage,
                         parse_obj_as(
                             type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def upload_attachment(
+        self,
+        *,
+        file_name: str,
+        entity_type: UploadAttachmentRequestEntityType,
+        entity_id: str,
+        request: typing.Dict[str, typing.Optional[typing.Any]],
+        project_name: typing.Optional[str] = None,
+        mime_type: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Upload attachment to MinIO
+
+        Parameters
+        ----------
+        file_name : str
+
+        entity_type : UploadAttachmentRequestEntityType
+
+        entity_id : str
+
+        request : typing.Dict[str, typing.Optional[typing.Any]]
+
+        project_name : typing.Optional[str]
+
+        mime_type : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.attachments.upload_attachment(
+            file_name="file_name",
+            entity_type="trace",
+            entity_id="entity_id",
+            request={"key": "value"},
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/attachment/upload",
+            method="PUT",
+            params={
+                "file_name": file_name,
+                "project_name": project_name,
+                "mime_type": mime_type,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+            },
+            json=request,
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -257,13 +355,13 @@ class AsyncAttachmentsClient:
         self,
         *,
         file_name: str,
-        mime_type: str,
         entity_type: CompleteMultipartUploadRequestEntityType,
         entity_id: str,
-        container_id: str,
         file_size: int,
         upload_id: str,
         uploaded_file_parts: typing.Sequence[MultipartUploadPart],
+        project_name: typing.Optional[str] = OMIT,
+        mime_type: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -273,19 +371,20 @@ class AsyncAttachmentsClient:
         ----------
         file_name : str
 
-        mime_type : str
-
         entity_type : CompleteMultipartUploadRequestEntityType
 
         entity_id : str
-
-        container_id : str
 
         file_size : int
 
         upload_id : str
 
         uploaded_file_parts : typing.Sequence[MultipartUploadPart]
+
+        project_name : typing.Optional[str]
+            If null, the default project is used
+
+        mime_type : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -309,10 +408,8 @@ class AsyncAttachmentsClient:
         async def main() -> None:
             await client.attachments.start_multi_part_upload(
                 file_name="file_name",
-                mime_type="mime_type",
                 entity_type="trace",
                 entity_id="entity_id",
-                container_id="container_id",
                 file_size=1000000,
                 upload_id="upload_id",
                 uploaded_file_parts=[
@@ -331,11 +428,11 @@ class AsyncAttachmentsClient:
             method="POST",
             json={
                 "file_name": file_name,
-                "mime_type": mime_type,
+                "project_name": project_name,
                 "entity_type": entity_type,
                 "entity_id": entity_id,
-                "container_id": container_id,
                 "file_size": file_size,
+                "mime_type": mime_type,
                 "upload_id": upload_id,
                 "uploaded_file_parts": convert_and_respect_annotation_metadata(
                     object_=uploaded_file_parts,
@@ -355,9 +452,9 @@ class AsyncAttachmentsClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -381,11 +478,12 @@ class AsyncAttachmentsClient:
         self,
         *,
         file_name: str,
-        mime_type: str,
         num_of_file_parts: int,
         entity_type: StartMultipartUploadRequestEntityType,
         entity_id: str,
-        container_id: str,
+        path: str,
+        mime_type: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> StartMultipartUploadResponse:
         """
@@ -395,15 +493,18 @@ class AsyncAttachmentsClient:
         ----------
         file_name : str
 
-        mime_type : str
-
         num_of_file_parts : int
 
         entity_type : StartMultipartUploadRequestEntityType
 
         entity_id : str
 
-        container_id : str
+        path : str
+
+        mime_type : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+            If null, the default project is used
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -428,11 +529,10 @@ class AsyncAttachmentsClient:
         async def main() -> None:
             await client.attachments.start_multi_part_upload_1(
                 file_name="file_name",
-                mime_type="mime_type",
                 num_of_file_parts=1,
                 entity_type="trace",
                 entity_id="entity_id",
-                container_id="container_id",
+                path="path",
             )
 
 
@@ -443,11 +543,12 @@ class AsyncAttachmentsClient:
             method="POST",
             json={
                 "file_name": file_name,
-                "mime_type": mime_type,
                 "num_of_file_parts": num_of_file_parts,
+                "mime_type": mime_type,
+                "project_name": project_name,
                 "entity_type": entity_type,
                 "entity_id": entity_id,
-                "container_id": container_id,
+                "path": path,
             },
             headers={
                 "content-type": "application/json",
@@ -467,9 +568,109 @@ class AsyncAttachmentsClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
                         ErrorMessage,
                         parse_obj_as(
                             type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def upload_attachment(
+        self,
+        *,
+        file_name: str,
+        entity_type: UploadAttachmentRequestEntityType,
+        entity_id: str,
+        request: typing.Dict[str, typing.Optional[typing.Any]],
+        project_name: typing.Optional[str] = None,
+        mime_type: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Upload attachment to MinIO
+
+        Parameters
+        ----------
+        file_name : str
+
+        entity_type : UploadAttachmentRequestEntityType
+
+        entity_id : str
+
+        request : typing.Dict[str, typing.Optional[typing.Any]]
+
+        project_name : typing.Optional[str]
+
+        mime_type : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.attachments.upload_attachment(
+                file_name="file_name",
+                entity_type="trace",
+                entity_id="entity_id",
+                request={"key": "value"},
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/attachment/upload",
+            method="PUT",
+            params={
+                "file_name": file_name,
+                "project_name": project_name,
+                "mime_type": mime_type,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+            },
+            json=request,
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )

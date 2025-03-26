@@ -5,11 +5,12 @@ from ..core.client_wrapper import SyncClientWrapper
 from ..types.auth_details_holder import AuthDetailsHolder
 from ..core.request_options import RequestOptions
 from ..errors.unauthorized_error import UnauthorizedError
-from ..types.error_message import ErrorMessage
 from ..core.pydantic_utilities import parse_obj_as
 from ..errors.forbidden_error import ForbiddenError
+from ..types.error_message import ErrorMessage
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from ..types.workspace_name_holder import WorkspaceNameHolder
 from ..core.client_wrapper import AsyncClientWrapper
 
 # this is used as the default value for optional parameters
@@ -65,9 +66,9 @@ class CheckClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -89,7 +90,7 @@ class CheckClient:
 
     def get_workspace_name(
         self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> str:
+    ) -> WorkspaceNameHolder:
         """
         User's default workspace name
 
@@ -100,7 +101,7 @@ class CheckClient:
 
         Returns
         -------
-        str
+        WorkspaceNameHolder
             Authentication resource
 
         Examples
@@ -121,18 +122,18 @@ class CheckClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    str,
+                    WorkspaceNameHolder,
                     parse_obj_as(
-                        type_=str,  # type: ignore
+                        type_=WorkspaceNameHolder,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -210,9 +211,9 @@ class AsyncCheckClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -234,7 +235,7 @@ class AsyncCheckClient:
 
     async def get_workspace_name(
         self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> str:
+    ) -> WorkspaceNameHolder:
         """
         User's default workspace name
 
@@ -245,7 +246,7 @@ class AsyncCheckClient:
 
         Returns
         -------
-        str
+        WorkspaceNameHolder
             Authentication resource
 
         Examples
@@ -274,18 +275,18 @@ class AsyncCheckClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    str,
+                    WorkspaceNameHolder,
                     parse_obj_as(
-                        type_=str,  # type: ignore
+                        type_=WorkspaceNameHolder,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )

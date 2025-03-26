@@ -143,7 +143,7 @@ export class FeedbackDefinitions {
      *
      * @example
      *     await client.feedbackDefinitions.createFeedbackDefinition({
-     *         type: "categorical"
+     *         type: "numerical"
      *     })
      */
     public async createFeedbackDefinition(
@@ -286,7 +286,7 @@ export class FeedbackDefinitions {
      *
      * @example
      *     await client.feedbackDefinitions.updateFeedbackDefinition("id", {
-     *         type: "categorical"
+     *         type: "numerical"
      *     })
      */
     public async updateFeedbackDefinition(

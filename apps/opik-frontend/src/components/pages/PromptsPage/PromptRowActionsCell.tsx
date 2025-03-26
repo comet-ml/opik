@@ -38,6 +38,7 @@ export const PromptRowActionsCell: React.FunctionComponent<
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className="justify-end p-0"
+      stopClickPropagation
     >
       <AddEditPromptDialog
         key={`edit-${resetKeyRef.current}`}

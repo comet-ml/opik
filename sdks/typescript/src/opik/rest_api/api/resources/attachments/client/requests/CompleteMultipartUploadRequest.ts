@@ -8,10 +8,8 @@ import * as OpikApi from "../../../../index";
  * @example
  *     {
  *         fileName: "file_name",
- *         mimeType: "mime_type",
  *         entityType: "trace",
  *         entityId: "entity_id",
- *         containerId: "container_id",
  *         fileSize: 1000000,
  *         uploadId: "upload_id",
  *         uploadedFileParts: [{
@@ -22,11 +20,12 @@ import * as OpikApi from "../../../../index";
  */
 export interface CompleteMultipartUploadRequest {
     fileName: string;
-    mimeType: string;
+    /** If null, the default project is used */
+    projectName?: string;
     entityType: OpikApi.CompleteMultipartUploadRequestEntityType;
     entityId: string;
-    containerId: string;
     fileSize: number;
+    mimeType?: string;
     uploadId: string;
     uploadedFileParts: OpikApi.MultipartUploadPart[];
 }

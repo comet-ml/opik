@@ -9,12 +9,12 @@ RUN pip install -r requirements.txt --break-system-packages
 
 ENV PYTHON_CODE_EXECUTOR_ASSET_NAME="opik-sandbox-executor-python"
 # Optionally copies the file. It's built ok without it, as it'll be pulled before running anyway.
-COPY *${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz /images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz
+COPY *${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz ./images/${PYTHON_CODE_EXECUTOR_ASSET_NAME}.tar.gz
 
 COPY src ./src
 
-COPY entrypoint.sh .
-RUN chmod u+x entrypoint.sh
+COPY entrypoint.sh demo_data_entrypoint.sh ./
+RUN chmod u+x entrypoint.sh demo_data_entrypoint.sh
 
 EXPOSE 8000
 
@@ -26,6 +26,9 @@ ARG OPIK_VERSION
 ENV PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY="ghcr.io/comet-ml/opik"
 ENV PYTHON_CODE_EXECUTOR_IMAGE_NAME="opik-sandbox-executor-python"
 ENV PYTHON_CODE_EXECUTOR_IMAGE_TAG="${OPIK_VERSION}"
+ENV PYTHON_CODE_EXECUTOR_CONTAINERS_NUM=5
+ENV PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS=3
+ENV PYTHON_CODE_EXECUTOR_LOG_LEVEL="INFO"
 
 ENTRYPOINT ["tini", "--"]
 CMD ./entrypoint.sh

@@ -13,12 +13,10 @@ from .datasets.client import DatasetsClient
 from .experiments.client import ExperimentsClient
 from .feedback_definitions.client import FeedbackDefinitionsClient
 from .llm_provider_key.client import LlmProviderKeyClient
-from .open_telemetry_ingestion.client import OpenTelemetryIngestionClient
 from .projects.client import ProjectsClient
 from .prompts.client import PromptsClient
 from .spans.client import SpansClient
 from .traces.client import TracesClient
-from .workspaces.client import WorkspacesClient
 from .redirect.client import RedirectClient
 from .core.request_options import RequestOptions
 from .core.pydantic_utilities import parse_obj_as
@@ -34,12 +32,10 @@ from .datasets.client import AsyncDatasetsClient
 from .experiments.client import AsyncExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient
-from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient
 from .projects.client import AsyncProjectsClient
 from .prompts.client import AsyncPromptsClient
 from .spans.client import AsyncSpansClient
 from .traces.client import AsyncTracesClient
-from .workspaces.client import AsyncWorkspacesClient
 from .redirect.client import AsyncRedirectClient
 
 
@@ -94,7 +90,11 @@ class OpikApi:
         httpx_client: typing.Optional[httpx.Client] = None,
     ):
         _defaulted_timeout = (
-            timeout if timeout is not None else 60 if httpx_client is None else None
+            timeout
+            if timeout is not None
+            else 60
+            if httpx_client is None
+            else httpx_client.timeout.read
         )
         self._client_wrapper = SyncClientWrapper(
             base_url=_get_base_url(base_url=base_url, environment=environment),
@@ -126,14 +126,10 @@ class OpikApi:
         self.llm_provider_key = LlmProviderKeyClient(
             client_wrapper=self._client_wrapper
         )
-        self.open_telemetry_ingestion = OpenTelemetryIngestionClient(
-            client_wrapper=self._client_wrapper
-        )
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
-        self.workspaces = WorkspacesClient(client_wrapper=self._client_wrapper)
         self.redirect = RedirectClient(client_wrapper=self._client_wrapper)
 
     def is_alive(
@@ -274,7 +270,11 @@ class AsyncOpikApi:
         httpx_client: typing.Optional[httpx.AsyncClient] = None,
     ):
         _defaulted_timeout = (
-            timeout if timeout is not None else 60 if httpx_client is None else None
+            timeout
+            if timeout is not None
+            else 60
+            if httpx_client is None
+            else httpx_client.timeout.read
         )
         self._client_wrapper = AsyncClientWrapper(
             base_url=_get_base_url(base_url=base_url, environment=environment),
@@ -306,14 +306,10 @@ class AsyncOpikApi:
         self.llm_provider_key = AsyncLlmProviderKeyClient(
             client_wrapper=self._client_wrapper
         )
-        self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(
-            client_wrapper=self._client_wrapper
-        )
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
-        self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)
         self.redirect = AsyncRedirectClient(client_wrapper=self._client_wrapper)
 
     async def is_alive(

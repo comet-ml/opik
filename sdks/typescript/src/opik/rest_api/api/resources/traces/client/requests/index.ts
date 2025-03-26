@@ -6,3 +6,4 @@ export { type FindFeedbackScoreNames2Request } from "./FindFeedbackScoreNames2Re
 export { type GetTraceStatsRequest } from "./GetTraceStatsRequest";
 export { type TraceThreadIdentifier } from "./TraceThreadIdentifier";
 export { type GetTraceThreadsRequest } from "./GetTraceThreadsRequest";
+export { type TraceSearchStreamRequestPublic } from "./TraceSearchStreamRequestPublic";

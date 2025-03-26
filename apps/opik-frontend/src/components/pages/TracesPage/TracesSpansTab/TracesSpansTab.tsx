@@ -434,6 +434,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ...(type === TRACE_DATA_TYPE.traces
         ? [
             {
+              id: "span_count",
+              label: "Span count",
+              type: COLUMN_TYPE.number,
+              accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
+            },
+            {
               id: "thread_id",
               label: "Thread ID",
               type: COLUMN_TYPE.string,
@@ -647,6 +653,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         columns={columns}
         columnsStatistic={columnsStatistic}
         data={rows}
+        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         selectionConfig={{

@@ -9,6 +9,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
@@ -16,6 +17,8 @@ import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,6 +30,8 @@ public interface FileUploadService {
 
     CompleteMultipartUploadResponse completeMultipartUpload(String key, String uploadId,
             List<MultipartUploadPart> parts);
+
+    PutObjectResponse upload(String key, byte[] data, String contentType);
 }
 
 @Slf4j
@@ -80,5 +85,16 @@ class FileUploadServiceImpl implements FileUploadService {
                 .multipartUpload(completedMultipartUpload).build();
 
         return s3Client.completeMultipartUpload(request);
+    }
+
+    @Override
+    public PutObjectResponse upload(String key, byte[] data, String contentType) {
+        PutObjectRequest putRequest = PutObjectRequest.builder()
+                .bucket(s3Config.getS3BucketName())
+                .key(key)
+                .contentType(contentType)
+                .build();
+
+        return s3Client.putObject(putRequest, RequestBody.fromBytes(data));
     }
 }

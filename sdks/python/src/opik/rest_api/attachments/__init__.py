@@ -3,9 +3,11 @@
 from .types import (
     CompleteMultipartUploadRequestEntityType,
     StartMultipartUploadRequestEntityType,
+    UploadAttachmentRequestEntityType,
 )
 
 __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "StartMultipartUploadRequestEntityType",
+    "UploadAttachmentRequestEntityType",
 ]
