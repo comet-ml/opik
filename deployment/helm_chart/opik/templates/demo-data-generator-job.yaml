@@ -1,4 +1,4 @@
-{{- if and .Values.demoDataJob (index .Values.component "python-backend" "enabled") .Values.component.frontend.enabled }}
+{{- if and .Values.demoDataJob (index .Values.component "python-backend" "enabled") .Values.component.frontend.enabled .Values.component.backend.enabled (eq "true" .Values.component.backend.env.CREATE_DEMO_DATA) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
