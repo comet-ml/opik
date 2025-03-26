@@ -58,11 +58,11 @@ interface MetadataDAO {
 
     @UseStringTemplateEngine
     @SqlQuery("""
-                    SELECT DISTINCT last_updated_by
-                    FROM <table_name>
-                    <if(daily)>
-                    WHERE last_updated_at BETWEEN TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 1 DAY)) AND TIMESTAMP(CURDATE() - INTERVAL 1 MICROSECOND)
-                    <endif>
+                   SELECT DISTINCT last_updated_by
+                   FROM <table_name>
+                   <if(daily)>
+                   WHERE last_updated_at BETWEEN TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 1 DAY)) AND TIMESTAMP(CURDATE() - INTERVAL 1 MICROSECOND)
+                   <endif>
             """)
     Set<String> getReportUsers(@Define("table_name") String tableName, @Define("daily") boolean daily);
 }

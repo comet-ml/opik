@@ -58,10 +58,9 @@ opik:
         ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
       initContainers:
       - name: wait-for-clickhouse-service
-        image: stefanevinance/wait-for-200
-        env:
-          - name: URL
-            value: http://<YOUR CLICKHOUSE HOST>:8123
+        image: curlimages/curl:8.12.1
+        command: ["/bin/sh", "-c"]
+        args: ['while [ $(curl -ksw "%{http_code}" "http://<YOUR CLICKHOUSE HOST>:8123" -o /dev/null) -ne 200 ]; do sleep 5; echo "Clickhouse is not available. Waiting for the Clickhouse..."; done']
 ...
   clickhouse:
     enabled: false

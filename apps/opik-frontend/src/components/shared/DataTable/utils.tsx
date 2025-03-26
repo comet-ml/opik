@@ -147,6 +147,7 @@ export const generateSelectColumDef = <TData,>(meta?: {
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
         className="py-3.5"
+        stopClickPropagation
       >
         <Checkbox
           checked={context.row.getIsSelected()}
