@@ -48,7 +48,7 @@ def running_containers():
 def ensure_container_pool_filled():
     with container_pool_creation_lock:
         while len(running_containers()) < PRELOADED_CONTAINERS:
-            logger.warning(f"not enough containers running; creating more...")
+            logger.info(f"not enough python runner containers running; creating more...")
             create_container()
 
 def cleanup_containers():
