@@ -19,6 +19,11 @@ class ROUGE(base_metric.BaseMetric):
     Args:
         name: The name of the metric. Defaults to "rouge_metric".
         track: Whether to track the metric. Defaults to True.
+        rouge_type: Type of ROUGE score to compute. Defaults to "rouge1". Must be one of the following:
+                    - "rouge1": unigram (1-gram) based scoring
+                    - "rouge2": bigram (2-gram) based scoring
+                    - "rougeL": Longest common subsequence based scoring
+                    - "rougeLSum": splits text using "\n"
 
     Example:
         >>> from opik.evaluation.metrics import ROUGE
@@ -26,13 +31,17 @@ class ROUGE(base_metric.BaseMetric):
         >>> result = rouge_metric.score(
         ...     output="The quick brown fox jumps over the lazy dog.",
         ...     reference="The quick brown fox jumps over the lazy dog."
-        ...     rouge_type="rouge1"
         ... )
         >>> print(result.value)
         1.0
     """
 
-    def __init__(self, name: str = "rouge_metric", track: bool = True):
+    def __init__(
+        self,
+        name: str = "rouge_metric",
+        track: bool = True,
+        rouge_type: str = "rouge1"
+    ):
         super().__init__(name=name, track=track)
 
         if evaluate is None or rouge_score is None:
@@ -41,26 +50,26 @@ class ROUGE(base_metric.BaseMetric):
                 "Install via `pip install evaluate rouge-score`."
             )
 
+        valid_rouge_types = {'rouge1', 'rouge2', 'rougeL', 'rougeLsum'}
+        if rouge_type not in valid_rouge_types:
+            raise MetricComputationError(
+                f"Invalid rouge_type '{rouge_type}'. Must be one of {valid_rouge_types}.")
+
         self._rouge = evaluate.load('rouge')
+        self._rouge_type = rouge_type
 
     def score(
         self,
         output: str,
         reference: Union[str, List[str]],
-        rouge_type: str,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
-        Compute the ROUGE score between the output and reference strings.
+        Compute the ROUGE score based on the given rouge_type between the output and reference strings.
 
         Args:
             output: The output string to score.
             reference: The reference string or list of reference strings.
-            rouge_type: Type of ROUGE score to compute. Must be one of the following:
-                    - "rouge1": unigram (1-gram) based scoring
-                    - "rouge2": bigram (2-gram) based scoring
-                    - "rougeL": Longest common subsequence based scoring
-                    - "rougeLSum": splits text using "\n"
             **ignored_kwargs: Additional keyword arguments that are ignored.
 
         Returns:
@@ -70,14 +79,7 @@ class ROUGE(base_metric.BaseMetric):
             MetricComputationError:
                 - If the candidate or any reference is empty.
                 - If the reference strings are in multiple lists.
-                - If the rouge_type is invalid.
         """
-        valid_rouge_types = {'rouge1', 'rouge2', 'rougeL', 'rougeLsum'}
-
-        if rouge_type not in valid_rouge_types:
-            raise MetricComputationError(
-                f"Invalid rouge_type '{rouge_type}'. Must be one of {valid_rouge_types}.")
-
         if not output.strip():
             raise MetricComputationError("Candidate is empty.")
 
@@ -95,12 +97,13 @@ class ROUGE(base_metric.BaseMetric):
                     raise MetricComputationError(
                         "Encountered empty reference.")
 
+        rouge_score_type = self._rouge_type
         results = self._rouge.compute(
-            predictions=[output], references=[reference], rouge_type=[rouge_type])
-        rouge_f1_value = results[rouge_type].item()
+            predictions=[output], references=[reference], rouge_type=[rouge_score_type])
+        rouge_f1_value = results[rouge_score_type].item()
 
         return score_result.ScoreResult(
             value=rouge_f1_value,
             name=self.name,
-            reason=f"ROUGE score of {rouge_type}: {rouge_f1_value:.4f}",
+            reason=f"{rouge_score_type} score: {rouge_f1_value:.4f}",
         )
