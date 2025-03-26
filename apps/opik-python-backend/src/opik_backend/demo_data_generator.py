@@ -48,7 +48,7 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
     except urllib.error.HTTPError as e:
         if e.code >= 500:
             raise e
-        logger.error("Got error %s, from method %s on url %s", e.code, message["method"], url)
+        logger.info("Got error %s, from method %s on url %s", e.code, message["method"], url)
         return None, e.code
     
 def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
