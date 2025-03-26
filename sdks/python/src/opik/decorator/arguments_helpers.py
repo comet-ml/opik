@@ -1,10 +1,9 @@
-from typing import Optional, Any, Dict, List, Callable
-
-from .. import datetime_helpers
-from ..api_objects import helpers, span
-from ..types import SpanType, ErrorInfoDict
-
 import dataclasses
+from typing import Any, Callable, Dict, List, Optional, Union
+
+from .. import datetime_helpers, llm_usage
+from ..api_objects import helpers, span
+from ..types import ErrorInfoDict, SpanType
 
 
 @dataclasses.dataclass
@@ -26,11 +25,12 @@ class EndSpanParameters(BaseArguments):
     tracked function is ended.
     """
 
+    name: Optional[str] = None
     metadata: Optional[Any] = None
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
-    usage: Optional[Dict[str, Any]] = None
+    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None
     model: Optional[str] = None
     provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None

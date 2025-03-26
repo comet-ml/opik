@@ -3,19 +3,19 @@ from typing import Any, Dict
 from flask import request, abort, jsonify, Blueprint, current_app
 from werkzeug.exceptions import HTTPException
 
-from opik_backend.docker_runner import run_scoring_in_docker_python_container
+from opik_backend.docker_runner import run_scoring_in_docker_python_container, preload_containers
+from opik_backend.http_utils import build_error_response
 
 evaluator = Blueprint('evaluator', __name__, url_prefix='/v1/private/evaluators')
 
-
 @evaluator.errorhandler(400)
 def bad_request(exception: HTTPException):
-    return jsonify(error=str(exception)), 400
+    return build_error_response(exception, 400)
 
 
 @evaluator.errorhandler(500)
 def internal_server_error(exception: HTTPException):
-    return jsonify(error=str(exception)), 500
+    return build_error_response(exception, 500)
 
 
 @evaluator.route("/python", methods=["POST"])
@@ -43,3 +43,6 @@ def execute_evaluator_python():
         abort(400, "The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'")
 
     return jsonify({"scores": scores})
+
+# preload containers; they must go when application ends
+preload_containers()

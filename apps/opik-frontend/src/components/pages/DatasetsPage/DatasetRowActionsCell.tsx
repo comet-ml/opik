@@ -34,6 +34,7 @@ export const DatasetRowActionsCell: React.FunctionComponent<
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className="justify-end p-0"
+      stopClickPropagation
     >
       <AddEditDatasetDialog
         key={`add-${resetKeyRef.current}`}

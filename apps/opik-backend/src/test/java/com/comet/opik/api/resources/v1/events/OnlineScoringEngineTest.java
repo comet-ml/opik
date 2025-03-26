@@ -25,7 +25,8 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.dockerjava.api.exception.InternalServerErrorException;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.AbstractModule;
@@ -39,6 +40,7 @@ import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -61,6 +63,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -71,7 +74,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
 import static com.comet.opik.api.LogItem.LogLevel;
-import static com.comet.opik.api.LogItem.LogPage;
+import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -84,23 +87,21 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class OnlineScoringEngineTest {
 
-    static ChatCompletionService aiProxyService;
-    static FeedbackScoreService feedbackScoreService;
-    static EventBus eventBus;
+    private final ChatCompletionService aiProxyService;
+    private final FeedbackScoreService feedbackScoreService;
+    private final EventBus eventBus;
 
-    private static final String API_KEY = UUID.randomUUID().toString();
-    private static final String PROJECT_NAME = "project-" + UUID.randomUUID();
-    private static final String WORKSPACE_NAME = "workspace-" + UUID.randomUUID();
+    private static final String API_KEY = "apiKey" + UUID.randomUUID();
+    private static final String PROJECT_NAME = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+    private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String WORKSPACE_ID = "wid-" + UUID.randomUUID();
-    private static final String USER_NAME = "user-" + UUID.randomUUID();
+    private static final String USER_NAME = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
-    LlmAsJudgeCode evaluatorCode;
-    Trace trace;
-
-    String messageToTest = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
-    String testEvaluator = """
+    private final String MESSAGE_TO_TEST = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
+    private final String TEST_EVALUATOR = """
             {
               "model": { "name": "gpt-4o", "temperature": 0.3 },
               "messages": [
@@ -111,7 +112,9 @@ class OnlineScoringEngineTest {
                   "summary": "input.questions.question1",
                   "instruction": "output.output",
                   "nonUsed": "input.questions.question2",
-                  "toFail1": "metadata.nonexistent.path"
+                  "toFail1": "metadata.nonexistent.path",
+                  "nonexistent": "some.nonexistent.path",
+                  "literal": "some literal value"
               },
               "schema": [
                 { "name": "Relevance",           "type": "INTEGER",   "description": "Relevance of the summary" },
@@ -120,10 +123,10 @@ class OnlineScoringEngineTest {
               ]
             }
             """
-            .formatted(messageToTest).trim();
-    String summaryStr = "What was the approach to experimenting with different data mixtures?";
-    String outputStr = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
-    String input = """
+            .formatted(MESSAGE_TO_TEST).trim();
+    private final String SUMMARY_STR = "What was the approach to experimenting with different data mixtures?";
+    private final String OUTPUT_STR = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
+    private final String INPUT = """
             {
                 "questions": {
                     "question1": "%s",
@@ -132,15 +135,15 @@ class OnlineScoringEngineTest {
                 "pdf_url": "https://arxiv.org/pdf/2406.04744",
                 "title": "CRAG -- Comprehensive RAG Benchmark"
             }
-            """.formatted(summaryStr).trim();
-    String output = """
+            """.formatted(SUMMARY_STR).trim();
+    private final String OUTPUT = """
             {
                 "output": "%s"
             }
-            """.formatted(outputStr).trim();
+            """.formatted(OUTPUT_STR).trim();
 
-    String edgeCaseTemplate = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\n";
-    String testEvaluatorEdgeCase = """
+    private final String EDGE_CASE_TEMPLATE = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
+    private final String TEST_EVALUATOR_EDGE_CASE = """
             {
               "model": { "name": "gpt-4o", "temperature": 0.3 },
               "messages": [
@@ -151,7 +154,9 @@ class OnlineScoringEngineTest {
                   "summary": "input.questions.question1",
                   "instruction": "output.output",
                   "nonUsed": "input.questions.question2",
-                  "toFail1": "metadata.nonexistent.path"
+                  "toFail1": "metadata.nonexistent.path",
+                   "nonexistent": "some.nonexistent.path",
+                  "literal": "some literal value"
               },
               "schema": [
                 { "name": "Relevance",           "type": "INTEGER",   "description": "Relevance of the summary" },
@@ -160,9 +165,7 @@ class OnlineScoringEngineTest {
               ]
             }
             """
-            .formatted(edgeCaseTemplate).trim();
-
-    private final ObjectMapper mapper = new ObjectMapper();
+            .formatted(EDGE_CASE_TEMPLATE).trim();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -216,10 +219,12 @@ class OnlineScoringEngineTest {
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) {
-
+    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
+        try (var connection = CLICKHOUSE.createConnection("")) {
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+                    ClickHouseContainerUtils.migrationParameters());
+        }
         var baseURI = "http://localhost:%d".formatted(client.getPort());
 
         ClientSupportUtils.config(client);
@@ -235,20 +240,16 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("test Redis producer and consumer base flow")
     void testRedisProducerAndConsumerBaseFlow(OnlineScoringSampler onlineScoringSampler) throws Exception {
+        var projectId = projectResourceClient.createProject(PROJECT_NAME, API_KEY, WORKSPACE_NAME);
 
-        log.debug("Setting up project '{}'", PROJECT_NAME);
-        UUID projectId = projectResourceClient.createProject(PROJECT_NAME, API_KEY, WORKSPACE_NAME);
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
 
-        var mapper = JsonUtils.MAPPER;
-        evaluatorCode = mapper.readValue(testEvaluator, LlmAsJudgeCode.class);
+        var evaluator = createRule(projectId, evaluatorCode); // Let's make sure all traces are expected to be scored
 
-        var evaluator = createRule(projectId); // lets make sure all traces are expected to be scored
-
-        log.info("Creating evaluator {}", evaluator);
         evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
-        var traceId = UUID.randomUUID();
-        trace = createTrace(traceId, projectId);
+        var traceId = generator.generate();
+        var trace = createTrace(traceId, projectId);
         var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
 
         Mockito.doNothing().when(eventBus).register(Mockito.any());
@@ -274,7 +275,6 @@ class OnlineScoringEngineTest {
 
         // check which feedback scores would be stored in Clickhouse by our process
         List<FeedbackScoreBatchItem> processed = captor.getValue();
-        log.info(processed.toString());
 
         assertThat(processed).hasSize(event.traces().size() * 3);
 
@@ -288,29 +288,28 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("test User Facing log error when AI provider fails")
     void testUserFacingLogErrorWhenAIProviderFails(OnlineScoringSampler onlineScoringSampler) throws Exception {
-
         Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
 
-        String projectName = factory.manufacturePojo(String.class);
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
 
-        UUID projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        evaluatorCode = JsonUtils.MAPPER.readValue(testEvaluator, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
 
-        var evaluator = createRule(projectId);
+        var evaluator = createRule(projectId, evaluatorCode);
 
-        UUID id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+        var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
-        var traceId = UUID.randomUUID();
-        trace = createTrace(traceId, projectId);
+        var traceId = generator.generate();
+        var trace = createTrace(traceId, projectId);
 
         var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
 
         Mockito.doNothing().when(eventBus).register(Mockito.any());
 
-        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        var captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
-        String providerErrorMessage = "LLM provider XXXXX";
+        var providerErrorMessage = "LLM provider XXXXX";
 
         Mockito.doThrow(
                 new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER,
@@ -324,8 +323,8 @@ class OnlineScoringEngineTest {
         Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(captor.capture());
 
         //Check user facing logs
-        LogPage logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
-        String logMessage = "Unexpected error while scoring traceId '%s' with rule '%s': %n%n%s".formatted(traceId,
+        var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+        var logMessage = "Unexpected error while scoring traceId '%s' with rule '%s': %n%n%s".formatted(traceId,
                 evaluator.getName(), providerErrorMessage);
 
         assertThat(logPage.content())
@@ -338,14 +337,14 @@ class OnlineScoringEngineTest {
                 .projectName(PROJECT_NAME)
                 .projectId(projectId)
                 .createdBy(USER_NAME)
-                .input(JsonUtils.MAPPER.readTree(input))
-                .output(JsonUtils.MAPPER.readTree(output)).build();
+                .input(JsonUtils.MAPPER.readTree(INPUT))
+                .output(JsonUtils.MAPPER.readTree(OUTPUT)).build();
     }
 
-    private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId) {
+    private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId, LlmAsJudgeCode evaluatorCode) {
         return AutomationRuleEvaluatorLlmAsJudge.builder()
                 .projectId(projectId)
-                .name("evaluator-test-" + UUID.randomUUID())
+                .name("evaluator-test-" + RandomStringUtils.secure().nextAlphanumeric(36))
                 .createdBy(USER_NAME)
                 .code(evaluatorCode)
                 .samplingRate(1.0f)
@@ -354,12 +353,13 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("parse variable mapping into a usable one")
-    void testVariableMapping() {
+    void testVariableMapping() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var variableMappings = OnlineScoringEngine.toVariableMapping(evaluatorCode.variables());
 
-        assertThat(variableMappings).hasSize(4);
+        assertThat(variableMappings).hasSize(6);
 
-        var varSummary = variableMappings.get(0);
+        var varSummary = variableMappings.getFirst();
         assertThat(varSummary.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
         assertThat(varSummary.jsonPath()).isEqualTo("$.questions.question1");
 
@@ -374,20 +374,40 @@ class OnlineScoringEngineTest {
         var varToFail = variableMappings.get(3);
         assertThat(varToFail.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
         assertThat(varToFail.jsonPath()).isEqualTo("$.nonexistent.path");
+
+        var actualVarNonexistent = variableMappings.get(4);
+        var expectedVarNonexistent = OnlineScoringEngine.MessageVariableMapping.builder()
+                .variableName("nonexistent")
+                .valueToReplace("some.nonexistent.path")
+                .build();
+        assertThat(actualVarNonexistent).isEqualTo(expectedVarNonexistent);
+
+        var actualVarLiteral = variableMappings.get(5);
+        var expectedVarLiteral = OnlineScoringEngine.MessageVariableMapping.builder()
+                .variableName("literal")
+                .valueToReplace("some literal value")
+                .build();
+        assertThat(actualVarLiteral).isEqualTo(expectedVarLiteral);
     }
 
     @Test
     @DisplayName("render message templates with a trace")
-    void testRenderTemplate() {
-        var renderedMessages = OnlineScoringEngine.renderMessages(evaluatorCode.messages(), evaluatorCode.variables(),
-                trace);
+    void testRenderTemplate() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+        var renderedMessages = OnlineScoringEngine.renderMessages(
+                evaluatorCode.messages(), evaluatorCode.variables(), trace);
 
         assertThat(renderedMessages).hasSize(2);
 
-        var userMessage = renderedMessages.get(0);
+        var userMessage = renderedMessages.getFirst();
         assertThat(userMessage.getClass()).isEqualTo(UserMessage.class);
-        assertThat(((UserMessage) userMessage).singleText()).contains(summaryStr);
-        assertThat(((UserMessage) userMessage).singleText()).contains(outputStr);
+        assertThat(((UserMessage) userMessage).singleText()).contains(SUMMARY_STR);
+        assertThat(((UserMessage) userMessage).singleText()).contains(OUTPUT_STR);
+        assertThat(((UserMessage) userMessage).singleText()).contains("some.nonexistent.path");
+        assertThat(((UserMessage) userMessage).singleText()).contains("some literal value");
 
         var systemMessage = renderedMessages.get(1);
         assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
@@ -460,7 +480,7 @@ class OnlineScoringEngineTest {
         assertThat(feedbackScores).hasSize(expectedResults);
 
         if (expectedResults > 0) {
-            var relevanceScore = feedbackScores.get(0);
+            var relevanceScore = feedbackScores.getFirst();
             assertThat(relevanceScore.name()).isEqualTo("Relevance");
             assertThat(relevanceScore.value()).isEqualTo(new BigDecimal(5));
             assertThat(relevanceScore.reason()).startsWith("The summary directly ");
@@ -484,19 +504,22 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("render a message template with edge cases")
     void testRenderEdgeCaseTemplate() throws JsonProcessingException {
-
-        var evaluatorEdgeCase = mapper.readValue(testEvaluatorEdgeCase,
+        var evaluatorEdgeCase = JsonUtils.MAPPER.readValue(TEST_EVALUATOR_EDGE_CASE,
                 AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class);
-
-        var renderedMessages = OnlineScoringEngine.renderMessages(evaluatorEdgeCase.messages(),
-                evaluatorEdgeCase.variables(), trace);
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+        var renderedMessages = OnlineScoringEngine.renderMessages(
+                evaluatorEdgeCase.messages(), evaluatorEdgeCase.variables(), trace);
 
         assertThat(renderedMessages).hasSize(2);
 
-        var userMessage = renderedMessages.get(0);
+        var userMessage = renderedMessages.getFirst();
         assertThat(userMessage.getClass()).isEqualTo(UserMessage.class);
-        assertThat(((UserMessage) userMessage).singleText()).contains(summaryStr);
-        assertThat(((UserMessage) userMessage).singleText()).contains(outputStr);
+        assertThat(((UserMessage) userMessage).singleText()).contains(SUMMARY_STR);
+        assertThat(((UserMessage) userMessage).singleText()).contains(OUTPUT_STR);
+        assertThat(((UserMessage) userMessage).singleText()).contains("some.nonexistent.path");
+        assertThat(((UserMessage) userMessage).singleText()).contains("some literal value");
 
         var systemMessage = renderedMessages.get(1);
         assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);

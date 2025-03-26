@@ -133,7 +133,7 @@ class AutomationRuleEvaluatorServiceImplTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
-        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        var judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
@@ -141,7 +141,7 @@ class AutomationRuleEvaluatorServiceImplTest {
         // Going around the service to delete the evaluator
         deleteEvaluator(transactionTemplate, evaluator);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
@@ -200,14 +200,14 @@ class AutomationRuleEvaluatorServiceImplTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
-        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        var judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
 
         var evaluator2 = createEvaluator(evaluatorClass, projectId, projectName);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, evaluator2.getType());
+        judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(2);
         assertEvaluator(Set.of(evaluator, evaluator2), judges);
@@ -234,7 +234,7 @@ class AutomationRuleEvaluatorServiceImplTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
-        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        var judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
@@ -242,7 +242,7 @@ class AutomationRuleEvaluatorServiceImplTest {
         var evaluatorUpdate = factory.manufacturePojo(evaluatorUpdateClass);
         service.update(evaluator.getId(), projectId, WORKSPACE_ID, USER, evaluatorUpdate);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, evaluatorUpdate.getType());
+        judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertThat(judges.getFirst().getName()).isEqualTo(evaluatorUpdate.getName());
@@ -258,14 +258,14 @@ class AutomationRuleEvaluatorServiceImplTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
-        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        var judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
 
         service.delete(Set.of(evaluator.getId()), projectId, WORKSPACE_ID);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).isEmpty();
     }

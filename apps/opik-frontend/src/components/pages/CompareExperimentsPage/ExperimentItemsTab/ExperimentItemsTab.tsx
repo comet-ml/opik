@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import isUndefined from "lodash/isUndefined";
 import findIndex from "lodash/findIndex";
 import find from "lodash/find";
 import get from "lodash/get";
@@ -22,6 +23,7 @@ import useLocalStorageState from "use-local-storage-state";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_COMMENTS_ID,
+  COLUMN_CREATED_AT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -32,6 +34,7 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
+import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -41,7 +44,10 @@ import CompareExperimentsOutputCell from "@/components/pages/CompareExperimentsP
 import CompareExperimentsFeedbackScoreCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsFeedbackScoreCell";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
-import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
+import CompareExperimentsActionsPanel, {
+  EXPERIMENT_ITEM_OUTPUT_PREFIX,
+  EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX,
+} from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import CompareExperimentsNameCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsNameCell";
 import CompareExperimentsNameHeader from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsNameHeader";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
@@ -71,7 +77,8 @@ import {
 import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
-import { isUndefined } from "lodash";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -269,7 +276,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return (experimentsOutputData?.columns ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: `output.${c.name}`,
+        id: `${EXPERIMENT_ITEM_OUTPUT_PREFIX}.${c.name}`,
         label: c.name,
         columnType: mapDynamicColumnTypesToColumnType(c.types),
       }));
@@ -279,7 +286,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return (feedbackScoresData?.scores ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: `feedback_scores.${c.name}`,
+        id: `${EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX}.${c.name}`,
         label: c.name,
         columnType: COLUMN_TYPE.number,
       }));
@@ -304,7 +311,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const datasetColumnsData = useMemo(() => {
     return [
       {
-        id: "created_at",
+        id: COLUMN_CREATED_AT_ID,
         label: "Created",
         type: COLUMN_TYPE.time,
         accessorFn: (row) => formatDate(row.created_at),
@@ -387,6 +394,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const columns = useMemo(() => {
     const retVal = [
+      generateSelectColumDef<ExperimentsCompare>({
+        verticalAlignment: calculateVerticalAlignment(experimentsCount),
+      }),
       mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
         id: COLUMN_ID_ID,
         label: "ID (Dataset item)",
@@ -400,10 +410,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         size: 165,
       }),
     ];
-
-    if (experimentsCount === 1) {
-      retVal.unshift(generateSelectColumDef<ExperimentsCompare>());
-    }
 
     if (hasAnyVisibleColumns(datasetColumnsData, selectedColumns)) {
       retVal.push(
@@ -508,21 +514,19 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   ]);
 
   const columnsToExport = useMemo(() => {
-    return experimentsCount === 1
-      ? columns
-          .reduce<Array<ColumnDef<ExperimentsCompare>>>((acc, c) => {
-            const subColumns = get(c, "columns");
-            return acc.concat(subColumns ? subColumns : [c]);
-          }, [])
-          .map((c) => get(c, "accessorKey", ""))
-          .filter((c) =>
-            c === COLUMN_SELECT_ID
-              ? false
-              : selectedColumns.includes(c) ||
-                (DEFAULT_COLUMN_PINNING.left || []).includes(c),
-          )
-      : undefined;
-  }, [columns, selectedColumns, experimentsCount]);
+    return columns
+      .reduce<Array<ColumnDef<ExperimentsCompare>>>((acc, c) => {
+        const subColumns = get(c, "columns");
+        return acc.concat(subColumns ? subColumns : [c]);
+      }, [])
+      .map((c) => get(c, "accessorKey", ""))
+      .filter((c) =>
+        c === COLUMN_SELECT_ID
+          ? false
+          : selectedColumns.includes(c) ||
+            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+      );
+  }, [columns, selectedColumns]);
 
   const filterColumns = useMemo(() => {
     return [
@@ -623,8 +627,12 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   }
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between gap-8">
+    <>
+      <PageBodyStickyContainer
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <FiltersButton
             columns={filterColumns}
@@ -637,7 +645,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           <CompareExperimentsActionsPanel
             rows={selectedRows}
             columnsToExport={columnsToExport}
-            experimentName={experiments?.[0]?.name}
+            experiments={experiments}
           />
           <Separator orientation="vertical" className="mx-1 h-4" />
           <DataTableRowHeightSelector
@@ -653,10 +661,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             sections={columnSections}
           ></ColumnsButton>
         </div>
-      </div>
+      </PageBodyStickyContainer>
       <DataTable
         columns={columns}
         data={rows}
+        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -668,9 +677,16 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         getRowHeightStyle={getRowHeightStyle}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        TableWrapper={PageBodyStickyTableWrapper}
+        TableBody={DataTableVirtualBody}
+        stickyHeader
         meta={meta}
       />
-      <div className="py-4">
+      <PageBodyStickyContainer
+        className="py-4"
+        direction="horizontal"
+        limitWidth
+      >
         <DataTablePagination
           page={page as number}
           pageChange={setPage}
@@ -678,7 +694,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           sizeChange={setSize}
           total={total}
         ></DataTablePagination>
-      </div>
+      </PageBodyStickyContainer>
       <CompareExperimentsPanel
         experimentsCompareId={activeRowId}
         experimentsCompare={activeRow}
@@ -699,7 +715,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           setTraceId("");
         }}
       />
-    </div>
+    </>
   );
 };
 

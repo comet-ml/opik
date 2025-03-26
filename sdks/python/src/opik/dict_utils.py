@@ -1,10 +1,37 @@
 import copy
 import logging
-from typing import Any, Dict, Mapping, Optional, List, Tuple
+from typing import Any, Dict, Mapping, Optional, List, Tuple, TypeVar, Type
 
 from . import logging_messages
 
 LOGGER = logging.getLogger(__name__)
+
+
+def flatten_dict(
+    d: Dict[str, Any], parent_key: str, delim: str = "."
+) -> Dict[str, Any]:
+    """
+    Current implementation does not have max depth restrictions or cyclic references handling!
+    """
+    items = []  # type: ignore
+
+    for key, value in d.items():
+        new_key = f"{parent_key}{delim}{key}" if parent_key else key
+        if isinstance(value, dict):
+            items.extend(flatten_dict(value, parent_key=new_key, delim=delim).items())
+        else:
+            items.append((new_key, value))
+
+    return dict(items)
+
+
+_ValueType = TypeVar("_ValueType")
+
+
+def keep_only_values_of_type(
+    d: Dict[str, Any], value_type: Type[_ValueType]
+) -> Dict[str, _ValueType]:
+    return {key: value for key, value in d.items() if isinstance(value, value_type)}  # type: ignore
 
 
 def deepmerge(

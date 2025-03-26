@@ -175,6 +175,48 @@ rateLimit:
     # Default: 60
     # Description: Time bucket size in seconds
     durationInSeconds: ${RATE_LIMIT_GENERAL_EVENTS_DURATION_IN_SEC:-60}
+    # Description: Header name to use for rate limiting
+    headerName: User
+    # Description: User facing bucket name
+    userFacingBucketName: general_events
+    # Description: Rate limit error message
+    errorMessage: "You have exceeded the general rate limit for this user. Please try again later."
+
+  workspaceLimit:
+    # Default: 5000
+    # Description: how many events per workspace are allowed in the specified time bucket
+    limit: ${RATE_LIMIT_WORKSPACE_EVENTS_LIMIT:-5000}
+    # Default: 60
+    # Description: Time bucket size in seconds
+    durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+    # Description: Header name to use for rate limiting
+    headerName: Workspace
+    # Description: User facing bucket name
+    userFacingBucketName: workspace_events
+    # Description: Rate limit error message
+    errorMessage: "You have exceeded the rate limit for this user in this workspace. Please try again later."
+
+  customLimits:
+    getSpanById:
+      # Default: 250
+      # Description: how many events are allowed in the specified time bucket
+      limit: ${RATE_LIMIT_GET_SPANS_BY_ID_EVENTS_PER_WORKSPACE_LIMIT:-250}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Get-Span-Id
+      # Description: User facing bucket name
+      userFacingBucketName: get_span_by_id
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation Please try again later."
+
+# Configuration for usage limit. This is not enabled by default for open source installations.
+# In order to support that, the remote authentication server must contain a `quotas` object in its authentication
+# response.
+usageLimit:
+  # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
+  errorMessage: ${USAGE_LIMIT_ERROR_MESSAGE:-You have exceeded the usage limit for this operation.}
 
 # Configuration for anonymous usage reporting
 usageReport:
@@ -220,6 +262,9 @@ onlineScoring:
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
+      codec: java
+    - scorer: user_defined_metric_python
+      streamName: stream_scoring_user_defined_metric_python
       codec: java
 
 # LLM providers client configuration
@@ -299,3 +344,21 @@ workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
     maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+
+# Configuration AWS S3
+s3Config:
+  s3Region: ${S3_REGION:-'us-east-1'}
+  # Description: AWS S3 bucket for Opik
+  s3BucketName: ${S3_BUCKET:-'public'}
+  # Description: AWS S3 presign url timeout
+  preSignUrlTimeoutSec: ${S3_PRESIGN_URL_TIMEOUT:-3600}
+  # Description: Url for local MinIO or Aws
+  s3Url: ${S3_URL:-http://minio:9000}
+  # Description: Whether installation uses MinIO or AWS S3
+  isMinIO: ${IS_MINIO:-true}
+
+# Python evaluator configuration
+pythonEvaluator:
+  # Default: http://localhost:8000
+  # Description: URL of the Python evaluator service, generally the opik-python-backend service
+  url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}

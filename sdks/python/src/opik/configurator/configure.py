@@ -408,9 +408,15 @@ class OpikConfigurator:
         """
         retries = 3
         while retries > 0:
-            user_input_opik_url = url_helpers.get_base_url(
-                input("Please enter your Opik instance URL:")
-            )
+            user_input_opik_url = input("Please enter your Opik instance URL:")
+
+            if user_input_opik_url == "":
+                raise ConfigurationError(
+                    "URL cannot be empty. Please enter a valid URL. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                )
+
+            user_input_opik_url = url_helpers.get_base_url(user_input_opik_url)
+
             if opik_rest_helpers.is_instance_active(user_input_opik_url):
                 self.base_url = user_input_opik_url
                 return

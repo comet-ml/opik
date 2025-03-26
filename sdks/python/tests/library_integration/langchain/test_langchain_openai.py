@@ -16,23 +16,50 @@ from ...testlib import (
     assert_equal,
 )
 
+EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens": ANY_BUT_NONE,
+    "original_usage.total_tokens": ANY_BUT_NONE,
+}
+
+EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT = {
+    "prompt_tokens": ANY_BUT_NONE,
+    "completion_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens": ANY_BUT_NONE,
+    "original_usage.total_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.accepted_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.reasoning_tokens": ANY_BUT_NONE,
+    "original_usage.completion_tokens_details.rejected_prediction_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
+    "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
+}
+
 
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt, stream_usage",
+    "llm_model, expected_input_prompt, expected_usage, stream_usage",
     [
         (
             langchain_openai.OpenAI,
             "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
             False,
         ),
         (
             langchain_openai.ChatOpenAI,
             "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
             False,
         ),
         (
             langchain_openai.ChatOpenAI,
             "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
             True,
         ),
     ],
@@ -42,6 +69,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     ensure_openai_configured,
     llm_model,
     expected_input_prompt,
+    expected_usage,
     stream_usage,
 ):
     llm_args = {
@@ -105,11 +133,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                         metadata=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        usage={
-                            "completion_tokens": ANY_BUT_NONE,
-                            "prompt_tokens": ANY_BUT_NONE,
-                            "total_tokens": ANY_BUT_NONE,
-                        },
+                        usage=expected_usage,
                         spans=[],
                         provider="openai",
                         model=ANY_STRING(startswith="gpt-3.5-turbo"),
@@ -189,21 +213,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                     "ls_provider": "openai",
                     "ls_temperature": ANY,
                     "created_from": "langchain",
-                    "usage": {
-                        "completion_tokens": ANY_BUT_NONE,
-                        "input_token_details": {
-                            "audio": ANY_BUT_NONE,
-                            "cache_read": ANY_BUT_NONE,
-                        },
-                        "input_tokens": ANY_BUT_NONE,
-                        "output_token_details": {
-                            "audio": ANY_BUT_NONE,
-                            "reasoning": ANY_BUT_NONE,
-                        },
-                        "output_tokens": ANY_BUT_NONE,
-                        "prompt_tokens": ANY_BUT_NONE,
-                        "total_tokens": ANY_BUT_NONE,
-                    },
+                    "usage": ANY_DICT,
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
@@ -211,11 +221,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
                 type="llm",
                 model=ANY_STRING(startswith="gpt-3.5-turbo"),
                 provider="openai",
-                usage={
-                    "completion_tokens": ANY_BUT_NONE,
-                    "prompt_tokens": ANY_BUT_NONE,
-                    "total_tokens": ANY_BUT_NONE,
-                },
+                usage=EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
             )
         ],
     )
@@ -270,7 +276,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="RunnableSequence",
-        input={"input": ""},
+        input={"title": "The Hobbit"},
         output=ANY_DICT,
         tags=["tag3", "tag4"],
         metadata={
@@ -283,7 +289,121 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="RunnableSequence",
-                input={"input": ""},
+                input={"title": "The Hobbit"},
+                output=ANY_BUT_NONE,
+                tags=["tag3", "tag4"],
+                metadata={
+                    "c": "d",
+                    "created_from": "langchain",
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                type="general",
+                model=None,
+                provider=None,
+                usage=None,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="PromptTemplate",
+                        input={"title": "The Hobbit"},
+                        output=ANY_BUT_NONE,
+                        tags=None,
+                        metadata={
+                            "created_from": "langchain",
+                        },
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        type="tool",
+                        model=None,
+                        provider=None,
+                        usage=None,
+                        spans=[],
+                    ),
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="custom-openai-llm-name",
+                        input={
+                            "prompts": [
+                                "Human: Given the title of play, write a synopsys for that. Title: The Hobbit."
+                            ]
+                        },
+                        output=ANY_BUT_NONE,
+                        tags=None,
+                        metadata=ANY_DICT,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        type="llm",
+                        model=ANY_STRING(startswith="gpt-4o"),
+                        provider="openai",
+                        usage=None,
+                        spans=[],
+                    ),
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert len(callback.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__happyflow(
+    fake_backend,
+    ensure_openai_configured,
+):
+    callback = OpikTracer(
+        tags=["tag3", "tag4"],
+        metadata={"c": "d"},
+    )
+
+    model = langchain_openai.ChatOpenAI(
+        model="gpt-4o",
+        max_tokens=10,
+        name="custom-openai-llm-name",
+        callbacks=[callback],
+        # `stream_usage` param is VERY IMPORTANT!
+        # if it is explicitly set to True - token usage data will be available
+        # "stream_usage": True,
+    )
+
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    chain = prompt_template | model
+
+    def stream_generator(chain, inputs):
+        for chunk in chain.stream(inputs, config={"callbacks": [callback]}):
+            yield chunk
+
+    def invoke_generator(chain, inputs):
+        for chunk in stream_generator(chain, inputs):
+            print(chunk)
+
+    inputs = {"title": "The Hobbit"}
+
+    invoke_generator(chain, inputs)
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="RunnableSequence",
+        input={"title": "The Hobbit"},
+        output=ANY_DICT,
+        tags=["tag3", "tag4"],
+        metadata={
+            "c": "d",
+            "created_from": "langchain",
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="RunnableSequence",
+                input={"title": "The Hobbit"},
                 output=ANY_BUT_NONE,
                 tags=["tag3", "tag4"],
                 metadata={

@@ -7,6 +7,7 @@ export type DropdownOption<TDataType> = {
   value: TDataType;
   label: string;
   description?: string;
+  tooltip?: string;
   disabled?: boolean;
 };
 
@@ -17,6 +18,7 @@ export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
 export const COLUMN_COMMENTS_ID = "comments";
+export const COLUMN_CREATED_AT_ID = "created_at";
 
 export enum COLUMN_TYPE {
   string = "string",

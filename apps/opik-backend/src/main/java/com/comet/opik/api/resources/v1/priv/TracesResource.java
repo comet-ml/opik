@@ -14,6 +14,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchCriteria;
+import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
@@ -24,13 +25,16 @@ import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -64,7 +68,10 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.server.ChunkedOutput;
+import reactor.core.publisher.Flux;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -88,6 +95,7 @@ public class TracesResource {
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull TraceSortingFactory traceSortingFactory;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull Streamer streamer;
 
     @GET
     @Operation(operationId = "getTracesByProject", summary = "Get traces by project_name or project_id", description = "Get traces by project_name or project_id", responses = {
@@ -111,7 +119,7 @@ public class TracesResource {
                 .block();
 
         if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
-            throw new BadRequestException("Dynamic sorting is not enabled for this workspace");
+            sortingFields = List.of();
         }
 
         var searchCriteria = TraceSearchCriteria.builder()
@@ -127,6 +135,13 @@ public class TracesResource {
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
         TracePage tracePage = service.find(page, size, searchCriteria)
+                .map(it -> {
+                    // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
+                    if (!workspaceMetadata.canUseDynamicSorting()) {
+                        return it.toBuilder().sortableBy(List.of()).build();
+                    }
+                    return it;
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -161,6 +176,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/{traceId}", schema = @Schema(implementation = String.class))})})
     @RateLimited
+    @UsageLimited
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Trace.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid Trace trace,
             @Context UriInfo uriInfo) {
@@ -187,6 +203,7 @@ public class TracesResource {
     @Operation(operationId = "createTraces", summary = "Create traces", description = "Create traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
+    @UsageLimited
     public Response createTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
 
@@ -546,6 +563,45 @@ public class TracesResource {
         log.info("Deleted trace threads with ids '{}' on workspaceId '{}'", traceThreads.threadIds(), workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/search")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "searchTraces", summary = "Search traces", description = "Search traces", responses = {
+            @ApiResponse(responseCode = "200", description = "Traces stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    Trace.class,
+                    ErrorMessage.class
+            }), maxItems = 2000))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @JsonView(Trace.View.Public.class)
+    public ChunkedOutput<JsonNode> searchTraces(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceSearchStreamRequest.class))) @NotNull @Valid TraceSearchStreamRequest request) {
+
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+
+        validateProjectNameAndProjectId(request.projectName(), request.projectId());
+
+        log.info("Streaming traces search results by '{}', workspaceId '{}'", request, workspaceId);
+
+        var searchCriteria = TraceSearchCriteria.builder()
+                .lastReceivedTraceId(request.lastRetrievedId())
+                .projectName(request.projectName())
+                .projectId(request.projectId())
+                .filters(filtersFactory.validateFilter(request.filters()))
+                .truncate(request.truncate())
+                .sortingFields(List.of())
+                .build();
+
+        Flux<Trace> items = service.search(request.limit(), searchCriteria)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+
+        return streamer.getOutputStream(items,
+                () -> log.info("Streamed traces search results by '{}', workspaceId '{}'", request, workspaceId));
     }
 
 }

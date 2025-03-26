@@ -1,9 +1,12 @@
 import pytest
 import os
 import opik
+import tempfile
+import time
+import shutil
 from opik import track, opik_context
 from tests.config import EnvConfig, get_environment_config
-from playwright.sync_api import Page, Browser, Playwright
+from playwright.sync_api import Page, Browser, Playwright, expect
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
 from page_objects.DatasetsPage import DatasetsPage
@@ -39,15 +42,20 @@ def pytest_configure(config):
     """This runs before any tests or fixtures are executed"""
     config.addinivalue_line("markers", "sanity: mark test as a sanity test")
 
+    # Configure root logger only if it doesn't already have handlers
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%H:%M:%S",
+        )
+
+    # Set levels for specific loggers
     logging.getLogger("opik").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
 
     loggers_to_configure = [
         "opik",
@@ -74,9 +82,56 @@ def browser(playwright: Playwright, request) -> Browser:
 
 
 @pytest.fixture(scope="session")
-def browser_context(browser: Browser, env_config: EnvConfig):
+def video_dir():
+    """Create a temporary directory for videos"""
+    # Create a temp directory for videos
+    video_path = tempfile.mkdtemp(prefix="playwright_videos_")
+    logging.info(f"Created video directory: {video_path}")
+
+    # Dictionary to track test status and video paths
+    video_info = {}
+
+    # Store the video path and info dictionary in a container that can be accessed by other fixtures
+    container = {"path": video_path, "info": video_info}
+
+    yield container
+
+    # Clean up videos for successful tests
+    for test_id, info in video_info.items():
+        if not info.get("failed", False) and info.get("video_path"):
+            try:
+                video_file = info["video_path"]
+                if os.path.exists(video_file):
+                    os.remove(video_file)
+                    logging.info(f"Removed video for successful test: {test_id}")
+            except Exception as e:
+                logging.warning(
+                    f"Failed to remove video for successful test {test_id}: {str(e)}"
+                )
+
+    # Clean up the directory at the end of the session
+    if os.path.exists(video_path):
+        try:
+            # Wait a bit to ensure all files are released
+            time.sleep(1)
+            shutil.rmtree(video_path)
+            logging.info(f"Cleaned up video directory: {video_path}")
+        except Exception as e:
+            logging.warning(f"Failed to clean up video directory: {str(e)}")
+
+
+@pytest.fixture(scope="session")
+def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
     """Create a browser context with required permissions and authentication"""
-    context = browser.new_context()
+    # Enable video recording
+    context = browser.new_context(
+        record_video_dir=video_dir["path"],
+        record_video_size={"width": 1280, "height": 720},
+    )
+
+    # Store the video info container for access by other fixtures
+    context._video_info = video_dir["info"]
+
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
     # Handle cloud environment authentication
@@ -164,11 +219,87 @@ def client(env_config: EnvConfig, browser_context) -> opik.Opik:
 
 
 @pytest.fixture(scope="function")
-def page(browser_context):
+def page(browser_context, request):
     """Create a new page with authentication already handled"""
     page = browser_context.new_page()
+
+    test_id = f"{request.node.name}_{id(request)}"
+    test_name = request.node.name
+
+    console_logs = []
+
+    def log_handler(msg):
+        console_logs.append(f"{msg.type}: {msg.text}")
+
+    page.on("console", log_handler)
+
+    page._console_messages = console_logs
+    page._test_name = test_name
+    page._test_id = test_id
+
+    if hasattr(browser_context, "_video_info"):
+        browser_context._video_info[test_id] = {"failed": False, "video_path": None}
+
     yield page
+
+    failed = False
+    try:
+        for report in getattr(request.node, "_reports", {}).values():
+            if report.failed:
+                failed = True
+                break
+    except Exception:
+        pass
+
+    video_path = None
+    if hasattr(page, "video") and page.video:
+        try:
+            video_path = page.video.path()
+        except Exception as e:
+            logging.error(f"Failed to get video path: {str(e)}")
+
     page.close()
+
+    if (
+        hasattr(browser_context, "_video_info")
+        and test_id in browser_context._video_info
+    ):
+        browser_context._video_info[test_id]["failed"] = failed
+        if video_path:
+            browser_context._video_info[test_id]["video_path"] = video_path
+
+    if failed and video_path:
+        try:
+            max_retries = 10
+            retry_count = 0
+
+            while retry_count < max_retries:
+                if os.path.exists(video_path):
+                    try:
+                        with open(video_path, "rb") as f:
+                            video_content = f.read()
+
+                        allure.attach(
+                            video_content,
+                            name=f"Test Failure Video - {test_name}",
+                            attachment_type=allure.attachment_type.WEBM,
+                        )
+                        logging.info(
+                            f"Successfully attached video for failed test: {test_name}"
+                        )
+                        break
+                    except Exception as e:
+                        logging.error(f"Failed to attach video content: {str(e)}")
+                        break
+
+                retry_count += 1
+                time.sleep(0.5)
+
+            if retry_count >= max_retries:
+                logging.warning(f"Video file not found after waiting: {video_path}")
+
+        except Exception as e:
+            logging.error(f"Failed to handle video in page fixture: {str(e)}")
 
 
 @pytest.fixture(scope="function")
@@ -511,3 +642,130 @@ def create_ai_provider_config(page: Page):
     yield
     ai_providers_page.go_to_page()
     ai_providers_page.delete_provider(provider_name="OPENAI_API_KEY")
+
+
+@pytest.fixture
+def create_moderation_rule_fixture(
+    create_ai_provider_config, create_10_test_traces, page: Page, create_project_api
+):
+    project_name = create_project_api
+
+    # Navigate to traces page
+    traces_page = TracesPage(page)
+    projects_page = ProjectsPage(page)
+    try:
+        projects_page.go_to_page()
+        projects_page.click_project(project_name)
+    except Exception as e:
+        raise AssertionError(
+            f"Failed to navigate to project traces.\n"
+            f"Project name: {project_name}\n"
+            f"Error: {str(e)}"
+        ) from e
+
+    try:
+        expect(
+            traces_page.page.get_by_role("tab", name="Online evaluation")
+        ).to_be_visible()
+    except Exception as e:
+        raise AssertionError(
+            f"Rules tab not found, possible error loading" f"Error: {str(e)}"
+        ) from e
+
+    traces_page.page.get_by_role("tab", name="Online evaluation").click()
+    traces_page.page.get_by_role("tab", name="Online evaluation").click()
+    rule_name = "Test Moderation Rule"
+    traces_page.page.get_by_role("button", name="Create your first rule").click()
+    traces_page.page.get_by_placeholder("Rule name").fill(rule_name)
+    sampling_value = traces_page.page.locator("#sampling_rate-input")
+    sampling_value.fill("1")
+
+    traces_page.page.get_by_role("combobox").filter(
+        has_text="Select a LLM model"
+    ).click()
+    traces_page.page.get_by_text("OpenAI").hover()
+    traces_page.page.get_by_label("GPT 4o Mini", exact=True).click()
+
+    traces_page.page.get_by_role("combobox").filter(
+        has_text="Custom LLM-as-judge"
+    ).click()
+    traces_page.page.get_by_label("Moderation", exact=True).click()
+
+    variable_map = traces_page.page.get_by_placeholder("Select a key from recent trace")
+    variable_map.click()
+    variable_map.fill("output.output")
+    traces_page.page.get_by_role("option", name="output.output").click()
+
+    traces_page.page.get_by_role("button", name="Create rule").click()
+
+    yield
+
+    traces_page.page.get_by_role("button", name="Columns").click()
+    traces_page.page.get_by_role("menuitem", name="Show all").click()
+    traces_page.page.wait_for_timeout(500)
+
+
+# Hook for capturing screenshots and videos on test failures
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """
+    Capture screenshots and videos when tests fail and attach them to Allure reports.
+    This hook runs around each test phase (setup, call, teardown).
+    """
+    outcome = yield
+    report = outcome.get_result()
+
+    # Store the report for later use
+    if not hasattr(item, "_reports"):
+        item._reports = {}
+    item._reports[report.when] = report
+
+    # Only capture for failed tests
+    if report.when == "call" and report.failed:
+        try:
+            # Get the page fixture if it exists
+            page = item.funcargs.get("page", None)
+            if page:
+                # Take screenshot
+                screenshot_name = f"failure_{item.name}_{int(time.time())}.png"
+                screenshot_path = os.path.join(os.getcwd(), screenshot_name)
+
+                try:
+                    page.screenshot(path=screenshot_path)
+                    if os.path.exists(screenshot_path):
+                        # Attach screenshot to Allure report
+                        allure.attach.file(
+                            screenshot_path,
+                            name="Screenshot on Failure",
+                            attachment_type=allure.attachment_type.PNG,
+                        )
+                        # Clean up the file after attaching
+                        os.remove(screenshot_path)
+                except Exception as e:
+                    logging.error(f"Failed to capture screenshot: {str(e)}")
+
+                # Capture HTML source
+                try:
+                    html_content = page.content()
+                    allure.attach(
+                        html_content,
+                        name="Page HTML on Failure",
+                        attachment_type=allure.attachment_type.HTML,
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to capture HTML: {str(e)}")
+
+                # Capture console logs
+                try:
+                    # Get console logs if available
+                    if hasattr(page, "_console_messages") and page._console_messages:
+                        allure.attach(
+                            "\n".join(page._console_messages),
+                            name="Browser Console Logs",
+                            attachment_type=allure.attachment_type.TEXT,
+                        )
+                except Exception as e:
+                    logging.error(f"Failed to capture console logs: {str(e)}")
+
+        except Exception as e:
+            logging.error(f"Failed to capture failure evidence: {str(e)}")

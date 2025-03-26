@@ -22,10 +22,10 @@ PathType = Union[
 
 _SESSION_CACHE_DICT: Dict[str, Any] = {}
 
-MAX_BATCH_SIZE_MB = 50
+MAX_BATCH_SIZE_MB = 5
 
-OPIK_URL_CLOUD: Final[str] = "https://www.comet.com/opik/api"
-OPIK_URL_LOCAL: Final[str] = "http://localhost:5173/api"
+OPIK_URL_CLOUD: Final[str] = "https://www.comet.com/opik/api/"
+OPIK_URL_LOCAL: Final[str] = "http://localhost:5173/api/"
 
 OPIK_PROJECT_DEFAULT_NAME: Final[str] = "Default Project"
 OPIK_WORKSPACE_DEFAULT_NAME: Final[str] = "default"
@@ -124,7 +124,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If it's not set - there is no timeout.
     """
 
-    background_workers: int = 8
+    background_workers: int = 4
     """
     The amount of background threads that submit data to the backend.
     """
@@ -331,17 +331,16 @@ class OpikConfig(pydantic_settings.BaseSettings):
             the configuration is misconfigured for cloud logging, and the second element is either
             an error message indicating the reason for misconfiguration or None.
         """
-        workspace_is_default = self.workspace == OPIK_WORKSPACE_DEFAULT_NAME
         api_key_configured = self.api_key is not None
         tracking_disabled = self.track_disable
 
         if (
             self.is_cloud_installation
-            and (not api_key_configured or workspace_is_default)
-            and not tracking_disabled
+            and (not api_key_configured)
+            and (not tracking_disabled)
         ):
             error_message = (
-                "The workspace and API key must be specified to log data to https://www.comet.com/opik.\n"
+                "The API key must be specified to log data to https://www.comet.com/opik.\n"
                 "You can use `opik configure` CLI command to configure your environment for logging.\n"
                 "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration.\n"
             )
@@ -364,8 +363,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         if (
             self.is_localhost_installation
-            and not workspace_is_default
-            and not tracking_disabled
+            and (not workspace_is_default)
+            and (not tracking_disabled)
         ):
             error_message = (
                 "Open source installations do not support workspace specification. Only `default` is available.\n"

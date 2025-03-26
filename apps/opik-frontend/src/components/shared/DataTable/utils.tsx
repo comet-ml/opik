@@ -13,6 +13,7 @@ import {
   TABLE_ROW_Z_INDEX,
 } from "@/constants/shared";
 import {
+  CELL_VERTICAL_ALIGNMENT,
   COLUMN_ACTIONS_ID,
   COLUMN_SELECT_ID,
   ROW_HEIGHT,
@@ -27,6 +28,7 @@ export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
 export const getCommonPinningStyles = <TData,>(
   column: Column<TData>,
   isHeader: boolean = false,
+  applyStickyWorkaround = false,
 ): CSSProperties => {
   const isPinned = column.getIsPinned();
   const isLastLeftPinnedColumn =
@@ -43,7 +45,7 @@ export const getCommonPinningStyles = <TData,>(
     left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     ...(isPinned && {
-      position: "sticky",
+      position: applyStickyWorkaround ? "unset" : "sticky",
       zIndex: isHeader ? TABLE_HEADER_Z_INDEX + 1 : TABLE_ROW_Z_INDEX + 1,
     }),
   };
@@ -114,7 +116,9 @@ export const shiftCheckboxClickHandler = <TData,>(
   }
 };
 
-export const generateSelectColumDef = <TData,>() => {
+export const generateSelectColumDef = <TData,>(meta?: {
+  verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+}) => {
   let previousSelectedRowID = "";
 
   return {
@@ -143,6 +147,7 @@ export const generateSelectColumDef = <TData,>() => {
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
         className="py-3.5"
+        stopClickPropagation
       >
         <Checkbox
           checked={context.row.getIsSelected()}
@@ -157,6 +162,7 @@ export const generateSelectColumDef = <TData,>() => {
         />
       </CellWrapper>
     ),
+    meta,
     size: 50,
     enableResizing: false,
     enableSorting: false,

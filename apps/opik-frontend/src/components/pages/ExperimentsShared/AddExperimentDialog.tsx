@@ -10,7 +10,7 @@ import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
-import ConfigureEnvCode from "@/components/pages-shared/onboarding/ConfigureEnvCode/ConfigureEnvCode";
+import CreateExperimentCode from "@/components/pages-shared/onboarding/CreateExperimentCode/CreateExperimentCode";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -197,8 +197,12 @@ const AddExperimentDialog: React.FunctionComponent<
 
   const section3 =
     "" +
-    `from opik import Opik
+    `import os
+from opik import Opik
 from opik.evaluation import evaluate
+
+# INJECT_OPIK_CONFIGURATION
+
 ${importString}
 client = Opik()
 dataset = client.get_dataset(name="${
@@ -334,13 +338,9 @@ eval_results = evaluate(
             </div>
             <CodeHighlighter data={section1} />
             <div className="comet-body-s mt-4 text-foreground-secondary">
-              3. Configure your API key
+              3. Create an Experiment
             </div>
-            <ConfigureEnvCode />
-            <div className="comet-body-s mt-4 text-foreground-secondary">
-              4. Create an Experiment
-            </div>
-            <CodeHighlighter data={section3} />
+            <CreateExperimentCode code={section3} />
           </div>
 
           <div className="flex w-[250px] shrink-0 flex-col gap-6 self-start">

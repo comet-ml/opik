@@ -92,6 +92,7 @@ public interface TraceService {
 
     Mono<TraceThread> getThreadById(UUID projectId, String threadId);
 
+    Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
 }
 
 @Slf4j
@@ -329,12 +330,10 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<Void> delete(@NonNull UUID id) {
         log.info("Deleting trace by id '{}'", id);
-        return lockService.executeWithLock(
-                new LockService.Lock(id, TRACE_KEY),
-                Mono.defer(() -> feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id))
-                        .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
-                        .then(Mono.defer(() -> spanService.deleteByTraceIds(Set.of(id))))
-                        .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection)))));
+        return feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id)
+                .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
+                .then(Mono.defer(() -> spanService.deleteByTraceIds(Set.of(id))))
+                .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection))));
     }
 
     @Override
@@ -378,6 +377,7 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
+
         return template.stream(dao::countTracesPerWorkspace)
                 .collectList()
                 .flatMap(items -> Mono.just(
@@ -417,7 +417,14 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
-        return dao.getDailyTraces();
+        Mono<List<UUID>> projects = Mono
+                .fromCallable(() -> projectService.findByNames(ProjectService.DEFAULT_WORKSPACE_ID, DemoData.PROJECTS)
+                        .stream()
+                        .map(Project::id)
+                        .toList())
+                .subscribeOn(Schedulers.boundedElastic());
+
+        return projects.switchIfEmpty(Mono.just(List.of())).flatMap(dao::getDailyTraces);
     }
 
     @Override
@@ -459,6 +466,19 @@ class TraceServiceImpl implements TraceService {
     public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId) {
         return dao.findThreadById(projectId, threadId)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace Thread", threadId))));
+    }
+
+    @Override
+    public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
+
+        if (criteria.projectId() != null) {
+            return dao.search(limit, criteria);
+        }
+
+        return getProjectByName(criteria.projectName())
+                .map(project -> criteria.toBuilder().projectId(project.id()).build())
+                .flatMapMany(newCriteria -> dao.search(limit, newCriteria))
+                .switchIfEmpty(Flux.empty());
     }
 
 }

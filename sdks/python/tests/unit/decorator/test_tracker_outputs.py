@@ -1277,6 +1277,8 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
             name="span-name",
             metadata={"span-metadata-key": "span-metadata-value"},
             total_cost=0.42,
+            model="gpt-3.5-turbo",
+            provider="openai",
         )
         opik_context.update_current_trace(
             name="trace-name",
@@ -1309,6 +1311,8 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
                 end_time=ANY_BUT_NONE,
                 total_cost=0.42,
                 spans=[],
+                model="gpt-3.5-turbo",
+                provider="openai",
             )
         ],
     )
@@ -1516,6 +1520,64 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
                     "message": ANY_STRING(),
                 },
                 spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__span_usage_updated__openai_format(fake_backend):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(
+            usage={
+                "completion_tokens": 10,
+                "prompt_tokens": 20,
+                "total_tokens": 30,
+            },
+            provider="openai",
+        )
+
+        return "f-output"
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={"output": "f-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={"output": "f-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                provider="openai",
+                usage={
+                    "completion_tokens": 10,
+                    "prompt_tokens": 20,
+                    "total_tokens": 30,
+                    "original_usage.completion_tokens": 10,
+                    "original_usage.prompt_tokens": 20,
+                    "original_usage.total_tokens": 30,
+                },
+                metadata={
+                    "usage": {
+                        "completion_tokens": 10,
+                        "prompt_tokens": 20,
+                        "total_tokens": 30,
+                    }
+                },
             )
         ],
     )

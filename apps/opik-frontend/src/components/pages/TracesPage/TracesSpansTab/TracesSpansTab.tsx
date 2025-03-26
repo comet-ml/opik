@@ -51,6 +51,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -60,12 +61,13 @@ import TraceDetailsPanel, {
   LastSectionParam,
   LastSectionValue,
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { DEFAULT_COLUMN_PINNING } from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -94,20 +96,20 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Input",
     size: 400,
     type: COLUMN_TYPE.string,
-    iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.input) ? JSON.stringify(row.input, null, 2) : row.input,
-    cell: CodeCell as never,
+    cell: PrettyCell as never,
+    customMeta: {
+      fieldType: "input",
+    },
   },
   {
     id: "output",
     label: "Output",
     size: 400,
     type: COLUMN_TYPE.string,
-    iconType: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.output) ? JSON.stringify(row.output, null, 2) : row.output,
-    cell: CodeCell as never,
+    cell: PrettyCell as never,
+    customMeta: {
+      fieldType: "output",
+    },
   },
   {
     id: "duration",
@@ -432,6 +434,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ...(type === TRACE_DATA_TYPE.traces
         ? [
             {
+              id: "span_count",
+              label: "Span count",
+              type: COLUMN_TYPE.number,
+              accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
+            },
+            {
               id: "thread_id",
               label: "Thread ID",
               type: COLUMN_TYPE.string,
@@ -529,7 +537,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         c === COLUMN_SELECT_ID
           ? false
           : selectedColumns.includes(c) ||
-            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+            (DEFAULT_TRACES_COLUMN_PINNING.left || []).includes(c),
       );
   }, [columns, selectedColumns]);
 
@@ -579,8 +587,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+    <>
+      <PageBodyStickyContainer
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+        direction="bidirectional"
+        limitWidth
+      >
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search as string}
@@ -635,11 +647,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             sections={columnSections}
           ></ColumnsButton>
         </div>
-      </div>
+      </PageBodyStickyContainer>
+
       <DataTable
         columns={columns}
         columnsStatistic={columnsStatistic}
         data={rows}
+        onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -650,9 +664,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        TableWrapper={PageBodyStickyTableWrapper}
+        stickyHeader
         meta={meta}
       />
-      <div className="py-4">
+      <PageBodyStickyContainer
+        className="py-4"
+        direction="horizontal"
+        limitWidth
+      >
         <DataTablePagination
           page={page as number}
           pageChange={setPage}
@@ -660,7 +680,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           sizeChange={setSize}
           total={data?.total ?? 0}
         ></DataTablePagination>
-      </div>
+      </PageBodyStickyContainer>
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}
@@ -681,7 +701,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         open={Boolean(threadId)}
         onClose={handleClose}
       />
-    </div>
+    </>
   );
 };
 

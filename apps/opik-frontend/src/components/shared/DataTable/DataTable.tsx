@@ -1,4 +1,4 @@
-import React, { ReactNode, useMemo } from "react";
+import React, { ReactNode, useMemo, useState } from "react";
 import {
   Cell,
   ColumnDef,
@@ -22,13 +22,18 @@ import isBoolean from "lodash/isBoolean";
 
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import DataTableColumnResizer from "@/components/shared/DataTable/DataTableColumnResizer";
+import DataTableWrapper, {
+  DataTableWrapperProps,
+} from "@/components/shared/DataTable/DataTableWrapper";
+import DataTableBody, {
+  DataTableBodyProps,
+} from "@/components/shared/DataTable/DataTableBody";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
@@ -43,6 +48,12 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { TABLE_HEADER_Z_INDEX } from "@/constants/shared";
 import { cn } from "@/lib/utils";
+import {
+  STICKY_ATTRIBUTE_VERTICAL,
+  STICKY_DIRECTION,
+} from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import useCustomRowClick from "@/components/shared/DataTable/useCustomRowClick";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -100,7 +111,11 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   columnsStatistic?: ColumnsStatistic;
   data: TData[];
-  renderCustomRow?: (row: Row<TData>) => ReactNode | null;
+  onRowClick?: (row: TData) => void;
+  renderCustomRow?: (
+    row: Row<TData>,
+    stickyWorkaround?: boolean,
+  ) => ReactNode | null;
   getIsCustomRow?: (row: Row<TData>) => boolean;
   activeRowId?: string;
   sortConfig?: SortConfig;
@@ -114,6 +129,9 @@ interface DataTableProps<TData, TValue> {
   columnPinning?: ColumnPinningState;
   noData?: ReactNode;
   autoWidth?: boolean;
+  stickyHeader?: boolean;
+  TableWrapper?: React.FC<DataTableWrapperProps>;
+  TableBody?: React.FC<DataTableBodyProps<TData>>;
   meta?: Omit<
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
@@ -124,6 +142,7 @@ const DataTable = <TData, TValue>({
   columns,
   columnsStatistic,
   data,
+  onRowClick,
   renderCustomRow,
   getIsCustomRow = () => false,
   activeRowId,
@@ -138,9 +157,13 @@ const DataTable = <TData, TValue>({
   columnPinning,
   noData,
   autoWidth = false,
+  TableWrapper = DataTableWrapper,
+  TableBody = DataTableBody,
+  stickyHeader = false,
   meta,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
+  const isRowClickable = isFunction(onRowClick);
 
   const table = useReactTable({
     data,
@@ -191,6 +214,9 @@ const DataTable = <TData, TValue>({
     },
   });
 
+  const { onClick } = useCustomRowClick<TData>({
+    onRowClick: onRowClick,
+  });
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
@@ -210,9 +236,24 @@ const DataTable = <TData, TValue>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers, columnSizing]);
 
+  const [tableHeight, setTableHeight] = useState(0);
+  const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
+  const { ref: tableRef } = useObserveResizeNode<HTMLTableElement>((node) => {
+    setTableHeight(node.clientHeight);
+    setHasHorizontalScroll(
+      node.parentElement!.scrollWidth > node?.parentElement!.clientWidth,
+    );
+  });
+
+  // TODO move this workaround to context that wil be added to handle columns width
+  // In the version of Chrome Version 134.0.6998.89 (Official Build) (arm64)
+  // was introduced an issue that border (from row) for sticky cells is not presented on some displays
+  // this workaround checks if table can be scrolled and only then allow the library to set position sticky for cells
+  const stickyBorderWorkaround = !hasHorizontalScroll && !stickyHeader;
+
   const renderRow = (row: Row<TData>) => {
     if (isFunction(renderCustomRow) && getIsCustomRow(row)) {
-      return renderCustomRow(row);
+      return renderCustomRow(row, stickyBorderWorkaround);
     }
 
     return (
@@ -220,6 +261,15 @@ const DataTable = <TData, TValue>({
         key={row.id}
         data-state={row.getIsSelected() && "selected"}
         data-row-active={row.id === activeRowId}
+        data-row-id={row.id}
+        className={cn({
+          "cursor-pointer": isRowClickable,
+        })}
+        {...(isRowClickable && !row.getIsGrouped()
+          ? {
+              onClick: (e) => onClick?.(e, row.original),
+            }
+          : {})}
       >
         {row.getVisibleCells().map((cell) => renderCell(row, cell))}
       </TableRow>
@@ -249,7 +299,11 @@ const DataTable = <TData, TValue>({
           key={cell.id}
           data-cell-id={cell.id}
           style={{
-            ...getCommonPinningStyles(cell.column),
+            ...getCommonPinningStyles(
+              cell.column,
+              false,
+              stickyBorderWorkaround,
+            ),
           }}
           className={getCommonPinningClasses(cell.column)}
         />
@@ -261,7 +315,7 @@ const DataTable = <TData, TValue>({
         key={cell.id}
         data-cell-id={cell.id}
         style={{
-          ...getCommonPinningStyles(cell.column),
+          ...getCommonPinningStyles(cell.column, false, stickyBorderWorkaround),
         }}
         className={getCommonPinningClasses(cell.column)}
       >
@@ -270,11 +324,29 @@ const DataTable = <TData, TValue>({
     );
   };
 
+  const renderNoData = () => {
+    return (
+      <TableRow data-testid="no-data-row">
+        <TableCell colSpan={columns.length}>
+          {noData ? (
+            noData
+          ) : (
+            <div className="flex h-28 items-center justify-center text-muted-slate">
+              No results
+            </div>
+          )}
+        </TableCell>
+      </TableRow>
+    );
+  };
+
   return (
-    <div className="overflow-x-auto overflow-y-hidden rounded-md border">
+    <TableWrapper>
       <Table
+        ref={tableRef}
         style={{
           ...(!autoWidth && { minWidth: table.getTotalSize() }),
+          ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
         }}
       >
         <colgroup>
@@ -282,7 +354,12 @@ const DataTable = <TData, TValue>({
             <col key={i.id} style={{ width: `${i.size}px` }} />
           ))}
         </colgroup>
-        <TableHeader>
+        <TableHeader
+          className={cn(stickyHeader && "sticky z-10")}
+          {...(stickyHeader && {
+            ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
+          })}
+        >
           {table.getHeaderGroups().map((headerGroup, index, groups) => {
             const isLastRow = index === groups.length - 1;
 
@@ -291,7 +368,7 @@ const DataTable = <TData, TValue>({
                 key={headerGroup.id}
                 className={cn(
                   "bg-soft-background",
-                  !isLastRow && "border-b-transparent",
+                  !isLastRow && "!border-b-0",
                 )}
               >
                 {headerGroup.headers.map((header) => {
@@ -322,25 +399,13 @@ const DataTable = <TData, TValue>({
             );
           })}
         </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map(renderRow)
-          ) : (
-            <TableRow data-testid="no-data-row">
-              <TableCell colSpan={columns.length}>
-                {noData ? (
-                  noData
-                ) : (
-                  <div className="flex h-28 items-center justify-center text-muted-slate">
-                    No results
-                  </div>
-                )}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
+        <TableBody
+          table={table}
+          renderRow={renderRow}
+          renderNoData={renderNoData}
+        />
       </Table>
-    </div>
+    </TableWrapper>
   );
 };
 

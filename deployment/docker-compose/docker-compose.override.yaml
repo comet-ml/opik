@@ -16,6 +16,11 @@ services:
     ports:
       - "2181:2181"
       
+  minio:
+    ports:
+      - "9001:9000"   # MinIO API Port
+      - "9090:9090"   # MinIO Web UI Console
+
   backend:
     ports:
       - "8080:8080" # Exposing backend HTTP port to host

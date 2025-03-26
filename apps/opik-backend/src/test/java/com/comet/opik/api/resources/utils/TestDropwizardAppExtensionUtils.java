@@ -37,6 +37,7 @@ public class TestDropwizardAppExtensionUtils {
             Integer authCacheTtlInSeconds,
             boolean rateLimitEnabled,
             Long limit,
+            Long workspaceLimit,
             Long limitDurationInSeconds,
             Map<String, LimitConfig> customLimits,
             List<Object> customBeans,
@@ -50,7 +51,9 @@ public class TestDropwizardAppExtensionUtils {
             boolean corsEnabled,
             List<CustomConfig> customConfigs,
             List<Class<? extends Module>> disableModules,
-            List<AbstractModule> modules) {
+            List<AbstractModule> modules,
+            String minioUrl,
+            boolean isMinIO) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -128,6 +131,14 @@ public class TestDropwizardAppExtensionUtils {
             }
         }
 
+        if (appContextConfig.minioUrl() != null) {
+            configs.add("s3Config.s3Url: " + appContextConfig.minioUrl());
+        }
+
+        if (!appContextConfig.isMinIO()) {
+            configs.add("s3Config.isMinIO: " + false);
+        }
+
         GuiceyConfigurationHook hook = injector -> {
             injector.modulesOverride(TestHttpClientUtils.testAuthModule());
 
@@ -173,12 +184,32 @@ public class TestDropwizardAppExtensionUtils {
             configs.add("rateLimit.generalLimit.durationInSeconds: %d"
                     .formatted(appContextConfig.limitDurationInSeconds()));
 
+            configs.add("rateLimit.generalLimit.headerName: %s".formatted("User"));
+            configs.add("rateLimit.generalLimit.userFacingBucketName: %s".formatted("general_events"));
+            configs.add("rateLimit.generalLimit.errorMessage: %s"
+                    .formatted("You have exceeded the rate limit for user general events. Please try again later."));
+
+            configs.add("rateLimit.workspaceLimit.limit: %d".formatted(appContextConfig.workspaceLimit()));
+            configs.add("rateLimit.workspaceLimit.durationInSeconds: %d"
+                    .formatted(appContextConfig.limitDurationInSeconds()));
+
+            configs.add("rateLimit.workspaceLimit.headerName: %s".formatted("Workspace"));
+            configs.add("rateLimit.workspaceLimit.userFacingBucketName: %s".formatted("workspace_events"));
+            configs.add("rateLimit.workspaceLimit.errorMessage: %s"
+                    .formatted("You have exceeded the rate limit for workspace events. Please try again later."));
+
             if (appContextConfig.customLimits() != null) {
                 appContextConfig.customLimits()
                         .forEach((bucket, limitConfig) -> {
                             configs.add("rateLimit.customLimits.%s.limit: %d".formatted(bucket, limitConfig.limit()));
                             configs.add("rateLimit.customLimits.%s.durationInSeconds: %d".formatted(bucket,
                                     limitConfig.durationInSeconds()));
+                            configs.add("rateLimit.customLimits.%s.headerName: %s".formatted(bucket,
+                                    limitConfig.headerName()));
+                            configs.add("rateLimit.customLimits.%s.userFacingBucketName: %s".formatted(bucket,
+                                    limitConfig.userFacingBucketName()));
+                            configs.add("rateLimit.customLimits.%s.errorMessage: %s".formatted(bucket,
+                                    limitConfig.errorMessage()));
                         });
             }
         }

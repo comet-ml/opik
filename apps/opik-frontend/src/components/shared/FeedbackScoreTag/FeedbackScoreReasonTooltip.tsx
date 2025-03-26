@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import TooltipWrapper from "../TooltipWrapper/TooltipWrapper";
 import { getTimeFromNow } from "@/lib/date";
 
@@ -13,7 +12,6 @@ const FeedbackScoreReasonTooltip: React.FC<FeedbackScoreReasonTooltipProps> = ({
   reason,
   lastUpdatedAt,
   lastUpdatedBy,
-  className,
   children,
 }) => {
   if (!reason) return <>{children}</>;
@@ -34,11 +32,7 @@ const FeedbackScoreReasonTooltip: React.FC<FeedbackScoreReasonTooltipProps> = ({
         </div>
       }
       delayDuration={100}
-      className={cn(
-        "comet-body-xs max-w-[400px] border border-slate-200 bg-soft-background p-2 text-foreground-secondary",
-        className,
-      )}
-      showArrow={false}
+      stopClickPropagation
     >
       {children}
     </TooltipWrapper>

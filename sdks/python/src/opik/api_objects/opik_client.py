@@ -1,45 +1,45 @@
-import functools
 import atexit
 import datetime
+import functools
 import logging
+from typing import Any, Dict, List, Optional, Union
 
-from typing import Optional, Any, Dict, List
+import httpx
 
-from .prompt import Prompt
-from .prompt.client import PromptClient
-
-from ..types import SpanType, UsageDict, FeedbackScoreDict, ErrorInfoDict
+from .. import (
+    config,
+    datetime_helpers,
+    exceptions,
+    httpx_client,
+    id_helpers,
+    llm_usage,
+    rest_client_configurator,
+    url_helpers,
+)
+from ..message_processing import messages, streamer_constructors
+from ..message_processing.batching import sequence_splitter
+from ..rest_api import client as rest_api_client
+from ..rest_api.core.api_error import ApiError
+from ..rest_api.types import dataset_public, project_public, span_public, trace_public
+from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
 from . import (
+    constants,
+    dataset,
+    experiment,
+    helpers,
     opik_query_language,
     span,
     trace,
-    dataset,
-    experiment,
-    constants,
     validation_helpers,
 )
-from .trace import migration as trace_migration
+from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
-from .dataset import rest_operations as dataset_rest_operations
-from ..message_processing import streamer_constructors, messages
-from ..message_processing.batching import sequence_splitter
-
-from ..rest_api import client as rest_api_client
-from ..rest_api.types import dataset_public, trace_public, span_public, project_public
-from ..rest_api.core.api_error import ApiError
-from .. import (
-    exceptions,
-    datetime_helpers,
-    config,
-    httpx_client,
-    url_helpers,
-    rest_client_configurator,
-    id_helpers,
-)
+from .prompt import Prompt
+from .prompt.client import PromptClient
+from .trace import migration as trace_migration
 
 LOGGER = logging.getLogger(__name__)
-OPIK_API_REQUESTS_TIMEOUT_SECONDS = 5.0
 
 
 class Opik:
@@ -120,7 +120,9 @@ class Opik:
             base_url=base_url,
             httpx_client=httpx_client_,
         )
-        self._rest_client._client_wrapper._timeout = OPIK_API_REQUESTS_TIMEOUT_SECONDS  # See https://github.com/fern-api/fern/issues/5321
+        self._rest_client._client_wrapper._timeout = (
+            httpx.USE_CLIENT_DEFAULT
+        )  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
@@ -128,11 +130,11 @@ class Opik:
             use_batching=use_batching,
         )
 
-    def _display_trace_url(self, workspace: str, project_name: str) -> None:
-        project_url = url_helpers.get_project_url(
-            workspace=workspace, project_name=project_name
+    def _display_trace_url(self, trace_id: str, project_name: str) -> None:
+        project_url = url_helpers.get_project_url_by_trace_id(
+            trace_id=trace_id,
+            url_override=self._config.url_override,
         )
-
         if (
             self._project_name_most_recent_trace is None
             or self._project_name_most_recent_trace != project_name
@@ -142,9 +144,9 @@ class Opik:
             )
             self._project_name_most_recent_trace = project_name
 
-    def _display_created_dataset_url(self, workspace: str, dataset_name: str) -> None:
-        dataset_url = url_helpers.get_dataset_url(
-            workspace=workspace, dataset_name=dataset_name
+    def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
+        dataset_url = url_helpers.get_dataset_url_by_id(
+            dataset_id, self._config.url_override
         )
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
@@ -217,7 +219,7 @@ class Opik:
             thread_id=thread_id,
         )
         self._streamer.put(create_trace_message)
-        self._display_trace_url(workspace=self._workspace, project_name=project_name)
+        self._display_trace_url(trace_id=id, project_name=project_name)
 
         if feedback_scores is not None:
             for feedback_score in feedback_scores:
@@ -311,11 +313,11 @@ class Opik:
         input: Optional[Dict[str, Any]] = None,
         output: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        usage: Optional[UsageDict] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
         feedback_scores: Optional[List[FeedbackScoreDict]] = None,
         project_name: Optional[str] = None,
         model: Optional[str] = None,
-        provider: Optional[str] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
     ) -> span.Span:
@@ -334,12 +336,17 @@ class Opik:
             input: The input data for the span. This can be any valid JSON serializable object.
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
-            usage: Usage data for the span.
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when Opik instance
                 was created will be used.
+            usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+                If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
+                format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
-            provider: The provider of LLM.
+            provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+                If your provider not in the list, you can still specify it but the cost tracking will not be available
             error_info: The dictionary with error information (typically used when the span function has failed).
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
 
@@ -351,17 +358,14 @@ class Opik:
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        parsed_usage = validation_helpers.validate_and_parse_usage(
+        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
             usage=usage,
             logger=LOGGER,
             provider=provider,
         )
-        if parsed_usage.full_usage is not None:
-            metadata = (
-                {"usage": parsed_usage.full_usage}
-                if metadata is None
-                else {"usage": parsed_usage.full_usage, **metadata}
-            )
+
+        if backend_compatible_usage is not None:
+            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
 
         if project_name is None:
             project_name = self._project_name
@@ -398,7 +402,7 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=parsed_usage.supported_usage,
+            usage=backend_compatible_usage,
             model=model,
             provider=provider,
             error_info=error_info,
@@ -507,6 +511,42 @@ class Opik:
 
             self._streamer.put(add_span_feedback_scores_batch_message)
 
+    def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
+        """
+        Deletes a feedback score associated with a specific trace.
+
+        Args:
+            trace_id:
+                The unique identifier of the trace for which the feedback score needs to be deleted.
+            name: str
+                The name associated with the feedback score that should be deleted.
+
+        Returns:
+            None
+        """
+        self._rest_client.traces.delete_trace_feedback_score(
+            id=trace_id,
+            name=name,
+        )
+
+    def delete_span_feedback_score(self, span_id: str, name: str) -> None:
+        """
+        Deletes a feedback score associated with a specific span.
+
+        Args:
+            span_id:
+                The unique identifier of the trace for which the feedback score needs to be deleted.
+            name: str
+                The name associated with the feedback score that should be deleted.
+
+        Returns:
+            None
+        """
+        self._rest_client.spans.delete_span_feedback_score(
+            id=span_id,
+            name=name,
+        )
+
     def get_dataset(self, name: str) -> dataset.Dataset:
         """
         Get dataset by name
@@ -607,7 +647,7 @@ class Opik:
             rest_client=self._rest_client,
         )
 
-        self._display_created_dataset_url(workspace=self._workspace, dataset_name=name)
+        self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
 
         return result
 
@@ -692,6 +732,9 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
+        LOGGER.warning(
+            "Deprecated, use `get_experiments_by_name` or `get_experiment_by_id` instead."
+        )
         experiment_public = experiment_rest_operations.get_experiment_data_by_name(
             rest_client=self._rest_client, name=name
         )
@@ -703,6 +746,32 @@ class Opik:
             rest_client=self._rest_client,
             # TODO: add prompt if exists
         )
+
+    def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
+        """
+        Returns an existing experiments by its name.
+
+        Args:
+            name: The name of the experiment(s).
+
+        Returns:
+            List[experiment.Experiment]: List of existing experiments.
+        """
+        experiments_public = experiment_rest_operations.get_experiments_data_by_name(
+            rest_client=self._rest_client, name=name
+        )
+        result = []
+
+        for public_experiment in experiments_public:
+            experiment_ = experiment.Experiment(
+                id=public_experiment.id,
+                dataset_name=public_experiment.dataset_name,
+                name=name,
+                rest_client=self._rest_client,
+            )
+            result.append(experiment_)
+
+        return result
 
     def get_experiment_by_id(self, id: str) -> experiment.Experiment:
         """
@@ -890,7 +959,7 @@ class Opik:
         """
 
         project_name = project_name or self._project_name
-        return url_helpers.get_project_url(
+        return url_helpers.get_project_url_by_workspace(
             workspace=self._workspace, project_name=project_name
         )
 

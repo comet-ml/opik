@@ -13,9 +13,10 @@ from typing import (
 
 from google.genai import types as genai_types
 
-from opik import dict_utils
+from opik import dict_utils, llm_usage
+from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
-from opik.types import UsageDictGoogle
+from opik.types import LLMProvider
 
 from . import stream_wrappers
 
@@ -51,7 +52,10 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             kwargs is not None
         ), "Expected kwargs to be not None in client.models.generate_content(**kwargs), client.aio.models.generate_content(**kwargs)"
 
+        model = kwargs.get("model")
+
         name = track_options.name if track_options.name is not None else func.__name__
+        name = f"{name}: {model}"  # Add model to the name for better viewing UX
 
         metadata = track_options.metadata if track_options.metadata is not None else {}
 
@@ -70,14 +74,17 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
-            model=kwargs.get("model", None),
+            model=model,
             provider=self.provider,
         )
 
         return result
 
     def _end_span_inputs_preprocessor(
-        self, output: Any, capture_output: bool
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         assert isinstance(
             output,
@@ -90,18 +97,16 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         model = result_dict["model_version"]
-        provider_usage = dict_utils.remove_none_from_dict(result_dict["usage_metadata"])
 
-        usage = {
-            **UsageDictGoogle(
-                completion_tokens=provider_usage["candidates_token_count"],
-                prompt_tokens=provider_usage["prompt_token_count"],
-                total_tokens=provider_usage["total_token_count"],
-                **provider_usage,  # type: ignore
-            )
-        }
-
+        usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=LLMProvider(self.provider),
+            usage=result_dict["usage_metadata"],
+            logger=LOGGER,
+            error_message="Failed to log token usage from genai generate_response call",
+        )
+        span_name_without_model = current_span_data.name.split(":")[0]  # type: ignore
         result = arguments_helpers.EndSpanParameters(
+            name=f"{span_name_without_model}: {model}",
             output=output,
             usage=usage,
             metadata=metadata,

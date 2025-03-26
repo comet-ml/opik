@@ -26,11 +26,11 @@ on:
             required: false
             default: ""
             description: Arguments for cloud docker build
-        push_latest:
-            type: string
+        is_release:
+            type: boolean
             required: true
-            description: If to push docker image with latest tag
-            default: "false"
+            description: If this is a release build (will build multi-arch and push latest tag)
+            default: false
 
 env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik" 
@@ -39,9 +39,6 @@ jobs:
 
   build-n-push-image:
     runs-on: ubuntu-latest
-    defaults:
-        run:
-          working-directory: apps/${{ inputs.image }}/
     steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
@@ -52,60 +49,65 @@ jobs:
           if: inputs.image == 'opik-python-backend'
           run: |
             docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
-            docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > opik-sandbox-executor-python.tar.gz
-
-        - name: Build Docker Image
-          run: |
-            DOCKER_IMAGE_NAME=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
-            echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}" | tee -a $GITHUB_ENV
-            DOCKER_BUILDKIT=1 docker build \
-            --build-arg OPIK_VERSION=${{inputs.version}} \
-            -t ${DOCKER_IMAGE_NAME} .
-
-        - name: Build Docker Image for Comet integration
-          if: inputs.build_comet_image 
-          run: |
-            DOCKER_IMAGE_NAME_COMET=${{env.DOCKER_REGISTRY}}/${{inputs.image}}-comet:${{inputs.version}}
-            echo "DOCKER_IMAGE_NAME_COMET=${DOCKER_IMAGE_NAME_COMET}" | tee -a $GITHUB_ENV
-            DOCKER_BUILDKIT=1 docker build \
-            --build-arg ${{inputs.comet_build_args}}  \
-            --build-arg OPIK_VERSION=${{inputs.version}} \
-            --build-arg SENTRY_ENABLED=true \
-            --build-arg SENTRY_DSN="${{secrets.OPIK_FE_SENTRY_DSN}}" \
-            -t ${DOCKER_IMAGE_NAME_COMET} .
-  
+            docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
+            
         - name: Login to GHCR
           uses: docker/login-action@v3
           with:
             registry: ${{env.DOCKER_REGISTRY}}
             username: "github-actions"
             password: ${{ secrets.GITHUB_TOKEN }}
-  
-        - name: Push Docker Image
-          run: |
-            docker push ${{env.DOCKER_IMAGE_NAME}}
-            echo "Docker image pushed: ${{env.DOCKER_IMAGE_NAME}}" >> $GITHUB_STEP_SUMMARY
 
-        - name: Push Docker Image with latest tag
-          if: inputs.push_latest == 'true'
-          run: |
-            DOCKER_IMAGE_NAME_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest
-            docker tag ${{env.DOCKER_IMAGE_NAME}} ${DOCKER_IMAGE_NAME_LATEST}
-            docker push ${DOCKER_IMAGE_NAME_LATEST}
-            echo "Docker image pushed: ${DOCKER_IMAGE_NAME_LATEST}" >> $GITHUB_STEP_SUMMARY
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v2
 
-        - name: Push Docker Image for Comet integration
-          if: inputs.build_comet_image 
-          run: |
-            docker push ${{env.DOCKER_IMAGE_NAME_COMET}}
-            echo "Docker image pushed: ${{env.DOCKER_IMAGE_NAME_COMET}}" >> $GITHUB_STEP_SUMMARY
+        - name: Build and Push Docker Image
+          uses: docker/build-push-action@v4
+          with:
+            context: apps/${{ inputs.image }}/
+            platforms: ${{ inputs.is_release && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+            push: true
+            tags: |
+              ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
+              ${{ inputs.is_release && format('{0}/{1}:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
+            build-args: |
+              OPIK_VERSION=${{inputs.version}}
 
-        - name: Push Docker Image for Comet integration with latest tag
-          if: inputs.build_comet_image && inputs.push_latest == 'true'
-          run: |
-            DOCKER_IMAGE_NAME_COMET_LATEST=${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest
-            docker tag ${{env.DOCKER_IMAGE_NAME_COMET}} ${DOCKER_IMAGE_NAME_COMET_LATEST}
-            docker push ${DOCKER_IMAGE_NAME_COMET_LATEST}
-            echo "Docker image pushed: ${DOCKER_IMAGE_NAME_COMET_LATEST}" >> $GITHUB_STEP_SUMMARY
+        - name: Build and Push Docker Image for Comet integration
+          if: inputs.build_comet_image
+          uses: docker/build-push-action@v4
+          with:
+            context: apps/${{ inputs.image }}/
+            platforms: ${{ inputs.is_release && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+            push: true
+            tags: |
+              ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:${{inputs.version}}
+              ${{ inputs.is_release && format('{0}/{1}-comet:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
+            build-args: |
+              ${{inputs.comet_build_args}}
+              OPIK_VERSION=${{inputs.version}}
+              SENTRY_ENABLED=true
+              SENTRY_DSN=${{secrets.OPIK_FE_SENTRY_DSN}}
 
+        - name: Write Build Summary
+          run: |
+            echo "### Docker images pushed:" >> $GITHUB_STEP_SUMMARY
+            echo "${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}" >> $GITHUB_STEP_SUMMARY
+            if [[ "${{ inputs.is_release }}" == "true" ]]; then
+              echo "${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest" >> $GITHUB_STEP_SUMMARY
+              echo "Built for platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            if [[ "${{ inputs.build_comet_image }}" == "true" ]]; then
+              echo "### Comet Integration Image" >> $GITHUB_STEP_SUMMARY
+              echo "${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:${{inputs.version}}" >> $GITHUB_STEP_SUMMARY
+              if [[ "${{ inputs.is_release }}" == "true" ]]; then
+                echo "${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest" >> $GITHUB_STEP_SUMMARY
+                echo "Built for platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
         

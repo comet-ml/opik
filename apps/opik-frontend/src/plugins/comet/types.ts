@@ -2,7 +2,6 @@ export interface User {
   apiKeys: string[];
   defaultWorkspace: string;
   email: string;
-  getTeams: GetTeams;
   gitHub: boolean;
   loggedIn: boolean;
   orgReachedTraceLimit?: boolean;

@@ -7,7 +7,6 @@ import api, {
 import { EvaluatorRuleLogItem } from "@/types/automations";
 
 type UseRulesLogsListParams = {
-  projectId: string;
   ruleId: string;
 };
 
@@ -17,10 +16,10 @@ export type UseRulesLogsListResponse = {
 
 const getRulesLogsList = async (
   { signal }: QueryFunctionContext,
-  { projectId, ruleId }: UseRulesLogsListParams,
+  { ruleId }: UseRulesLogsListParams,
 ) => {
   const { data } = await api.get<UseRulesLogsListResponse>(
-    `${AUTOMATIONS_REST_ENDPOINT}projects/${projectId}/evaluators/${ruleId}/logs`,
+    `${AUTOMATIONS_REST_ENDPOINT}evaluators/${ruleId}/logs`,
     {
       signal,
     },

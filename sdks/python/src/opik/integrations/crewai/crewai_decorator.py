@@ -11,9 +11,10 @@ from typing import (
     Union,
 )
 
-from opik import opik_context
+from opik import llm_usage
 from opik.decorator import arguments_helpers, base_track_decorator
-from opik.types import SpanType
+from opik.types import SpanType, LLMProvider
+from opik.api_objects import span
 
 LOGGER = logging.getLogger(__name__)
 
@@ -146,13 +147,13 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
+        current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
         object_type = None
         metadata = {}
 
-        current_span = opik_context.get_current_span_data()
-        if current_span and current_span.metadata:
-            metadata = current_span.metadata
+        if current_span_data and current_span_data.metadata:
+            metadata = current_span_data.metadata
             object_type = metadata.pop("object_type")
 
         model, provider, output_dict, usage = self._parse_outputs(object_type, output)
@@ -175,7 +176,7 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         Optional[str],
         Optional[str],
         Dict[str, Any],
-        Optional[Dict[str, Any]],
+        Optional[llm_usage.OpikUsage],
     ]:
         model = None
         provider = None
@@ -191,7 +192,15 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
             output_dict = output.model_dump(include=TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT)
         elif object_type == "completion":
             output_dict = output.model_dump()
-            usage = output_dict.pop("usage", None)
+            if output_dict.get("usage", None) is not None:
+                usage = llm_usage.try_build_opik_usage_or_log_error(
+                    provider=LLMProvider.OPENAI,  # even if it's not openai, we know the format is openai-like
+                    usage=output_dict["usage"],
+                    logger=LOGGER,
+                    error_message="Failed to log token usage from CrewAI LLM call",
+                )
+            else:
+                usage = None
             model = output_dict.pop("model", None)
             provider = (
                 "openai" if output_dict.get("object") == "chat.completion" else None

@@ -118,7 +118,7 @@ jobs:
                 elif [ "$SUITE" == "sanity" ]; then
                     allurectl watch -- pytest -s -m sanity --browser chromium --alluredir="${ALLURE_RESULTS}"
                 elif [ "$SUITE" == "all_features" ]; then
-                    allurectl watch -- pytest -s tests --browser chromium --alluredir="${ALLURE_RESULTS}"
+                    allurectl watch -- pytest -s tests --ignore tests/Admin --ignore tests/Installation --browser chromium --alluredir="${ALLURE_RESULTS}"
                 fi
 
             - name: Stop Opik server (Local)

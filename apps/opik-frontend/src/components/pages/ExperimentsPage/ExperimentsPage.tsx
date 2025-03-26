@@ -6,6 +6,7 @@ import {
   Row,
   RowSelectionState,
 } from "@tanstack/react-table";
+import { useNavigate } from "@tanstack/react-router";
 import {
   JsonParam,
   NumberParam,
@@ -114,6 +115,10 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
         value: formatNumericData(score.value),
       })),
     cell: FeedbackScoreListCell as never,
+    customMeta: {
+      getHoverCardName: (row: GroupedExperiment) => row.name,
+      isAverageScores: true,
+    },
   },
   {
     id: COLUMN_COMMENTS_ID,
@@ -136,6 +141,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 
 const ExperimentsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
@@ -166,7 +172,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     };
   }, []);
 
-  const { data, isPending, refetch } = useGroupedExperimentsList({
+  const { data, isPending, refetch, datasetsData } = useGroupedExperimentsList({
     workspaceName,
     groupLimit,
     datasetId: datasetId!,
@@ -249,6 +255,22 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleRowClick = useCallback(
+    (row: GroupedExperiment) => {
+      navigate({
+        to: "/$workspaceName/experiments/$datasetId/compare",
+        params: {
+          datasetId: row.dataset_id,
+          workspaceName,
+        },
+        search: {
+          experiments: [row.id],
+        },
+      });
+    },
+    [navigate, workspaceName],
+  );
+
   const expandingConfig = useExpandingConfig({
     groupIds,
   });
@@ -259,8 +281,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
   }, []);
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedExperiment>) => {
-      return renderCustomRow(row, setGroupLimit);
+    (row: Row<GroupedExperiment>, applyStickyWorkaround?: boolean) => {
+      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
     },
     [setGroupLimit],
   );
@@ -318,10 +340,14 @@ const ExperimentsPage: React.FunctionComponent = () => {
           </Button>
         </div>
       </div>
-      <ExperimentsChartsWrapper experiments={experiments} />
+      <ExperimentsChartsWrapper
+        experiments={experiments}
+        datasetsData={datasetsData}
+      />
       <DataTable
         columns={columns}
         data={experiments}
+        onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
         getIsCustomRow={getIsCustomRow}
         resizeConfig={resizeConfig}

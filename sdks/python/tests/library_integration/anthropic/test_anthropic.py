@@ -1,5 +1,4 @@
 import pytest
-import os
 import asyncio
 
 import opik
@@ -33,13 +32,20 @@ retry_on_internal_server_errors = tenacity.retry(
     retry=tenacity.retry_if_exception(_is_internal_server_error),
 )
 
+EXPECTED_ANTHROPIC_USAGE_DICT = {
+    "completion_tokens": ANY_BUT_NONE,
+    "prompt_tokens": ANY_BUT_NONE,
+    "total_tokens": ANY_BUT_NONE,
+    "original_usage.input_tokens": ANY_BUT_NONE,
+    "original_usage.output_tokens": ANY_BUT_NONE,
+    "original_usage.cache_creation_input_tokens": ANY_BUT_NONE,
+    "original_usage.cache_read_input_tokens": ANY_BUT_NONE,
+}
 
-@pytest.fixture(autouse=True)
-def ensure_anthropic_configured():
-    # don't use assertion here to prevent printing os.environ with all env variables
+MODEL_FOR_TESTS_FULL = "claude-3-5-haiku-latest"
+MODEL_FOR_TESTS_SHORT = "claude-3-5-haiku"
 
-    if "ANTHROPIC_API_KEY" not in os.environ:
-        raise Exception("Anthropic not configured!")
+pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")
 
 
 @pytest.mark.parametrize(
@@ -61,7 +67,7 @@ def test_anthropic_messages_create__happyflow(
     messages = [{"role": "user", "content": "Tell a short fact"}]
 
     response = wrapped_client.messages.create(
-        model="claude-3-5-haiku-latest",
+        model=MODEL_FOR_TESTS_FULL,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -94,7 +100,9 @@ def test_anthropic_messages_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -157,6 +165,7 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
                     "message": ANY_STRING(),
                     "traceback": ANY_STRING(),
                 },
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -190,7 +199,7 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
         ]
 
         _ = wrapped_client.messages.create(
-            model="claude-3-5-haiku-latest",
+            model=MODEL_FOR_TESTS_FULL,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -232,7 +241,9 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
                         end_time=ANY_BUT_NONE,
                         project_name="anthropic-integration-test",
                         type="llm",
-                        usage=ANY_DICT,
+                        usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                        model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                        provider="anthropic",
                         spans=[],
                     )
                 ],
@@ -258,7 +269,7 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
         client = anthropic.AsyncAnthropic()
         wrapped_client = track_anthropic(client)
         _ = await wrapped_client.messages.create(
-            model="claude-3-5-haiku-latest",
+            model=MODEL_FOR_TESTS_FULL,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -300,7 +311,9 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
                         end_time=ANY_BUT_NONE,
                         project_name=ANY_BUT_NONE,
                         type="llm",
-                        usage=ANY_DICT,
+                        usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                        model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                        provider="anthropic",
                         spans=[],
                     )
                 ],
@@ -327,7 +340,7 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model="claude-3-5-haiku-latest",
+        model=MODEL_FOR_TESTS_FULL,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -361,7 +374,9 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -378,7 +393,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
 ):
     def run_stream(client, messages):
         message_stream_manager = wrapped_client.messages.stream(
-            model="claude-3-5-haiku-latest",
+            model=MODEL_FOR_TESTS_FULL,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -433,7 +448,9 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -461,7 +478,9 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -487,7 +506,7 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model="claude-3-5-haiku-latest",
+        model=MODEL_FOR_TESTS_FULL,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -520,7 +539,9 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -545,7 +566,7 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model="claude-3-5-haiku-latest",
+        model=MODEL_FOR_TESTS_FULL,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -580,7 +601,9 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -606,7 +629,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
 
     async def async_f():
         message_stream_manager = wrapped_client.messages.stream(
-            model="claude-3-5-haiku-latest",
+            model=MODEL_FOR_TESTS_FULL,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -642,7 +665,9 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -668,7 +693,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
 
     async def async_f():
         message_stream_manager = wrapped_client.messages.stream(
-            model="claude-3-5-haiku-latest",
+            model=MODEL_FOR_TESTS_FULL,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -704,7 +729,9 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -729,7 +756,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
     ]
 
     stream = wrapped_client.messages.create(
-        model="claude-3-5-haiku-latest",
+        model=MODEL_FOR_TESTS_FULL,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -763,7 +790,9 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],
@@ -789,7 +818,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
         ]
 
         stream = await wrapped_client.messages.create(
-            model="claude-3-5-haiku-latest",
+            model=MODEL_FOR_TESTS_FULL,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -837,7 +866,9 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                provider="anthropic",
                 spans=[],
             )
         ],

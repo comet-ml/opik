@@ -1,10 +1,11 @@
 import math
 from functools import cached_property
-from typing import Any, Optional, Union
+from typing import Any, Optional, TYPE_CHECKING, Union
 import pydantic
 import json
 
-from litellm.types.utils import ModelResponse
+if TYPE_CHECKING:
+    from litellm.types.utils import ModelResponse
 
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
@@ -145,7 +146,7 @@ class GEval(base_metric.BaseMetric):
 
         return self._parse_model_output(model_output)
 
-    def _parse_model_output(self, content: ModelResponse) -> score_result.ScoreResult:
+    def _parse_model_output(self, content: "ModelResponse") -> score_result.ScoreResult:
         """
         This method computes the final score based on the model's response. The model's response is a dictionary
         with a `score` key and a `reason` key. The prompt template also specifies that the score should be an integer
@@ -158,9 +159,12 @@ class GEval(base_metric.BaseMetric):
         try:
             # Compute score using top logprobs
             score_token_position = 3
-            top_score_logprobs = content.choices[0].model_extra["logprobs"]["content"][
+            log_probs_content = content.choices[0].model_extra["logprobs"]["content"][
                 score_token_position
-            ]["top_logprobs"]
+            ]
+
+            top_score_logprobs = log_probs_content["top_logprobs"]
+            log_probs_token = log_probs_content["token"]
 
             linear_probs_sum = 0.0
             weighted_score_sum = 0.0
@@ -188,7 +192,14 @@ class GEval(base_metric.BaseMetric):
                 linear_probs_sum += linear_prob
                 weighted_score_sum += linear_prob * score
 
-            final_score: float = weighted_score_sum / linear_probs_sum / 10
+            if linear_probs_sum != 0.0:
+                final_score: float = weighted_score_sum / linear_probs_sum / 10
+            else:
+                # Handle cases where we can't find any matching tokens in the top_log_probs
+                if not log_probs_token.isdecimal():
+                    raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)
+
+                final_score = int(log_probs_token) / 10
 
             if not (0.0 <= final_score <= 1.0):
                 raise ValueError

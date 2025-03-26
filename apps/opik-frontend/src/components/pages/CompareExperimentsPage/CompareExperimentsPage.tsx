@@ -3,13 +3,15 @@ import isUndefined from "lodash/isUndefined";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails";
 import ExperimentItemsTab from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/ExperimentItemsTab";
 import ConfigurationTab from "@/components/pages/CompareExperimentsPage/ConfigurationTab/ConfigurationTab";
+import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import ExperimentFeedbackScoresTab from "@/components/pages/CompareExperimentsPage/ExperimentFeedbackScoresTab/ExperimentFeedbackScoresTab";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
+import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
@@ -38,23 +40,33 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
   }, [experiments]);
 
   return (
-    <div>
-      <CompareExperimentsDetails
-        experimentsIds={experimentsIds}
-        experiments={memorizedExperiments}
-      />
-      <Tabs defaultValue="input" value={tab as string} onValueChange={setTab}>
-        <TabsList variant="underline">
-          <TabsTrigger variant="underline" value="items">
-            Experiment items
-          </TabsTrigger>
-          <TabsTrigger variant="underline" value="config">
-            Configuration
-          </TabsTrigger>
-          <TabsTrigger variant="underline" value="scores">
-            Feedback scores
-          </TabsTrigger>
-        </TabsList>
+    <PageBodyScrollContainer>
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
+        <CompareExperimentsDetails
+          experimentsIds={experimentsIds}
+          experiments={memorizedExperiments}
+          isPending={isPending}
+        />
+      </PageBodyStickyContainer>
+      <Tabs
+        defaultValue="input"
+        value={tab as string}
+        onValueChange={setTab}
+        className="min-w-min"
+      >
+        <PageBodyStickyContainer direction="horizontal" limitWidth>
+          <TabsList variant="underline">
+            <TabsTrigger variant="underline" value="items">
+              Experiment items
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="config">
+              Configuration
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="scores">
+              Feedback scores
+            </TabsTrigger>
+          </TabsList>
+        </PageBodyStickyContainer>
         <TabsContent value="items">
           <ExperimentItemsTab
             experimentsIds={experimentsIds}
@@ -76,7 +88,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
           />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageBodyScrollContainer>
   );
 };
 

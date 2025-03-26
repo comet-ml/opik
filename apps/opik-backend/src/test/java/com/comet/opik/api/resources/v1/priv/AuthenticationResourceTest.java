@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AuthDetailsHolder;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.WorkspaceNameHolder;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -191,6 +192,23 @@ class AuthenticationResourceTest {
                     arguments(UNAUTHORISED_WORKSPACE_NAME, NOT_ALLOWED_TO_ACCESS_WORKSPACE));
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void getWorkspaceName(String apiKey, int expectedStatus,
+                String errorMessage) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            getAndAsserWorkspaceName(apiKey, workspaceName, expectedStatus, errorMessage);
+        }
+
+        private Stream<Arguments> getWorkspaceName() {
+            return Stream.of(
+                    arguments(okApikey, 200, ""),
+                    arguments(fakeApikey, 401, FAKE_API_KEY_MESSAGE),
+                    arguments("", 401, MISSING_API_KEY));
+        }
+
         private void checkProjectAccess(String apiKey,
                 String workspaceName,
                 int expectedStatus,
@@ -209,6 +227,30 @@ class AuthenticationResourceTest {
                     assertThat(actualResponse.hasEntity()).isFalse();
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError.getMessage()).isEqualTo(expectedErrorMessage);
+                }
+            }
+        }
+
+        private void getAndAsserWorkspaceName(String apiKey,
+                String workspaceName,
+                int expectedStatus,
+                String expectedErrorMessage) {
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("workspace")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+                if (expectedStatus == 200) {
+                    assertThat(actualResponse.readEntity(WorkspaceNameHolder.class).workspaceName())
+                            .isEqualTo(workspaceName);
+                } else {
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                     assertThat(actualError.getMessage()).isEqualTo(expectedErrorMessage);
                 }

@@ -1,7 +1,9 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
+from opik import llm_usage
 from opik.api_objects import span, trace
-from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, UsageDict
+from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, LLMProvider
+
 from . import context_storage, exceptions
 
 
@@ -49,8 +51,10 @@ def update_current_span(
     output: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
-    usage: Optional[UsageDict] = None,
+    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+    model: Optional[str] = None,
+    provider: Optional[Union[str, LLMProvider]] = None,
     total_cost: Optional[float] = None,
 ) -> None:
     """
@@ -62,8 +66,15 @@ def update_current_span(
         output: The output data of the span.
         metadata: The metadata of the span.
         tags: The tags of the span.
-        usage: The usage data of the span.
+        usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
+            the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+            If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
+            format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
         feedback_scores: The feedback scores of the span.
+        model: The name of LLM (in this case type parameter should be == llm)
+        provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
+            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+            If your provider not in the list, you can still specify it but the cost tracking will not be available
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
     """
     new_params = {
@@ -74,6 +85,8 @@ def update_current_span(
         "tags": tags,
         "usage": usage,
         "feedback_scores": feedback_scores,
+        "model": model,
+        "provider": provider,
         "total_cost": total_cost,
     }
     current_span_data = context_storage.top_span_data()

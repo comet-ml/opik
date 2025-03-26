@@ -34,6 +34,7 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className="justify-end p-0"
+      stopClickPropagation
     >
       <AddEditProjectDialog
         key={`add-${resetKeyRef.current}`}

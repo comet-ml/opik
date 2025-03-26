@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import get from "lodash/get";
 
@@ -67,6 +67,10 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
           value: formatNumericData(score.value),
         })),
       cell: FeedbackScoreListCell as never,
+      customMeta: {
+        getHoverCardName: (row: Experiment) => row.name,
+        isAverageScores: true,
+      },
     },
     {
       id: "created_at",
@@ -85,6 +89,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const EvaluationSection: React.FunctionComponent = () => {
+  const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const resetDialogKeyRef = useRef(0);
@@ -109,6 +114,22 @@ const EvaluationSection: React.FunctionComponent = () => {
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
+
+  const handleRowClick = useCallback(
+    (row: Experiment) => {
+      navigate({
+        to: "/$workspaceName/experiments/$datasetId/compare",
+        params: {
+          datasetId: row.dataset_id,
+          workspaceName,
+        },
+        search: {
+          experiments: [row.id],
+        },
+      });
+    },
+    [navigate, workspaceName],
+  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -136,6 +157,7 @@ const EvaluationSection: React.FunctionComponent = () => {
       <DataTable
         columns={COLUMNS}
         data={experiments}
+        onRowClick={handleRowClick}
         resizeConfig={resizeConfig}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
