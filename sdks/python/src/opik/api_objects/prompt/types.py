@@ -1,6 +1,6 @@
-from enum import StrEnum
+import enum
 
 
-class PromptType(StrEnum):
+class PromptType(str, enum.Enum):
     MUSTACHE = "mustache"
     JINJA2 = "jinja2"
