@@ -167,8 +167,6 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
-      backend:
-        condition: service_healthy
       python-backend:
         condition: service_healthy
 

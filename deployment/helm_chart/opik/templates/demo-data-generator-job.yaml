@@ -28,10 +28,6 @@ spec:
         image: curlimages/curl:8.12.1
         command: ["/bin/sh", "-c"]
         args: ['while [ $(curl -ksw "%{http_code}" "http://opik-frontend:5173" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Frontend is not available. Waiting for the Opik Frontend..."; done']
-      - name: wait-for-backend-service
-        image: curlimages/curl:8.12.1
-        command: ["/bin/sh", "-c"]
-        args: ['while [ $(curl -ksw "%{http_code}" "http://opik-backend:8080/health-check" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Backend is not available. Waiting for the Opik Backend..."; done']
       containers:
       - name: demo-data-generator
         image: "{{ .Values.registry }}/opik-python-backend:{{ (index .Values.component "python-backend" "image" "tag") }}"
