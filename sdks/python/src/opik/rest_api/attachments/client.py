@@ -2,18 +2,23 @@
 
 import typing
 from ..core.client_wrapper import SyncClientWrapper
-from .types.complete_multipart_upload_request_entity_type import (
-    CompleteMultipartUploadRequestEntityType,
-)
-from ..types.multipart_upload_part import MultipartUploadPart
+from .types.attachment_list_request_entity_type import AttachmentListRequestEntityType
 from ..core.request_options import RequestOptions
-from ..core.serialization import convert_and_respect_annotation_metadata
-from ..errors.unauthorized_error import UnauthorizedError
+from ..types.attachment_page import AttachmentPage
 from ..core.pydantic_utilities import parse_obj_as
+from ..errors.unauthorized_error import UnauthorizedError
 from ..errors.forbidden_error import ForbiddenError
 from ..types.error_message import ErrorMessage
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from .types.complete_multipart_upload_request_entity_type import (
+    CompleteMultipartUploadRequestEntityType,
+)
+from ..types.multipart_upload_part import MultipartUploadPart
+from ..core.serialization import convert_and_respect_annotation_metadata
+from .types.download_attachment_request_entity_type import (
+    DownloadAttachmentRequestEntityType,
+)
 from .types.start_multipart_upload_request_entity_type import (
     StartMultipartUploadRequestEntityType,
 )
@@ -30,6 +35,104 @@ OMIT = typing.cast(typing.Any, ...)
 class AttachmentsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def attachment_list(
+        self,
+        *,
+        project_id: str,
+        entity_type: AttachmentListRequestEntityType,
+        entity_id: str,
+        path: str,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AttachmentPage:
+        """
+        Attachments list for entity
+
+        Parameters
+        ----------
+        project_id : str
+
+        entity_type : AttachmentListRequestEntityType
+
+        entity_id : str
+
+        path : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AttachmentPage
+            Attachment Resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.attachments.attachment_list(
+            project_id="project_id",
+            entity_type="trace",
+            entity_id="entity_id",
+            path="path",
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/attachment/list",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "project_id": project_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "path": path,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    AttachmentPage,
+                    parse_obj_as(
+                        type_=AttachmentPage,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
+                        ErrorMessage,
+                        parse_obj_as(
+                            type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def start_multi_part_upload(
         self,
@@ -112,9 +215,6 @@ class AttachmentsClient:
                     direction="write",
                 ),
             },
-            headers={
-                "content-type": "application/json",
-            },
             request_options=request_options,
             omit=OMIT,
         )
@@ -145,6 +245,91 @@ class AttachmentsClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def download_attachment(
+        self,
+        *,
+        container_id: str,
+        entity_type: DownloadAttachmentRequestEntityType,
+        entity_id: str,
+        file_name: str,
+        mime_type: str,
+        workspace_name: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[bytes]:
+        """
+        Download attachment from MinIO
+
+        Parameters
+        ----------
+        container_id : str
+
+        entity_type : DownloadAttachmentRequestEntityType
+
+        entity_id : str
+
+        file_name : str
+
+        mime_type : str
+
+        workspace_name : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.Iterator[bytes]
+            Attachment Resource
+        """
+        with self._client_wrapper.httpx_client.stream(
+            "v1/private/attachment/download",
+            method="GET",
+            params={
+                "workspace_name": workspace_name,
+                "container_id": container_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "file_name": file_name,
+                "mime_type": mime_type,
+            },
+            request_options=request_options,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    for _chunk in _response.iter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                _response.read()
+                if _response.status_code == 401:
+                    raise UnauthorizedError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                if _response.status_code == 403:
+                    raise ForbiddenError(
+                        typing.cast(
+                            ErrorMessage,
+                            parse_obj_as(
+                                type_=ErrorMessage,  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
 
     def start_multi_part_upload_1(
         self,
@@ -351,6 +536,112 @@ class AsyncAttachmentsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    async def attachment_list(
+        self,
+        *,
+        project_id: str,
+        entity_type: AttachmentListRequestEntityType,
+        entity_id: str,
+        path: str,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AttachmentPage:
+        """
+        Attachments list for entity
+
+        Parameters
+        ----------
+        project_id : str
+
+        entity_type : AttachmentListRequestEntityType
+
+        entity_id : str
+
+        path : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AttachmentPage
+            Attachment Resource
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.attachments.attachment_list(
+                project_id="project_id",
+                entity_type="trace",
+                entity_id="entity_id",
+                path="path",
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/attachment/list",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "project_id": project_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "path": path,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return typing.cast(
+                    AttachmentPage,
+                    parse_obj_as(
+                        type_=AttachmentPage,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
+                        ErrorMessage,
+                        parse_obj_as(
+                            type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
     async def start_multi_part_upload(
         self,
         *,
@@ -440,9 +731,6 @@ class AsyncAttachmentsClient:
                     direction="write",
                 ),
             },
-            headers={
-                "content-type": "application/json",
-            },
             request_options=request_options,
             omit=OMIT,
         )
@@ -473,6 +761,91 @@ class AsyncAttachmentsClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def download_attachment(
+        self,
+        *,
+        container_id: str,
+        entity_type: DownloadAttachmentRequestEntityType,
+        entity_id: str,
+        file_name: str,
+        mime_type: str,
+        workspace_name: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Download attachment from MinIO
+
+        Parameters
+        ----------
+        container_id : str
+
+        entity_type : DownloadAttachmentRequestEntityType
+
+        entity_id : str
+
+        file_name : str
+
+        mime_type : str
+
+        workspace_name : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.AsyncIterator[bytes]
+            Attachment Resource
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            "v1/private/attachment/download",
+            method="GET",
+            params={
+                "workspace_name": workspace_name,
+                "container_id": container_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "file_name": file_name,
+                "mime_type": mime_type,
+            },
+            request_options=request_options,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                await _response.aread()
+                if _response.status_code == 401:
+                    raise UnauthorizedError(
+                        typing.cast(
+                            typing.Optional[typing.Any],
+                            parse_obj_as(
+                                type_=typing.Optional[typing.Any],  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                if _response.status_code == 403:
+                    raise ForbiddenError(
+                        typing.cast(
+                            ErrorMessage,
+                            parse_obj_as(
+                                type_=ErrorMessage,  # type: ignore
+                                object_=_response.json(),
+                            ),
+                        )
+                    )
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
 
     async def start_multi_part_upload_1(
         self,
