@@ -7,23 +7,10 @@ env:
   ALLURE_PROJECT_ID: 1
   ALLURE_RESULTS: allure-results
 on:
+    schedule:
+    - cron: '0 12 * * *' # runs every day at noon UTC
     workflow_dispatch:
-        inputs:
-            ALLURE_JOB_RUN_ID:
-                description: ALLURE_JOB_RUN_ID service parameter. Leave blank.
-            ALLURE_USERNAME:
-                description: ALLURE_USERNAME service parameter. Leave blank.
-                
-    pull_request:
-      paths:
-        - 'sdks/code_generation/fern/openapi/openapi.yaml'
-        - 'tests_end_to_end/**'
     
-    
-    push:
-        branches:
-            'andrei/opik-1267/automation-for-quickstart-guide-snippets'
-
 run-name: Quickstart Guide Snippets Tests
 
 jobs:
@@ -59,24 +46,8 @@ jobs:
               env:
                 OPIK_USAGE_REPORT_ENABLED: false
               run: |
-                cd ${{ github.workspace }}/deployment/docker-compose
-                docker compose up -d --build
-                
-            - name: Check Docker pods are up (Local)
-              run: |
-                chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
-                ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
-              shell: bash
-
-            - name: Check backend health (Local)
-              run: |
-                chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
-                ./tests_end_to_end/installer_utils/check_backend.sh
-              shell: bash
-
-            - name: Check app is up via the UI (Local)
-              run: |
-                pytest -v -s ${{ github.workspace }}/tests_end_to_end/installer_utils/test_app_status.py
+                cd ${{ github.workspace }}
+                ./opik.sh
             
             - name: Run suite
               env:
@@ -95,8 +66,5 @@ jobs:
             - name: Stop Opik server (Local)
               if: always()
               run: |
-                cd ${{ github.workspace }}/deployment/docker-compose
-                docker compose down
-                cd -
-
-        continue-on-error: ${{ github.event_name == 'pull_request' }}
+                cd ${{ github.workspace }}
+                ./opik.sh --stop

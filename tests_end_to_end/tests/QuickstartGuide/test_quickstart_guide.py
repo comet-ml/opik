@@ -92,5 +92,3 @@ def test_quickstart_snippet(page, integration):
 
         except subprocess.TimeoutExpired:
             raise AssertionError("Code execution timed out after 30 seconds")
-        except Exception as e:
-            raise AssertionError(f"Error running the code: {e}")
