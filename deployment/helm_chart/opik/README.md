@@ -201,8 +201,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
 | component.python-backend.image.tag | string | `"latest"` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
-| component.python-backend.livenessProbe.path | string | `"/health-check"` |  |
-| component.python-backend.livenessProbe.port | int | `8080` |  |
 | component.python-backend.networkPolicy.enabled | bool | `true` |  |
 | component.python-backend.networkPolicy.engineEgress.except[0] | string | `"10.0.0.0/8"` |  |
 | component.python-backend.networkPolicy.engineEgress.except[1] | string | `"100.64.0.0/10"` |  |
@@ -211,9 +209,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.networkPolicy.engineEgress.except[4] | string | `"198.18.0.0/15"` |  |
 | component.python-backend.networkPolicy.engineEgress.except[5] | string | `"192.168.0.0/16"` |  |
 | component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
-| component.python-backend.readinessProbe.initialDelaySeconds | int | `20` |  |
-| component.python-backend.readinessProbe.path | string | `"/health-check"` |  |
-| component.python-backend.readinessProbe.port | int | `8080` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.securityContext.privileged | bool | `true` |  |
 | component.python-backend.service.ports[0].name | string | `"http"` |  |
