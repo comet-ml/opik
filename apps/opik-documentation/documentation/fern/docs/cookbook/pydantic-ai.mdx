@@ -19,7 +19,7 @@ by installing the required libraries and setting the correct environment variabl
 import os
 
 # Install the required libraries
-%pip install --upgrade --quiet pydantic-ai logfire 'logfire[httpx]'
+%pip install --upgrade --quiet pydantic-ai logfire 'logfire[httpx]' nest_asyncio
 
 # Configure the logging to Opik Cloud
 os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = (
