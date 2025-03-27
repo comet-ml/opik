@@ -259,3 +259,53 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments DETACH PARTITION tuple() S
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 TO ${ANALYTICS_DB_DATABASE_NAME}.attachments;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments TO ${ANALYTICS_DB_DATABASE_NAME}.attachments1;
+
+--changeset liyaka:change-tables-to-replicated-19 id:migrate-databasechangelog
+CREATE TABLE IF NOT EXISTS default.DATABASECHANGELOG1
+(
+    `ID` String,
+    `AUTHOR` String,
+    `FILENAME` String,
+    `DATEEXECUTED` DateTime64(3),
+    `ORDEREXECUTED` UInt64,
+    `EXECTYPE` String,
+    `MD5SUM` Nullable(String),
+    `DESCRIPTION` Nullable(String),
+    `COMMENTS` Nullable(String),
+    `TAG` Nullable(String),
+    `LIQUIBASE` Nullable(String),
+    `CONTEXTS` Nullable(String),
+    `LABELS` Nullable(String),
+    `DEPLOYMENT_ID` Nullable(String)
+)
+ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/default/DATABASECHANGELOG', '{replica}')
+ORDER BY ID
+SETTINGS index_granularity = 8192
+--rollback DROP TABLE default.DATABASECHANGELOG1;
+
+--changeset liyaka:change-tables-to-replicated-19 id:migrate-databasechangelog
+ALTER TABLE default.DATABASECHANGELOG1 ATTACH PARTITION tuple() FROM default.DATABASECHANGELOG;
+ALTER TABLE default.DATABASECHANGELOG DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
+DROP TABLE default.DATABASECHANGELOG SYNC SETTINGS max_table_size_to_drop = 0;
+RENAME TABLE default.DATABASECHANGELOG1 TO default.DATABASECHANGELOG;
+--rollback RENAME TABLE default.DATABASECHANGELOG TO default.DATABASECHANGELOG1;
+
+--changeset liyaka:change-tables-to-replicated-19 id:migrate-databasechangeloglock
+CREATE TABLE IF NOT EXISTS default.DATABASECHANGELOGLOCK1
+(
+    `ID` Int64,
+    `LOCKED` UInt8,
+    `LOCKGRANTED` Nullable(DateTime64(3)),
+    `LOCKEDBY` Nullable(String)
+)
+ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/default/DATABASECHANGELOGLOCK', '{replica}')
+ORDER BY ID
+SETTINGS index_granularity = 8192
+--rollback DROP TABLE default.DATABASECHANGELOGLOCK1;
+
+--changeset liyaka:change-tables-to-replicated-19 id:migrate-databasechangeloglock
+ALTER TABLE default.DATABASECHANGELOGLOCK1 ATTACH PARTITION tuple() FROM default.DATABASECHANGELOGLOCK;
+ALTER TABLE default.DATABASECHANGELOGLOCK DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
+DROP TABLE default.DATABASECHANGELOGLOCK SYNC SETTINGS max_table_size_to_drop = 0;
+RENAME TABLE default.DATABASECHANGELOGLOCK1 TO default.DATABASECHANGELOGLOCK;
+--rollback RENAME TABLE default.DATABASECHANGELOGLOCK TO default.DATABASECHANGELOGLOCK1;
