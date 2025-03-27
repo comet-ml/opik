@@ -14,6 +14,7 @@ import { CommentPublic } from "./CommentPublic";
 export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.Raw, OpikApi.SpanPublic> =
     core.serialization.object({
         id: core.serialization.string().optional(),
+        projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
         parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
@@ -49,6 +50,7 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
 export declare namespace SpanPublic {
     export interface Raw {
         id?: string | null;
+        project_name?: string | null;
         project_id?: string | null;
         trace_id: string;
         parent_span_id?: string | null;

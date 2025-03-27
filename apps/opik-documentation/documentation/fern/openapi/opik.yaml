@@ -6707,6 +6707,10 @@ components:
         id:
           type: string
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
         project_id:
           type: string
           format: uuid
