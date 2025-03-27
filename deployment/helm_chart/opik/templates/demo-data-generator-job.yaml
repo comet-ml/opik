@@ -1,0 +1,42 @@
+{{- if and .Values.demoDataJob (index .Values.component "python-backend" "enabled") .Values.component.frontend.enabled .Values.component.backend.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opik.name" $ }}-demo-data-generator
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
+    component: {{ include "opik.name" $ }}-demo-data-generator
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  template:
+    metadata:
+      name:  {{ include "opik.name" $ }}-demo-data-generator
+    spec:
+      restartPolicy: Never
+      initContainers:          
+      - name: wait-for-python-backend-service
+        image: curlimages/curl:8.12.1
+        command: ["/bin/sh", "-c"]
+        args: ['while [ $(curl -ksw "%{http_code}" "http://opik-python-backend:8000/healthcheck" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Python Backend is not available. Waiting for the Python Backend..."; done']
+      - name: wait-for-frontend-service
+        image: curlimages/curl:8.12.1
+        command: ["/bin/sh", "-c"]
+        args: ['while [ $(curl -ksw "%{http_code}" "http://opik-frontend:5173" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Frontend is not available. Waiting for the Opik Frontend..."; done']
+      containers:
+      - name: demo-data-generator
+        image: "{{ .Values.registry }}/opik-python-backend:{{ (index .Values.component "python-backend" "image" "tag") }}"
+        command: [ "sh", "-c", "./demo_data_entrypoint.sh" ]
+        env:
+        - name: CREATE_DEMO_DATA
+          value: "true"
+        - name: PYTHON_BACKEND_URL
+          value: "http://opik-python-backend:8000"
+  backoffLimit: 3
+
+{{- end }}

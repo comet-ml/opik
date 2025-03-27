@@ -18,7 +18,7 @@ public class AsyncContextUtils {
         };
     }
 
-    static ContextAwareAction<Result> bindWorkspaceIdToMono(Statement statement) {
+    public static ContextAwareAction<Result> bindWorkspaceIdToMono(Statement statement) {
         return (userName, workspaceId) -> {
             statement.bind("workspace_id", workspaceId);
             return Mono.from(statement.execute());

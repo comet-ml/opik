@@ -122,7 +122,7 @@ export class LlmProviderKey {
      */
     public async findLlmProviderKeys(
         requestOptions?: LlmProviderKey.RequestOptions,
-    ): Promise<OpikApi.ProjectPagePublic> {
+    ): Promise<OpikApi.ProviderApiKeyPagePublic> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -150,7 +150,7 @@ export class LlmProviderKey {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectPagePublic.parseOrThrow(_response.body, {
+            return serializers.ProviderApiKeyPagePublic.parseOrThrow(_response.body, {
                 unrecognizedObjectKeys: "passthrough",
                 allowUnrecognizedUnionMembers: true,
                 allowUnrecognizedEnumValues: true,
