@@ -43,7 +43,10 @@ const ExperimentDatasetItems = ({
 
   if (!showImages) {
     return data ? (
-      <SyntaxHighlighter data={data} prettifyConfig={{ fieldType: "input" }} />
+      <SyntaxHighlighter
+        data={selectedData}
+        prettifyConfig={{ fieldType: "input" }}
+      />
     ) : (
       <NoData />
     );
@@ -85,7 +88,7 @@ const ExperimentDatasetItems = ({
         <AccordionContent>
           {formattedSelectedData ? (
             <SyntaxHighlighter
-              data={formattedSelectedData}
+              data={formattedSelectedData ?? {}}
               prettifyConfig={{ fieldType: "input" }}
             />
           ) : (
