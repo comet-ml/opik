@@ -10,18 +10,21 @@ import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.PythonEvaluatorConfig;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -67,6 +70,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull AutomationRuleEvaluatorLogsDAO logsDAO;
+    private final @NonNull @Config("pythonEvaluator") PythonEvaluatorConfig pythonEvaluatorConfig;
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
@@ -93,6 +97,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
                 case AutomationRuleEvaluatorUserDefinedMetricPython userDefinedMetricPython -> {
+                    if (!pythonEvaluatorConfig.enabled()) {
+                        throw new ServiceUnavailableException("Python evaluator is disabled");
+                    }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
                             .projectId(projectId)
@@ -145,12 +152,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                 .code(AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdateLlmAsJudge.getCode()))
                                 .lastUpdatedBy(userName)
                                 .build();
-                    case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython ->
-                        UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
+                    case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython -> {
+                        if (!pythonEvaluatorConfig.enabled()) {
+                            throw new ServiceUnavailableException("Python evaluator is disabled");
+                        }
+                        yield UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
                                 .code(AutomationModelEvaluatorMapper.INSTANCE
                                         .map(evaluatorUpdateUserDefinedMetricPython.getCode()))
                                 .lastUpdatedBy(userName)
                                 .build();
+                    }
                 };
 
                 int resultEval = dao.updateEvaluator(id, modelUpdate);
