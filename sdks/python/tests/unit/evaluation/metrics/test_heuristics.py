@@ -389,3 +389,35 @@ def test_rouge1_score_for_multiple_references(candidate, reference, expected_min
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rouge1 score for multiple references in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,expected_min,expected_max",
+    [
+        # Porter stemmer - removes plurals and word suffixes such as (ing, ion, ment)
+        # Candidate = "The brown dogs jumps on the log quickly"
+        # Reference = "The quick brown fox jumps over the lazy dog"
+        # Stemmed Candidate = "the brown dog jump on the log quick"
+        # Stemmed Reference = "the quick brown fox jump over the lazy dog"
+        # Matches => "the" "brown" "dog" "jump" "quick"
+        # Precision = 5/8 = 0.625
+        # Recall = 5/9 = 0.5556
+        # F1 = 2 * (0.625 * 0.5556) / (0.625 + 0.5556) = 0.5882
+        # Hence, the final score = 0.5882
+        (
+            "The brown dogs jumps on the log quickly",
+            "The quick brown fox jumps over the lazy dog",
+            0.57,
+            0.59,
+        ),
+    ],
+)
+def test_rouge1_score_using_stemmer(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE(rouge_type="rouge1", use_stemmer=True)
+    result = metric.score(output=candidate, reference=reference)
+    assert isinstance(result, ScoreResult)
+
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
