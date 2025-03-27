@@ -1,5 +1,5 @@
 export { OpikClient as Opik } from "@/client/Client";
-export { OpikConfig } from "@/config/Config";
+export type { OpikConfig } from "@/config/Config";
 export { getTrackContext, track, trackOpikClient } from "@/decorators/track";
 export { generateId } from "@/utils/generateId";
 export { flushAll } from "@/utils/flushAll";

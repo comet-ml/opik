@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-readme-installation:
-    name: Test Main README.md Installation With Pull
+  test-opiksh:
+    name: opik.sh (main README)
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -32,21 +32,8 @@ jobs:
         env:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose pull
-          docker compose up --detach
-
-      - name: Check Docker pods are up (Local)
-        run: |
-          chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
-          ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
-        shell: bash
-
-      - name: Check backend health (Local)
-        run: |
-          chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
-          ./tests_end_to_end/installer_utils/check_backend.sh
-        shell: bash
+          cd ${{ github.workspace }}
+          ./opik.sh
 
       - name: Run trace test
         run: |
@@ -57,11 +44,11 @@ jobs:
       - name: Stop Opik
         if: always()
         run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
+          cd ${{ github.workspace }}
+          ./opik.sh --stop
 
-  test-docs-installation:
-    name: Test Comet Documentation Installation No Pull First
+  test-docker-compose-up:
+    name: docker compose up --detach (Comet docs)
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -101,7 +88,6 @@ jobs:
           ./tests_end_to_end/installer_utils/check_backend.sh
         shell: bash
 
-
       - name: Run trace test
         run: |
           cd ${{ github.workspace }}/tests_end_to_end
@@ -114,8 +100,8 @@ jobs:
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
-  test-docker-compose-readme-default:
-    name: Test Deployment README Default
+  test-docker-compose-build:
+    name: docker compose up --build (Comet docs)
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -141,8 +127,7 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose pull
-          docker compose -f docker-compose.yaml up -d
+          docker compose up --build
           
       - name: Check Docker pods are up (Local)
         run: |
@@ -168,8 +153,8 @@ jobs:
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
-  test-docker-compose-readme-specific-version:
-    name: Test Deployment README with Specific Version
+  test-docker-compose-with-version:
+    name: Set version - docker compose (deployment README)
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -196,7 +181,6 @@ jobs:
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           export OPIK_VERSION=1.6.5
-          docker compose pull
           docker compose -f docker-compose.yaml up -d
           
       - name: Check Docker pods are up (Local)
@@ -223,8 +207,8 @@ jobs:
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
-  test-docker-compose-readme-build:
-    name: Test Deployment README with Build
+  test-docker-compose-with-pull:
+    name: Docker compose pull + up (Deployment README)
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -251,7 +235,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose pull
-          docker compose -f docker-compose.yaml up -d --build
+          docker compose -f docker-compose.yaml up -d
           
       - name: Check Docker pods are up (Local)
         run: |

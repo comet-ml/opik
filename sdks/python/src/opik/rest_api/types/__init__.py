@@ -2,7 +2,14 @@
 
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
+from .attachment import Attachment
+from .attachment_page import AttachmentPage
 from .auth_details_holder import AuthDetailsHolder
+from .automation_rule_evaluator import (
+    AutomationRuleEvaluator,
+    AutomationRuleEvaluator_LlmAsJudge,
+    AutomationRuleEvaluator_UserDefinedMetricPython,
+)
 from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
 from .automation_rule_evaluator_llm_as_judge_public import (
     AutomationRuleEvaluatorLlmAsJudgePublic,
@@ -10,7 +17,22 @@ from .automation_rule_evaluator_llm_as_judge_public import (
 from .automation_rule_evaluator_llm_as_judge_write import (
     AutomationRuleEvaluatorLlmAsJudgeWrite,
 )
+from .automation_rule_evaluator_object_public import (
+    AutomationRuleEvaluatorObjectPublic,
+    AutomationRuleEvaluatorObjectPublic_LlmAsJudge,
+    AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython,
+)
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
+from .automation_rule_evaluator_public import (
+    AutomationRuleEvaluatorPublic,
+    AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
+)
+from .automation_rule_evaluator_update import (
+    AutomationRuleEvaluatorUpdate,
+    AutomationRuleEvaluatorUpdate_LlmAsJudge,
+    AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
+)
 from .automation_rule_evaluator_update_llm_as_judge import (
     AutomationRuleEvaluatorUpdateLlmAsJudge,
 )
@@ -25,6 +47,11 @@ from .automation_rule_evaluator_user_defined_metric_python_public import (
 )
 from .automation_rule_evaluator_user_defined_metric_python_write import (
     AutomationRuleEvaluatorUserDefinedMetricPythonWrite,
+)
+from .automation_rule_evaluator_write import (
+    AutomationRuleEvaluatorWrite,
+    AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
@@ -201,6 +228,7 @@ from .prompt_version_public import PromptVersionPublic
 from .prompt_version_public_type import PromptVersionPublicType
 from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
+from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
@@ -244,16 +272,33 @@ from .workspace_trace_count import WorkspaceTraceCount
 __all__ = [
     "AssistantMessage",
     "AssistantMessageRole",
+    "Attachment",
+    "AttachmentPage",
     "AuthDetailsHolder",
+    "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorLlmAsJudge",
     "AutomationRuleEvaluatorLlmAsJudgePublic",
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
+    "AutomationRuleEvaluatorObjectPublic",
+    "AutomationRuleEvaluatorObjectPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorPagePublic",
+    "AutomationRuleEvaluatorPublic",
+    "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorPublic_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
+    "AutomationRuleEvaluatorUpdate_LlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_UserDefinedMetricPython",
     "AutomationRuleEvaluatorUserDefinedMetricPython",
     "AutomationRuleEvaluatorUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
+    "AutomationRuleEvaluatorWrite",
+    "AutomationRuleEvaluatorWrite_LlmAsJudge",
+    "AutomationRuleEvaluatorWrite_UserDefinedMetricPython",
+    "AutomationRuleEvaluator_LlmAsJudge",
+    "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
     "BiInformation",
@@ -419,6 +464,7 @@ __all__ = [
     "PromptVersionPublicType",
     "PromptVersionType",
     "ProviderApiKey",
+    "ProviderApiKeyPagePublic",
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
     "ProviderApiKeyPublicProvider",

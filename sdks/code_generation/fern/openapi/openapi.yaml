@@ -133,6 +133,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TraceCountResponse"
+  /v1/private/attachment/list:
+    get:
+      tags:
+      - Attachments
+      summary: Attachments list for entity
+      description: Attachments list for entity
+      operationId: attachmentList
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 100
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: entity_type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - trace
+          - span
+      - name: entity_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Attachment Resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentPage"
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/attachment/upload-complete:
     post:
       tags:
@@ -142,7 +208,7 @@ paths:
       operationId: startMultiPartUpload
       requestBody:
         content:
-          application/json:
+          '*/*':
             schema:
               $ref: "#/components/schemas/CompleteMultipartUploadRequest"
       responses:
@@ -158,6 +224,68 @@ paths:
           description: Access forbidden
           content:
             application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/attachment/download:
+    get:
+      tags:
+      - Attachments
+      summary: Download attachment from MinIO
+      description: Download attachment from MinIO
+      operationId: downloadAttachment
+      parameters:
+      - name: workspace_name
+        in: query
+        schema:
+          type: string
+      - name: container_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: entity_type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - trace
+          - span
+      - name: entity_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: file_name
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: mime_type
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Attachment Resource
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Bad Request
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            '*/*':
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
   /v1/private/attachment/upload-start:
@@ -1259,7 +1387,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectPage_Public"
+                $ref: "#/components/schemas/ProviderApiKeyPage_Public"
     post:
       tags:
       - LlmProviderKey
@@ -3078,6 +3206,38 @@ components:
         trace_count:
           type: integer
           format: int32
+    Attachment:
+      type: object
+      properties:
+        link:
+          type: string
+        file_name:
+          type: string
+        file_size:
+          type: integer
+          format: int64
+        mime_type:
+          type: string
+    AttachmentPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attachment"
+        sortableBy:
+          type: array
+          items:
+            type: string
     ErrorMessage:
       type: object
       properties:
@@ -3193,7 +3353,6 @@ components:
           type: string
     AutomationRuleEvaluator:
       required:
-      - code
       - name
       - type
       type: object
@@ -3213,8 +3372,6 @@ components:
         sampling_rate:
           type: number
           format: float
-        code:
-          type: object
         created_at:
           type: string
           format: date-time
@@ -3370,7 +3527,6 @@ components:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluator_Write:
       required:
-      - code
       - name
       - type
       type: object
@@ -3383,8 +3539,6 @@ components:
         sampling_rate:
           type: number
           format: float
-        code:
-          type: object
         type:
           type: string
           enum:
@@ -3503,7 +3657,6 @@ components:
             $ref: "#/components/schemas/LlmAsJudgeCode_Public"
     AutomationRuleEvaluatorObject_Public:
       required:
-      - code
       - name
       - type
       type: object
@@ -3523,8 +3676,6 @@ components:
         sampling_rate:
           type: number
           format: float
-        code:
-          type: object
         created_at:
           type: string
           format: date-time
@@ -3660,7 +3811,6 @@ components:
             type: string
     AutomationRuleEvaluator_Public:
       required:
-      - code
       - name
       - type
       type: object
@@ -3680,8 +3830,6 @@ components:
         sampling_rate:
           type: number
           format: float
-        code:
-          type: object
         created_at:
           type: string
           format: date-time
@@ -3757,7 +3905,6 @@ components:
           format: int64
     AutomationRuleEvaluatorUpdate:
       required:
-      - code
       - name
       type: object
       properties:
@@ -3766,8 +3913,6 @@ components:
         sampling_rate:
           type: number
           format: float
-        code:
-          type: object
         project_id:
           type: string
           format: uuid
@@ -5509,12 +5654,9 @@ components:
           type: number
         min:
           type: number
-    ProjectPage_Public:
+    ProviderApiKeyPage_Public:
       type: object
       properties:
-        page:
-          type: integer
-          format: int32
         size:
           type: integer
           format: int32
@@ -5524,7 +5666,7 @@ components:
         content:
           type: array
           items:
-            $ref: "#/components/schemas/Project_Public"
+            $ref: "#/components/schemas/ProviderApiKey_Public"
         sortableBy:
           type: array
           items:
@@ -5704,6 +5846,26 @@ components:
           type: string
         description:
           type: string
+    ProjectPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     Project_Public:
       required:
       - name
@@ -6545,6 +6707,10 @@ components:
         id:
           type: string
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
         project_id:
           type: string
           format: uuid
