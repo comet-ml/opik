@@ -20,7 +20,9 @@ type PluginStore = {
   EvaluationExamples: React.ComponentType | null;
   CommentsViewer: React.ComponentType<CommentsViewerCoreProps> | null;
   ExperimentCommentsViewer: React.ComponentType<ExperimentCommentsViewerCoreProps> | null;
-  RetentionBanner: React.ComponentType | null;
+  RetentionBanner: React.ComponentType<{
+    onChangeHeight: (height: number) => void;
+  }> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
