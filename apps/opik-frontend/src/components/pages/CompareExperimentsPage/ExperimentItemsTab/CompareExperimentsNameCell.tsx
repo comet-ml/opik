@@ -9,7 +9,7 @@ import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
 
-const CompareExperimentsOutputCell: React.FunctionComponent<
+const CompareExperimentsNameCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
 > = (context) => {
   const { custom } = context.column.columnDef.meta ?? {};
@@ -47,4 +47,4 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
   );
 };
 
-export default CompareExperimentsOutputCell;
+export default CompareExperimentsNameCell;

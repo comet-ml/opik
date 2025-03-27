@@ -23,7 +23,9 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
           <span className="truncate">{value}</span>
         </CellTooltipWrapper>
       ) : (
-        <div className="size-full overflow-y-auto">{value}</div>
+        <div className="size-full overflow-y-auto whitespace-pre-wrap break-words">
+          {value}
+        </div>
       )}
     </CellWrapper>
   );
