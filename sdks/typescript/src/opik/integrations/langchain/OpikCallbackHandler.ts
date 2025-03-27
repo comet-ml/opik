@@ -9,7 +9,6 @@ import { OpikClient } from "@/client/Client";
 import { Opik, Span, Trace } from "opik";
 import { OpikApi } from "@/rest_api";
 import {
-  cleanObject,
   extractCallArgs,
   inputFromChainValues,
   inputFromMessages,
@@ -28,6 +27,7 @@ export interface OpikCallbackHandlerOptions {
   tags?: [];
   metadata?: OpikApi.JsonNode;
   projectName?: string;
+  client?: OpikClient;
 }
 
 type StartTracingArgs = {
@@ -70,7 +70,7 @@ export class OpikCallbackHandler
     this.options = {
       ...options,
     };
-    this.client = new Opik();
+    this.client = options?.client ?? new Opik();
 
     if (options?.projectName) {
       this.client.config.projectName = options?.projectName;
@@ -104,7 +104,7 @@ export class OpikCallbackHandler
     }
 
     if (!this.rootTrace) {
-      logger.debug(`handleChainStart error ${runId} has not parent`);
+      logger.debug(`handleChainStart error ${runId} has no parent`);
       return;
     }
 
@@ -162,7 +162,7 @@ export class OpikCallbackHandler
     const span = this.spansMap.get(runId);
 
     if (!span) {
-      logger.debug(`handleChainEnd span ${runId} has not fond`);
+      logger.debug(`handleChainEnd span ${runId} has not found`);
 
       return;
     }
@@ -208,14 +208,14 @@ export class OpikCallbackHandler
       runId,
       parentRunId,
       name: runName ?? llm.id.at(-1)?.toString() ?? "Chat Model",
-      type: "llm",
+      type: SpanType.Llm,
       input: inputFromMessages(messages),
       tags,
-      metadata: cleanObject({
+      metadata: {
         ...metadata,
         ...extractCallArgs(llm, extraParams?.invocation_params || {}, metadata),
         tools: extraParams?.invocation_params?.tools,
-      }),
+      },
     });
   }
 
