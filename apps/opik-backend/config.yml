@@ -359,6 +359,10 @@ s3Config:
 
 # Python evaluator configuration
 pythonEvaluator:
+  # Default: true
+  # Description: Whether or not Python evaluator is enabled
+  enabled: ${PYTHON_EVALUATOR_ENABLED:-true}
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
   url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
+

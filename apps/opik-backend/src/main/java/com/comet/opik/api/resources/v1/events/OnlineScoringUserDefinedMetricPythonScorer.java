@@ -42,6 +42,15 @@ public class OnlineScoringUserDefinedMetricPythonScorer
     }
 
     @Override
+    public void start() {
+        if (pythonEvaluatorService.isActive()) {
+            super.start();
+        } else {
+            log.warn("Online Scoring Python evaluator consumer won't start as it is disabled.");
+        }
+    }
+
+    @Override
     protected void score(@NonNull TraceToScoreUserDefinedMetricPython message) {
         var trace = message.trace();
         log.info("Message received with traceId '{}', userName '{}'", trace.id(), message.userName());
