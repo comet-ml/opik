@@ -30,7 +30,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
   const spanQuota = quotas?.find((q) => q.type === QUOTA_TYPE.OPIK_SPAN_COUNT);
 
-  const isUsedLess80 = spanQuota?.used / spanQuota?.limit < 0.8;
+  const isUsedLess80 = (spanQuota?.used || 0) / (spanQuota?.limit || 1) < 0.8;
 
   if (!spanQuota || isUsedLess80 || closed || !user) {
     return null;

@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import api from "../api";
+import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import api, { QueryConfig } from "../api";
 import { QUOTA_TYPE } from "@/plugins/comet/types/quotas";
 
 interface WorkspaceQuota {
@@ -16,18 +16,25 @@ interface UseWorkspaceQuotas {
   workspaceName: string;
 }
 
-const getWorkspaceQuotas = async (context, workspaceName: string) => {
+const getWorkspaceQuotas = async (
+  context: QueryFunctionContext,
+  workspaceName: string,
+) => {
   const response = await api.get<WorkspaceQuotasResponse>(
     "/organizations/quotas",
     {
       params: { workspaceName },
+      signal: context.signal,
     },
   );
 
   return response?.data?.quotas;
 };
 
-const useWorkspaceQuotas = ({ workspaceName }: UseWorkspaceQuotas, options) => {
+const useWorkspaceQuotas = (
+  { workspaceName }: UseWorkspaceQuotas,
+  options: QueryConfig<WorkspaceQuota[]>,
+) => {
   return useQuery({
     queryKey: ["workspace-quotas", { workspaceName }],
     queryFn: (context) => getWorkspaceQuotas(context, workspaceName),
