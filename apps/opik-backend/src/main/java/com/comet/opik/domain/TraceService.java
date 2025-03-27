@@ -185,8 +185,7 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id) {
-        //TODO: refactor to implement proper conflict resolution
-        return template.nonTransaction(connection -> dao.findById(id, connection))
+        return dao.getPartialById(id)
                 .flatMap(existingTrace -> insertTrace(newTrace, project, id, existingTrace))
                 .switchIfEmpty(Mono.defer(() -> create(newTrace, project, id)))
                 .onErrorResume(this::handleDBError);
@@ -224,7 +223,6 @@ class TraceServiceImpl implements TraceService {
 
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id, Trace existingTrace) {
         return Mono.defer(() -> {
-            //TODO: refactor to implement proper conflict resolution
             // check if a partial trace exists caused by a patch request
             if (existingTrace.name().isBlank()
                     && existingTrace.startTime().equals(Instant.EPOCH)
@@ -271,7 +269,7 @@ class TraceServiceImpl implements TraceService {
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, TRACE_KEY),
-                        Mono.defer(() -> template.nonTransaction(connection -> dao.findById(id, connection))
+                        Mono.defer(() -> dao.getPartialById(id)
                                 .flatMap(trace -> updateOrFail(traceUpdate, id, trace, project).thenReturn(id))
                                 .switchIfEmpty(Mono.defer(() -> insertUpdate(project, traceUpdate, id))
                                         .thenReturn(id))

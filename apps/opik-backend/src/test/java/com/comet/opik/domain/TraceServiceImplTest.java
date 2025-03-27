@@ -118,7 +118,7 @@ class TraceServiceImplTest {
                         return trace.execute(connection);
                     });
 
-            when(traceDao.findById(any(), any()))
+            when(traceDao.getPartialById(any()))
                     .thenReturn(Mono.empty());
 
             when(traceDao.insert(any(), any()))
