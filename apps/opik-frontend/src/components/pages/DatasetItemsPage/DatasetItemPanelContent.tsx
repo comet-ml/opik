@@ -10,7 +10,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
-import { extractImageUrls } from "@/lib/images";
+import { extractImageUrls, replaceBase64ImageValues } from "@/lib/images";
 
 type DatasetItemPanelContentProps = {
   datasetItemId: string;
@@ -27,6 +27,11 @@ const DatasetItemPanelContent: React.FunctionComponent<
       placeholderData: keepPreviousData,
     },
   );
+  const formattedData = useMemo(() => {
+    if (!data?.data) return null;
+
+    return replaceBase64ImageValues(data.data);
+  }, [data?.data]);
 
   const imagesUrls = useMemo(() => extractImageUrls(data?.data), [data?.data]);
   const hasImages = imagesUrls.length > 0;
@@ -35,7 +40,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
     return <Loader />;
   }
 
-  if (!data) {
+  if (!formattedData) {
     return <NoData />;
   }
 
@@ -74,7 +79,7 @@ const DatasetItemPanelContent: React.FunctionComponent<
         <AccordionItem value="data">
           <AccordionTrigger>Data</AccordionTrigger>
           <AccordionContent>
-            <SyntaxHighlighter data={data.data} />
+            <SyntaxHighlighter data={formattedData} />
           </AccordionContent>
         </AccordionItem>
       </Accordion>
