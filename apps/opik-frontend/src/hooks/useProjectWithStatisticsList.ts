@@ -55,7 +55,7 @@ export default function useProjectWithStatisticsList(
 
       return {
         ...projectsData,
-        content: projectsData.content.map((project) => {
+        content: projectsData.content?.map((project) => {
           return statisticMap
             ? {
                 ...project,
