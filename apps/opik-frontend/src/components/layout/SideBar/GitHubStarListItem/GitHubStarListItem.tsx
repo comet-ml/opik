@@ -30,7 +30,9 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
       <Button
         variant="outline"
         size="sm"
-        className={cn(expanded ? "ml-1 gap-2.5 px-[7px]" : "size-9 p-0")}
+        className={cn(
+          expanded ? "ml-1 gap-2.5 px-[7px]" : "size-9 p-0 max-w-full",
+        )}
         asChild
       >
         <a
