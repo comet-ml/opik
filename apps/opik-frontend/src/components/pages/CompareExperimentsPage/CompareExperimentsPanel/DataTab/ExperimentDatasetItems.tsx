@@ -39,6 +39,7 @@ const ExperimentDatasetItems = ({
       <SyntaxHighlighter
         data={selectedData}
         prettifyConfig={{ fieldType: "input" }}
+        preserveKey="syntax-highlighter-compare-experiment-input"
       />
     ) : (
       <NoData />
@@ -83,6 +84,7 @@ const ExperimentDatasetItems = ({
             <SyntaxHighlighter
               data={selectedData || {}}
               prettifyConfig={{ fieldType: "input" }}
+              preserveKey="syntax-highlighter-compare-experiment-input"
             />
           ) : (
             <NoData />
