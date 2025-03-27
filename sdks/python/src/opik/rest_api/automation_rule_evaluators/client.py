@@ -9,7 +9,11 @@ from ..types.automation_rule_evaluator_page_public import (
 from ..core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from ..types.automation_rule_evaluator_write import AutomationRuleEvaluatorWrite
+from ..core.serialization import convert_and_respect_annotation_metadata
+from ..types.automation_rule_evaluator_public import AutomationRuleEvaluatorPublic
 from ..core.jsonable_encoder import jsonable_encoder
+from ..types.automation_rule_evaluator_update import AutomationRuleEvaluatorUpdate
 from ..types.log_page import LogPage
 from ..core.client_wrapper import AsyncClientWrapper
 
@@ -89,7 +93,7 @@ class AutomationRuleEvaluatorsClient:
     def create_automation_rule_evaluator(
         self,
         *,
-        request: typing.Optional[typing.Any] = None,
+        request: AutomationRuleEvaluatorWrite,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -97,7 +101,7 @@ class AutomationRuleEvaluatorsClient:
 
         Parameters
         ----------
-        request : typing.Optional[typing.Any]
+        request : AutomationRuleEvaluatorWrite
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -108,20 +112,24 @@ class AutomationRuleEvaluatorsClient:
 
         Examples
         --------
-        from Opik import OpikApi
+        from Opik import AutomationRuleEvaluatorWrite_LlmAsJudge, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
         client.automation_rule_evaluators.create_automation_rule_evaluator(
-            request={"key": "value"},
+            request=AutomationRuleEvaluatorWrite_LlmAsJudge(),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/automations/evaluators",
             method="POST",
-            json=request,
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorWrite,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -194,7 +202,7 @@ class AutomationRuleEvaluatorsClient:
         *,
         project_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> typing.Optional[typing.Any]:
+    ) -> AutomationRuleEvaluatorPublic:
         """
         Get automation rule by id
 
@@ -209,7 +217,7 @@ class AutomationRuleEvaluatorsClient:
 
         Returns
         -------
-        typing.Optional[typing.Any]
+        AutomationRuleEvaluatorPublic
             Automation Rule resource
 
         Examples
@@ -235,9 +243,9 @@ class AutomationRuleEvaluatorsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    typing.Optional[typing.Any],
+                    AutomationRuleEvaluatorPublic,
                     parse_obj_as(
-                        type_=typing.Optional[typing.Any],  # type: ignore
+                        type_=AutomationRuleEvaluatorPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -250,7 +258,7 @@ class AutomationRuleEvaluatorsClient:
         self,
         id: str,
         *,
-        request: typing.Optional[typing.Any] = None,
+        request: AutomationRuleEvaluatorUpdate,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -260,7 +268,7 @@ class AutomationRuleEvaluatorsClient:
         ----------
         id : str
 
-        request : typing.Optional[typing.Any]
+        request : AutomationRuleEvaluatorUpdate
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -271,7 +279,7 @@ class AutomationRuleEvaluatorsClient:
 
         Examples
         --------
-        from Opik import OpikApi
+        from Opik import AutomationRuleEvaluatorUpdate_LlmAsJudge, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
@@ -279,13 +287,17 @@ class AutomationRuleEvaluatorsClient:
         )
         client.automation_rule_evaluators.update_automation_rule_evaluator(
             id="id",
-            request={"key": "value"},
+            request=AutomationRuleEvaluatorUpdate_LlmAsJudge(),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
-            json=request,
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -436,7 +448,7 @@ class AsyncAutomationRuleEvaluatorsClient:
     async def create_automation_rule_evaluator(
         self,
         *,
-        request: typing.Optional[typing.Any] = None,
+        request: AutomationRuleEvaluatorWrite,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -444,7 +456,7 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         Parameters
         ----------
-        request : typing.Optional[typing.Any]
+        request : AutomationRuleEvaluatorWrite
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -457,7 +469,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi
+        from Opik import AsyncOpikApi, AutomationRuleEvaluatorWrite_LlmAsJudge
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -467,7 +479,7 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         async def main() -> None:
             await client.automation_rule_evaluators.create_automation_rule_evaluator(
-                request={"key": "value"},
+                request=AutomationRuleEvaluatorWrite_LlmAsJudge(),
             )
 
 
@@ -476,7 +488,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/automations/evaluators",
             method="POST",
-            json=request,
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorWrite,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -557,7 +573,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         *,
         project_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> typing.Optional[typing.Any]:
+    ) -> AutomationRuleEvaluatorPublic:
         """
         Get automation rule by id
 
@@ -572,7 +588,7 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         Returns
         -------
-        typing.Optional[typing.Any]
+        AutomationRuleEvaluatorPublic
             Automation Rule resource
 
         Examples
@@ -606,9 +622,9 @@ class AsyncAutomationRuleEvaluatorsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    typing.Optional[typing.Any],
+                    AutomationRuleEvaluatorPublic,
                     parse_obj_as(
-                        type_=typing.Optional[typing.Any],  # type: ignore
+                        type_=AutomationRuleEvaluatorPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -621,7 +637,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         self,
         id: str,
         *,
-        request: typing.Optional[typing.Any] = None,
+        request: AutomationRuleEvaluatorUpdate,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -631,7 +647,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         ----------
         id : str
 
-        request : typing.Optional[typing.Any]
+        request : AutomationRuleEvaluatorUpdate
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -644,7 +660,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi
+        from Opik import AsyncOpikApi, AutomationRuleEvaluatorUpdate_LlmAsJudge
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -655,7 +671,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         async def main() -> None:
             await client.automation_rule_evaluators.update_automation_rule_evaluator(
                 id="id",
-                request={"key": "value"},
+                request=AutomationRuleEvaluatorUpdate_LlmAsJudge(),
             )
 
 
@@ -664,7 +680,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
-            json=request,
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )

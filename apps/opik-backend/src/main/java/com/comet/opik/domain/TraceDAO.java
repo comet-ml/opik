@@ -104,6 +104,8 @@ interface TraceDAO {
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
 
+    Mono<Trace> getPartialById(@NonNull UUID id);
+
     Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria);
 }
 
@@ -182,11 +184,7 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(CAST(old_trace.project_id AS Nullable(String))) > 0, old_trace.project_id,
                     new_trace.project_id
                 ) as project_id,
-                multiIf(
-                    LENGTH(CAST(old_trace.workspace_id AS Nullable(String))) > 0 AND notEquals(old_trace.workspace_id, new_trace.workspace_id), CAST(leftPad(new_trace.workspace_id, 40, '*') AS FixedString(19)),
-                    LENGTH(CAST(old_trace.workspace_id AS Nullable(String))) > 0, old_trace.workspace_id,
-                    new_trace.workspace_id
-                ) as workspace_id,
+                new_trace.workspace_id as workspace_id,
                 multiIf(
                     LENGTH(old_trace.name) > 0, old_trace.name,
                     new_trace.name
@@ -255,6 +253,7 @@ class TraceDAOImpl implements TraceDAO {
                     *
                 FROM traces
                 WHERE id = :id
+                AND workspace_id = :workspace_id
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_trace
@@ -638,11 +637,7 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(CAST(old_trace.project_id AS Nullable(String))) > 0, old_trace.project_id,
                     new_trace.project_id
                 ) as project_id,
-                multiIf(
-                    LENGTH(CAST(old_trace.workspace_id AS Nullable(String))) > 0 AND notEquals(old_trace.workspace_id, new_trace.workspace_id), CAST(leftPad(new_trace.workspace_id, 40, '*') AS FixedString(19)),
-                    LENGTH(CAST(old_trace.workspace_id AS Nullable(String))) > 0, old_trace.workspace_id,
-                    new_trace.workspace_id
-                ) as workspace_id,
+                new_trace.workspace_id as workspace_id,
                 multiIf(
                     LENGTH(new_trace.name) > 0, new_trace.name,
                     old_trace.name
@@ -717,10 +712,25 @@ class TraceDAOImpl implements TraceDAO {
                     *
                 FROM traces
                 WHERE id = :id
+                AND workspace_id = :workspace_id
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
+            ;
+            """;
+
+    private static final String SELECT_PARTIAL_BY_ID = """
+            SELECT
+                name,
+                project_id,
+                start_time
+            FROM traces
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            AND id = :id
+            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+            LIMIT 1
             ;
             """;
 
@@ -1710,6 +1720,27 @@ class TraceDAOImpl implements TraceDAO {
                     .singleOrEmpty()
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    @WithSpan
+    public Mono<Trace> getPartialById(@NonNull UUID id) {
+        log.info("Getting partial trace by id '{}'", id);
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_PARTIAL_BY_ID).bind("id", id);
+            var segment = startSegment("traces", "Clickhouse", "get_partial_by_id");
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .doFinally(signalType -> endSegment(segment));
+        })
+                .flatMapMany(this::mapToPartialDto)
+                .singleOrEmpty();
+    }
+
+    private Publisher<Trace> mapToPartialDto(Result result) {
+        return result.map((row, rowMetadata) -> Trace.builder()
+                .name(row.get("name", String.class))
+                .startTime(row.get("start_time", Instant.class))
+                .projectId(row.get("project_id", UUID.class))
+                .build());
     }
 
     @Override
