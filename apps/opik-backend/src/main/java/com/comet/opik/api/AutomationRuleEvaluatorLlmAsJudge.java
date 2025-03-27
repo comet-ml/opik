@@ -75,9 +75,19 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
         super(id, projectId, projectName, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public LlmAsJudgeCode getCode() {
+        return super.getCode();
+    }
+
     @Override
     public AutomationRuleEvaluatorType getType() {
         return AutomationRuleEvaluatorType.LLM_AS_JUDGE;
     }
-
 }

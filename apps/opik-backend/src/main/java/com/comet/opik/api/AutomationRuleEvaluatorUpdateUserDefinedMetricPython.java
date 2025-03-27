@@ -1,6 +1,7 @@
 package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotBlank;
@@ -28,6 +29,17 @@ public final class AutomationRuleEvaluatorUpdateUserDefinedMetricPython
             // TODO: add @NotNull to projectId after deprecated endpoint is removed
             @NotBlank String name, float samplingRate, @NotNull UserDefinedMetricPythonCode code, UUID projectId) {
         super(name, samplingRate, code, projectId);
+    }
+
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonView
+    @Override
+    public UserDefinedMetricPythonCode getCode() {
+        return super.getCode();
     }
 
     @Override

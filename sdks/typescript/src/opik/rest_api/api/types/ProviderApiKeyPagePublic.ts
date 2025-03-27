@@ -4,9 +4,9 @@
 
 import * as OpikApi from "../index";
 
-export interface AutomationRuleEvaluatorPagePublic {
-    page?: number;
+export interface ProviderApiKeyPagePublic {
     size?: number;
     total?: number;
-    content?: OpikApi.AutomationRuleEvaluatorObjectPublic[];
+    content?: OpikApi.ProviderApiKeyPublic[];
+    sortableBy?: string[];
 }

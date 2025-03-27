@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -54,7 +55,7 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     @JsonView({View.Public.class, View.Write.class})
     private final Float samplingRate;
 
-    @JsonView({View.Public.class, View.Write.class})
+    @JsonIgnore
     @NotNull private final T code;
 
     @JsonView({View.Public.class})
