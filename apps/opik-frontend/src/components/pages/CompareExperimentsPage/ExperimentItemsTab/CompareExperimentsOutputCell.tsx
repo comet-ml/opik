@@ -69,10 +69,11 @@ const CompareExperimentsOutputCell: React.FC<
           <Button
             size="icon-xs"
             variant="outline"
-            onClick={() => {
+            onClick={(event) => {
               if (isFunction(openTrace) && item?.trace_id) {
                 openTrace(item.trace_id);
               }
+              event.stopPropagation();
             }}
             className="absolute right-1 top-1 hidden group-hover:flex"
           >

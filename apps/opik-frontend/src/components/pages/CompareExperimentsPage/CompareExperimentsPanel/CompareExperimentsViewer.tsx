@@ -74,6 +74,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
         <SyntaxHighlighter
           data={experimentItem.output}
           prettifyConfig={{ fieldType: "output" }}
+          preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
         />
       );
     }
