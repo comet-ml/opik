@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 import datetime
 from typing import Optional, Any, Dict, List, Union
@@ -25,6 +26,13 @@ class CreateTraceMessage(BaseMessage):
     tags: Optional[List[str]]
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
+
+    def __post_init__(self) -> None:
+        # Make deep copies of mutable objects to prevent mutation
+        if self.input is not None:
+            self.input = copy.deepcopy(self.input)
+        if self.output is not None:
+            self.output = copy.deepcopy(self.output)
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
@@ -73,6 +81,13 @@ class CreateSpanMessage(BaseMessage):
     provider: Optional[Union[LLMProvider, str]]
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
+
+    def __post_init__(self) -> None:
+        # Make deep copies of mutable objects to prevent mutation
+        if self.input is not None:
+            self.input = copy.deepcopy(self.input)
+        if self.output is not None:
+            self.output = copy.deepcopy(self.output)
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
