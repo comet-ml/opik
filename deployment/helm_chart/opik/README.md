@@ -77,6 +77,7 @@ Call opik api on http://localhost:5173/api
 
 | Repository | Name | Version |
 |------------|------|---------|
+| https://charts.bitnami.com/bitnami | minio | 15.0.7 |
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 12.12.1 |
@@ -117,6 +118,8 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_PORT | string | `"8123"` |  |
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
+| component.backend.env.AWS_ACCESS_KEY_ID | string | `"THAAIOSFODNN7EXAMPLE"` |  |
+| component.backend.env.AWS_SECRET_ACCESS_KEY | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
@@ -125,7 +128,9 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE | string | `"delta"` |  |
 | component.backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage,b3"` |  |
 | component.backend.env.OTEL_VERSION | string | `"2.12.0"` |  |
+| component.backend.env.PYTHON_EVALUATOR_URL | string | `"http://opik-python-backend:8000"` |  |
 | component.backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
+| component.backend.env.S3_URL | string | `"http://opik-minio:9000"` |  |
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PASS | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
@@ -136,10 +141,16 @@ Call opik api on http://localhost:5173/api
 | component.backend.image.repository | string | `"opik-backend"` |  |
 | component.backend.image.tag | string | `"latest"` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
-| component.backend.initContainers[0].env[0].name | string | `"URL"` |  |
-| component.backend.initContainers[0].env[0].value | string | `"http://clickhouse-opik-clickhouse:8123"` |  |
-| component.backend.initContainers[0].image | string | `"stefanevinance/wait-for-200"` |  |
+| component.backend.initContainers[0].args[0] | string | `"while [ $(curl -ksw \"%{http_code}\" \"http://clickhouse-opik-clickhouse:8123\" -o /dev/null) -ne 200 ]; do sleep 5; echo \"Clickhouse is not available. Waiting for the Clickhouse...\"; done"` |  |
+| component.backend.initContainers[0].command[0] | string | `"/bin/sh"` |  |
+| component.backend.initContainers[0].command[1] | string | `"-c"` |  |
+| component.backend.initContainers[0].image | string | `"curlimages/curl:8.12.1"` |  |
 | component.backend.initContainers[0].name | string | `"wait-for-clickhouse-service"` |  |
+| component.backend.livenessProbe.path | string | `"/health-check?name=all&type=alive"` |  |
+| component.backend.livenessProbe.port | int | `8080` |  |
+| component.backend.readinessProbe.initialDelaySeconds | int | `20` |  |
+| component.backend.readinessProbe.path | string | `"/health-check?name=all&type=ready"` |  |
+| component.backend.readinessProbe.port | int | `8080` |  |
 | component.backend.replicaCount | int | `1` |  |
 | component.backend.run_migration | bool | `true` |  |
 | component.backend.service.ports[0].name | string | `"http"` |  |
@@ -206,9 +217,22 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.ports[0].targetPort | int | `8000` |  |
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
+| demoDataJob | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
+| minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
+| minio.auth.rootUser | string | `"THAAIOSFODNN7EXAMPLE"` |  |
+| minio.disableWebUI | bool | `true` |  |
+| minio.enabled | bool | `true` |  |
+| minio.fullnameOverride | string | `"opik-minio"` |  |
+| minio.mode | string | `"standalone"` |  |
+| minio.persistence.enabled | bool | `true` |  |
+| minio.persistence.size | string | `"50Gi"` |  |
+| minio.provisioning.enabled | bool | `true` |  |
+| minio.provisioning.extraCommands[0] | string | `"mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4"` |  |
+| minio.provisioning.extraCommands[1] | string | `"mc mb --ignore-existing s3/public"` |  |
+| minio.provisioning.extraCommands[2] | string | `"mc anonymous set download s3/public/"` |  |
 | mysql.auth.rootPassword | string | `"opik"` |  |
 | mysql.enabled | bool | `true` |  |
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |

@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.auth;
 import com.comet.opik.domain.ProjectService;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.UriInfo;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +21,8 @@ class AuthServiceImplTest {
     @Mock
     private HttpHeaders headers;
 
-    private final static String PATH = "some-path";
+    @Mock
+    private UriInfo uriInfo;
 
     private AuthServiceImpl authService = new AuthServiceImpl(() -> requestContext);
 
@@ -30,7 +32,7 @@ class AuthServiceImplTest {
         Cookie sessionToken = null;
 
         // When
-        authService.authenticate(headers, sessionToken, PATH);
+        authService.authenticate(headers, sessionToken, uriInfo);
 
         // Then
         verify(requestContext).setUserName(ProjectService.DEFAULT_USER);
@@ -42,7 +44,7 @@ class AuthServiceImplTest {
         Cookie sessionToken = new Cookie("sessionToken", "token");
 
         // When
-        authService.authenticate(headers, sessionToken, PATH);
+        authService.authenticate(headers, sessionToken, uriInfo);
 
         // Then
         verify(requestContext).setUserName(ProjectService.DEFAULT_USER);
@@ -59,6 +61,6 @@ class AuthServiceImplTest {
 
         Assertions.assertThrows(
                 jakarta.ws.rs.ClientErrorException.class,
-                () -> authService.authenticate(headers, sessionToken, PATH));
+                () -> authService.authenticate(headers, sessionToken, uriInfo));
     }
 }

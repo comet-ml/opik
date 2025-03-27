@@ -87,7 +87,14 @@ public class SpanService {
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
-        return spanDAO.getById(id).switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))));
+        return Mono.deferContextual(ctx -> spanDAO.getById(id)
+                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))))
+                .flatMap(span -> {
+                    Project project = projectService.get(span.projectId(), ctx.get(RequestContext.WORKSPACE_ID));
+                    return Mono.just(span.toBuilder()
+                            .projectName(project.name())
+                            .build());
+                }));
     }
 
     @WithSpan

@@ -63,6 +63,17 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
         super(id, projectId, projectName, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public UserDefinedMetricPythonCode getCode() {
+        return super.getCode();
+    }
+
     @Override
     public AutomationRuleEvaluatorType getType() {
         return AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;

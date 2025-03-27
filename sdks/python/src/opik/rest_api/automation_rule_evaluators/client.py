@@ -9,7 +9,11 @@ from ..types.automation_rule_evaluator_page_public import (
 from ..core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from ..types.automation_rule_evaluator_write import AutomationRuleEvaluatorWrite
+from ..core.serialization import convert_and_respect_annotation_metadata
+from ..types.automation_rule_evaluator_public import AutomationRuleEvaluatorPublic
 from ..core.jsonable_encoder import jsonable_encoder
+from ..types.automation_rule_evaluator_update import AutomationRuleEvaluatorUpdate
 from ..types.log_page import LogPage
 from ..core.client_wrapper import AsyncClientWrapper
 
@@ -89,7 +93,7 @@ class AutomationRuleEvaluatorsClient:
     def create_automation_rule_evaluator(
         self,
         *,
-        request: typing.Optional[typing.Any] = None,
+        request: AutomationRuleEvaluatorWrite,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -97,7 +101,7 @@ class AutomationRuleEvaluatorsClient:
 
         Parameters
         ----------
-        request : typing.Optional[typing.Any]
+        request : AutomationRuleEvaluatorWrite
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -108,20 +112,24 @@ class AutomationRuleEvaluatorsClient:
 
         Examples
         --------
-        from Opik import OpikApi
+        from Opik import AutomationRuleEvaluatorWrite_LlmAsJudge, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
         client.automation_rule_evaluators.create_automation_rule_evaluator(
-            request={"key": "value"},
+            request=AutomationRuleEvaluatorWrite_LlmAsJudge(),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/automations/evaluators",
             method="POST",
-            json=request,
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorWrite,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -136,8 +144,8 @@ class AutomationRuleEvaluatorsClient:
     def delete_automation_rule_evaluator_batch(
         self,
         *,
-        project_id: str,
         ids: typing.Sequence[str],
+        project_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -145,9 +153,9 @@ class AutomationRuleEvaluatorsClient:
 
         Parameters
         ----------
-        project_id : str
-
         ids : typing.Sequence[str]
+
+        project_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -165,7 +173,6 @@ class AutomationRuleEvaluatorsClient:
             workspace_name="YOUR_WORKSPACE_NAME",
         )
         client.automation_rule_evaluators.delete_automation_rule_evaluator_batch(
-            project_id="project_id",
             ids=["ids"],
         )
         """
@@ -195,7 +202,7 @@ class AutomationRuleEvaluatorsClient:
         *,
         project_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> typing.Optional[typing.Any]:
+    ) -> AutomationRuleEvaluatorPublic:
         """
         Get automation rule by id
 
@@ -210,7 +217,7 @@ class AutomationRuleEvaluatorsClient:
 
         Returns
         -------
-        typing.Optional[typing.Any]
+        AutomationRuleEvaluatorPublic
             Automation Rule resource
 
         Examples
@@ -236,9 +243,9 @@ class AutomationRuleEvaluatorsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    typing.Optional[typing.Any],
+                    AutomationRuleEvaluatorPublic,
                     parse_obj_as(
-                        type_=typing.Optional[typing.Any],  # type: ignore
+                        type_=AutomationRuleEvaluatorPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -251,7 +258,7 @@ class AutomationRuleEvaluatorsClient:
         self,
         id: str,
         *,
-        request: typing.Optional[typing.Any] = None,
+        request: AutomationRuleEvaluatorUpdate,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -261,7 +268,7 @@ class AutomationRuleEvaluatorsClient:
         ----------
         id : str
 
-        request : typing.Optional[typing.Any]
+        request : AutomationRuleEvaluatorUpdate
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -272,7 +279,7 @@ class AutomationRuleEvaluatorsClient:
 
         Examples
         --------
-        from Opik import OpikApi
+        from Opik import AutomationRuleEvaluatorUpdate_LlmAsJudge, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
@@ -280,13 +287,17 @@ class AutomationRuleEvaluatorsClient:
         )
         client.automation_rule_evaluators.update_automation_rule_evaluator(
             id="id",
-            request={"key": "value"},
+            request=AutomationRuleEvaluatorUpdate_LlmAsJudge(),
         )
         """
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
-            json=request,
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -336,349 +347,6 @@ class AutomationRuleEvaluatorsClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}/logs",
-            method="GET",
-            params={
-                "size": size,
-            },
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return typing.cast(
-                    LogPage,
-                    parse_obj_as(
-                        type_=LogPage,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    def find_evaluators_deprecated(
-        self,
-        project_id: str,
-        *,
-        name: typing.Optional[str] = None,
-        page: typing.Optional[int] = None,
-        size: typing.Optional[int] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AutomationRuleEvaluatorPagePublic:
-        """
-        Find project Evaluators Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        name : typing.Optional[str]
-
-        page : typing.Optional[int]
-
-        size : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AutomationRuleEvaluatorPagePublic
-            Evaluators resource
-
-        Examples
-        --------
-        from Opik import OpikApi
-
-        client = OpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-        client.automation_rule_evaluators.find_evaluators_deprecated(
-            project_id="projectId",
-        )
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators",
-            method="GET",
-            params={
-                "name": name,
-                "page": page,
-                "size": size,
-            },
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return typing.cast(
-                    AutomationRuleEvaluatorPagePublic,
-                    parse_obj_as(
-                        type_=AutomationRuleEvaluatorPagePublic,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    def create_automation_rule_evaluator_deprecated(
-        self,
-        project_id: str,
-        *,
-        request: typing.Optional[typing.Any] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Create automation rule evaluator Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        request : typing.Optional[typing.Any]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-
-        client = OpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-        client.automation_rule_evaluators.create_automation_rule_evaluator_deprecated(
-            project_id="projectId",
-            request={"key": "value"},
-        )
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators",
-            method="POST",
-            json=request,
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    def delete_automation_rule_evaluator_batch_deprecated(
-        self,
-        project_id: str,
-        *,
-        ids: typing.Sequence[str],
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Delete automation rule evaluators batch Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        ids : typing.Sequence[str]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-
-        client = OpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-        client.automation_rule_evaluators.delete_automation_rule_evaluator_batch_deprecated(
-            project_id="projectId",
-            ids=["ids"],
-        )
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/delete",
-            method="POST",
-            json={
-                "ids": ids,
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    def get_evaluator_by_id_deprecated(
-        self,
-        project_id: str,
-        id: str,
-        *,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> typing.Optional[typing.Any]:
-        """
-        Get automation rule by id Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        typing.Optional[typing.Any]
-            Automation Rule resource
-
-        Examples
-        --------
-        from Opik import OpikApi
-
-        client = OpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-        client.automation_rule_evaluators.get_evaluator_by_id_deprecated(
-            project_id="projectId",
-            id="id",
-        )
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/{jsonable_encoder(id)}",
-            method="GET",
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return typing.cast(
-                    typing.Optional[typing.Any],
-                    parse_obj_as(
-                        type_=typing.Optional[typing.Any],  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    def update_automation_rule_evaluator_deprecated(
-        self,
-        id: str,
-        project_id: str,
-        *,
-        request: typing.Optional[typing.Any] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        update Automation Rule Evaluator by id Deprecated
-
-        Parameters
-        ----------
-        id : str
-
-        project_id : str
-
-        request : typing.Optional[typing.Any]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-
-        client = OpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-        client.automation_rule_evaluators.update_automation_rule_evaluator_deprecated(
-            id="id",
-            project_id="projectId",
-            request={"key": "value"},
-        )
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/{jsonable_encoder(id)}",
-            method="PATCH",
-            json=request,
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    def get_evaluator_logs_by_id_deprecated(
-        self,
-        project_id: str,
-        id: str,
-        *,
-        size: typing.Optional[int] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> LogPage:
-        """
-        Get automation rule evaluator logs by id Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        id : str
-
-        size : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        LogPage
-            Automation rule evaluator logs resource
-
-        Examples
-        --------
-        from Opik import OpikApi
-
-        client = OpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-        client.automation_rule_evaluators.get_evaluator_logs_by_id_deprecated(
-            project_id="projectId",
-            id="id",
-        )
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/{jsonable_encoder(id)}/logs",
             method="GET",
             params={
                 "size": size,
@@ -780,7 +448,7 @@ class AsyncAutomationRuleEvaluatorsClient:
     async def create_automation_rule_evaluator(
         self,
         *,
-        request: typing.Optional[typing.Any] = None,
+        request: AutomationRuleEvaluatorWrite,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -788,7 +456,7 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         Parameters
         ----------
-        request : typing.Optional[typing.Any]
+        request : AutomationRuleEvaluatorWrite
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -801,7 +469,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi
+        from Opik import AsyncOpikApi, AutomationRuleEvaluatorWrite_LlmAsJudge
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -811,7 +479,7 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         async def main() -> None:
             await client.automation_rule_evaluators.create_automation_rule_evaluator(
-                request={"key": "value"},
+                request=AutomationRuleEvaluatorWrite_LlmAsJudge(),
             )
 
 
@@ -820,7 +488,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/automations/evaluators",
             method="POST",
-            json=request,
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorWrite,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -835,8 +507,8 @@ class AsyncAutomationRuleEvaluatorsClient:
     async def delete_automation_rule_evaluator_batch(
         self,
         *,
-        project_id: str,
         ids: typing.Sequence[str],
+        project_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -844,9 +516,9 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         Parameters
         ----------
-        project_id : str
-
         ids : typing.Sequence[str]
+
+        project_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -869,7 +541,6 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         async def main() -> None:
             await client.automation_rule_evaluators.delete_automation_rule_evaluator_batch(
-                project_id="project_id",
                 ids=["ids"],
             )
 
@@ -902,7 +573,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         *,
         project_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> typing.Optional[typing.Any]:
+    ) -> AutomationRuleEvaluatorPublic:
         """
         Get automation rule by id
 
@@ -917,7 +588,7 @@ class AsyncAutomationRuleEvaluatorsClient:
 
         Returns
         -------
-        typing.Optional[typing.Any]
+        AutomationRuleEvaluatorPublic
             Automation Rule resource
 
         Examples
@@ -951,9 +622,9 @@ class AsyncAutomationRuleEvaluatorsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    typing.Optional[typing.Any],
+                    AutomationRuleEvaluatorPublic,
                     parse_obj_as(
-                        type_=typing.Optional[typing.Any],  # type: ignore
+                        type_=AutomationRuleEvaluatorPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -966,7 +637,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         self,
         id: str,
         *,
-        request: typing.Optional[typing.Any] = None,
+        request: AutomationRuleEvaluatorUpdate,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -976,7 +647,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         ----------
         id : str
 
-        request : typing.Optional[typing.Any]
+        request : AutomationRuleEvaluatorUpdate
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -989,7 +660,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi
+        from Opik import AsyncOpikApi, AutomationRuleEvaluatorUpdate_LlmAsJudge
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -1000,7 +671,7 @@ class AsyncAutomationRuleEvaluatorsClient:
         async def main() -> None:
             await client.automation_rule_evaluators.update_automation_rule_evaluator(
                 id="id",
-                request={"key": "value"},
+                request=AutomationRuleEvaluatorUpdate_LlmAsJudge(),
             )
 
 
@@ -1009,7 +680,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
-            json=request,
+            json=convert_and_respect_annotation_metadata(
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
+            ),
             request_options=request_options,
             omit=OMIT,
         )
@@ -1067,397 +742,6 @@ class AsyncAutomationRuleEvaluatorsClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}/logs",
-            method="GET",
-            params={
-                "size": size,
-            },
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return typing.cast(
-                    LogPage,
-                    parse_obj_as(
-                        type_=LogPage,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    async def find_evaluators_deprecated(
-        self,
-        project_id: str,
-        *,
-        name: typing.Optional[str] = None,
-        page: typing.Optional[int] = None,
-        size: typing.Optional[int] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AutomationRuleEvaluatorPagePublic:
-        """
-        Find project Evaluators Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        name : typing.Optional[str]
-
-        page : typing.Optional[int]
-
-        size : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AutomationRuleEvaluatorPagePublic
-            Evaluators resource
-
-        Examples
-        --------
-        import asyncio
-
-        from Opik import AsyncOpikApi
-
-        client = AsyncOpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-
-
-        async def main() -> None:
-            await client.automation_rule_evaluators.find_evaluators_deprecated(
-                project_id="projectId",
-            )
-
-
-        asyncio.run(main())
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators",
-            method="GET",
-            params={
-                "name": name,
-                "page": page,
-                "size": size,
-            },
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return typing.cast(
-                    AutomationRuleEvaluatorPagePublic,
-                    parse_obj_as(
-                        type_=AutomationRuleEvaluatorPagePublic,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    async def create_automation_rule_evaluator_deprecated(
-        self,
-        project_id: str,
-        *,
-        request: typing.Optional[typing.Any] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Create automation rule evaluator Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        request : typing.Optional[typing.Any]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        import asyncio
-
-        from Opik import AsyncOpikApi
-
-        client = AsyncOpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-
-
-        async def main() -> None:
-            await client.automation_rule_evaluators.create_automation_rule_evaluator_deprecated(
-                project_id="projectId",
-                request={"key": "value"},
-            )
-
-
-        asyncio.run(main())
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators",
-            method="POST",
-            json=request,
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    async def delete_automation_rule_evaluator_batch_deprecated(
-        self,
-        project_id: str,
-        *,
-        ids: typing.Sequence[str],
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        Delete automation rule evaluators batch Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        ids : typing.Sequence[str]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        import asyncio
-
-        from Opik import AsyncOpikApi
-
-        client = AsyncOpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-
-
-        async def main() -> None:
-            await client.automation_rule_evaluators.delete_automation_rule_evaluator_batch_deprecated(
-                project_id="projectId",
-                ids=["ids"],
-            )
-
-
-        asyncio.run(main())
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/delete",
-            method="POST",
-            json={
-                "ids": ids,
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    async def get_evaluator_by_id_deprecated(
-        self,
-        project_id: str,
-        id: str,
-        *,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> typing.Optional[typing.Any]:
-        """
-        Get automation rule by id Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        id : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        typing.Optional[typing.Any]
-            Automation Rule resource
-
-        Examples
-        --------
-        import asyncio
-
-        from Opik import AsyncOpikApi
-
-        client = AsyncOpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-
-
-        async def main() -> None:
-            await client.automation_rule_evaluators.get_evaluator_by_id_deprecated(
-                project_id="projectId",
-                id="id",
-            )
-
-
-        asyncio.run(main())
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/{jsonable_encoder(id)}",
-            method="GET",
-            request_options=request_options,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return typing.cast(
-                    typing.Optional[typing.Any],
-                    parse_obj_as(
-                        type_=typing.Optional[typing.Any],  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    async def update_automation_rule_evaluator_deprecated(
-        self,
-        id: str,
-        project_id: str,
-        *,
-        request: typing.Optional[typing.Any] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        """
-        update Automation Rule Evaluator by id Deprecated
-
-        Parameters
-        ----------
-        id : str
-
-        project_id : str
-
-        request : typing.Optional[typing.Any]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        import asyncio
-
-        from Opik import AsyncOpikApi
-
-        client = AsyncOpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-
-
-        async def main() -> None:
-            await client.automation_rule_evaluators.update_automation_rule_evaluator_deprecated(
-                id="id",
-                project_id="projectId",
-                request={"key": "value"},
-            )
-
-
-        asyncio.run(main())
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/{jsonable_encoder(id)}",
-            method="PATCH",
-            json=request,
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
-    async def get_evaluator_logs_by_id_deprecated(
-        self,
-        project_id: str,
-        id: str,
-        *,
-        size: typing.Optional[int] = None,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> LogPage:
-        """
-        Get automation rule evaluator logs by id Deprecated
-
-        Parameters
-        ----------
-        project_id : str
-
-        id : str
-
-        size : typing.Optional[int]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        LogPage
-            Automation rule evaluator logs resource
-
-        Examples
-        --------
-        import asyncio
-
-        from Opik import AsyncOpikApi
-
-        client = AsyncOpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-
-
-        async def main() -> None:
-            await client.automation_rule_evaluators.get_evaluator_logs_by_id_deprecated(
-                project_id="projectId",
-                id="id",
-            )
-
-
-        asyncio.run(main())
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            f"v1/private/automations/projects/{jsonable_encoder(project_id)}/evaluators/{jsonable_encoder(id)}/logs",
             method="GET",
             params={
                 "size": size,

@@ -99,11 +99,11 @@ services:
       ANALYTICS_DB_PROTOCOL: "HTTP"
       ANALYTICS_DB_HOST: "clickhouse"
       ANALYTICS_DB_PORT: 8123
-      ANALYTICS_DB_USERNAME: opik
       ANALYTICS_DB_DATABASE_NAME: opik
+      ANALYTICS_DB_USERNAME: opik
+      ANALYTICS_DB_PASS: opik
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
-      ANALYTICS_DB_PASS: opik
       OPIK_OTEL_SDK_ENABLED: false
       OTEL_VERSION: 2.12.0
       OTEL_PROPAGATORS: "tracecontext,baggage,b3"
@@ -114,6 +114,7 @@ services:
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
+      PYTHON_EVALUATOR_URL: http://python-backend:8000
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:
@@ -140,14 +141,17 @@ services:
     privileged: true # Required for Docker-in-Docker, so it can launch containers
     environment:
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
+      PYTHON_CODE_EXECUTOR_CONTAINERS_NUM: 5
+      PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 3
+      PYTHON_CODE_EXECUTOR_LOG_LEVEL: "INFO"
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8000/healthcheck"]
-      interval: 1s
-      timeout: 30s
+      test: ["CMD", "sh", "-c", "if [ -f /opt/opik-python-backend/src/opik_backend/healthcheck.py ]; then wget --spider --quiet http://127.0.0.1:8000/healthcheck; else exit 0; fi"]
+      interval: 2s
+      timeout: 60s
       retries: 30
-      start_period: 1s
+      start_period: 2s
 
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
@@ -181,7 +185,7 @@ services:
       - ./nginx_default_local.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]
       interval: 1s

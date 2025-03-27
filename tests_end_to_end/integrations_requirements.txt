@@ -1,0 +1,11 @@
+anthropic
+openai
+boto3
+dspy
+google-genai
+haystack
+langchain
+langgraph
+llama_index
+langchain_openai
+ragas

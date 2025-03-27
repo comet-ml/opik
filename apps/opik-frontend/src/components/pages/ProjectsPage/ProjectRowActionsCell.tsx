@@ -34,6 +34,7 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className="justify-end p-0"
+      stopClickPropagation
     >
       <AddEditProjectDialog
         key={`add-${resetKeyRef.current}`}
@@ -57,11 +58,7 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          className="w-52"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
             onClick={() => {
               setOpen(2);

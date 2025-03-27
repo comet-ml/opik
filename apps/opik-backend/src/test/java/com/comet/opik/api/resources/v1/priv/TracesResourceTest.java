@@ -54,6 +54,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -127,8 +128,9 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
+import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
-import static com.comet.opik.domain.TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -148,9 +150,6 @@ class TracesResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
-    private static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
-            "comments", "threadId"};
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -223,8 +222,8 @@ class TracesResourceTest {
         return projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
     }
 
-    private UUID createProject(String projectName, String workspaceName, String apiKey) {
-        return projectResourceClient.createProject(projectName, apiKey, workspaceName);
+    private void createProject(String projectName, String workspaceName, String apiKey) {
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
     }
 
     @Nested
@@ -4003,8 +4002,8 @@ class TracesResourceTest {
                             (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
                                     .field(TraceThreadField.FIRST_MESSAGE)
                                     .operator(Operator.CONTAINS)
-                                    .value(traces.stream().sorted(Comparator.comparing(Trace::startTime)).findFirst()
-                                            .get().input().toString().substring(0, 20))
+                                    .value(traces.stream().min(Comparator.comparing(Trace::startTime))
+                                            .orElseThrow().input().toString().substring(0, 20))
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
                             (Function<List<Trace>, List<Trace>>) traces -> traces),
@@ -4012,8 +4011,8 @@ class TracesResourceTest {
                             (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
                                     .field(TraceThreadField.LAST_MESSAGE)
                                     .operator(Operator.CONTAINS)
-                                    .value(traces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                            .findFirst().get().output().toString().substring(0, 20))
+                                    .value(traces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                            .output().toString().substring(0, 20))
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
                             (Function<List<Trace>, List<Trace>>) traces -> traces),
@@ -4022,7 +4021,8 @@ class TracesResourceTest {
                                     .field(TraceThreadField.CREATED_AT)
                                     .operator(Operator.EQUAL)
                                     .key(null)
-                                    .value(traces.stream().min(Comparator.comparing(Trace::createdAt)).get().createdAt()
+                                    .value(traces.stream().min(Comparator.comparing(Trace::createdAt))
+                                            .orElseThrow().createdAt()
                                             .toString())
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
@@ -4100,7 +4100,7 @@ class TracesResourceTest {
                     .createdBy(USER)
                     .startTime(trace.startTime())
                     .endTime(trace.endTime())
-                    .numberOfMessages(traces.size() * 2)
+                    .numberOfMessages(traces.size() * 2L)
                     .id(threadId)
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
@@ -4227,30 +4227,31 @@ class TracesResourceTest {
     }
 
     private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId) {
-        return expectedTraces.size() == 0
+        return expectedTraces.isEmpty()
                 ? List.of()
                 : List.of(TraceThread.builder()
-                        .firstMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
-                                .findFirst().get().input())
-                        .lastMessage(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                .findFirst().get().output())
+                        .firstMessage(expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).orElseThrow()
+                                .input())
+                        .lastMessage(expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                .output())
                         .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                                expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).get()
+                                expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).orElseThrow()
                                         .startTime(),
-                                expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime()))
+                                expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                        .endTime()))
                         .projectId(projectId)
                         .createdBy(USER)
-                        .startTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::startTime))
-                                .findFirst().get().startTime())
-                        .endTime(expectedTraces.stream().sorted(Comparator.comparing(Trace::endTime).reversed())
-                                .findFirst().get().endTime())
-                        .numberOfMessages(expectedTraces.size() * 2)
+                        .startTime(expectedTraces.stream().min(Comparator.comparing(Trace::startTime)).orElseThrow()
+                                .startTime())
+                        .endTime(expectedTraces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                .endTime())
+                        .numberOfMessages(expectedTraces.size() * 2L)
                         .id(threadId)
-                        .createdAt(expectedTraces.stream().sorted(Comparator.comparing(Trace::createdAt))
-                                .findFirst().get().createdAt())
-                        .lastUpdatedAt(expectedTraces.stream()
-                                .sorted(Comparator.comparing(Trace::lastUpdatedAt).reversed()).findFirst().get()
-                                .lastUpdatedAt())
+                        .createdAt(expectedTraces.stream().min(Comparator.comparing(Trace::createdAt)).orElseThrow()
+                                .createdAt())
+                        .lastUpdatedAt(
+                                expectedTraces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).orElseThrow()
+                                        .lastUpdatedAt())
                         .build());
     }
 
@@ -4882,14 +4883,6 @@ class TracesResourceTest {
         return traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
-    private void createAndAssertErrorMessage(Trace trace, String apiKey, String workspaceName, int status,
-            String errorMessage) {
-        try (var response = traceResourceClient.callCreateTrace(trace, apiKey, workspaceName)) {
-            assertThat(response.getStatus()).isEqualTo(status);
-            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).isEqualTo(errorMessage);
-        }
-    }
-
     private void create(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
         traceResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
     }
@@ -4963,35 +4956,6 @@ class TracesResourceTest {
 
             getAndAssert(trace1, projectId1, API_KEY, TEST_WORKSPACE);
             getAndAssert(trace2, projectId2, API_KEY, TEST_WORKSPACE);
-        }
-
-        @Test
-        @DisplayName("when creating traces with same Id for different workspaces, then return conflict")
-        void create__whenCreatingTracesWithSameIdForDifferentWorkspaces__thenReturnConflict() {
-
-            var trace1 = createTrace()
-                    .toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .build();
-            create(trace1, API_KEY, TEST_WORKSPACE);
-
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var trace2 = createTrace()
-                    .toBuilder()
-                    .id(trace1.id())
-                    .projectName(DEFAULT_PROJECT)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .build();
-            createAndAssertErrorMessage(trace2, apiKey, workspaceName, HttpStatus.SC_CONFLICT,
-                    PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }
 
         @Test
@@ -5088,6 +5052,33 @@ class TracesResourceTest {
             getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var trace = createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callCreateTrace(trace, API_KEY, workspaceName)) {
+                if (isLimitReached) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+                }
+            }
+        }
     }
 
     @Nested
@@ -5249,6 +5240,35 @@ class TracesResourceTest {
             getAndAssertPage(TEST_WORKSPACE, projectName, null, List.of(), List.of(), expectedTraces.reversed(),
                     List.of(),
                     API_KEY);
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var trace = createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(List.of(trace), API_KEY,
+                    workspaceName)) {
+                if (isLimitReached) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                }
+            }
         }
     }
 

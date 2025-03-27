@@ -49,6 +49,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -135,6 +136,7 @@ import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryPara
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS_SCORES;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.assertSpan;
+import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PARENT_SPAN_IS_MISMATCH;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
@@ -4400,7 +4402,10 @@ class SpansResourceTest {
                     .build();
             var expectedSpanId = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            getAndAssert(expectedSpan.toBuilder().id(expectedSpanId).build(), API_KEY, TEST_WORKSPACE);
+            getAndAssert(expectedSpan.toBuilder()
+                    .id(expectedSpanId)
+                    .projectName(DEFAULT_PROJECT)
+                    .build(), API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -4494,6 +4499,29 @@ class SpansResourceTest {
             spanResourceClient.updateSpan(span.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             createAndAssertErrorMessage(span, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CONFLICT, TRACE_ID_MISMATCH);
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var span = podamFactory.manufacturePojo(Span.class);
+
+            var expectedStatus = isLimitReached ? HttpStatus.SC_PAYMENT_REQUIRED : HttpStatus.SC_CREATED;
+
+            try (var actualResponse = spanResourceClient.createSpan(span, API_KEY, workspaceName, expectedStatus)) {
+                if (isLimitReached) {
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                }
+            }
         }
     }
 
@@ -4687,6 +4715,29 @@ class SpansResourceTest {
                     API_KEY, List.of());
         }
 
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var span = podamFactory.manufacturePojo(Span.class);
+
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(List.of(span), API_KEY, workspaceName)) {
+                if (isLimitReached) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                }
+            }
+        }
     }
 
     private void batchCreateAndAssert(List<Span> expectedSpans, String apiKey, String workspaceName) {
@@ -4701,7 +4752,7 @@ class SpansResourceTest {
                 .ignoringCollectionOrderInFields("tags")
                 .isEqualTo(expectedSpan);
         assertThat(actualSpan.projectId()).isNotNull();
-        assertThat(actualSpan.projectName()).isNull();
+        assertThat(actualSpan.projectName()).isEqualTo(expectedSpan.projectName());
         assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
         assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
         assertThat(actualSpan.createdBy()).isEqualTo(USER);
@@ -4785,7 +4836,8 @@ class SpansResourceTest {
                     .build();
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var expectedSpanBuilder = expectedSpan.toBuilder();
+            var expectedSpanBuilder = expectedSpan.toBuilder()
+                    .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
             getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
         }
@@ -4830,7 +4882,8 @@ class SpansResourceTest {
 
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var expectedSpanBuilder = expectedSpan.toBuilder();
+            var expectedSpanBuilder = expectedSpan.toBuilder()
+                    .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
             getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
         }
@@ -4860,7 +4913,8 @@ class SpansResourceTest {
 
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var expectedSpanBuilder = expectedSpan.toBuilder();
+            var expectedSpanBuilder = expectedSpan.toBuilder()
+                    .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
             var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
 
