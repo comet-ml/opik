@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { traceExist } from "@/lib/traces";
 import ExperimentCommentsViewer from "./DataTab/ExperimentCommentsViewer";
 import { CommentItems } from "@/types/comment";
-import { replaceBase64ImageValues } from "@/lib/images";
 
 type CompareExperimentsViewerProps = {
   experimentItem: ExperimentItem;
@@ -37,12 +36,6 @@ const CompareExperimentsViewer: React.FunctionComponent<
       refetchOnMount: false,
     },
   );
-
-  const formattedOutput = useMemo(() => {
-    if (!experimentItem.output) return null;
-
-    return replaceBase64ImageValues(experimentItem.output);
-  }, [experimentItem.output]);
 
   const name = data?.name || experimentId;
 
@@ -76,10 +69,10 @@ const CompareExperimentsViewer: React.FunctionComponent<
       );
     }
 
-    if (formattedOutput) {
+    if (experimentItem.output) {
       return (
         <SyntaxHighlighter
-          data={formattedOutput}
+          data={experimentItem.output}
           prettifyConfig={{ fieldType: "output" }}
         />
       );

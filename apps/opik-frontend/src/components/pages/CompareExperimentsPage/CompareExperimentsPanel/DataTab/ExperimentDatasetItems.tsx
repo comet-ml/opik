@@ -9,7 +9,7 @@ import NoData from "@/components/shared/NoData/NoData";
 import React, { useMemo } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { pick } from "lodash";
-import { extractImageUrls } from "@/lib/images";
+import { extractImageUrls, replaceBase64ImageValues } from "@/lib/images";
 
 interface ExperimentDatasetItemsProps {
   data: DatasetItem["data"] | undefined;
@@ -34,10 +34,17 @@ const ExperimentDatasetItems = ({
   );
   const showImages = imagesUrls?.length > 0;
 
+  const formattedSelectedData = useMemo(() => {
+    if (!data) {
+      return null;
+    }
+    return replaceBase64ImageValues(selectedData);
+  }, [data, selectedData]);
+
   if (!showImages) {
-    return data ? (
+    return formattedSelectedData ? (
       <SyntaxHighlighter
-        data={selectedData}
+        data={formattedSelectedData}
         prettifyConfig={{ fieldType: "input" }}
       />
     ) : (
