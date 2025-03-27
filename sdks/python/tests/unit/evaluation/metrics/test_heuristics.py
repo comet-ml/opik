@@ -86,29 +86,6 @@ def test_sentence_bleu_score(candidate, reference, expected_min, expected_max):
 
 
 @pytest.mark.parametrize(
-    "candidate,reference,expected_min,expected_max",
-    [
-        # Perfect match => ROUGE~1.0
-        (
-            "The quick brown fox jumps over the lazy dog",
-            "The quick brown fox jumps over the lazy dog",
-            0.99,
-            1.01,
-        ),
-    ],
-)
-def test_rouge1_score(candidate, reference, expected_min, expected_max):
-    metric = rouge.ROUGE(rouge_type="rouge1")
-    result = metric.score(output=candidate, reference=reference)
-    assert isinstance(result, ScoreResult)
-
-    assert expected_min <= result.value <= expected_max, (
-        f"For candidate='{candidate}' vs reference='{reference}', "
-        f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
-    )
-
-
-@pytest.mark.parametrize(
     "candidate,reference",
     [
         ("", "The quick brown fox"),
@@ -209,3 +186,169 @@ def test_corpus_bleu_score_empty_inputs(outputs, references):
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
     assert "empty" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,expected_min,expected_max",
+    [
+        # Perfect match => ~1.0
+        (
+            "The quick brown fox jumps over the lazy dog",
+            "The quick brown fox jumps over the lazy dog",
+            0.99,
+            1.01,
+        ),
+        # Partial overlap => hence greater than 0.5 less than 0.75
+        # Matches => "The" "brown" "fox"
+        # Precision = 3/3 = 1.0
+        # Recall = 3/6 = 0.5
+        # F1 = 2 * (1.0 * 0.5) / (1.0 + 0.5) = 0.6667
+        (
+            "The brown fox",
+            "The quick brown fox moves quickly",
+            0.65,
+            0.67,
+        ),
+        # No overlap => ~0.0
+        (
+            "A green dog",
+            "The quick brown fox moves quickly",
+            0.0,
+            0.01,
+        ),
+    ],
+)
+def test_rouge1_score(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE(rouge_type="rouge1")
+    result = metric.score(output=candidate, reference=reference)
+    assert isinstance(result, ScoreResult)
+
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,expected_min,expected_max",
+    [
+        # Perfect match => ~1.0
+        (
+            "The quick brown fox jumps over the lazy dog",
+            "The quick brown fox jumps over the lazy dog",
+            0.99,
+            1.01,
+        ),
+        # No overlap => ~0.0
+        (
+            "A green dog",
+            "The quick brown fox moves quickly",
+            0.0,
+            0.01,
+        ),
+        # Rouge 2 uses bigrams
+        # Candidate = "the brown", "brown fox"
+        # Reference = "the quick, quick brown", "brown fox, fox moves, moves quickly"
+        # Match => "brown fox"
+        # Precision = 1/2 = 0.5
+        # Recall = 1/5 = 0.2
+        # F1 = 2 * (0.5 * 0.2) / (0.5 + 0.2) = 0.2857
+        (
+            "The brown fox",
+            "The quick brown fox moves quickly",
+            0.27,
+            0.29,
+        ),
+    ],
+)
+def test_rouge2_score(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE(rouge_type="rouge2")
+    result = metric.score(output=candidate, reference=reference)
+    assert isinstance(result, ScoreResult)
+
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected rouge2 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,expected_min,expected_max",
+    [
+        # Perfect match => ~1.0
+        (
+            "The quick brown fox jumps over the lazy dog",
+            "The quick brown fox jumps over the lazy dog",
+            0.99,
+            1.01,
+        ),
+        # No overlap => ~0.0
+        (
+            "A green dog",
+            "The quick brown fox moves quickly",
+            0.0,
+            0.01,
+        ),
+        # Rouge L uses longest common subsequence i.e. the longest sequence of words (not necessarily consecutive, but still in order)
+        # Candidate = "the brown fox"
+        # Reference = "the quick brown fox moves quickly"
+        # LCS => "the brown fox"
+        # ROUGE-L precision is the ratio of the length of the LCS, over the number of unigrams in candidate.
+        # Precision = 3/3 = 1.0
+        # ROUGE-L recall is the ratio of the length of the LCS, over the number of unigrams in reference.
+        # Recall = 3/6 = 0.5
+        # F1 = 2 * (1.0 * 0.5) / (1.0 + 0.5) = 0.6667
+        (
+            "The brown fox",
+            "The quick brown fox moves quickly",
+            0.65,
+            0.67,
+        ),
+    ],
+)
+def test_rougeL_score(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE(rouge_type="rougeL")
+    result = metric.score(output=candidate, reference=reference)
+    assert isinstance(result, ScoreResult)
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected rougeL score in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,expected_min,expected_max",
+    [
+        # ROUGE-Lsum splits the text into sentences based on newlines and
+        # computes the LCS for each pair of sentences and
+        # take the average score for all sentences.
+        # Candidate = "John is an accomplished artist.\\n He is part of a music band"
+        # Reference = "John is a talented musician.\\n He has a band called as 'The Band'"
+        # Split based on newlines:
+        # Candidate = ["John is an accomplished artist.", " He is part of a music band"]
+        # Reference = ["John is a talented musician.", " He has a band called as 'The Band'"]
+        # LCS for first pair = "John is"
+        # Precision = 2/5 = 0.4
+        # Recall = 2/5 = 0.4
+        # F1 = 2 * (0.4 * 0.4) / (0.4 + 0.4) = 0.4
+        # LCS for second pair = "He a band"
+        # Precision = 3/7 = 0.4286
+        # Recall = 3/8 = 0.375
+        # F1 = 2 * (0.4286 * 0.375) / (0.4286 + 0.375) = 0.4
+        # Average of both = (0.4 + 0.4) / 2 = 0.4
+        (
+            "John is an accomplished artist.\n He is part of a music band",
+            "John is a talented musician.\n He has a band called as 'The Band'",
+            0.40,
+            0.45,
+        ),
+    ],
+)
+def test_rougeLsum_score(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE(rouge_type="rougeLsum")
+    result = metric.score(output=candidate, reference=reference)
+    assert isinstance(result, ScoreResult)
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected rougeLsum score in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
