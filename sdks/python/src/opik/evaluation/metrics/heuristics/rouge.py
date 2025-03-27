@@ -95,7 +95,7 @@ class ROUGE(base_metric.BaseMetric):
         Raises:
             MetricComputationError:
                 - If the candidate or any reference is empty.
-                - If the reference strings are in multiple lists.
+                - If the reference is not a string or a list of strings.
         """
         if not output.strip():
             raise MetricComputationError("Candidate is empty.")
@@ -103,16 +103,24 @@ class ROUGE(base_metric.BaseMetric):
         if isinstance(reference, str):
             if not reference.strip():
                 raise MetricComputationError("Reference is empty.")
-        else:
-            if len(reference) != 1:
-                raise MetricComputationError("Reference strings are in multiple lists.")
+
+            reference = [reference]
+        elif isinstance(reference, list):
+            if len(reference) == 0:
+                raise MetricComputationError("Reference is empty.")
+
+            if not all(isinstance(item, str) for item in reference):
+                raise MetricComputationError(
+                    "Reference must be a string or a list of strings."
+                )
 
             for ref_str in reference:
                 if not ref_str.strip():
-                    raise MetricComputationError("Encountered empty reference.")
+                    raise MetricComputationError(
+                        "Encountered empty reference.")
 
         rouge_score_type = self._rouge_type
-        results = self._rouge.score(reference, output)
+        results = self._rouge.score_multi(reference, output)
         rouge_f1_value = results[rouge_score_type].fmeasure
 
         return score_result.ScoreResult(

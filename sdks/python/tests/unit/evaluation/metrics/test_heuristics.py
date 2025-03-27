@@ -352,3 +352,40 @@ def test_rougeLsum_score(candidate, reference, expected_min, expected_max):
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rougeLsum score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
+
+# For multiple references
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,expected_min,expected_max",
+    [
+        # Calculates rouge scores between targets and prediction.
+        # The target with the maximum f-measure is used for the final score
+        # Candidate = "The brown fox jumps quickly"
+        # Reference = ["The fox moves", "The quick brown fox jumps over the lazy dog"]
+        # Matches for reference 1 => "The" "fox"
+        # # Precision = 2/5 = 0.4
+        # # Recall = 2/3 = 0.6667
+        # # F1 = 2 * (0.4 * 0.6667) / (0.4 + 0.6667) = 0.5
+        # Matches for reference 2 => "The" "brown" "fox" "jumps"
+        # # Precision = 4/4 = 1.0
+        # # Recall = 4/8 = 0.5
+        # # F1 = 2 * (1.0 * 0.5) / (1.0 + 0.5) = 0.6667
+        # Hence, the final score = 0.6667
+        (
+            "The brown fox jumps quickly",
+            ["The fox moves quickly", "The quick brown fox jumps over the lazy dog"],
+            0.65,
+            0.67,
+        ),
+    ],
+)
+def test_rouge1_score_for_multiple_references(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE(rouge_type="rouge1")
+    result = metric.score(output=candidate, reference=reference)
+    assert isinstance(result, ScoreResult)
+
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected rouge1 score for multiple references in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
