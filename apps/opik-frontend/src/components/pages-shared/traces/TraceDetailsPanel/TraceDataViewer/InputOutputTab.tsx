@@ -7,7 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
-import { extractImageUrls } from "@/lib/images";
+import { extractImageUrls, replaceBase64ImageValues } from "@/lib/images";
 
 type InputOutputTabProps = {
   data: Trace | Span;
@@ -18,6 +18,15 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
 }) => {
   const imagesUrls = useMemo(() => extractImageUrls(data.input), [data.input]);
   const hasImages = imagesUrls.length > 0;
+
+  const formattedOutput = useMemo(
+    () => replaceBase64ImageValues(data.output),
+    [data.output],
+  );
+  const formattedInput = useMemo(
+    () => replaceBase64ImageValues(data.input),
+    [data.input],
+  );
 
   const openSections = useMemo(() => {
     return hasImages ? ["images", "input", "output"] : ["input", "output"];
@@ -53,7 +62,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
         <AccordionTrigger>Input</AccordionTrigger>
         <AccordionContent>
           <SyntaxHighlighter
-            data={data.input}
+            data={formattedInput}
             prettifyConfig={{ fieldType: "input" }}
           />
         </AccordionContent>
@@ -62,7 +71,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
         <AccordionTrigger>Output</AccordionTrigger>
         <AccordionContent>
           <SyntaxHighlighter
-            data={data.output}
+            data={formattedOutput}
             prettifyConfig={{ fieldType: "output" }}
           />
         </AccordionContent>

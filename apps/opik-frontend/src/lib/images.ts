@@ -128,3 +128,43 @@ export function extractImageUrls(input?: object) {
 
   return uniq([...openAIImages, ...inputImages]);
 }
+
+export function isImageString(str?: unknown): boolean {
+  if (!str || typeof str !== "string") {
+    return false;
+  }
+
+  if (str.startsWith("data:image/")) {
+    return true;
+  }
+
+  for (const prefix of Object.keys(BASE64_PREFIXES_MAP)) {
+    if (str.startsWith(prefix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export const BASE_64_OVERRIDE_TEXT = "[image]";
+export function replaceBase64ImageValues<T>(v: T): T {
+  if (typeof v === "string" && isImageString(v)) {
+    return BASE_64_OVERRIDE_TEXT as T;
+  }
+
+  if (Array.isArray(v)) {
+    return v.map(replaceBase64ImageValues) as T;
+  }
+
+  if (v && typeof v === "object") {
+    return Object.fromEntries(
+      Object.entries(v).map(([key, value]) => [
+        key,
+        replaceBase64ImageValues(value),
+      ]),
+    ) as T;
+  }
+
+  return v;
+}
