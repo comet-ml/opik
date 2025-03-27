@@ -30,6 +30,7 @@ public record Span(
         @JsonView( {
                 Span.View.Public.class, Span.View.Write.class}) UUID id,
         @JsonView({
+                Span.View.Public.class,
                 Span.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) @NotNull UUID traceId,
