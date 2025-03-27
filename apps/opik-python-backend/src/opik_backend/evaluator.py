@@ -62,3 +62,4 @@ def execute_evaluator_python():
         abort(400, "The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'")
 
     return jsonify({"scores": scores})
+    
