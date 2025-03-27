@@ -4,9 +4,10 @@
 
 import * as OpikApi from "../index";
 
-export interface AutomationRuleEvaluatorPagePublic {
+export interface AttachmentPage {
     page?: number;
     size?: number;
     total?: number;
-    content?: OpikApi.AutomationRuleEvaluatorObjectPublic[];
+    content?: OpikApi.Attachment[];
+    sortableBy?: string[];
 }
