@@ -130,7 +130,7 @@ export function extractImageUrls(input?: object) {
 }
 
 export function isImageString(str?: unknown): boolean {
-  if (!str || typeof str !== "string") {
+  if (!str || !isString(str)) {
     return false;
   }
 

@@ -19,10 +19,6 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   const imagesUrls = useMemo(() => extractImageUrls(data.input), [data.input]);
   const hasImages = imagesUrls.length > 0;
 
-  const formattedOutput = useMemo(
-    () => replaceBase64ImageValues(data.output),
-    [data.output],
-  );
   const formattedInput = useMemo(
     () => replaceBase64ImageValues(data.input),
     [data.input],
@@ -71,7 +67,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
         <AccordionTrigger>Output</AccordionTrigger>
         <AccordionContent>
           <SyntaxHighlighter
-            data={formattedOutput}
+            data={data.output}
             prettifyConfig={{ fieldType: "output" }}
           />
         </AccordionContent>
