@@ -34,12 +34,10 @@ const ExperimentDatasetItems = ({
   );
   const showImages = imagesUrls?.length > 0;
 
-  const formattedSelectedData = useMemo(() => {
-    if (!data) {
-      return null;
-    }
-    return replaceBase64ImageValues(selectedData);
-  }, [data, selectedData]);
+  const formattedSelectedData = useMemo(
+    () => replaceBase64ImageValues(selectedData),
+    [selectedData],
+  );
 
   if (!showImages) {
     return data ? (
