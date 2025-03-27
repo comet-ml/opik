@@ -27,11 +27,10 @@ const DatasetItemPanelContent: React.FunctionComponent<
       placeholderData: keepPreviousData,
     },
   );
-  const formattedData = useMemo(() => {
-    if (!data?.data) return null;
-
-    return replaceBase64ImageValues(data.data);
-  }, [data?.data]);
+  const formattedData = useMemo(
+    () => replaceBase64ImageValues(data?.data),
+    [data?.data],
+  );
 
   const imagesUrls = useMemo(() => extractImageUrls(data?.data), [data?.data]);
   const hasImages = imagesUrls.length > 0;
