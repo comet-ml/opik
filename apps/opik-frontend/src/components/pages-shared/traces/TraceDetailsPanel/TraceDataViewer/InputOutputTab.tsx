@@ -55,6 +55,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
           <SyntaxHighlighter
             data={data.input}
             prettifyConfig={{ fieldType: "input" }}
+            preserveKey="syntax-highlighter-trace-sidebar-input"
           />
         </AccordionContent>
       </AccordionItem>
@@ -64,6 +65,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
           <SyntaxHighlighter
             data={data.output}
             prettifyConfig={{ fieldType: "output" }}
+            preserveKey="syntax-highlighter-trace-sidebar-output"
           />
         </AccordionContent>
       </AccordionItem>
