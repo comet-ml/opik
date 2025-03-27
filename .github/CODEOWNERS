@@ -8,6 +8,7 @@
 * @comet-ml/comet-opik-devs # This is an inline comment.
 
 *.md @comet-ml/product @comet-ml/comet-opik-devs
+*.mdx @comet-ml/product @comet-ml/comet-opik-devs
 
 /.github/ISSUE_TEMPLATE/ @comet-ml/product @comet-ml/comet-opik-devs
 /.github/workflows/ @comet-ml/comet-devops @comet-ml/comet-qa @comet-ml/comet-opik-devs
