@@ -143,3 +143,4 @@ def run_scoring_in_docker_python_container(code, data):
     finally:
         # async replace container
         release_container(container)
+
