@@ -79,7 +79,6 @@ export const LLMJudgeDetailsFormSchema = z.object({
     ),
 });
 
-// TODO lala check. as well partial validation
 export const PythonCodeDetailsFormSchema = z.object({
   metric: z
     .string({
