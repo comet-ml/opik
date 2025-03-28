@@ -26,10 +26,6 @@ public class PythonEvaluatorService {
     private final @NonNull Client client;
     private final @NonNull @Config("pythonEvaluator") PythonEvaluatorConfig pythonEvaluatorConfig;
 
-    public boolean isActive() {
-        return pythonEvaluatorConfig.enabled();
-    }
-
     public List<PythonScoreResult> evaluate(@NonNull String code, Map<String, String> data) {
         Preconditions.checkArgument(MapUtils.isNotEmpty(data), "Argument 'data' must not be empty");
         var request = PythonEvaluatorRequest.builder()

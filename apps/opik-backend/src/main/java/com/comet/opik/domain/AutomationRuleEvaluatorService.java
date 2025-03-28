@@ -97,7 +97,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
                 case AutomationRuleEvaluatorUserDefinedMetricPython userDefinedMetricPython -> {
-                    if (!pythonEvaluatorConfig.enabled()) {
+                    if (!pythonEvaluatorConfig.isEnabled()) {
                         throw new ServiceUnavailableException("Python evaluator is disabled");
                     }
                     var definition = userDefinedMetricPython.toBuilder()
@@ -153,7 +153,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                 .lastUpdatedBy(userName)
                                 .build();
                     case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython -> {
-                        if (!pythonEvaluatorConfig.enabled()) {
+                        if (!pythonEvaluatorConfig.isEnabled()) {
                             throw new ServiceUnavailableException("Python evaluator is disabled");
                         }
                         yield UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()

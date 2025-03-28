@@ -9,6 +9,7 @@ import com.comet.opik.domain.UserLog;
 import com.comet.opik.domain.pythonevaluator.PythonEvaluatorService;
 import com.comet.opik.domain.pythonevaluator.PythonScoreResult;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.PythonEvaluatorConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -28,6 +29,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
         extends
             OnlineScoringBaseScorer<TraceToScoreUserDefinedMetricPython> {
 
+    private final PythonEvaluatorConfig pythonEvaluatorConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
     private final Logger userFacingLogger;
 
@@ -35,15 +37,17 @@ public class OnlineScoringUserDefinedMetricPythonScorer
     public OnlineScoringUserDefinedMetricPythonScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
-            @NonNull PythonEvaluatorService pythonEvaluatorService) {
+            @NonNull PythonEvaluatorService pythonEvaluatorService,
+            @NonNull @Config("pythonEvaluator") PythonEvaluatorConfig pythonEvaluatorConfig) {
         super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
+        this.pythonEvaluatorConfig = pythonEvaluatorConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
     }
 
     @Override
     public void start() {
-        if (pythonEvaluatorService.isActive()) {
+        if (pythonEvaluatorConfig.isEnabled()) {
             super.start();
         } else {
             log.warn("Online Scoring Python evaluator consumer won't start as it is disabled.");

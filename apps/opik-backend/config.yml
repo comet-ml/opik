@@ -123,7 +123,7 @@ openTelemetry:
   # Description: how long it takes to expire non-used keys
   ttl: ${OTEL_TTL_INTERVAL:-3h}
 
-# Authentication configuration. This is not enabled by default for open source installations.
+# Authentication configuration. This is not isEnabled by default for open source installations.
 authentication:
   # Default: false
   # Description: Whether or not to enable authentication
@@ -160,12 +160,12 @@ batchOperations:
     # involve the use of temp tables for querying
     maxExperimentInClauseSize: ${BATCH_OPERATIONS_MAX_EXPERIMENT_IN_CLAUSE_SIZE:-5000}
 
-# Configuration for rate limit. This is not enabled by default for open source installations.
-# If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
+# Configuration for rate limit. This is not isEnabled by default for open source installations.
+# If isEnabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
 # prompts, feedback definitions, experiments, datasets and dataset items
 rateLimit:
   # Default: false
-  # Description: Whether or not rate limit is enabled
+  # Description: Whether or not rate limit is isEnabled
   enabled: ${RATE_LIMIT_ENABLED:-false}
   # This uses as a fallback rate limit configuration in case an entity specific configuration doesn't exist
   generalLimit:
@@ -211,7 +211,7 @@ rateLimit:
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation Please try again later."
 
-# Configuration for usage limit. This is not enabled by default for open source installations.
+# Configuration for usage limit. This is not isEnabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
 # response.
 usageLimit:
@@ -319,7 +319,7 @@ llmProviderClient:
 # Configuration for cache manager
 cacheManager:
     # Default: true
-    # Description: Whether or not cache manager is enabled
+    # Description: Whether or not cache manager is isEnabled
     enabled: ${CACHE_MANAGER_ENABLED:-true}
     # Default: PT1S
     # Description: Time to live for cache entries in using the formats accepted are based on the ISO-8601: https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-
