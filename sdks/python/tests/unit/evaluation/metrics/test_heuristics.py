@@ -11,6 +11,14 @@ from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU, CorpusBLEU
 
 
+class CustomTokenizer:
+    def __init__(self, delimiter=" "):
+        self.delimiter = delimiter
+
+    def tokenize(self, text):
+        return text.split(self.delimiter)
+
+
 def test_evaluation__equals():
     metric_param = "some metric"
     metric = equals.Equals(case_sensitive=True)
@@ -187,6 +195,37 @@ def test_corpus_bleu_score_empty_inputs(outputs, references):
         metric.score(output=outputs, reference=references)
     assert "empty" in str(exc_info.value).lower()
 
+# ROUGE score tests
+
+
+def test_rouge_score_invalid_rouge_type():
+    with pytest.raises(MetricComputationError) as exc_info:
+        rouge.ROUGE(rouge_type="rouge55")
+    assert "invalid rouge_type" in str(exc_info.value).lower()
+
+
+def test_rouge_score_for_invalid_reference_type():
+    metric = rouge.ROUGE()
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score("candidate", [1, False, -3, 4])
+    assert str(exc_info.value).lower(
+    ) == "reference must be a string or a list of strings."
+
+
+@pytest.mark.parametrize(
+    "candidate,reference",
+    [
+        ("", "The quick brown fox"),
+        ("The quick brown fox", ""),
+        ("The quick brown fox", ["the quick brown fox", ""]),
+    ],
+)
+def test_rouge_score_for_empty_inputs(candidate, reference):
+    metric = rouge.ROUGE()
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(candidate, reference)
+    assert "empty" in str(exc_info.value).lower()
+
 
 @pytest.mark.parametrize(
     "candidate,reference,expected_min,expected_max",
@@ -353,8 +392,6 @@ def test_rougeLsum_score(candidate, reference, expected_min, expected_max):
         f"expected rougeLsum score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
 
-# For multiple references
-
 
 @pytest.mark.parametrize(
     "candidate,reference,expected_min,expected_max",
@@ -380,8 +417,8 @@ def test_rougeLsum_score(candidate, reference, expected_min, expected_max):
         ),
     ],
 )
-def test_rouge1_score_for_multiple_references(candidate, reference, expected_min, expected_max):
-    metric = rouge.ROUGE(rouge_type="rouge1")
+def test_rouge_score_for_multiple_references(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE()
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
 
@@ -412,8 +449,40 @@ def test_rouge1_score_for_multiple_references(candidate, reference, expected_min
         ),
     ],
 )
-def test_rouge1_score_using_stemmer(candidate, reference, expected_min, expected_max):
-    metric = rouge.ROUGE(rouge_type="rouge1", use_stemmer=True)
+def test_rouge_score_using_stemmer(candidate, reference, expected_min, expected_max):
+    metric = rouge.ROUGE(use_stemmer=True)
+    result = metric.score(output=candidate, reference=reference)
+    assert isinstance(result, ScoreResult)
+
+    assert expected_min <= result.value <= expected_max, (
+        f"For candidate='{candidate}' vs reference='{reference}', "
+        f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,expected_min,expected_max,tokenizer",
+    [
+        # Custom tokenizer - splits based on commas
+        # Candidate = "Bread and butter, Bun and cream"
+        # Reference = "Bread and butter, Bun and jam"
+        # Tokenized Candidate = ["Bread and butter", "Bun and cream"]
+        # Tokenized Reference = ["Bread and butter", "Bun and jam"]
+        # Matches => "Bread and butter"
+        # Precision = 1/2 = 0.5
+        # Recall = 1/2 = 0.5
+        # F1 = 2 * (0.5 * 0.5) / (0.5 + 0.5) = 0.5
+        (
+            "Bread and butter, Bun and cream",
+            "Bread and butter, Bun and jam",
+            0.49,
+            0.51,
+            CustomTokenizer(delimiter=", "),
+        ),
+    ],
+)
+def test_rouge_score_using_custom_tokenizer(candidate, reference, expected_min, expected_max, tokenizer):
+    metric = rouge.ROUGE(tokenizer=tokenizer)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
 
