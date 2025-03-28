@@ -25,7 +25,8 @@ const injectGitHubLink = () => {
   const colabUrl = "https://colab.research.google.com/github/comet-ml/opik/blob/main" + notebookPath;
 
   const container = document.createElement("div");
-  container.className = "rounded-lg p-4 first:mt-0 callout-outlined-tip mt-24";
+  container.className = "fern-callout rounded-lg p-4 first:mt-0 callout-outlined-tip mt-24";
+  container.setAttribute("data-intent", "tip");
 
   const content = document.createElement("div");
   content.className = "flex items-center justify-between";
