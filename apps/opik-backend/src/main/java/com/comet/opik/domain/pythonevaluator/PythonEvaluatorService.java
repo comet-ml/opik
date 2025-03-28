@@ -1,6 +1,6 @@
 package com.comet.opik.domain.pythonevaluator;
 
-import com.comet.opik.infrastructure.PythonEvaluatorConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -12,9 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -25,7 +23,7 @@ public class PythonEvaluatorService {
     private static final String URL_TEMPLATE = "%s/v1/private/evaluators/python";
 
     private final @NonNull Client client;
-    private final @NonNull @Config("pythonEvaluator") PythonEvaluatorConfig pythonEvaluatorConfig;
+    private final @NonNull OpikConfiguration config;
 
     public List<PythonScoreResult> evaluate(@NonNull String code, Map<String, String> data) {
         Preconditions.checkArgument(MapUtils.isNotEmpty(data), "Argument 'data' must not be empty");
@@ -33,7 +31,7 @@ public class PythonEvaluatorService {
                 .code(code)
                 .data(data)
                 .build();
-        try (var response = client.target(URI.create(URL_TEMPLATE.formatted(pythonEvaluatorConfig.url())))
+        try (var response = client.target(URL_TEMPLATE.formatted(config.getPythonEvaluator().url()))
                 .request()
                 .post(Entity.json(request))) {
             var result = getAndValidateResult(response);
