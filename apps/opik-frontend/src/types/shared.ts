@@ -111,6 +111,8 @@ export type ColumnStatistic = {
 
 export type ColumnsStatistic = ColumnStatistic[];
 
+export type StringBoolean = "true" | "false";
+
 export type JsonNode =
   | string
   | number

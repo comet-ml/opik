@@ -37,6 +37,7 @@ import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
@@ -50,6 +51,7 @@ import {
 } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import { LLM_JUDGE } from "@/types/llm";
 import { LLM_PROMPT_CUSTOM_TEMPLATE } from "@/constants/llm";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 
 export const DEFAULT_SAMPLING_RATE = 1;
 
@@ -66,10 +68,11 @@ export const DEFAULT_LLM_AS_JUDGE_DATA: LLMJudgeDetailsFormType = {
 
 export const DEFAULT_PYTHON_CODE_DATA: PythonCodeDetailsFormType = {
   metric:
+    "from typing import Any\n" +
     "from opik.evaluation.metrics import base_metric, score_result\n" +
     "\n" +
     "class MyCustomMetric(base_metric.BaseMetric):\n" +
-    "    def __init__(self, name: str):\n" +
+    '    def __init__(self, name: str = "my_custom_metric"):\n' +
     "        self.name = name\n" +
     "\n" +
     "    def score(self, input: str, output: str, **ignored_kwargs: Any):\n" +
@@ -99,6 +102,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   projectId,
   rule: defaultRule,
 }) => {
+  const isCodeMetricEnabled = useIsFeatureEnabled(
+    "TOGGLE_PYTHON_EVALUATOR_ENABLED",
+  );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
@@ -129,6 +135,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isEdit = Boolean(defaultRule);
   const title = isEdit ? "Edit rule" : "Create a new rule";
   const submitText = isEdit ? "Update rule" : "Create rule";
+
+  const isCodeMetricEditBlock = !isCodeMetricEnabled && !isLLMJudge && isEdit;
 
   const getRule = useCallback(() => {
     const formData = form.getValues();
@@ -271,12 +279,26 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                             >
                               LLM-as-judge
                             </ToggleGroupItem>
-                            <ToggleGroupItem
-                              value={EVALUATORS_RULE_TYPE.python_code}
-                              aria-label="Code metric"
-                            >
-                              Code metric
-                            </ToggleGroupItem>
+                            {isCodeMetricEnabled ? (
+                              <ToggleGroupItem
+                                value={EVALUATORS_RULE_TYPE.python_code}
+                                aria-label="Code metric"
+                              >
+                                Code metric
+                              </ToggleGroupItem>
+                            ) : (
+                              <TooltipWrapper content="This feature is not available for this environment">
+                                <span>
+                                  <ToggleGroupItem
+                                    value={EVALUATORS_RULE_TYPE.python_code}
+                                    aria-label="Code metric"
+                                    disabled
+                                  >
+                                    Code metric
+                                  </ToggleGroupItem>
+                                </span>
+                              </TooltipWrapper>
+                            )}
                           </ToggleGroup>
                         </div>
                       </FormControl>
@@ -299,9 +321,19 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
-            {submitText}
-          </Button>
+          {isCodeMetricEditBlock ? (
+            <TooltipWrapper content="Code metric cannot be updated. This feature is not available for this environment">
+              <span>
+                <Button type="submit" disabled>
+                  {submitText}
+                </Button>
+              </span>
+            </TooltipWrapper>
+          ) : (
+            <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+              {submitText}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
