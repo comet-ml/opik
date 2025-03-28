@@ -116,8 +116,7 @@ class ROUGE(base_metric.BaseMetric):
 
             for ref_str in reference:
                 if not ref_str.strip():
-                    raise MetricComputationError(
-                        "Encountered empty reference.")
+                    raise MetricComputationError("Encountered empty reference.")
 
         rouge_score_type = self._rouge_type
         results = self._rouge.score_multi(reference, output)

@@ -195,6 +195,7 @@ def test_corpus_bleu_score_empty_inputs(outputs, references):
         metric.score(output=outputs, reference=references)
     assert "empty" in str(exc_info.value).lower()
 
+
 # ROUGE score tests
 
 
@@ -208,8 +209,10 @@ def test_rouge_score_for_invalid_reference_type():
     metric = rouge.ROUGE()
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score("candidate", [1, False, -3, 4])
-    assert str(exc_info.value).lower(
-    ) == "reference must be a string or a list of strings."
+    assert (
+        str(exc_info.value).lower()
+        == "reference must be a string or a list of strings."
+    )
 
 
 @pytest.mark.parametrize(
@@ -417,7 +420,9 @@ def test_rougeLsum_score(candidate, reference, expected_min, expected_max):
         ),
     ],
 )
-def test_rouge_score_for_multiple_references(candidate, reference, expected_min, expected_max):
+def test_rouge_score_for_multiple_references(
+    candidate, reference, expected_min, expected_max
+):
     metric = rouge.ROUGE()
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
@@ -481,7 +486,9 @@ def test_rouge_score_using_stemmer(candidate, reference, expected_min, expected_
         ),
     ],
 )
-def test_rouge_score_using_custom_tokenizer(candidate, reference, expected_min, expected_max, tokenizer):
+def test_rouge_score_using_custom_tokenizer(
+    candidate, reference, expected_min, expected_max, tokenizer
+):
     metric = rouge.ROUGE(tokenizer=tokenizer)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
