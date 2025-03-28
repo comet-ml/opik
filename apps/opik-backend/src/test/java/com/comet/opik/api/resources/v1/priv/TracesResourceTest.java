@@ -83,6 +83,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -4533,6 +4534,85 @@ class TracesResourceTest {
 
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        void getTracesByProject__whenSortingByFeedbackScores__thenReturnTracesSorted(Direction direction) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                            .comments(null)
+                            .build())
+                    .map(trace -> trace.toBuilder()
+                            .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            List<FeedbackScoreBatchItem> scoreForTrace = PodamFactoryUtils.manufacturePojoList(factory,
+                    FeedbackScoreBatchItem.class);
+
+            List<FeedbackScoreBatchItem> allScores = traces
+                    .stream()
+                    .flatMap(trace -> scoreForTrace.stream()
+                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
+                                    .id(trace.id())
+                                    .projectName(trace.projectName())
+                                    .value(factory.manufacturePojo(BigDecimal.class))
+                                    .build()))
+                    .toList();
+
+            traceResourceClient.feedbackScores(allScores, apiKey, workspaceName);
+
+            var sortingField = new SortingField(
+                    "feedback_scores.%s".formatted(scoreForTrace.getFirst().name()),
+                    direction);
+
+            Comparator<Trace> comparing = Comparator.comparing(trace -> trace.feedbackScores()
+                    .stream()
+                    .filter(score -> score.name().equals(scoreForTrace.getFirst().name()))
+                    .findFirst()
+                    .orElseThrow()
+                    .value());
+
+            var expectedTraces = traces.stream()
+                    .map(trace -> trace.toBuilder()
+                            .feedbackScores(allScores
+                                    .stream()
+                                    .filter(score -> score.id().equals(trace.id()))
+                                    .map(scores -> FeedbackScore.builder()
+                                            .name(scores.name())
+                                            .value(scores.value())
+                                            .categoryName(scores.categoryName())
+                                            .source(scores.source())
+                                            .reason(scores.reason())
+                                            .build())
+                                    .toList())
+                            .build())
+                    .sorted(direction == Direction.ASC
+                            ? comparing
+                            : comparing.reversed())
+                    .toList();
+
+            List<SortingField> sortingFields = List.of(sortingField);
+
+            getAndAssertPage(workspaceName, projectName, null, List.of(), traces, expectedTraces, List.of(), apiKey,
+                    sortingFields);
         }
 
     }
