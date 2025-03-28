@@ -20,6 +20,9 @@ type PluginStore = {
   EvaluationExamples: React.ComponentType | null;
   CommentsViewer: React.ComponentType<CommentsViewerCoreProps> | null;
   ExperimentCommentsViewer: React.ComponentType<ExperimentCommentsViewerCoreProps> | null;
+  RetentionBanner: React.ComponentType<{
+    onChangeHeight: (height: number) => void;
+  }> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -37,6 +40,7 @@ const PLUGIN_NAMES = [
   "WorkspacePreloader",
   "EvaluationExamples",
   "ExperimentCommentsViewer",
+  "RetentionBanner",
   "init",
 ];
 
@@ -52,6 +56,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   CommentsViewer: null,
   EvaluationExamples: null,
   ExperimentCommentsViewer: null,
+  RetentionBanner: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
