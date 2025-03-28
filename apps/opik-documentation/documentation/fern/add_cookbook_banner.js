@@ -1,9 +1,10 @@
 const createButton = (href, text, icon = "") => {
   const link = document.createElement("a");
   link.href = href;
-  link.className =
-    "inline-flex items-center gap-1.5 rounded-md border border-gray-700/50 bg-gray-900/50 px-3 py-1.5 text-sm font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800/50";
+  link.style.cssText =
+    "border: 0 solid #e5e7eb; box-sizing: inherit; outline-color: transparent; color: inherit; text-decoration: inherit; display: inline-flex; align-items: center; border-radius: .375rem; border-width: 1px; padding-left: .75rem; padding-right: .75rem; padding-bottom: .375rem; padding-top: .375rem; font-size: .875rem; line-height: 1.25rem; font-weight: 500;";
   link.target = "_blank";
+
   link.rel = "noreferrer";
   if (icon) link.innerHTML = icon;
   link.appendChild(document.createTextNode(text));
