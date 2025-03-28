@@ -44,11 +44,12 @@ public record Experiment(
             @JsonView(Experiment.View.Public.class) int page,
             @JsonView(Experiment.View.Public.class) int size,
             @JsonView(Experiment.View.Public.class) long total,
-            @JsonView(Experiment.View.Public.class) List<Experiment> content)
+            @JsonView(Experiment.View.Public.class) List<Experiment> content,
+            @JsonView(Experiment.View.Public.class) List<String> sortableBy)
             implements
                 Page<Experiment> {
-        public static Experiment.ExperimentPage empty(int page) {
-            return new Experiment.ExperimentPage(page, 0, 0, List.of());
+        public static Experiment.ExperimentPage empty(int page, List<String> sortableBy) {
+            return new Experiment.ExperimentPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 
