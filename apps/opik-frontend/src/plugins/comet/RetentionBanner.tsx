@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 import { useActiveWorkspaceName } from "@/store/AppStore";
@@ -15,6 +15,7 @@ interface RetentionBannerProps {
 
 const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   const { data: user } = useUser();
+  const heightRef = useRef(0);
 
   const [closed, setClosed] = useState(false);
   const activeWorkspaceName = useActiveWorkspaceName();
@@ -25,6 +26,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   );
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
+    heightRef.current = node.clientHeight;
     onChangeHeight(node.clientHeight);
   });
 
@@ -32,13 +34,13 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
   const isUsedLess80 = (spanQuota?.used || 0) / (spanQuota?.limit || 1) < 0.8;
 
-  useEffect(() => {
-    if (closed) {
-      onChangeHeight(0);
-    }
-  }, [closed]);
+  const hideBanner = !spanQuota || isUsedLess80 || closed || !user;
 
-  if (!spanQuota || isUsedLess80 || closed || !user) {
+  useEffect(() => {
+    onChangeHeight(!hideBanner ? heightRef.current : 0);
+  }, [hideBanner]);
+
+  if (hideBanner) {
     return null;
   }
 
