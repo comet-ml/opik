@@ -1,0 +1,94 @@
+[Pydantic AI](https://ai.pydantic.dev/) is a Python agent framework designed to
+build production grade applications with Generative AI.
+
+Pydantic AI's primary advantage is its integration of Pydantic's type-safe data
+validation, ensuring structured and reliable responses in AI applications.
+
+## Getting started
+
+To use the Pydantic AI integration with Opik, you will need to have Pydantic AI
+and logfire installed:
+
+```bash
+pip install --upgrade --quiet pydantic-ai logfire 'logfire[httpx]'
+```
+
+In addition you will need to set the following environment variables to make
+sure the data is logged to Opik:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following environment
+        variables:
+            
+        ```bash
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+            ```bash
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different value if you would like to log the data
+            to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+        ```bash
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+    </Tip>
+    </Tab>
+
+</Tabs>
+
+## Using Opik with Pydantic AI
+
+To track your Pydantic AI agents, you will need to configure logfire as this is
+the framework used by Pydantic AI to enable tracing.
+
+```python
+import logfire
+
+logfire.configure(
+    send_to_logfire=False,
+)
+logfire.instrument_httpx(capture_all=True)
+```
+
+This combined with the environment variables above will log your traces to Opik:
+
+<Frame>
+  <img src="/img/tracing/pydantic-ai.png" alt="Pydantic AI tracing" />
+</Frame>
+
+## Advanced usage
+
+You can reduce the amount of data logged to Opik by setting `capture_all` to `False`:
+
+```python
+import logfire
+
+logfire.configure(
+    send_to_logfire=False,
+)
+logfire.instrument_httpx(capture_all=False)
+```
+
+When this parameter is set to `False`, we will not log the exact request made
+to the LLM provider.
