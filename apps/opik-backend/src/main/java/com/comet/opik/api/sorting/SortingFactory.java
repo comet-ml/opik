@@ -43,12 +43,41 @@ public abstract class SortingFactory {
         }
 
         List<String> illegalFields = sorting.stream()
-                .map(SortingField::field)
-                .filter(f -> !this.getSortableFields().contains(f))
+                .map(SortingField::rawField)
+                .filter(f -> !isFieldSupported(f) && !isDynamicFieldSupported(f))
                 .toList();
         if (!illegalFields.isEmpty()) {
             throw new BadRequestException(
                     ERR_ILLEGAL_SORTING_FIELDS_TEMPLATE.formatted(StringUtils.join(illegalFields, ",")));
         }
+    }
+
+    private boolean isFieldSupported(String field) {
+        return this.getSortableFields().contains(field);
+    }
+
+    private boolean isDynamicFieldSupported(String field) {
+        if (field.contains(".")) {
+            // Split at the first dot
+            String[] parts = field.split("\\.", 2);
+            String baseField = parts[0];
+            String dynamicPart = parts.length > 1 ? parts[1] : "";
+
+            // Dynamic part must not be empty
+            if (dynamicPart.isEmpty()) {
+                return false;
+            }
+
+            // Check if base field matches any supported dynamic field pattern
+            return this.getSortableFields()
+                    .stream()
+                    .filter(supportedField -> supportedField.contains(".*"))
+                    .anyMatch(supportedField -> {
+                        String supportedBaseField = supportedField.substring(0, supportedField.indexOf(".*"));
+                        return baseField.equals(supportedBaseField);
+                    });
+        }
+
+        return false;
     }
 }
