@@ -31,7 +31,7 @@ container_labels={
 
 def preload_containers():
     if not container_pool.empty():
-        logger.warning("Containers already preloaded. Skipping duplicate initialization.")
+        logger.warning("Containers already preloaded. Skipping duplicate initialization")
         return
 
     logger.info(f"Preloading {PRELOADED_CONTAINERS} containers...")
@@ -48,7 +48,7 @@ def running_containers():
 def ensure_container_pool_filled():
     with container_pool_creation_lock:
         while len(running_containers()) < PRELOADED_CONTAINERS:
-            logger.info(f"not enough python runner containers running; creating more...")
+            logger.info("Not enough python runner containers running; creating more...")
             create_container()
 
 def cleanup_containers():
@@ -101,7 +101,7 @@ def get_container():
         try:
             return container_pool.get(timeout=EXEC_TIMEOUT)
         except Exception as e:
-            logger.warning(f"Couldn't get a container to execute after waiting for {EXEC_TIMEOUT}s. Ensuring we have enough and trying again.")
+            logger.warning(f"Couldn't get a container to execute after waiting for {EXEC_TIMEOUT}s. Ensuring we have enough and trying again: {e}")
             ensure_container_pool_filled()
 
 def run_scoring_in_docker_python_container(code, data):
@@ -132,7 +132,7 @@ def run_scoring_in_docker_python_container(code, data):
                     last_line = logs.strip().splitlines()[-1]
                     return {"code": 400, "error": json.loads(last_line).get("error")}
                 except Exception as e:
-                    logger.debug(f"Exception parsing container error logs: {e}")
+                    logger.info(f"Exception parsing container error logs: {e}")
                     return {"code": 400, "error": "Execution failed: Python code contains an invalid metric"}
     except concurrent.futures.TimeoutError:
         logger.error(f"Execution timed out in container {container.id}")
