@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 import { useActiveWorkspaceName } from "@/store/AppStore";
@@ -32,12 +32,17 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
   const isUsedLess80 = (spanQuota?.used || 0) / (spanQuota?.limit || 1) < 0.8;
 
+  useEffect(() => {
+    if (closed) {
+      onChangeHeight(0);
+    }
+  }, [closed]);
+
   if (!spanQuota || isUsedLess80 || closed || !user) {
     return null;
   }
 
   const closeBanner = () => {
-    onChangeHeight(0);
     setClosed(true);
   };
 
