@@ -15,6 +15,7 @@ You can use the following heuristic metrics:
 | Levenshtein  | Calculates the Levenshtein distance between the output and an expected string                     |
 | SentenceBLEU | Calculates a single-sentence BLEU score for a candidate vs. one or more references                |
 | CorpusBLEU   | Calculates a corpus-level BLEU score for multiple candidates vs. their references                 |
+| ROUGE        | Calculates the ROUGE score for a candidate vs. one or more references                             |
 
 ## Score an LLM response
 
@@ -172,3 +173,80 @@ print(score.value, score.reason)
 ```
 
 **Note:** If any candidate or reference is empty, SentenceBLEU or CorpusBLEU will raise a MetricComputationError. Handle or validate inputs accordingly.
+
+### ROUGE
+
+The [ROUGE (Recall-Oriented Understudy for Gisting Evaluation)](<https://en.wikipedia.org/wiki/ROUGE_(metric)>) metrics estimate how close the LLM outputs are to one or more reference summaries, commonly used for evaluating summarization and text generation tasks. It measures the overlap between an output string and a reference string, with support for multiple ROUGE types. This metrics is a wrapper around the Google Research reimplementation of ROUGE, which is based on the `rouge-score` library. You will need rouge-score library:
+
+```bash
+pip install rouge-score
+```
+
+It can be used in a following way:
+
+```python
+from opik.evaluation.metrics import ROUGE
+
+metric = ROUGE()
+
+# Single reference
+score = metric.score(
+    output="Hello world!",
+    reference="Hello world"
+)
+print(score.value, score.reason)
+
+# Multiple references
+score = metric.score(
+    output="Hello world!",
+    reference=["Hello planet", "Hello world"]
+)
+print(score.value, score.reason)
+```
+
+You can customize the ROUGE metric using the following parameters:
+
+- **`rouge_type` (str)**: Type of ROUGE score to compute. Must be one of:
+
+  - `rouge1`: Unigram-based scoring
+  - `rouge2`: Bigram-based scoring
+  - `rougeL`: Longest common subsequence-based scoring
+  - `rougeLsum`: ROUGE-L score based on sentence splitting
+
+  _Default_: `rouge1`
+
+- **`use_stemmer` (bool)**: Whether to use stemming in ROUGE computation.  
+  _Default_: `False`
+
+- **`split_summaries` (bool)**: Whether to split summaries into sentences.  
+  _Default_: `False`
+
+- **`tokenizer` (Any | None)**: Custom tokenizer for sentence splitting.  
+  _Default_: `None`
+
+```python
+from opik.evaluation.metrics import ROUGE
+
+metric = ROUGE(
+    rouge_type="rouge2",
+    use_stemmer=True
+)
+
+score = metric.score(
+    output="The cats sat on the mats",
+    reference=["The cat is on the mat", "A cat sat here on the mat"]
+)
+print(score.value, score.reason)
+```
+
+#### References
+
+- [Understanding ROUGE Metrics](https://www.linkedin.com/pulse/mastering-rouge-matrix-your-guide-large-language-model-mamdouh/)
+- [Google Research ROUGE Implementation](https://github.com/google-research/google-research/tree/master/rouge)
+- [Hugging Face ROUGE Metric](https://huggingface.co/spaces/evaluate-metric/rouge)
+
+#### Notes
+
+- The metric is case-insensitive.
+- ROUGE scores are useful for comparing text summarization models or evaluating text similarity.
+- Consider using stemming for improved evaluation in certain cases.
