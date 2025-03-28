@@ -38,7 +38,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
   useEffect(() => {
     onChangeHeight(!hideBanner ? heightRef.current : 0);
-  }, [hideBanner]);
+  }, [hideBanner, onChangeHeight]);
 
   if (hideBanner) {
     return null;
