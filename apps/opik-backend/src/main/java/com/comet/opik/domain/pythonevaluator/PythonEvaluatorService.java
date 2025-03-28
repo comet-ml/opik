@@ -14,6 +14,7 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -32,7 +33,7 @@ public class PythonEvaluatorService {
                 .code(code)
                 .data(data)
                 .build();
-        try (var response = client.target(URL_TEMPLATE.formatted(pythonEvaluatorConfig.url()))
+        try (var response = client.target(URI.create(URL_TEMPLATE.formatted(pythonEvaluatorConfig.url())))
                 .request()
                 .post(Entity.json(request))) {
             var result = getAndValidateResult(response);
