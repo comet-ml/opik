@@ -256,7 +256,7 @@ class OpikQueryLanguage:
             return {"value": value}
         else:
             raise ValueError(
-                f'Invalid value {self.query_string[start:self._cursor]}, expected an string in double quotes("value") or a number'
+                f'Invalid value {self.query_string[start : self._cursor]}, expected an string in double quotes("value") or a number'
             )
 
     def _parse(self) -> Optional[str]:

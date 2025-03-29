@@ -51,16 +51,16 @@ def generate_query(
 ) -> str:
     examples_str = "\n\n".join(
         [
-            f"#### Example {i+1}: {example['title']}\n\n"
-            f"- **Input:** \"{example['input']}\"\n"
-            f"- **Output:** \"{example['output']}\"\n"
-            f"- **Expected Output:** \"{example['expected_output']}\"\n"
-            f"- **Context:** \"{example['context']}\"\n"
+            f"#### Example {i + 1}: {example['title']}\n\n"
+            f'- **Input:** "{example["input"]}"\n'
+            f'- **Output:** "{example["output"]}"\n'
+            f'- **Expected Output:** "{example["expected_output"]}"\n'
+            f'- **Context:** "{example["context"]}"\n'
             f"- **Result:**\n"
             f"  ```json\n"
             f"  {{\n"
-            f"    \"context_recall_score\": {example['context_recall_score']},\n"
-            f"    \"reason\": \"{example['reason']}\"\n"
+            f'    "context_recall_score": {example["context_recall_score"]},\n'
+            f'    "reason": "{example["reason"]}"\n'
             f"  }}\n"
             f"  ```"
             for i, example in enumerate(few_shot_examples)
