@@ -106,6 +106,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
+| clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
@@ -263,7 +264,7 @@ Call opik api on http://localhost:5173/api
 | redis.ssl | bool | `false` |  |
 | registry | string | `"ghcr.io/comet-ml/opik"` |  |
 | standalone | bool | `true` |  |
-| zookeeper.enabled | bool | `false` |  |
+| zookeeper.enabled | bool | `true` |  |
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
 | zookeeper.headless.publishNotReadyAddresses | bool | `true` |  |
