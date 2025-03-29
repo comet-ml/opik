@@ -1500,9 +1500,9 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<List<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds) {
+    public Mono<Set<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds) {
         if (traceIds.isEmpty()) {
-            return Mono.just(List.of());
+            return Mono.just(Set.of());
         }
 
         return Mono.from(connectionFactory.create())
@@ -1513,7 +1513,7 @@ class SpanDAO {
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
-                .collectList();
+                .collect(Collectors.toSet());
     }
 
     @WithSpan
