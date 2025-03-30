@@ -439,10 +439,20 @@ class TraceDAOImpl implements TraceDAO {
                   t.last_updated_by as last_updated_by,
                   t.duration as duration,
                   t.thread_id as thread_id,
-                  sumMap(s.usage) as usage,
-                  sum(s.total_estimated_cost) as total_estimated_cost,
+                  sumMap(sagg.usage) as usage,
+                  sum(sagg.total_estimated_cost) as total_estimated_cost,
                   groupUniqArrayArray(c.comments_array) as comments,
-                  max(s.span_count) AS span_count
+                  max(sagg.span_count) AS span_count,
+                  groupArrayIf(
+                      toJSONString(
+                          map(
+                              'name', g.name,
+                              'passed', toString(g.passed),
+                              'details', g.details
+                          )
+                      ),
+                      g.entity_id != ''
+                  ) as guardrail_checks,
              FROM (
                  SELECT
                      *,
@@ -452,7 +462,7 @@ class TraceDAOImpl implements TraceDAO {
                          NULL) AS duration
                  FROM traces t
                  <if(trace_aggregation_filters)>
-                 LEFT JOIN spans_agg s ON t.id = s.trace_id
+                 LEFT JOIN spans_agg sagg ON t.id = s.trace_id
                  <endif>
                  <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
@@ -488,8 +498,10 @@ class TraceDAOImpl implements TraceDAO {
                  LIMIT 1 BY id
                  LIMIT :limit <if(offset)>OFFSET :offset <endif>
              ) AS t
-             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+             LEFT JOIN spans_agg AS sagg ON t.id = sagg.trace_id
              LEFT JOIN comments_agg AS c ON t.id = c.entity_id
+             LEFT JOIN spans AS s ON t.id = s.trace_id
+             LEFT JOIN guardrails AS g ON s.id = g.trace_id
              GROUP BY
                 t.*
              ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
