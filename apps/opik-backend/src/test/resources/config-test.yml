@@ -118,7 +118,7 @@ openTelemetry:
   # Description: how long it takes to expire non-used keys
   ttl: 3h
 
-# Authentication configuration. This is not isEnabled by default for open source installations.
+# Authentication configuration. This is not enabled by default for open source installations.
 authentication:
   # Default: false
   # Description: Whether or not to enable authentication
@@ -155,15 +155,15 @@ batchOperations:
     # involve the use of temp tables for querying
     maxExperimentInClauseSize: 100
 
-# Configuration for rate limit. This is not isEnabled by default for open source installations.
-# If isEnabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
+# Configuration for rate limit. This is not enabled by default for open source installations.
+# If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
 # prompts, feedback definitions, experiments, datasets and dataset items
 rateLimit:
   # Default: false
-  # Description: Whether or not rate limit is isEnabled
+  # Description: Whether or not rate limit is enabled
   enabled: false
 
-# Configuration for usage limit. This is not isEnabled by default for open source installations.
+# Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
 # response.
 usageLimit:
@@ -243,7 +243,7 @@ llmProviderClient:
 # Configuration for cache manager
 cacheManager:
   # Default: false
-  # Description: Whether or not cache manager is isEnabled
+  # Description: Whether or not cache manager is enabled
   enabled: false
   # Default: PT1S
   # Description: Time to live for cache entries in using the formats accepted are based on the ISO-8601: https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-
