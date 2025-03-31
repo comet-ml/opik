@@ -13,4 +13,5 @@ export interface FindExperimentsRequest {
     name?: string;
     datasetDeleted?: boolean;
     promptId?: string;
+    sorting?: string;
 }

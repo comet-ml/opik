@@ -17,6 +17,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
+import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -50,6 +51,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
+import static com.comet.opik.api.attachment.EntityType.TRACE;
 import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
@@ -106,6 +108,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull SpanService spanService;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull CommentDAO commentDAO;
+    private final @NonNull AttachmentService attachmentService;
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
@@ -330,6 +333,7 @@ class TraceServiceImpl implements TraceService {
         log.info("Deleting trace by id '{}'", id);
         return feedbackScoreDAO.deleteByEntityId(EntityType.TRACE, id)
                 .then(Mono.defer(() -> commentDAO.deleteByEntityId(CommentDAO.EntityType.TRACE, id)))
+                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, Set.of(id))))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(Set.of(id))))
                 .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(id, connection))));
     }
@@ -342,6 +346,7 @@ class TraceServiceImpl implements TraceService {
         return template
                 .nonTransaction(connection -> feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, ids))
                 .then(Mono.defer(() -> commentDAO.deleteByEntityIds(CommentDAO.EntityType.TRACE, ids)))
+                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, ids)))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(ids)))
                 .then(Mono.defer(() -> template.nonTransaction(connection -> dao.delete(ids, connection))));
     }
