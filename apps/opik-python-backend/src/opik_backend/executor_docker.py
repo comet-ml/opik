@@ -66,7 +66,7 @@ class DockerExecutor(CodeExecutorBase):
     def release_container(self, container):
         def async_release():
             try:
-                logger.debug(f"Stopping container {container.id}. Will create a new one.")
+                logger.info(f"Stopping container {container.id}. Will create a new one.")
                 container.stop(timeout=1)
                 container.remove(force=True)
                 self.create_container()
