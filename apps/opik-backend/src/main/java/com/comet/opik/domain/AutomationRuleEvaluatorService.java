@@ -17,6 +17,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -154,7 +155,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                 .build();
                     case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython -> {
                         if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
-                            throw new ServiceUnavailableException("Python evaluator is disabled");
+                            throw new ServerErrorException("Python evaluator is disabled", 501);
                         }
                         yield UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
                                 .code(AutomationModelEvaluatorMapper.INSTANCE
