@@ -16,6 +16,7 @@ export * as automationRuleEvaluators from "./automationRuleEvaluators";
 export * as chatCompletions from "./chatCompletions";
 export * as datasets from "./datasets";
 export * as experiments from "./experiments";
+export * as openTelemetryIngestion from "./openTelemetryIngestion";
 export * as traces from "./traces";
 export * as redirect from "./redirect";
 export * from "./attachments/client/requests";

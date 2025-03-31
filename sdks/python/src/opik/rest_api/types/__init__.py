@@ -119,6 +119,7 @@ from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_public import ExperimentItemPublic
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
+from .export_trace_service_request import ExportTraceServiceRequest
 from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
 from .feedback_create import (
     FeedbackCreate,
@@ -369,6 +370,7 @@ __all__ = [
     "ExperimentItemPublic",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
     "FeedbackCreate_Categorical",

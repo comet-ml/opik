@@ -52,6 +52,8 @@ tags:
   description: Feedback definitions related resources
 - name: LlmProviderKey
   description: LLM Provider Key
+- name: OpenTelemetry Ingestion
+  description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -1524,6 +1526,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/otel/v1/traces:
+    post:
+      tags:
+      - OpenTelemetry Ingestion
+      operationId: receiveProtobufTraces
+      requestBody:
+        content:
+          application/x-protobuf:
+            schema:
+              $ref: "#/components/schemas/JsonNode"
+      responses:
+        default:
+          description: default response
+          content:
+            '*/*': {}
   /v1/private/projects:
     get:
       tags:
@@ -5844,6 +5861,8 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+    ExportTraceServiceRequest:
+      $ref: "#/components/schemas/JsonNode"
     PercentageValues:
       type: object
       properties:

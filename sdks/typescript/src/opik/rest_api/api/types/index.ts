@@ -146,6 +146,7 @@ export * from "./ProviderApiKeyPublicProvider";
 export * from "./ProviderApiKeyPublic";
 export * from "./ProviderApiKeyProvider";
 export * from "./ProviderApiKey";
+export * from "./ExportTraceServiceRequest";
 export * from "./PercentageValues";
 export * from "./Project";
 export * from "./ProjectPagePublic";
