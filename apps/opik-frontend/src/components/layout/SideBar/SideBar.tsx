@@ -390,8 +390,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         size="icon-2xs"
         onClick={() => setExpanded((s) => !s)}
         className={cn(
-          "absolute -right-3 top-2 hidden rounded-full z-50",
-          expanded ? "group-hover:flex" : "flex",
+          "absolute -right-3 top-2 hidden rounded-full z-50 group-hover:flex",
         )}
       >
         {expanded ? <ChevronLeft /> : <ChevronRight />}
@@ -411,15 +410,19 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
             {logo}
           </Link>
         </div>
-        <div className="relative flex h-[calc(100%-var(--header-height))] flex-col justify-between px-3 py-4">
+        <div className="relative flex h-[calc(100%-var(--header-height))]">
           {renderExpandCollapseButton()}
-          <ul className="flex flex-col gap-1">{renderGroups(MENU_ITEMS)}</ul>
-          <div className="flex flex-col gap-4">
-            <Separator />
-            <ul className="flex flex-col gap-1">
-              <GitHubStarListItem expanded={expanded} />
-              {renderItems(bottomMenuItems)}
+          <div className="flex min-h-0 grow flex-col justify-between overflow-auto px-3 py-4">
+            <ul className="flex flex-col gap-1 pb-2">
+              {renderGroups(MENU_ITEMS)}
             </ul>
+            <div className="flex flex-col gap-4">
+              <Separator />
+              <ul className="flex flex-col gap-1">
+                <GitHubStarListItem expanded={expanded} />
+                {renderItems(bottomMenuItems)}
+              </ul>
+            </div>
           </div>
         </div>
       </aside>

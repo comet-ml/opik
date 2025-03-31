@@ -1,3 +1,4 @@
+import isObject from "lodash/isObject";
 import get from "lodash/get";
 import isString from "lodash/isString";
 import uniq from "lodash/uniq";
@@ -127,4 +128,44 @@ export function extractImageUrls(input?: object) {
   const inputImages = extractInputImages(input);
 
   return uniq([...openAIImages, ...inputImages]);
+}
+
+export function isImageString(str?: unknown): boolean {
+  if (!isString(str)) {
+    return false;
+  }
+
+  if (str.startsWith("data:image/")) {
+    return true;
+  }
+
+  for (const prefix of Object.keys(BASE64_PREFIXES_MAP)) {
+    if (str.startsWith(prefix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export const BASE_64_OVERRIDE_TEXT = "[image]";
+export function replaceBase64ImageValues<T>(v: T): T {
+  if (isImageString(v)) {
+    return BASE_64_OVERRIDE_TEXT as T;
+  }
+
+  if (Array.isArray(v)) {
+    return v.map(replaceBase64ImageValues) as T;
+  }
+
+  if (isObject(v)) {
+    return Object.fromEntries(
+      Object.entries(v).map(([key, value]) => [
+        key,
+        replaceBase64ImageValues(value),
+      ]),
+    ) as T;
+  }
+
+  return v;
 }

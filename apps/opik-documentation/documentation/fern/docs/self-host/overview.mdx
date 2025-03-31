@@ -13,19 +13,51 @@ If you choose to self-host Opik, you can choose between two deployment options:
 
 ## Getting started
 
-If you would like to try out Opik locally, we recommend using our Local installation based on `docker compose`. Assuming you have `git` and `docker` installed, you can get started in a couple of minutes:
+If you would like to try out Opik locally, we recommend using our Local installation
+script. Assuming you have `git` and `docker` installed, you can get started with
+just one line of code:
 
+<Tabs>
+ <Tab value="Linux / Mac" title="Linux / Mac">
 ```bash
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
-# Run the Opik platform
-cd opik/deployment/docker-compose
-docker compose up --detach
+# Navigate to the opik folder
 
-```
+cd opik
 
-Opik will now be available at <a href="http://localhost:5173" target="_blank">http://localhost:5173</a> and all traces logged from your local machine will be logged to this local Opik instance. In order for traces and other data to be logged to your Opik instance, you need to make sure that the Opik Python SDK is configured to point to the Opik server you just started. You can do this by running the following command:
+# Start the Opik platform
+
+./opik.sh
+
+````
+
+</Tab>
+<Tab value="Windows" title="Windows">
+
+```powershell
+# Clone the Opik repository
+git clone https://github.com/comet-ml/opik.git
+
+# Navigate to the opik folder
+cd opik
+
+# Start the Opik platform
+powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+````
+
+</Tab>
+</Tabs>
+
+Opik will now be available at
+
+<a href="http://localhost:5173" target="_blank">
+  http://localhost:5173
+</a>
+and all traces logged from your local machine will be logged to this local Opik instance. In order for traces and other data
+to be logged to your Opik instance, you need to make sure that the Opik Python SDK is configured to point to the Opik server
+you just started. You can do this by running the following command:
 
 ```bash
 # Configure the Python SDK to point to the local Opik platform

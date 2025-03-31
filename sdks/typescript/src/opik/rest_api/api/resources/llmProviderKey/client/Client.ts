@@ -122,7 +122,7 @@ export class LlmProviderKey {
      */
     public async findLlmProviderKeys(
         requestOptions?: LlmProviderKey.RequestOptions,
-    ): Promise<OpikApi.ProjectPagePublic> {
+    ): Promise<OpikApi.ProviderApiKeyPagePublic> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -150,7 +150,7 @@ export class LlmProviderKey {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectPagePublic.parseOrThrow(_response.body, {
+            return serializers.ProviderApiKeyPagePublic.parseOrThrow(_response.body, {
                 unrecognizedObjectKeys: "passthrough",
                 allowUnrecognizedUnionMembers: true,
                 allowUnrecognizedEnumValues: true,
@@ -233,14 +233,7 @@ export class LlmProviderKey {
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                    );
+                    throw new OpikApi.UnauthorizedError(_response.error.body);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -409,14 +402,7 @@ export class LlmProviderKey {
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                    );
+                    throw new OpikApi.UnauthorizedError(_response.error.body);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {

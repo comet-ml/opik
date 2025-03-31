@@ -425,7 +425,7 @@ class DatasetServiceImpl implements DatasetService {
         log.info("Getting dataset BI events daily data");
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var biInformation = dao.getDatasetsBIInformation();
+            var biInformation = dao.getDatasetsBIInformation(ProjectService.DEFAULT_WORKSPACE_ID, DemoData.DATASETS);
             return BiInformationResponse.builder()
                     .biInformation(biInformation)
                     .build();
@@ -538,7 +538,7 @@ class DatasetServiceImpl implements DatasetService {
     public long getDailyCreatedCount() {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            return dao.getDatasetsBIInformation()
+            return dao.getDatasetsBIInformation(ProjectService.DEFAULT_WORKSPACE_ID, DemoData.DATASETS)
                     .stream()
                     .mapToLong(BiInformationResponse.BiInformation::count)
                     .sum();

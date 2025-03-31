@@ -113,7 +113,11 @@ public class OpenTelemetryMapper {
 
                         extractToJsonColumn(node, key, value);
                 }
-            }, () -> log.debug("No rule found for key: {} (value: {}). Ignoring it.", key, attribute.getValue()));
+            }, () -> {
+                // if it's not explicitly request to drop, we keep it in input
+                log.debug("No rule found for kv {} -> {}. Using for Input.", key, attribute.getValue());
+                extractToJsonColumn(input, key, value);
+            });
         });
 
         if (!metadata.isEmpty()) {

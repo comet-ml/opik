@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -36,6 +37,7 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements Automat
 
     private final float samplingRate;
 
+    @JsonIgnore
     @NotNull private final T code;
 
     // TODO: add @NotNull after deprecated endpoint is removed
