@@ -29,11 +29,12 @@ class DockerExecutor(CodeExecutorBase):
         self.container_pool = Queue()
         self.pool_lock = Lock()
         self.ensure_pool_filled()
+        self.running = True
         atexit.register(self.cleanup)
 
     def ensure_pool_filled(self):
         with self.pool_lock:
-            while len(self.get_managed_containers()) < self.max_parallel:
+            while len(self.get_managed_containers()) < self.max_parallel and self.running:
                 logger.warning("Not enough containers running; creating more...")
                 self.create_container()
 
@@ -69,7 +70,7 @@ class DockerExecutor(CodeExecutorBase):
         executor.submit(async_release)
 
     def get_container(self):
-        while True:
+        while self.running:
             try:
                 return self.container_pool.get(timeout=self.exec_timeout)
             except Exception as e:
@@ -118,6 +119,7 @@ class DockerExecutor(CodeExecutorBase):
             executor.submit(async_replace)
 
     def cleanup(self):
+        self.running = False
         """Clean up all containers managed by this executor."""
         while not self.container_pool.empty():
             try:
