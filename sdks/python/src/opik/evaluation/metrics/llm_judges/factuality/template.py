@@ -46,7 +46,7 @@ def generate_query(
 ) -> str:
     examples_str = "\n\n".join(
         [
-            f"Example {i+1}:\n"
+            f"Example {i + 1}:\n"
             f"Input: {example['input']}\n"
             f"Output: {example['output']}\n"
             f"Contexts: {example['context']}\n"
