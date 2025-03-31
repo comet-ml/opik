@@ -10,7 +10,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.infrastructure.PythonEvaluatorConfig;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
@@ -70,7 +70,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull AutomationRuleEvaluatorLogsDAO logsDAO;
-    private final @NonNull @Config("pythonEvaluator") PythonEvaluatorConfig pythonEvaluatorConfig;
+    private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig;
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
@@ -97,7 +97,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
                 case AutomationRuleEvaluatorUserDefinedMetricPython userDefinedMetricPython -> {
-                    if (!pythonEvaluatorConfig.isEnabled()) {
+                    if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
                         throw new ServiceUnavailableException("Python evaluator is disabled");
                     }
                     var definition = userDefinedMetricPython.toBuilder()
@@ -153,7 +153,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                 .lastUpdatedBy(userName)
                                 .build();
                     case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython -> {
-                        if (!pythonEvaluatorConfig.isEnabled()) {
+                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
                             throw new ServiceUnavailableException("Python evaluator is disabled");
                         }
                         yield UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
