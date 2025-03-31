@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Project;
+import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
+import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
@@ -17,12 +19,12 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentUtilsTest;
-import com.comet.opik.utils.ProjectUtilsTest;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -100,11 +102,13 @@ class AttachmentResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
     private TransactionTemplate mySqlTemplate;
+    private ProjectService projectService;
     private String baseURI;
     public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576; //6M
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate, ProjectService projectService)
+            throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -116,6 +120,7 @@ class AttachmentResourceTest {
         this.attachmentResourceClient = new AttachmentResourceClient(client);
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.mySqlTemplate = mySqlTemplate;
+        this.projectService = projectService;
 
         ClientSupportUtils.config(client);
     }
@@ -165,8 +170,7 @@ class AttachmentResourceTest {
                 startUploadRequest.entityId());
 
         // To verify that the file was uploaded we get the list of attachments
-        Project project = ProjectUtilsTest
-                .findProjectByNames(mySqlTemplate, workspaceId, List.of(startUploadRequest.projectName())).get(0);
+        Project project = projectService.findByNames(workspaceId, List.of(startUploadRequest.projectName())).getFirst();
         var page = attachmentResourceClient.attachmentList(project.id(), startUploadRequest.entityType(),
                 startUploadRequest.entityId(), UUID.randomUUID().toString(), apiKey, workspaceName, 200);
 
@@ -174,8 +178,21 @@ class AttachmentResourceTest {
         AttachmentUtilsTest.verifyPage(page, expectedPage);
 
         // To verify the link, we download attachment using that link
-        var downloadedFileData = attachmentResourceClient.downloadFileExternal(page.content().get(0).link());
+        String downloadLink = page.content().get(0).link();
+        var downloadedFileData = attachmentResourceClient.downloadFileExternal(downloadLink, 200);
         assertThat(downloadedFileData).isEqualTo(fileData);
+
+        // Delete attachment and verify it's not available
+        DeleteAttachmentsRequest deleteAttachmentsRequest = AttachmentUtilsTest.prepareDeleteRequest(startUploadRequest,
+                project.id());
+        attachmentResourceClient.deleteAttachments(deleteAttachmentsRequest, apiKey, workspaceName, 204);
+
+        page = attachmentResourceClient.attachmentList(project.id(), startUploadRequest.entityType(),
+                startUploadRequest.entityId(), UUID.randomUUID().toString(), apiKey, workspaceName, 200);
+        AttachmentUtilsTest.verifyPage(page, Attachment.AttachmentPage.empty(1));
+
+        // Try to download deleted file, should fail
+        attachmentResourceClient.downloadFileExternal(downloadLink, 404);
     }
 
     @Test
