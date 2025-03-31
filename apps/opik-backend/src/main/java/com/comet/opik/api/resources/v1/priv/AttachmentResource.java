@@ -5,6 +5,7 @@ import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.AttachmentSearchCriteria;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
+import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
@@ -81,6 +82,7 @@ public class AttachmentResource {
 
     @POST
     @Path("/upload-complete")
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(operationId = "startMultiPartUpload", summary = "Start multipart attachment upload", description = "Start multipart attachment upload", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
@@ -209,5 +211,28 @@ public class AttachmentResource {
                 .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
                 .header("Content-Type", mimeType)
                 .build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "deleteAttachments", summary = "Delete attachments", description = "Delete attachments", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response deleteAttachments(
+            @RequestBody(content = @Content(schema = @Schema(implementation = CompleteMultipartUploadRequest.class))) @Valid DeleteAttachmentsRequest request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Delete attachments on workspace_id '{}' with request '{}'", workspaceId, request);
+
+        attachmentService.delete(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Complete Delete attachments on workspace_id '{}' with request '{}'", workspaceId, request);
+
+        return Response.noContent().build();
     }
 }

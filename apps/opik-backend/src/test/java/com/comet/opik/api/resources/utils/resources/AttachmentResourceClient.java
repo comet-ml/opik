@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
+import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
@@ -134,6 +135,20 @@ public class AttachmentResourceClient {
         }
     }
 
+    public void deleteAttachments(
+            DeleteAttachmentsRequest request, String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
     public void uploadFile(StartMultipartUploadResponse startUploadResponse, byte[] data, String apiKey,
             String workspaceName) {
         try (var response = client.target(startUploadResponse.preSignUrls().getFirst())
@@ -155,25 +170,36 @@ public class AttachmentResourceClient {
         }
     }
 
-    public byte[] downloadFile(String url, String apiKey) throws IOException {
+    public byte[] downloadFile(String url, String apiKey, int expectedStatus) throws IOException {
         try (var response = client.target(url)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .get()) {
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
-            InputStream inputStream = response.readEntity(InputStream.class);
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
-            return IOUtils.toByteArray(inputStream);
+            if (expectedStatus == 200) {
+                InputStream inputStream = response.readEntity(InputStream.class);
+
+                return IOUtils.toByteArray(inputStream);
+            }
+
+            return null;
         }
     }
 
-    public byte[] downloadFileExternal(String url) throws IOException {
+    public byte[] downloadFileExternal(String url, int expectedStatus) throws IOException {
         try (var response = externatClient.target(url)
                 .request()
                 .get()) {
-            InputStream inputStream = response.readEntity(InputStream.class);
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
-            return IOUtils.toByteArray(inputStream);
+            if (expectedStatus == 200) {
+                InputStream inputStream = response.readEntity(InputStream.class);
+
+                return IOUtils.toByteArray(inputStream);
+            }
+
+            return null;
         }
     }
 }

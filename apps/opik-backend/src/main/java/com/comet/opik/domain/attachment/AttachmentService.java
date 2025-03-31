@@ -5,6 +5,8 @@ import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.AttachmentInfoHolder;
 import com.comet.opik.api.attachment.AttachmentSearchCriteria;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
+import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
 import com.comet.opik.domain.ProjectService;
@@ -30,7 +32,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.attachment.AttachmentUtils.KEY_TEMPLATE;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -47,6 +51,10 @@ public interface AttachmentService {
     InputStream downloadAttachment(AttachmentInfo attachmentInfo, String workspaceId);
 
     Mono<Attachment.AttachmentPage> list(int page, int size, AttachmentSearchCriteria criteria, String baseUrlEncoded);
+
+    Mono<Long> delete(DeleteAttachmentsRequest request);
+
+    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
 }
 
 @Slf4j
@@ -62,8 +70,8 @@ class AttachmentServiceImpl implements AttachmentService {
     private static final Tika tika = new Tika();
 
     @Override
-    public StartMultipartUploadResponse startMultiPartUpload(StartMultipartUploadRequest startUploadRequest,
-            String workspaceId, String userName) {
+    public StartMultipartUploadResponse startMultiPartUpload(@NonNull StartMultipartUploadRequest startUploadRequest,
+            @NonNull String workspaceId, @NonNull String userName) {
         if (config.getS3Config().isMinIO()) {
             return prepareMinIOUploadResponse(startUploadRequest);
         }
@@ -85,8 +93,9 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
-    public void completeMultiPartUpload(CompleteMultipartUploadRequest completeUploadRequest, String workspaceId,
-            String userName) {
+    public void completeMultiPartUpload(@NonNull CompleteMultipartUploadRequest completeUploadRequest,
+            @NonNull String workspaceId,
+            @NonNull String userName) {
         // In case of MinIO complete is not needed, file is uploaded directly via BE
         if (config.getS3Config().isMinIO()) {
             log.info("Skipping completeMultiPartUpload for MinIO");
@@ -108,7 +117,8 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
-    public void uploadAttachment(AttachmentInfo attachmentInfo, byte[] data, String workspaceId, String userName) {
+    public void uploadAttachment(@NonNull AttachmentInfo attachmentInfo, byte[] data, @NonNull String workspaceId,
+            @NonNull String userName) {
         if (!config.getS3Config().isMinIO()) {
             log.warn("uploadAttachment is forbidden for S3");
             throw new ClientErrorException(
@@ -129,7 +139,7 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
-    public InputStream downloadAttachment(AttachmentInfo attachmentInfo, String workspaceId) {
+    public InputStream downloadAttachment(@NonNull AttachmentInfo attachmentInfo, @NonNull String workspaceId) {
         if (!config.getS3Config().isMinIO()) {
             log.warn("downloadAttachment is forbidden for S3");
             throw new ClientErrorException(
@@ -142,8 +152,8 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
-    public Mono<Attachment.AttachmentPage> list(int page, int size, AttachmentSearchCriteria criteria,
-            String baseUrlEncoded) {
+    public Mono<Attachment.AttachmentPage> list(int page, int size, @NonNull AttachmentSearchCriteria criteria,
+            @NonNull String baseUrlEncoded) {
         String baseUrl = decodeBaseUrl(baseUrlEncoded);
 
         return attachmentDAO.list(page, size, criteria)
@@ -156,6 +166,41 @@ class AttachmentServiceImpl implements AttachmentService {
                                     workspaceId))
                             .build());
                 }));
+    }
+
+    @Override
+    public Mono<Long> delete(@NonNull DeleteAttachmentsRequest request) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            Set<String> keys = request.fileNames().stream()
+                    .map(fileName -> prepareKey(AttachmentInfo.builder()
+                            .fileName(fileName)
+                            .containerId(request.containerId())
+                            .entityType(request.entityType())
+                            .entityId(request.entityId())
+                            .build(), workspaceId))
+                    .collect(Collectors.toSet());
+
+            return Mono.fromRunnable(() -> fileService.deleteObjects(keys));
+        }).then(Mono.defer(() -> attachmentDAO.delete(request)));
+    }
+
+    @Override
+    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+                .flatMap(attachments -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    Set<String> keys = attachments.stream()
+                            .map(attachment -> prepareKey(attachment, workspaceId))
+                            .collect(Collectors.toSet());
+
+                    return Mono.fromRunnable(() -> fileService.deleteObjects(keys));
+                }))
+                .then(attachmentDAO.deleteByEntityIds(entityType, entityIds));
     }
 
     private List<Attachment> enhanceWithDownloadUrl(List<Attachment> attachments, AttachmentSearchCriteria criteria,
