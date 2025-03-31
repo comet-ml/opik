@@ -284,4 +284,4 @@ pythonEvaluator:
 serviceToggles:
   # Default: false for testing. It should be enabled for test scenarios when it's relevant.
   # Description: Whether or not Python evaluator is enabled
-  pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-false}
+  pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-"false"}
