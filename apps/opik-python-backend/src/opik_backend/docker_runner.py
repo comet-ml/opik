@@ -75,7 +75,7 @@ def create_container():
     new_container = client.containers.run(
         image=f"{IMAGE_REGISTRY}/{IMAGE_NAME}:{IMAGE_TAG}",
         command=["tail", "-f", "/dev/null"], # a never ending process so Docker wont kill the container
-        mem_limit="128mb",
+        mem_limit="256mb",
         cpu_shares=2,
         detach=True,
         network_disabled=True,
