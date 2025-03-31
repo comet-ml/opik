@@ -1,9 +1,10 @@
 const createButton = (href, text, icon = "") => {
   const link = document.createElement("a");
   link.href = href;
-  link.className =
-    "inline-flex items-center gap-1.5 rounded-md border border-gray-700/50 bg-gray-900/50 px-3 py-1.5 text-sm font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800/50";
+  link.style.cssText =
+    "border: 0 solid #e5e7eb; box-sizing: inherit; outline-color: transparent; color: inherit; text-decoration: inherit; display: inline-flex; align-items: center; border-radius: .375rem; border-width: 1px; padding-left: .75rem; padding-right: .75rem; padding-bottom: .375rem; padding-top: .375rem; font-size: .875rem; line-height: 1.25rem; font-weight: 500;";
   link.target = "_blank";
+
   link.rel = "noreferrer";
   if (icon) link.innerHTML = icon;
   link.appendChild(document.createTextNode(text));
@@ -25,7 +26,8 @@ const injectGitHubLink = () => {
   const colabUrl = "https://colab.research.google.com/github/comet-ml/opik/blob/main" + notebookPath;
 
   const container = document.createElement("div");
-  container.className = "rounded-lg p-4 first:mt-0 callout-outlined-tip mt-24";
+  container.className = "fern-callout rounded-lg p-4 first:mt-0 callout-outlined-tip mt-24";
+  container.setAttribute("data-intent", "tip");
 
   const content = document.createElement("div");
   content.className = "flex items-center justify-between";
@@ -45,7 +47,7 @@ const injectGitHubLink = () => {
   rightSection.className = "flex items-center gap-2";
 
   const githubIcon =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="h-4 w-4 mr-1"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="black" class="h-4 w-4 mr-1"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
 
   const colabIcon =
     '<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-4 w-4 mr-1"><g><path d="M4.54,9.46,2.19,7.1a6.93,6.93,0,0,0,0,9.79l2.36-2.36A3.59,3.59,0,0,1,4.54,9.46Z" fill="#E8710A"/><path d="M2.19,7.1,4.54,9.46a3.59,3.59,0,0,1,5.08,0l1.71-2.93h0l-.1-.08h0A6.93,6.93,0,0,0,2.19,7.1Z" fill="#F9AB00"/><path d="M11.34,17.46h0L9.62,14.54a3.59,3.59,0,0,1-5.08,0L2.19,16.9a6.93,6.93,0,0,0,9,.65l.11-.09" fill="#F9AB00"/><path d="M12,7.1a6.93,6.93,0,0,0,0,9.79l2.36-2.36a3.59,3.59,0,1,1,5.08-5.08L21.81,7.1A6.93,6.93,0,0,0,12,7.1Z" fill="#F9AB00"/><path d="M21.81,7.1,19.46,9.46a3.59,3.59,0,0,1-5.08,5.08L12,16.9A6.93,6.93,0,0,0,21.81,7.1Z" fill="#E8710A"/></g></svg>';
