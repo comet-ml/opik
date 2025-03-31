@@ -141,7 +141,7 @@ services:
     privileged: true # Required for Docker-in-Docker, so it can launch containers
     environment:
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
-      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
+      PYTHON_CODE_EXECUTOR_STRATEGY: ${PYTHON_CODE_EXECUTOR_STRATEGY:-process}
       PYTHON_CODE_EXECUTOR_CONTAINERS_NUM: 5
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 3
       OPIK_VERSION: ${OPIK_VERSION:-latest}
