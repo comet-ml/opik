@@ -30,6 +30,17 @@ services:
       retries: 20
       start_period: 30s
 
+  clickhouse-init:
+    image: alpine:latest
+    volumes:
+      - ./clickhouse_config:/clickhouse_config_files
+      - clickhouse-config:/config
+    command: |
+      sh -c "
+        cp -r /clickhouse_config_files/* /config/ && 
+        chown -R 1000:1000 /config
+      "
+
   clickhouse:
     image: clickhouse/clickhouse-server:24.3.6.48-alpine
     pull_policy: always
@@ -44,11 +55,37 @@ services:
     volumes:
       - clickhouse:/var/lib/clickhouse/:type=volume,source=~/opik/clickhouse/data
       - clickhouse-server:/var/log/clickhouse-server/:type=volume,source=~/opik/clickhouse/logs
+      - clickhouse-config:/etc/clickhouse-server/config.d
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping" ]
       interval: 1s
       timeout: 1s
       retries: 300
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
+
+  zookeeper:
+    image: docker.io/bitnami/zookeeper:3.9.2-debian-12-r0
+    hostname: zookeeper
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: zookeeper=zookeeper:2888:3888
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    healthcheck:
+      test: [ "CMD", "/bin/bash", "-ec", "ZOO_HC_TIMEOUT=2", "/opt/bitnami/scripts/zookeeper/healthcheck.sh" ]
+      interval: 1s
+      timeout: 1s
+      retries: 300
+    volumes:
+      - zookeeper-data:/data
+      - zookeeper-datalog:/datalog
 
   minio:
     image: minio/minio:RELEASE.2025-03-12T18-04-18Z
@@ -200,7 +237,8 @@ networks:
 
 volumes:
   clickhouse:
-
   clickhouse-server:
-
+  clickhouse-config:
   mysql:
+  zookeeper-data:
+  zookeeper-datalog:
