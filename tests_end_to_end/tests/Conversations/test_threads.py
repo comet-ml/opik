@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class TestThreadsCrud:
     @pytest.mark.parametrize(
         "threads_fixture",
-        ["log_threads_low_level" 
+        ["log_threads_low_level", 
          "log_threads_with_decorator"],
     )
     @pytest.mark.sanity
