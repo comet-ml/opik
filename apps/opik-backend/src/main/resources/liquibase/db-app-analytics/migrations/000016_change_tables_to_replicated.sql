@@ -1,5 +1,4 @@
 --liquibase formatted sql
-
 --changeset liyaka:change-tables-to-replicated-01 id:create-automation-rule-evaluator-logs
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1
 (
@@ -231,3 +230,30 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces DETACH PARTITION tuple();
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 TO ${ANALYTICS_DB_DATABASE_NAME}.traces;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces1;
+
+--changeset liyaka:change-tables-to-replicated-17 id:create-attachments-table
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.attachments1
+(
+    workspace_id    String,
+    container_id    FixedString(36),
+    entity_id       FixedString(36),
+    entity_type     ENUM('trace', 'span'),
+    file_name       String,
+    mime_type       String,
+    file_size       Int64,
+    created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
+    last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9),
+    deleted_at      DateTime64(9, 'UTC') DEFAULT toDateTime64(0, 9),
+    created_by      String DEFAULT '',
+    last_updated_by String DEFAULT ''
+) ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/attachments','{replica}',last_updated_at)
+    ORDER BY (workspace_id, container_id, entity_type, entity_id, file_name)
+    SETTINGS index_granularity = 8192;
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.attachments1;
+
+--changeset liyaka:change-tables-to-replicated-18 id:migrate-attachments
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.attachments;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments DETACH PARTITION tuple();
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments SYNC SETTINGS max_table_size_to_drop = 0;
+RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 TO ${ANALYTICS_DB_DATABASE_NAME}.attachments;
+--rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments TO ${ANALYTICS_DB_DATABASE_NAME}.attachments1;
