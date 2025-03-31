@@ -107,6 +107,9 @@ component:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
+      PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
+      PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
     envFrom:
       - configMapRef:
