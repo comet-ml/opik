@@ -9,4 +9,5 @@ export interface ExperimentPagePublic {
     size?: number;
     total?: number;
     content?: OpikApi.ExperimentPublic[];
+    sortableBy?: string[];
 }

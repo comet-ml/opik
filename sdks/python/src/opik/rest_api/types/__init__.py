@@ -80,6 +80,10 @@ from .column_types_item import ColumnTypesItem
 from .comment import Comment
 from .comment_compare import CommentCompare
 from .comment_public import CommentPublic
+from .complete_multipart_upload_request import CompleteMultipartUploadRequest
+from .complete_multipart_upload_request_entity_type import (
+    CompleteMultipartUploadRequestEntityType,
+)
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
 from .data_point_number_public import DataPointNumberPublic
@@ -97,6 +101,8 @@ from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
+from .delete_attachments_request import DeleteAttachmentsRequest
+from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
 from .delete_feedback_score import DeleteFeedbackScore
 from .delta import Delta
 from .delta_role import DeltaRole
@@ -113,6 +119,7 @@ from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_public import ExperimentItemPublic
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
+from .export_trace_service_request import ExportTraceServiceRequest
 from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
 from .feedback_create import (
     FeedbackCreate,
@@ -326,6 +333,8 @@ __all__ = [
     "Comment",
     "CommentCompare",
     "CommentPublic",
+    "CompleteMultipartUploadRequest",
+    "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
     "DataPointNumberPublic",
@@ -343,6 +352,8 @@ __all__ = [
     "DatasetItemWriteSource",
     "DatasetPagePublic",
     "DatasetPublic",
+    "DeleteAttachmentsRequest",
+    "DeleteAttachmentsRequestEntityType",
     "DeleteFeedbackScore",
     "Delta",
     "DeltaRole",
@@ -359,6 +370,7 @@ __all__ = [
     "ExperimentItemPublic",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
     "FeedbackCreate_Categorical",

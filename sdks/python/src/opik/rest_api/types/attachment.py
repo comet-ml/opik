@@ -8,9 +8,9 @@ import pydantic
 
 class Attachment(UniversalBaseModel):
     link: typing.Optional[str] = None
-    file_name: typing.Optional[str] = None
-    file_size: typing.Optional[int] = None
-    mime_type: typing.Optional[str] = None
+    file_name: str
+    file_size: int
+    mime_type: str
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

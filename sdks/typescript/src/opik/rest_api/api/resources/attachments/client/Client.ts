@@ -248,6 +248,101 @@ export class Attachments {
     }
 
     /**
+     * Delete attachments
+     *
+     * @param {OpikApi.CompleteMultipartUploadRequest} request
+     * @param {Attachments.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.ForbiddenError}
+     *
+     * @example
+     *     await client.attachments.deleteAttachments({
+     *         fileName: "file_name",
+     *         entityType: "trace",
+     *         entityId: "entity_id",
+     *         fileSize: 1000000,
+     *         uploadId: "upload_id",
+     *         uploadedFileParts: [{
+     *                 eTag: "e_tag",
+     *                 partNumber: 1
+     *             }]
+     *     })
+     */
+    public async deleteAttachments(
+        request: OpikApi.CompleteMultipartUploadRequest,
+        requestOptions?: Attachments.RequestOptions,
+    ): Promise<void> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/attachment/delete",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.CompleteMultipartUploadRequest.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return;
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 401:
+                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                case 403:
+                    throw new OpikApi.ForbiddenError(
+                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
+                            unrecognizedObjectKeys: "passthrough",
+                            allowUnrecognizedUnionMembers: true,
+                            allowUnrecognizedEnumValues: true,
+                            breadcrumbsPrefix: ["response"],
+                        }),
+                    );
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/attachment/delete.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                });
+        }
+    }
+
+    /**
      * Download attachment from MinIO
      * @throws {@link OpikApi.UnauthorizedError}
      * @throws {@link OpikApi.ForbiddenError}

@@ -2,7 +2,6 @@
 
 from .types import (
     AttachmentListRequestEntityType,
-    CompleteMultipartUploadRequestEntityType,
     DownloadAttachmentRequestEntityType,
     StartMultipartUploadRequestEntityType,
     UploadAttachmentRequestEntityType,
@@ -10,7 +9,6 @@ from .types import (
 
 __all__ = [
     "AttachmentListRequestEntityType",
-    "CompleteMultipartUploadRequestEntityType",
     "DownloadAttachmentRequestEntityType",
     "StartMultipartUploadRequestEntityType",
     "UploadAttachmentRequestEntityType",

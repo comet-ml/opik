@@ -15,6 +15,7 @@ export const ExperimentPagePublic: core.serialization.ObjectSchema<
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
     content: core.serialization.list(ExperimentPublic).optional(),
+    sortableBy: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace ExperimentPagePublic {
@@ -23,5 +24,6 @@ export declare namespace ExperimentPagePublic {
         size?: number | null;
         total?: number | null;
         content?: ExperimentPublic.Raw[] | null;
+        sortableBy?: string[] | null;
     }
 }

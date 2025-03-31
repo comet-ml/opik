@@ -49,6 +49,8 @@ export class Experiments {
      * @param {OpikApi.FindExperimentsRequest} request
      * @param {Experiments.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.BadRequestError}
+     *
      * @example
      *     await client.experiments.findExperiments()
      */
@@ -56,7 +58,7 @@ export class Experiments {
         request: OpikApi.FindExperimentsRequest = {},
         requestOptions?: Experiments.RequestOptions,
     ): Promise<OpikApi.ExperimentPagePublic> {
-        const { page, size, datasetId, name, datasetDeleted, promptId } = request;
+        const { page, size, datasetId, name, datasetDeleted, promptId, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -80,6 +82,10 @@ export class Experiments {
 
         if (promptId != null) {
             _queryParams["prompt_id"] = promptId;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
         }
 
         const _response = await core.fetcher({
@@ -119,10 +125,15 @@ export class Experiments {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-            });
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                    });
+            }
         }
 
         switch (_response.error.reason) {
