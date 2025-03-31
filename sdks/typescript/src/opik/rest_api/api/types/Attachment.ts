@@ -4,7 +4,7 @@
 
 export interface Attachment {
     link?: string;
-    fileName?: string;
-    fileSize?: number;
-    mimeType?: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
 }

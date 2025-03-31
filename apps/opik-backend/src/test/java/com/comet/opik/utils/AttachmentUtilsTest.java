@@ -1,10 +1,14 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.api.attachment.Attachment;
+import com.comet.opik.api.attachment.AttachmentInfoHolder;
+import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import org.apache.tika.Tika;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,6 +46,16 @@ public class AttachmentUtilsTest {
                 .total(1)
                 .sortableBy(List.of())
                 .content(List.of(expectedAttachment))
+                .build();
+    }
+
+    public static DeleteAttachmentsRequest prepareDeleteRequest(AttachmentInfoHolder attachmentInfoHolder,
+            UUID containerId) {
+        return DeleteAttachmentsRequest.builder()
+                .containerId(containerId)
+                .entityType(attachmentInfoHolder.entityType())
+                .entityId(attachmentInfoHolder.entityId())
+                .fileNames(Set.of(attachmentInfoHolder.fileName()))
                 .build();
     }
 }

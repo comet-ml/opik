@@ -9,16 +9,16 @@ import * as core from "../../core";
 export const Attachment: core.serialization.ObjectSchema<serializers.Attachment.Raw, OpikApi.Attachment> =
     core.serialization.object({
         link: core.serialization.string().optional(),
-        fileName: core.serialization.property("file_name", core.serialization.string().optional()),
-        fileSize: core.serialization.property("file_size", core.serialization.number().optional()),
-        mimeType: core.serialization.property("mime_type", core.serialization.string().optional()),
+        fileName: core.serialization.property("file_name", core.serialization.string()),
+        fileSize: core.serialization.property("file_size", core.serialization.number()),
+        mimeType: core.serialization.property("mime_type", core.serialization.string()),
     });
 
 export declare namespace Attachment {
     export interface Raw {
         link?: string | null;
-        file_name?: string | null;
-        file_size?: number | null;
-        mime_type?: string | null;
+        file_name: string;
+        file_size: number;
+        mime_type: string;
     }
 }

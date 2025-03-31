@@ -5,6 +5,7 @@ from ..core.client_wrapper import SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..core.pydantic_utilities import parse_obj_as
+from ..errors.bad_request_error import BadRequestError
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from ..types.json_node_write import JsonNodeWrite
@@ -34,6 +35,7 @@ class ExperimentsClient:
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -52,6 +54,8 @@ class ExperimentsClient:
         dataset_deleted : typing.Optional[bool]
 
         prompt_id : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -81,6 +85,7 @@ class ExperimentsClient:
                 "name": name,
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -92,6 +97,16 @@ class ExperimentsClient:
                         type_=ExperimentPagePublic,  # type: ignore
                         object_=_response.json(),
                     ),
+                )
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
                 )
             _response_json = _response.json()
         except JSONDecodeError:
@@ -659,6 +674,7 @@ class AsyncExperimentsClient:
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -677,6 +693,8 @@ class AsyncExperimentsClient:
         dataset_deleted : typing.Optional[bool]
 
         prompt_id : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -714,6 +732,7 @@ class AsyncExperimentsClient:
                 "name": name,
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -725,6 +744,16 @@ class AsyncExperimentsClient:
                         type_=ExperimentPagePublic,  # type: ignore
                         object_=_response.json(),
                     ),
+                )
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
                 )
             _response_json = _response.json()
         except JSONDecodeError:
