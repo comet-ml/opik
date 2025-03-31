@@ -136,6 +136,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
+| component.backend.env.TOGGLE_PYTHON_EVALUATOR_ENABLED | bool | `true` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
