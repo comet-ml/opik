@@ -18,7 +18,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.ServerErrorException;
-import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -99,7 +98,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 }
                 case AutomationRuleEvaluatorUserDefinedMetricPython userDefinedMetricPython -> {
                     if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
-                        throw new ServiceUnavailableException("Python evaluator is disabled");
+                        throw new ServerErrorException("Python evaluator is disabled", 501);
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
