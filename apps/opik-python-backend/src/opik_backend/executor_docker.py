@@ -33,8 +33,12 @@ class DockerExecutor(CodeExecutorBase):
         atexit.register(self.cleanup)
 
     def ensure_pool_filled(self):
+        if not self.running:
+            logger.warning("Executor is shutting down, skipping container creation")
+            return
+
         with self.pool_lock:
-            while len(self.get_managed_containers()) < self.max_parallel and self.running:
+            while self.running and len(self.get_managed_containers()) < self.max_parallel:
                 logger.warning("Not enough containers running; creating more...")
                 self.create_container()
 
@@ -70,14 +74,23 @@ class DockerExecutor(CodeExecutorBase):
         executor.submit(async_release)
 
     def get_container(self):
+        if not self.running:
+            raise RuntimeError("Executor is shutting down, no containers available")
+            
         while self.running:
             try:
                 return self.container_pool.get(timeout=self.exec_timeout)
             except Exception as e:
+                if not self.running:
+                    raise RuntimeError("Executor is shutting down, no containers available")
+                    
                 logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Ensuring we have enough and trying again.")
                 self.ensure_pool_filled()
 
     def run_scoring(self, code: str, data: dict) -> dict:
+        if not self.running:
+            return {"code": 503, "error": "Service is shutting down"}
+            
         container = self.get_container()
         try:
             with concurrent.futures.ThreadPoolExecutor() as exec_pool:
