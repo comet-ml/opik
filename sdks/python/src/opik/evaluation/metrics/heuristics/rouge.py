@@ -1,11 +1,11 @@
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
 try:
-    from rouge_score import rouge_scorer
+    import rouge_score as rouge_score
 except ImportError:
-    rouge_scorer = None
+    rouge_score = None
 
 
 class ROUGE(base_metric.BaseMetric):
@@ -48,11 +48,11 @@ class ROUGE(base_metric.BaseMetric):
         rouge_type: str = "rouge1",
         use_stemmer: bool = False,
         split_summaries: bool = False,
-        tokenizer: Any | None = None,
+        tokenizer: Optional[Any] = None,
     ):
         super().__init__(name=name, track=track)
 
-        if rouge_scorer is None:
+        if rouge_score.rouge_scorer is None:
             raise ImportError(
                 "`rouge-score` libraries are required for ROUGE score calculation. "
                 "Install via `pip install rouge-score`."
@@ -65,7 +65,7 @@ class ROUGE(base_metric.BaseMetric):
             )
 
         self._rouge_type = rouge_type
-        self._rouge = rouge_scorer.RougeScorer(
+        self._rouge = rouge_score.rouge_scorer.RougeScorer(
             [rouge_type],
             use_stemmer=use_stemmer,
             split_summaries=split_summaries,
