@@ -11,8 +11,8 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -42,6 +42,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -55,6 +56,7 @@ public class ExperimentService {
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
     private final @NonNull PromptService promptService;
+    private final @NonNull ExperimentSortingFactory sortingFactory;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -69,17 +71,18 @@ public class ExperimentService {
                             .stream()
                             .map(ExperimentDatasetId::datasetId)
                             .collect(Collectors.toSet()))
-                    .flatMap(datasetIds -> AsyncUtils.makeMonoContextAware((userName, workspaceId) -> {
+                    .flatMap(datasetIds -> makeMonoContextAware((userName, workspaceId) -> {
 
                         if (datasetIds.isEmpty()) {
-                            return Mono.just(ExperimentPage.empty(page));
+                            return Mono.just(ExperimentPage.empty(page, sortingFactory.getSortableFields()));
                         }
 
                         return getDeletedDatasetAndBuildCriteria(experimentSearchCriteria, datasetIds, workspaceId)
                                 .subscribeOn(Schedulers.boundedElastic())
                                 .flatMap(criteria -> {
                                     if (criteria.datasetIds().isEmpty()) {
-                                        return Mono.just(ExperimentPage.empty(page));
+                                        return Mono
+                                                .just(ExperimentPage.empty(page, sortingFactory.getSortableFields()));
                                     }
 
                                     return fetchExperimentPage(page, size, criteria);

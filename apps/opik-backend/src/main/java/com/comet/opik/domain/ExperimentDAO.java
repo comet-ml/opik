@@ -6,6 +6,8 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Function;
@@ -393,7 +395,7 @@ class ExperimentDAO {
                 e.prompt_version_id,
                 e.prompt_id,
                 e.prompt_versions
-            ORDER BY e.id DESC
+            ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC, last_updated_at DESC
             LIMIT :limit OFFSET :offset
             ;
             """;
@@ -491,6 +493,8 @@ class ExperimentDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull ExperimentSortingFactory sortingFactory;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -650,16 +654,24 @@ class ExperimentDAO {
                 .flatMapMany(connection -> find(page, size, experimentSearchCriteria, connection))
                 .flatMap(this::mapToDto)
                 .collectList()
-                .map(experiments -> new ExperimentPage(page, experiments.size(), total, experiments));
+                .map(experiments -> new ExperimentPage(page, experiments.size(), total, experiments,
+                        sortingFactory.getSortableFields()));
     }
 
     private Publisher<? extends Result> find(
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
+
+        String sorting = sortingQueryBuilder.toOrderBySql(experimentSearchCriteria.sortingFields());
+
         var template = newFindTemplate(FIND, experimentSearchCriteria);
+
+        template.add("sort_fields", sorting);
+
         var statement = connection.createStatement(template.render())
                 .bind("limit", size)
                 .bind("offset", (page - 1) * size);
+
         bindSearchCriteria(statement, experimentSearchCriteria, false);
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
