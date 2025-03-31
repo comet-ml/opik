@@ -180,6 +180,9 @@ navigation:
               - page: Predibase
                 path: docs/tracing/integrations/predibase.mdx
                 slug: predibase
+              - page: Pydantic AI
+                path: docs/tracing/integrations/pydantic-ai.mdx
+                slug: pydantic-ai
               - page: Ragas
                 path: docs/tracing/integrations/ragas.mdx
                 slug: ragas
@@ -372,6 +375,9 @@ navigation:
           - page: Predibase
             path: docs/cookbook/predibase.mdx
             slug: predibase
+          - page: Pydantic AI
+            path: docs/cookbook/pydantic-ai.mdx
+            slug: pydantic-ai
           - page: Ragas
             path: docs/cookbook/ragas.mdx
             slug: ragas
