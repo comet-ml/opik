@@ -282,6 +282,6 @@ pythonEvaluator:
   url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
 
 serviceToggles:
-  # Default: true
+  # Default: false for testing. It should be enabled for test scenarios when it's relevant.
   # Description: Whether or not Python evaluator is enabled
-  pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-true}
+  pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-false}
