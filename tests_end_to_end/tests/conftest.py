@@ -506,6 +506,70 @@ def log_traces_with_spans_decorator():
     )
     yield trace_config, span_config
 
+@pytest.fixture(scope="function")
+@allure.title("Log threads using the @track decorator")
+def log_threads_with_decorator():
+    """
+    Log 3 threads with 3 inputs and 3 ouputs using the @track decorator
+    """
+        
+    thread1_config = {"thread_id": "thread_1",
+                     "inputs": ["input1_1", "input1_2", "input1_3"],
+                     "outputs": ["output1_1", "output1_2", "output1_3"]}
+    
+    thread2_config = {"thread_id": "thread_2",
+                     "inputs": ["input2_1", "input2_2", "input2_3"],
+                     "outputs": ["output2_1", "output2_2", "output2_3"]}
+    
+    thread3_config = {"thread_id": "thread_3",
+                     "inputs": ["input3_1", "input3_2", "input3_3"],
+                     "outputs": ["output3_1", "output3_2", "output3_3"]}
+    
+    thread_configs = [thread1_config, thread2_config, thread3_config]
+
+    @opik.track
+    def chat_message(input, output, thread_id):
+        opik_context.update_current_trace(
+            thread_id=thread_id
+        )
+        return output
+    
+    for thread in thread_configs:
+        for input, output in zip(thread["inputs"], thread["outputs"]):
+            chat_message(input, output, thread["thread_id"])
+    yield thread_configs
+
+
+@pytest.fixture(scope="function")
+@allure.title("Log threads using low level SDK")
+def log_threads_low_level(client: opik.Opik):
+    """
+    Log 3 threads with 3 inputs and 3 ouputs using low level SDK
+    """
+    
+    thread1_config = {"thread_id": "thread_1",
+                     "inputs": ["input1_1", "input1_2", "input1_3"],
+                     "outputs": ["output1_1", "output1_2", "output1_3"]}
+    
+    thread2_config = {"thread_id": "thread_2",
+                     "inputs": ["input2_1", "input2_2", "input2_3"],
+                     "outputs": ["output2_1", "output2_2", "output2_3"]}
+    
+    thread3_config = {"thread_id": "thread_3",
+                     "inputs": ["input3_1", "input3_2", "input3_3"],
+                     "outputs": ["output3_1", "output3_2", "output3_3"]}
+    
+    thread_configs = [thread1_config, thread2_config, thread3_config]
+
+    for thread in thread_configs:
+        for input, output in zip(thread["inputs"], thread["outputs"]):
+            client.trace(
+                name="chat_conversation",
+                input=input,
+                output=output,
+                thread_id=thread["thread_id"])
+            
+    yield thread_configs
 
 @pytest.fixture(scope="function")
 @allure.title("Create dataset via SDK, handle cleanup after test")
