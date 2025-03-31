@@ -19,8 +19,6 @@ def create_app(test_config=None):
         # load the test config if passed in
         app.config.from_mapping(test_config)
 
-    logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
-
     from opik_backend.evaluator import evaluator
     from opik_backend.post_user_signup import post_user_signup
     from opik_backend.healthcheck import healthcheck

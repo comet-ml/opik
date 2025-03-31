@@ -147,6 +147,11 @@ Call opik api on http://localhost:5173/api
 | component.backend.initContainers[0].command[1] | string | `"-c"` |  |
 | component.backend.initContainers[0].image | string | `"curlimages/curl:8.12.1"` |  |
 | component.backend.initContainers[0].name | string | `"wait-for-clickhouse-service"` |  |
+| component.backend.livenessProbe.path | string | `"/health-check?name=all&type=alive"` |  |
+| component.backend.livenessProbe.port | int | `8080` |  |
+| component.backend.readinessProbe.initialDelaySeconds | int | `20` |  |
+| component.backend.readinessProbe.path | string | `"/health-check?name=all&type=ready"` |  |
+| component.backend.readinessProbe.port | int | `8080` |  |
 | component.backend.replicaCount | int | `1` |  |
 | component.backend.run_migration | bool | `true` |  |
 | component.backend.service.ports[0].name | string | `"http"` |  |
@@ -213,6 +218,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.ports[0].targetPort | int | `8000` |  |
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
+| demoDataJob | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |

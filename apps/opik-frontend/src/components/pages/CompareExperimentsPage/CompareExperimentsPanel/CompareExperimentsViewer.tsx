@@ -70,7 +70,13 @@ const CompareExperimentsViewer: React.FunctionComponent<
     }
 
     if (experimentItem.output) {
-      return <SyntaxHighlighter data={experimentItem.output} />;
+      return (
+        <SyntaxHighlighter
+          data={experimentItem.output}
+          prettifyConfig={{ fieldType: "output" }}
+          preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
+        />
+      );
     }
 
     return null;

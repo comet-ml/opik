@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Project;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
@@ -18,6 +19,8 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.AttachmentUtilsTest;
+import com.comet.opik.utils.ProjectUtilsTest;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -34,6 +37,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
@@ -46,6 +50,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Attachment Resource Test")
@@ -94,10 +99,12 @@ class AttachmentResourceMinIOTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
     private String baseURI;
+    private String baseURIEncoded;
+    private TransactionTemplate mySqlTemplate;
     public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576;//6M
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -108,6 +115,8 @@ class AttachmentResourceMinIOTest {
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURIEncoded = Base64.getUrlEncoder().withoutPadding().encodeToString(baseURI.getBytes());
+        this.mySqlTemplate = mySqlTemplate;
 
         ClientSupportUtils.config(client);
     }
@@ -151,13 +160,24 @@ class AttachmentResourceMinIOTest {
                 startUploadRequest.projectName(),
                 startUploadRequest.entityId());
 
-        // TODO: proper verification that the file was uploaded will be done once we prepare corresponding endpoint in OPIK-728
+        // To verify that the file was uploaded we get the list of attachments
+        Project project = ProjectUtilsTest
+                .findProjectByNames(mySqlTemplate, workspaceId, List.of(startUploadRequest.projectName())).get(0);
+        var page = attachmentResourceClient.attachmentList(project.id(), startUploadRequest.entityType(),
+                startUploadRequest.entityId(), baseURIEncoded, apiKey, workspaceName, 200);
+
+        var expectedPage = AttachmentUtilsTest.prepareExpectedPage(startUploadRequest, fileData.length);
+        AttachmentUtilsTest.verifyPage(page, expectedPage);
+
+        // To verify the link, we download attachment using that link
+        var downloadedFileData = attachmentResourceClient.downloadFile(page.content().get(0).link(), apiKey);
+        assertThat(downloadedFileData).isEqualTo(fileData);
     }
 
     private StartMultipartUploadRequest prepareStartUploadRequest() {
         return factory.manufacturePojo(StartMultipartUploadRequest.class)
                 .toBuilder()
-                .path(Base64.getUrlEncoder().withoutPadding().encodeToString(baseURI.getBytes()))
+                .path(baseURIEncoded)
                 .build();
     }
 

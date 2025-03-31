@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Project;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.MultipartUploadPart;
@@ -20,6 +21,8 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.AttachmentUtilsTest;
+import com.comet.opik.utils.ProjectUtilsTest;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -36,6 +39,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
@@ -47,6 +51,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Attachment Resource Test")
@@ -95,11 +100,12 @@ class AttachmentResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
+    private TransactionTemplate mySqlTemplate;
     private String baseURI;
     public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576; //6M
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate) throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -110,6 +116,7 @@ class AttachmentResourceTest {
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.mySqlTemplate = mySqlTemplate;
 
         ClientSupportUtils.config(client);
     }
@@ -126,7 +133,7 @@ class AttachmentResourceTest {
 
     @Test
     @DisplayName("Upload attachment with MultiPart Presign URL")
-    void uploadAttachmentWithMultiPartPresignUrl() throws IOException, InterruptedException {
+    void uploadAttachmentWithMultiPartPresignUrl() throws IOException {
 
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
@@ -158,7 +165,18 @@ class AttachmentResourceTest {
                 startUploadRequest.projectName(),
                 startUploadRequest.entityId());
 
-        // TODO: proper verification that the file was uploaded will be done once we prepare corresponding endpoint in OPIK-728
+        // To verify that the file was uploaded we get the list of attachments
+        Project project = ProjectUtilsTest
+                .findProjectByNames(mySqlTemplate, workspaceId, List.of(startUploadRequest.projectName())).get(0);
+        var page = attachmentResourceClient.attachmentList(project.id(), startUploadRequest.entityType(),
+                startUploadRequest.entityId(), UUID.randomUUID().toString(), apiKey, workspaceName, 200);
+
+        var expectedPage = AttachmentUtilsTest.prepareExpectedPage(startUploadRequest, fileData.length);
+        AttachmentUtilsTest.verifyPage(page, expectedPage);
+
+        // To verify the link, we download attachment using that link
+        var downloadedFileData = attachmentResourceClient.downloadFileExternal(page.content().get(0).link());
+        assertThat(downloadedFileData).isEqualTo(fileData);
     }
 
     @Test
@@ -175,6 +193,22 @@ class AttachmentResourceTest {
         InputStream is = getClass().getClassLoader().getResourceAsStream(FILE_NAME);
         byte[] fileData = IOUtils.toByteArray(is);
         attachmentResourceClient.uploadAttachment(attachmentInfo, fileData, apiKey, workspaceName, 403);
+    }
+
+    @Test
+    @DisplayName("Direct download for AWS S3 should fail")
+    void directS3DownloadShouldFailTest() throws IOException {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Initiate upload
+        AttachmentInfo attachmentInfo = factory.manufacturePojo(AttachmentInfo.class);
+        attachmentResourceClient.downloadAttachment(attachmentInfo.fileName(), attachmentInfo.containerId(),
+                attachmentInfo.mimeType(), attachmentInfo.entityType(), attachmentInfo.entityId(), apiKey,
+                workspaceName, 403);
     }
 
     private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data) {

@@ -4405,7 +4405,10 @@ class SpansResourceTest {
                     .build();
             var expectedSpanId = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            getAndAssert(expectedSpan.toBuilder().id(expectedSpanId).build(), API_KEY, TEST_WORKSPACE);
+            getAndAssert(expectedSpan.toBuilder()
+                    .id(expectedSpanId)
+                    .projectName(DEFAULT_PROJECT)
+                    .build(), API_KEY, TEST_WORKSPACE);
         }
 
         @Test
@@ -4752,7 +4755,7 @@ class SpansResourceTest {
                 .ignoringCollectionOrderInFields("tags")
                 .isEqualTo(expectedSpan);
         assertThat(actualSpan.projectId()).isNotNull();
-        assertThat(actualSpan.projectName()).isNull();
+        assertThat(actualSpan.projectName()).isEqualTo(expectedSpan.projectName());
         assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
         assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
         assertThat(actualSpan.createdBy()).isEqualTo(USER);
@@ -4836,7 +4839,8 @@ class SpansResourceTest {
                     .build();
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var expectedSpanBuilder = expectedSpan.toBuilder();
+            var expectedSpanBuilder = expectedSpan.toBuilder()
+                    .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
             getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
         }
@@ -4881,7 +4885,8 @@ class SpansResourceTest {
 
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var expectedSpanBuilder = expectedSpan.toBuilder();
+            var expectedSpanBuilder = expectedSpan.toBuilder()
+                    .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
             getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
         }
@@ -4911,7 +4916,8 @@ class SpansResourceTest {
 
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
-            var expectedSpanBuilder = expectedSpan.toBuilder();
+            var expectedSpanBuilder = expectedSpan.toBuilder()
+                    .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
             var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
 

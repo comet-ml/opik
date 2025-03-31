@@ -186,10 +186,10 @@ services:
       OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
     healthcheck:
       test: ["CMD", "sh", "-c", "if [ -f /opt/opik-python-backend/src/opik_backend/healthcheck.py ]; then wget --spider --quiet http://127.0.0.1:8000/healthcheck; else exit 0; fi"]
-      interval: 1s
-      timeout: 30s
+      interval: 2s
+      timeout: 60s
       retries: 30
-      start_period: 1s
+      start_period: 2s
 
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
@@ -223,7 +223,7 @@ services:
       - ./nginx_default_local.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]
       interval: 1s
