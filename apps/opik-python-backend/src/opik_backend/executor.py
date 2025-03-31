@@ -33,7 +33,7 @@ class CodeExecutorBase(ABC):
                 last_line = result.output.decode("utf-8").strip().splitlines()[-1]
                 return {"code": 400, "error": json.loads(last_line).get("error")}
             except Exception as e:
-                logger.debug(f"Exception parsing execution logs: {e}")
+                logger.info(f"Exception parsing execution logs: {e}")
                 return {"code": 400, "error": "Execution failed: Python code contains an invalid metric"}
     
     @abstractmethod

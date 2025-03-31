@@ -28,8 +28,9 @@ class DockerExecutor(CodeExecutorBase):
         self.container_labels = {"managed_by": self.instance_id}
         self.container_pool = Queue()
         self.pool_lock = Lock()
-        self.ensure_pool_filled()
+        releaser_executor = concurrent.futures.ThreadPoolExecutor()
         self.running = True
+        self.ensure_pool_filled()
         atexit.register(self.cleanup)
 
     def ensure_pool_filled(self):
@@ -39,7 +40,7 @@ class DockerExecutor(CodeExecutorBase):
 
         with self.pool_lock:
             while self.running and len(self.get_managed_containers()) < self.max_parallel:
-                logger.warning("Not enough containers running; creating more...")
+                logger.info("Not enough python runner containers running; creating more...")
                 self.create_container()
 
     def get_managed_containers(self):
@@ -51,8 +52,8 @@ class DockerExecutor(CodeExecutorBase):
     def create_container(self):
         new_container = client.containers.run(
             image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
-            command=["tail", "-f", "/dev/null"],
-            mem_limit="128mb",
+        command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
+        mem_limit="256mb",
             cpu_shares=2,
             detach=True,
             network_disabled=True,
@@ -60,18 +61,19 @@ class DockerExecutor(CodeExecutorBase):
             labels=self.container_labels
         )
         self.container_pool.put(new_container)
+        logger.info(f"Created container, id '{new_container.id}'")
 
     def release_container(self, container):
         def async_release():
             try:
-                logger.debug(f"Stopping container {container.id}. Will create a new one.")
+                logger.info(f"Stopping container {container.id}. Will create a new one.")
                 container.stop(timeout=1)
                 container.remove(force=True)
                 self.create_container()
             except Exception as e:
                 logger.error(f"Error replacing container: {e}")
 
-        executor.submit(async_release)
+        releaser_executor.submit(async_release)
 
     def get_container(self):
         if not self.running:
@@ -84,7 +86,7 @@ class DockerExecutor(CodeExecutorBase):
                 if not self.running:
                     raise RuntimeError("Executor is shutting down, no containers available")
                     
-                logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Ensuring we have enough and trying again.")
+                logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Ensuring we have enough and trying again: {e}")
                 self.ensure_pool_filled()
 
     def run_scoring(self, code: str, data: dict) -> dict:
@@ -93,8 +95,8 @@ class DockerExecutor(CodeExecutorBase):
             
         container = self.get_container()
         try:
-            with concurrent.futures.ThreadPoolExecutor() as exec_pool:
-                future = exec_pool.submit(
+            with concurrent.futures.ThreadPoolExecutor() as command_executor:
+                future = command_executor.submit(
                     container.exec_run,
                     cmd=["python", "-c", PYTHON_SCORING_COMMAND, code, json.dumps(data)],
                     detach=False,
