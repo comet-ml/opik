@@ -5,12 +5,12 @@ from ..core.client_wrapper import SyncClientWrapper
 from ..core.request_options import RequestOptions
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
-from ..types.project_page_public import ProjectPagePublic
+from ..types.provider_api_key_page_public import ProviderApiKeyPagePublic
 from ..core.pydantic_utilities import parse_obj_as
 from .types.provider_api_key_write_provider import ProviderApiKeyWriteProvider
 from ..errors.unauthorized_error import UnauthorizedError
-from ..types.error_message import ErrorMessage
 from ..errors.forbidden_error import ForbiddenError
+from ..types.error_message import ErrorMessage
 from ..types.provider_api_key_public import ProviderApiKeyPublic
 from ..core.jsonable_encoder import jsonable_encoder
 from ..errors.not_found_error import NotFoundError
@@ -75,7 +75,7 @@ class LlmProviderKeyClient:
 
     def find_llm_provider_keys(
         self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> ProjectPagePublic:
+    ) -> ProviderApiKeyPagePublic:
         """
         Find LLM Provider's ApiKeys
 
@@ -86,7 +86,7 @@ class LlmProviderKeyClient:
 
         Returns
         -------
-        ProjectPagePublic
+        ProviderApiKeyPagePublic
             LLMProviderApiKey resource
 
         Examples
@@ -107,9 +107,9 @@ class LlmProviderKeyClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    ProjectPagePublic,
+                    ProviderApiKeyPagePublic,
                     parse_obj_as(
-                        type_=ProjectPagePublic,  # type: ignore
+                        type_=ProviderApiKeyPagePublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -177,9 +177,9 @@ class LlmProviderKeyClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -316,9 +316,9 @@ class LlmProviderKeyClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -412,7 +412,7 @@ class AsyncLlmProviderKeyClient:
 
     async def find_llm_provider_keys(
         self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> ProjectPagePublic:
+    ) -> ProviderApiKeyPagePublic:
         """
         Find LLM Provider's ApiKeys
 
@@ -423,7 +423,7 @@ class AsyncLlmProviderKeyClient:
 
         Returns
         -------
-        ProjectPagePublic
+        ProviderApiKeyPagePublic
             LLMProviderApiKey resource
 
         Examples
@@ -452,9 +452,9 @@ class AsyncLlmProviderKeyClient:
         try:
             if 200 <= _response.status_code < 300:
                 return typing.cast(
-                    ProjectPagePublic,
+                    ProviderApiKeyPagePublic,
                     parse_obj_as(
-                        type_=ProjectPagePublic,  # type: ignore
+                        type_=ProviderApiKeyPagePublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -530,9 +530,9 @@ class AsyncLlmProviderKeyClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )
@@ -685,9 +685,9 @@ class AsyncLlmProviderKeyClient:
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     )

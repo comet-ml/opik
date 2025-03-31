@@ -11,6 +11,7 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -29,7 +30,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -40,6 +40,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.attachment.EntityType.SPAN;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
@@ -58,6 +59,7 @@ public class SpanService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
     private final @NonNull CommentService commentService;
+    private final @NonNull AttachmentService attachmentService;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -87,7 +89,14 @@ public class SpanService {
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
-        return spanDAO.getById(id).switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))));
+        return Mono.deferContextual(ctx -> spanDAO.getById(id)
+                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))))
+                .flatMap(span -> {
+                    Project project = projectService.get(span.projectId(), ctx.get(RequestContext.WORKSPACE_ID));
+                    return Mono.just(span.toBuilder()
+                            .projectName(project.name())
+                            .build());
+                }));
     }
 
     @WithSpan
@@ -323,7 +332,8 @@ public class SpanService {
 
         return spanDAO.getSpanIdsForTraces(traceIds)
                 .flatMap(
-                        spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, new HashSet<>(spanIds)))
+                        spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
+                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds))))
                 .then(Mono.defer(() -> spanDAO.deleteByTraceIds(traceIds)))
                 .then();
     }

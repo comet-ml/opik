@@ -67,7 +67,14 @@ jobs:
             cd ${{ github.workspace }}/sdks/python
             export OPIK_URL_OVERRIDE=http://localhost:5173/api
             export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
-            pytest tests/e2e -vv 
+            pytest tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+
+        - name: Publish Test Report
+          uses: EnricoMi/publish-unit-test-result-action/linux@v2
+          if: failure()
+          with:
+            action_fail: true
+            files: ${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Keep BE log in case of failure
           if: failure()

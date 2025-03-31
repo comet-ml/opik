@@ -1,5 +1,9 @@
-from flask import Flask
 import logging
+import os
+
+from flask import Flask
+
+log_level = os.getenv("PYTHON_CODE_EXECUTOR_LOG_LEVEL", "INFO").upper()
 
 def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)

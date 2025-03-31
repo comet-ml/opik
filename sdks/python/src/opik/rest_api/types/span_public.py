@@ -2,18 +2,23 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
+import pydantic
 from .span_public_type import SpanPublicType
 import datetime as dt
 from .json_node_public import JsonNodePublic
 from .error_info_public import ErrorInfoPublic
 from .feedback_score_public import FeedbackScorePublic
 from .comment_public import CommentPublic
-import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
 
 class SpanPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
+    project_name: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    If null, the default project is used
+    """
+
     project_id: typing.Optional[str] = None
     trace_id: str
     parent_span_id: typing.Optional[str] = None

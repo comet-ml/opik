@@ -19,7 +19,8 @@ public class AsyncUtils {
 
     public static Context setRequestContext(Context ctx, Provider<RequestContext> requestContext) {
         return ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
-                .put(RequestContext.WORKSPACE_ID, requestContext.get().getWorkspaceId());
+                .put(RequestContext.WORKSPACE_ID, requestContext.get().getWorkspaceId())
+                .put(RequestContext.WORKSPACE_NAME, requestContext.get().getWorkspaceName());
     }
 
     public static Context setRequestContext(Context ctx, String userName, String workspaceId) {
