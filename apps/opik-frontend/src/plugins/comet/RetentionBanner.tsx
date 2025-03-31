@@ -53,8 +53,9 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   const label = isExceededLimit
     ? "You have exceeded your plan limits. Upgrade to ensure " +
       "uninterrupted monitoring"
-    : "You're at 80% of your 100,000 free spans. Upgrade to ensure " +
+    : `You're at 80% of your ${spanQuota?.limit} free spans. Upgrade to ensure ` +
       "uninterrupted monitoring";
+
   const closable = !isExceededLimit;
 
   return (
