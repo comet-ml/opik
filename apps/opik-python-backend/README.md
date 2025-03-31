@@ -10,7 +10,7 @@ Opik Python Backend is a service that runs Python code in a sandboxed environmen
 - Install all dependencies from `requirements.txt`.
 - For running tests, also install dependencies from `tests/test_requirements.txt`.
 - Check the important environment variables:
-    - `PYTHON_CODE_EXECUTOR_STRATEGY`: sets backend to use Docker containers (use 'docker', or empty as it's the default) or subprocesses (use 'process')
+    - `PYTHON_CODE_EXECUTOR_STRATEGY`: sets backend to use Docker containers (use 'docker' or subprocesses (use 'process', or empty as it's the default))
     - `PYTHON_CODE_EXECUTOR_PARALLEL_NUM`: number of containers or subprocesses to use (default: 5)
     - `PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS`: timeout for execution in seconds (default: 3)
 

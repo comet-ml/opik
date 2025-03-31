@@ -10,7 +10,7 @@ from opik_backend.executor_process import ProcessExecutor
 from opik_backend.http_utils import build_error_response
 
 # Environment variable to control execution strategy
-EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "docker")
+EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
 
 evaluator = Blueprint('evaluator', __name__, url_prefix='/v1/private/evaluators')
 
