@@ -1,8 +1,11 @@
 package com.comet.opik.domain.attachment;
 
 import com.comet.opik.api.attachment.Attachment;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.AttachmentInfoHolder;
 import com.comet.opik.api.attachment.AttachmentSearchCriteria;
+import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -13,10 +16,13 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -28,6 +34,12 @@ public interface AttachmentDAO {
     Mono<Long> addAttachment(AttachmentInfoHolder attachmentInfo, String mimeType, long fileSize);
 
     Mono<Attachment.AttachmentPage> list(int page, int size, AttachmentSearchCriteria criteria);
+
+    Mono<Long> delete(DeleteAttachmentsRequest request);
+
+    Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
 }
 
 @Singleton
@@ -97,6 +109,33 @@ class AttachmentDAOImpl implements AttachmentDAO {
             ;
             """;
 
+    private static final String DELETE_ATTACHMENTS = """
+            DELETE FROM attachments
+            WHERE workspace_id = :workspace_id
+            AND container_id = :container_id
+            AND entity_type = :entity_type
+            AND entity_id = :entity_id
+            AND file_name IN :file_names
+            ;
+            """;
+
+    private static final String DELETE_ATTACHMENTS_BY_ENTITY_IDS = """
+            DELETE FROM attachments
+            WHERE workspace_id = :workspace_id
+            AND entity_type = :entity_type
+            AND entity_id IN :entity_ids
+            ;
+            """;
+
+    private static final String ATTACHMENTS_BY_ENTITY_IDS = """
+            SELECT container_id, entity_id, file_name
+            FROM attachments
+            WHERE workspace_id = :workspace_id
+            AND entity_type = :entity_type
+            AND entity_id IN :entity_ids
+            ;
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
@@ -127,6 +166,71 @@ class AttachmentDAOImpl implements AttachmentDAO {
                         .collectList()
                         .map(content -> new Attachment.AttachmentPage(page, content.size(), total, content,
                                 List.of()))));
+    }
+
+    @Override
+    public Mono<Long> delete(@NonNull DeleteAttachmentsRequest request) {
+        if (CollectionUtils.isEmpty(request.fileNames())) {
+            return Mono.just(0L);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            var statement = connection.createStatement(DELETE_ATTACHMENTS);
+
+            statement.bind("entity_id", request.entityId())
+                    .bind("entity_type", request.entityType().getValue())
+                    .bind("container_id", request.containerId())
+                    .bind("file_names", request.fileNames());
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum);
+        });
+    }
+
+    @Override
+    public Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(@NonNull EntityType entityType,
+            @NonNull Set<UUID> entityIds) {
+        if (CollectionUtils.isEmpty(entityIds)) {
+            return Mono.just(List.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            var statement = connection.createStatement(ATTACHMENTS_BY_ENTITY_IDS);
+
+            statement.bind("entity_ids", entityIds)
+                    .bind("entity_type", entityType.getValue());
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> AttachmentInfo.builder()
+                            .containerId(row.get("container_id", UUID.class))
+                            .entityType(entityType)
+                            .entityId(row.get("entity_id", UUID.class))
+                            .fileName(row.get("file_name", String.class))
+                            .build()))
+                    .collectList();
+        });
+    }
+
+    @Override
+    public Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds) {
+        if (CollectionUtils.isEmpty(entityIds)) {
+            return Mono.just(0L);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            var statement = connection.createStatement(DELETE_ATTACHMENTS_BY_ENTITY_IDS);
+
+            statement.bind("entity_ids", entityIds)
+                    .bind("entity_type", entityType.getValue());
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum);
+        });
     }
 
     private Mono<? extends Result> countTotal(
