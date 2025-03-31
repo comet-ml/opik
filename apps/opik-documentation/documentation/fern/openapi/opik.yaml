@@ -208,7 +208,34 @@ paths:
       operationId: startMultiPartUpload
       requestBody:
         content:
-          '*/*':
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteMultipartUploadRequest"
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/attachment/delete:
+    post:
+      tags:
+      - Attachments
+      summary: Delete attachments
+      description: Delete attachments
+      operationId: deleteAttachments
+      requestBody:
+        content:
+          application/json:
             schema:
               $ref: "#/components/schemas/CompleteMultipartUploadRequest"
       responses:
@@ -1015,6 +1042,10 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Experiments resource
@@ -1022,6 +1053,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
     post:
       tags:
       - Experiments
@@ -3207,6 +3244,10 @@ components:
           type: integer
           format: int32
     Attachment:
+      required:
+      - file_name
+      - file_size
+      - mime_type
       type: object
       properties:
         link:
@@ -3298,6 +3339,30 @@ components:
         part_number:
           type: integer
           format: int32
+    DeleteAttachmentsRequest:
+      required:
+      - container_id
+      - entity_id
+      - entity_type
+      - file_names
+      type: object
+      properties:
+        file_names:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        entity_type:
+          type: string
+          enum:
+          - trace
+          - span
+        entity_id:
+          type: string
+          format: uuid
+        container_id:
+          type: string
+          format: uuid
     StartMultipartUploadResponse:
       required:
       - pre_sign_urls
@@ -5138,6 +5203,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Experiment_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     Experiment_Public:
       required:
       - dataset_name
