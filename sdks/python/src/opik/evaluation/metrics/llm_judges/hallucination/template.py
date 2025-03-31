@@ -88,13 +88,11 @@ def generate_query(
     else:
         examples_str = "\n\nEXAMPLES:\n\n".join(
             [
-                f"<example>\n"
-                f"Input: {example['input']}\n"
-                f"Context: {example['context']}\n"
+                f"<example>\nInput: {example['input']}\nContext: {example['context']}\n"
                 if context is not None
                 else ""
                 f"Output: {example['output']}\n\n"
-                f"{{\"score\": \"{example['score']}\", \"reason\": \"{example['reason']}\"}}\n"
+                f'{{"score": "{example["score"]}", "reason": "{example["reason"]}"}}\n'
                 f"</example>"
                 for i, example in enumerate(few_shot_examples)
             ]

@@ -1,9 +1,9 @@
 import copy
 from typing import Any, Dict, Optional
 
-from opik.rest_api import PromptVersionDetail
-
-from . import prompt_template
+from opik.rest_api.types import PromptVersionDetail
+from .prompt_template import PromptTemplate
+from .types import PromptType
 
 
 class Prompt:
@@ -16,6 +16,7 @@ class Prompt:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
+        type: PromptType = PromptType.MUSTACHE,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -40,14 +41,16 @@ class Prompt:
             name=name,
             prompt=prompt,
             metadata=metadata,
+            type=type,
         )
 
         # TODO: synchronize names? Template and prompt.
         # prompt is actually a prompt template.
-        self._template = prompt_template.PromptTemplate(new_instance.prompt)
+        self._template = PromptTemplate(template=new_instance.prompt, type=type)
         self._name = new_instance.name
         self._commit = new_instance.commit
         self._metadata = new_instance.metadata
+        self._type = new_instance.type
 
         self.__internal_api__prompt_id__: str = new_instance.__internal_api__prompt_id__
         self.__internal_api__version_id__: str = (
@@ -73,6 +76,11 @@ class Prompt:
     def metadata(self) -> Optional[Dict[str, Any]]:
         """The metadata dictionary associated with the prompt"""
         return copy.deepcopy(self._metadata)
+
+    @property
+    def type(self) -> PromptType:
+        """The prompt type of the prompt."""
+        return self._type
 
     def format(self, **kwargs: Any) -> str:
         """
@@ -100,8 +108,11 @@ class Prompt:
         prompt.__internal_api__prompt_id__ = prompt_version.prompt_id
 
         prompt._name = name
-        prompt._template = prompt_template.PromptTemplate(prompt_version.template)
+        prompt._template = PromptTemplate(
+            template=prompt_version.template,
+            type=PromptType(prompt_version.type) or PromptType.MUSTACHE,
+        )
         prompt._commit = prompt_version.commit
         prompt._metadata = prompt_version.metadata
-
+        prompt._type = prompt_version.type
         return prompt
