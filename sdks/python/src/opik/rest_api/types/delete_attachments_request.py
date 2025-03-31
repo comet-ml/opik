@@ -2,21 +2,16 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
-from .experiment_public import ExperimentPublic
-import typing_extensions
-from ..core.serialization import FieldMetadata
+from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
 
 
-class ExperimentPagePublic(UniversalBaseModel):
-    page: typing.Optional[int] = None
-    size: typing.Optional[int] = None
-    total: typing.Optional[int] = None
-    content: typing.Optional[typing.List[ExperimentPublic]] = None
-    sortable_by: typing_extensions.Annotated[
-        typing.Optional[typing.List[str]], FieldMetadata(alias="sortableBy")
-    ] = None
+class DeleteAttachmentsRequest(UniversalBaseModel):
+    file_names: typing.List[str]
+    entity_type: DeleteAttachmentsRequestEntityType
+    entity_id: str
+    container_id: str
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

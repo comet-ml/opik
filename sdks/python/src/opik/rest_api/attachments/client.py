@@ -11,7 +11,7 @@ from ..errors.forbidden_error import ForbiddenError
 from ..types.error_message import ErrorMessage
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
-from .types.complete_multipart_upload_request_entity_type import (
+from ..types.complete_multipart_upload_request_entity_type import (
     CompleteMultipartUploadRequestEntityType,
 )
 from ..types.multipart_upload_part import MultipartUploadPart
@@ -144,6 +144,7 @@ class AttachmentsClient:
         upload_id: str,
         uploaded_file_parts: typing.Sequence[MultipartUploadPart],
         project_name: typing.Optional[str] = OMIT,
+        container_id: typing.Optional[str] = OMIT,
         mime_type: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -166,6 +167,8 @@ class AttachmentsClient:
 
         project_name : typing.Optional[str]
             If null, the default project is used
+
+        container_id : typing.Optional[str]
 
         mime_type : typing.Optional[str]
 
@@ -206,6 +209,123 @@ class AttachmentsClient:
                 "project_name": project_name,
                 "entity_type": entity_type,
                 "entity_id": entity_id,
+                "container_id": container_id,
+                "file_size": file_size,
+                "mime_type": mime_type,
+                "upload_id": upload_id,
+                "uploaded_file_parts": convert_and_respect_annotation_metadata(
+                    object_=uploaded_file_parts,
+                    annotation=typing.Sequence[MultipartUploadPart],
+                    direction="write",
+                ),
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
+                        ErrorMessage,
+                        parse_obj_as(
+                            type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    def delete_attachments(
+        self,
+        *,
+        file_name: str,
+        entity_type: CompleteMultipartUploadRequestEntityType,
+        entity_id: str,
+        file_size: int,
+        upload_id: str,
+        uploaded_file_parts: typing.Sequence[MultipartUploadPart],
+        project_name: typing.Optional[str] = OMIT,
+        container_id: typing.Optional[str] = OMIT,
+        mime_type: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Delete attachments
+
+        Parameters
+        ----------
+        file_name : str
+
+        entity_type : CompleteMultipartUploadRequestEntityType
+
+        entity_id : str
+
+        file_size : int
+
+        upload_id : str
+
+        uploaded_file_parts : typing.Sequence[MultipartUploadPart]
+
+        project_name : typing.Optional[str]
+            If null, the default project is used
+
+        container_id : typing.Optional[str]
+
+        mime_type : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import MultipartUploadPart, OpikApi
+
+        client = OpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+        client.attachments.delete_attachments(
+            file_name="file_name",
+            entity_type="trace",
+            entity_id="entity_id",
+            file_size=1000000,
+            upload_id="upload_id",
+            uploaded_file_parts=[
+                MultipartUploadPart(
+                    e_tag="e_tag",
+                    part_number=1,
+                )
+            ],
+        )
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/attachment/delete",
+            method="POST",
+            json={
+                "file_name": file_name,
+                "project_name": project_name,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "container_id": container_id,
                 "file_size": file_size,
                 "mime_type": mime_type,
                 "upload_id": upload_id,
@@ -652,6 +772,7 @@ class AsyncAttachmentsClient:
         upload_id: str,
         uploaded_file_parts: typing.Sequence[MultipartUploadPart],
         project_name: typing.Optional[str] = OMIT,
+        container_id: typing.Optional[str] = OMIT,
         mime_type: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -674,6 +795,8 @@ class AsyncAttachmentsClient:
 
         project_name : typing.Optional[str]
             If null, the default project is used
+
+        container_id : typing.Optional[str]
 
         mime_type : typing.Optional[str]
 
@@ -722,6 +845,131 @@ class AsyncAttachmentsClient:
                 "project_name": project_name,
                 "entity_type": entity_type,
                 "entity_id": entity_id,
+                "container_id": container_id,
+                "file_size": file_size,
+                "mime_type": mime_type,
+                "upload_id": upload_id,
+                "uploaded_file_parts": convert_and_respect_annotation_metadata(
+                    object_=uploaded_file_parts,
+                    annotation=typing.Sequence[MultipartUploadPart],
+                    direction="write",
+                ),
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    typing.cast(
+                        ErrorMessage,
+                        parse_obj_as(
+                            type_=ErrorMessage,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, body=_response.text)
+        raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def delete_attachments(
+        self,
+        *,
+        file_name: str,
+        entity_type: CompleteMultipartUploadRequestEntityType,
+        entity_id: str,
+        file_size: int,
+        upload_id: str,
+        uploaded_file_parts: typing.Sequence[MultipartUploadPart],
+        project_name: typing.Optional[str] = OMIT,
+        container_id: typing.Optional[str] = OMIT,
+        mime_type: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Delete attachments
+
+        Parameters
+        ----------
+        file_name : str
+
+        entity_type : CompleteMultipartUploadRequestEntityType
+
+        entity_id : str
+
+        file_size : int
+
+        upload_id : str
+
+        uploaded_file_parts : typing.Sequence[MultipartUploadPart]
+
+        project_name : typing.Optional[str]
+            If null, the default project is used
+
+        container_id : typing.Optional[str]
+
+        mime_type : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        import asyncio
+
+        from Opik import AsyncOpikApi, MultipartUploadPart
+
+        client = AsyncOpikApi(
+            api_key="YOUR_API_KEY",
+            workspace_name="YOUR_WORKSPACE_NAME",
+        )
+
+
+        async def main() -> None:
+            await client.attachments.delete_attachments(
+                file_name="file_name",
+                entity_type="trace",
+                entity_id="entity_id",
+                file_size=1000000,
+                upload_id="upload_id",
+                uploaded_file_parts=[
+                    MultipartUploadPart(
+                        e_tag="e_tag",
+                        part_number=1,
+                    )
+                ],
+            )
+
+
+        asyncio.run(main())
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/attachment/delete",
+            method="POST",
+            json={
+                "file_name": file_name,
+                "project_name": project_name,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "container_id": container_id,
                 "file_size": file_size,
                 "mime_type": mime_type,
                 "upload_id": upload_id,
