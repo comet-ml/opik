@@ -15,9 +15,9 @@ def generate_query(
     if few_shot_examples:
         examples_str = "\n\n".join(
             [
-                f"Example {i+1}:\n"
+                f"Example {i + 1}:\n"
                 f"Output: {example['output']}\n"
-                f"{{\"score\": {example['score']}, \"reason\": \"{example['reason']}\"}}"
+                f'{{"score": {example["score"]}, "reason": "{example["reason"]}"}}'
                 for i, example in enumerate(few_shot_examples)
             ]
         )

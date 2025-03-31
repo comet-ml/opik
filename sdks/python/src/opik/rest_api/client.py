@@ -13,6 +13,7 @@ from .datasets.client import DatasetsClient
 from .experiments.client import ExperimentsClient
 from .feedback_definitions.client import FeedbackDefinitionsClient
 from .llm_provider_key.client import LlmProviderKeyClient
+from .open_telemetry_ingestion.client import OpenTelemetryIngestionClient
 from .projects.client import ProjectsClient
 from .prompts.client import PromptsClient
 from .spans.client import SpansClient
@@ -32,6 +33,7 @@ from .datasets.client import AsyncDatasetsClient
 from .experiments.client import AsyncExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient
+from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient
 from .projects.client import AsyncProjectsClient
 from .prompts.client import AsyncPromptsClient
 from .spans.client import AsyncSpansClient
@@ -124,6 +126,9 @@ class OpikApi:
             client_wrapper=self._client_wrapper
         )
         self.llm_provider_key = LlmProviderKeyClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.open_telemetry_ingestion = OpenTelemetryIngestionClient(
             client_wrapper=self._client_wrapper
         )
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
@@ -304,6 +309,9 @@ class AsyncOpikApi:
             client_wrapper=self._client_wrapper
         )
         self.llm_provider_key = AsyncLlmProviderKeyClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(
             client_wrapper=self._client_wrapper
         )
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)

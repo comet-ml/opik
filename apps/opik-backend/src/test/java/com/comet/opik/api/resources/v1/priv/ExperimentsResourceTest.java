@@ -75,6 +75,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -936,19 +937,21 @@ class ExperimentsResourceTest {
             createAndAssert(noItemExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
-            var trace1 = makeTrace(apiKey, workspaceName);
+            var trace1 = makeTrace();
 
-            var trace2 = makeTrace(apiKey, workspaceName);
+            var trace2 = makeTrace();
 
-            var trace3 = makeTrace(apiKey, workspaceName);
+            var trace3 = makeTrace();
 
-            var trace4 = makeTrace(apiKey, workspaceName);
+            var trace4 = makeTrace();
 
-            var trace5 = makeTrace(apiKey, workspaceName);
+            var trace5 = makeTrace();
 
-            var trace6 = makeTrace(apiKey, workspaceName);
+            var trace6 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3, trace4, trace5);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -1074,19 +1077,21 @@ class ExperimentsResourceTest {
             createAndAssert(expectedExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
-            var trace1 = makeTrace(apiKey, workspaceName);
+            var trace1 = makeTrace();
 
-            var trace2 = makeTrace(apiKey, workspaceName);
+            var trace2 = makeTrace();
 
-            var trace3 = makeTrace(apiKey, workspaceName);
+            var trace3 = makeTrace();
 
-            var trace4 = makeTrace(apiKey, workspaceName);
+            var trace4 = makeTrace();
 
-            var trace5 = makeTrace(apiKey, workspaceName);
+            var trace5 = makeTrace();
 
-            var trace6 = makeTrace(apiKey, workspaceName);
+            var trace6 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3, trace4, trace5, trace6);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -1352,9 +1357,11 @@ class ExperimentsResourceTest {
                     .datasetName(null)
                     .build();
 
-            var trace = makeTrace(apiKey, workspaceName);
+            var trace = makeTrace();
 
             var traces = List.of(trace);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var scoreForTrace1 = makeTraceScores(trace);
 
@@ -1560,12 +1567,15 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+            List<FeedbackScoreBatchItem> scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchItem.class);
+
             var experiments = IntStream.range(0, 5)
                     .mapToObj(i -> experimentResourceClient.createPartialExperiment()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
                             .build())
-                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment))
+                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace))
                     .toList();
 
             var expectedExperiments = experiments
@@ -1584,7 +1594,80 @@ class ExperimentsResourceTest {
                     expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField));
         }
 
-        private Experiment generateFullExperiment(String apiKey, String workspaceName, Experiment expectedExperiment) {
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        @DisplayName("when sorting by feedback scores, then return page")
+        void whenSortingByFeedbackScores__thenReturnPage(Direction direction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<FeedbackScoreBatchItem> scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchItem.class);
+
+            var experiments = IntStream.range(0, 5)
+                    .mapToObj(i -> experimentResourceClient.createPartialExperiment()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build())
+                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace))
+                    .toList();
+
+            var sortingField = new SortingField(
+                    "feedback_scores.%s".formatted(scoreForTrace.getFirst().name()),
+                    direction);
+
+            Comparator<Experiment> comparing = Comparator.comparing(experiment -> experiment.feedbackScores()
+                    .stream()
+                    .filter(score -> score.name().equals(scoreForTrace.getFirst().name()))
+                    .findFirst()
+                    .orElseThrow()
+                    .value());
+
+            var expectedExperiments = experiments
+                    .stream()
+                    .sorted(direction == Direction.ASC ? comparing : comparing.reversed())
+                    .toList();
+
+            Map<UUID, Map<String, BigDecimal>> expectedScores = expectedExperiments
+                    .stream()
+                    .map(experiment -> Map.entry(experiment.id(), experiment.feedbackScores()
+                            .stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"feedback_scores", "feedback_score.dsfsdfd", "feedback_scores."})
+        void whenSortingByFeedbackScores__thenReturnPage(String field) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            try (Response response = findExperiment(
+                    workspaceName,
+                    apiKey,
+                    1,
+                    10,
+                    UUID.randomUUID(),
+                    null,
+                    false,
+                    UUID.randomUUID(),
+                    List.of(new SortingField(field, Direction.ASC)))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        private Experiment generateFullExperiment(String apiKey, String workspaceName, Experiment expectedExperiment,
+                List<FeedbackScoreBatchItem> scoreForTrace) {
 
             createAndAssert(expectedExperiment, apiKey, workspaceName);
 
@@ -1592,11 +1675,13 @@ class ExperimentsResourceTest {
 
             List<Trace> traces = IntStream.range(0, tracesNumber)
                     .parallel()
-                    .mapToObj(i -> makeTrace(apiKey, workspaceName))
+                    .mapToObj(i -> makeTrace())
                     .toList();
 
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
             Map<UUID, List<FeedbackScoreBatchItem>> traceIdToScoresMap = traces.stream()
-                    .map(ExperimentsResourceTest.this::makeTraceScores)
+                    .map(trace -> copyScoresFrom(scoreForTrace, trace))
                     .flatMap(List::stream)
                     .collect(groupingBy(FeedbackScoreBatchItem::id));
 
@@ -1670,17 +1755,10 @@ class ExperimentsResourceTest {
     }
 
     private void deleteTrace(UUID id, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(getTracesPath())
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .delete()) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-        }
+        traceResourceClient.deleteTrace(id, workspaceName, apiKey);
     }
 
-    private @NotNull Map<UUID, Map<String, BigDecimal>> getExpectedScoresPerExperiment(
+    private Map<UUID, Map<String, BigDecimal>> getExpectedScoresPerExperiment(
             List<Experiment> experiments, List<ExperimentItem> experimentItems) {
         return experiments.stream()
                 .map(experiment -> Map.entry(experiment.id(), experimentItems
@@ -1727,17 +1805,13 @@ class ExperimentsResourceTest {
                 unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null);
     }
 
-    private void findAndAssert(
-            String workspaceName,
+    public Response findExperiment(String workspaceName,
+            String apiKey,
             int page,
             int pageSize,
             UUID datasetId,
             String name,
-            List<Experiment> expectedExperiments,
-            long expectedTotal,
-            List<Experiment> unexpectedExperiments, String apiKey,
             boolean datasetDeleted,
-            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
             UUID promptId,
             List<SortingField> sortingFields) {
 
@@ -1762,11 +1836,31 @@ class ExperimentsResourceTest {
             webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
         }
 
-        try (var actualResponse = webTarget
+        return webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
+                .get();
+    }
+
+    private void findAndAssert(
+            String workspaceName,
+            int page,
+            int pageSize,
+            UUID datasetId,
+            String name,
+            List<Experiment> expectedExperiments,
+            long expectedTotal,
+            List<Experiment> unexpectedExperiments,
+            String apiKey,
+            boolean datasetDeleted,
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
+            UUID promptId,
+            List<SortingField> sortingFields) {
+
+        try (var actualResponse = findExperiment(workspaceName, apiKey, page, pageSize, datasetId, name, datasetDeleted,
+                promptId, sortingFields)) {
+
             var actualPage = actualResponse.readEntity(ExperimentPage.class);
             var actualExperiments = actualPage.content();
 
@@ -1866,6 +1960,8 @@ class ExperimentsResourceTest {
             var trace3 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3);
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -1977,6 +2073,8 @@ class ExperimentsResourceTest {
             var trace3 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3);
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -2172,19 +2270,21 @@ class ExperimentsResourceTest {
             createAndAssert(expectedExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
-            var trace1 = makeTrace(apiKey, workspaceName);
+            var trace1 = makeTrace();
 
-            var trace2 = makeTrace(apiKey, workspaceName);
+            var trace2 = makeTrace();
 
-            var trace3 = makeTrace(apiKey, workspaceName);
+            var trace3 = makeTrace();
 
-            var trace4 = makeTrace(apiKey, workspaceName);
+            var trace4 = makeTrace();
 
-            var trace5 = makeTrace(apiKey, workspaceName);
+            var trace5 = makeTrace();
 
-            var trace6 = makeTrace(apiKey, workspaceName);
+            var trace6 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3, trace4, trace5, trace6);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -2354,34 +2454,7 @@ class ExperimentsResourceTest {
     }
 
     private Trace makeTrace() {
-        Trace trace = podamFactory.manufacturePojo(Trace.class);
-        createTraceAndAssert(trace, API_KEY, TEST_WORKSPACE);
-        return trace;
-    }
-
-    private Trace makeTrace(String apiKey, String workspaceName) {
-        Trace trace = podamFactory.manufacturePojo(Trace.class);
-        createTraceAndAssert(trace, apiKey, workspaceName);
-        return trace;
-    }
-
-    private String getTracesPath() {
-        return URL_TEMPLATE_TRACES.formatted(baseURI);
-    }
-
-    private void createTraceAndAssert(Trace trace, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(getTracesPath())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-            assertThat(actualResponse.hasEntity()).isFalse();
-
-            var actualHeaderString = actualResponse.getHeaderString("Location");
-            assertThat(actualHeaderString).isEqualTo(getTracesPath() + "/" + trace.id());
-        }
+        return podamFactory.manufacturePojo(Trace.class);
     }
 
     private synchronized UUID createAndAssert(Experiment expectedExperiment, String apiKey, String workspaceName) {
@@ -3071,16 +3144,7 @@ class ExperimentsResourceTest {
     }
 
     private void createAndAssert(ExperimentItemsBatch request, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(getExperimentItemsPath())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
-
+        experimentResourceClient.createExperimentItem(request.experimentItems(), apiKey, workspaceName);
     }
 
     private void getAndAssert(ExperimentItem expectedExperimentItem, String workspaceName, String apiKey) {
