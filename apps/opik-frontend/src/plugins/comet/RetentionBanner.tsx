@@ -13,6 +13,8 @@ interface RetentionBannerProps {
   onChangeHeight: (height: number) => void;
 }
 
+const SHOW_BANNER_MIN_THRESHOLD = 0.8;
+
 const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   const { data: user } = useUser();
   const heightRef = useRef(0);
@@ -32,7 +34,9 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
   const spanQuota = quotas?.find((q) => q.type === QUOTA_TYPE.OPIK_SPAN_COUNT);
 
-  const isUsedLess80 = (spanQuota?.used || 0) / (spanQuota?.limit || 1) < 0.8;
+  const isUsedLess80 =
+    (spanQuota?.used || 0) / (spanQuota?.limit || 1) <
+    SHOW_BANNER_MIN_THRESHOLD;
 
   const hideBanner = !spanQuota || isUsedLess80 || closed || !user;
 
