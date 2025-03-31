@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
@@ -26,6 +27,7 @@ public class ServiceTogglesResource {
 
     @GET
     @Operation(operationId = "getServiceToggles", summary = "Get Service Toggles", description = "Get Service Toggles")
+    @Hidden
     public Response getToggles() {
         return Response.ok()
                 .entity(config.getServiceToggles())
