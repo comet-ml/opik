@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 client = docker.from_env()
 container_pool = Queue()
 container_pool_creation_lock = Lock()
-executor = concurrent.futures.ThreadPoolExecutor()
+releaser_executor = concurrent.futures.ThreadPoolExecutor()
 
 instance_id = str(uuid7())
 container_labels={
@@ -74,7 +74,7 @@ def cleanup_containers():
 def create_container():
     new_container = client.containers.run(
         image=f"{IMAGE_REGISTRY}/{IMAGE_NAME}:{IMAGE_TAG}",
-        command=["tail", "-f", "/dev/null"], # a never ending process so Docker wont kill the container
+        command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
         mem_limit="256mb",
         cpu_shares=2,
         detach=True,
@@ -83,6 +83,7 @@ def create_container():
         labels=container_labels
     )
     container_pool.put(new_container)
+    logger.info(f"Created container, id '{new_container.id}'")
 
 def release_container(container):
     def async_release():
@@ -94,7 +95,7 @@ def release_container(container):
         except Exception as e:
             logger.error(f"Error replacing container: {e}")
 
-    executor.submit(async_release)
+    releaser_executor.submit(async_release)
 
 def get_container():
     while True:
@@ -116,8 +117,8 @@ def run_scoring_in_docker_python_container(code, data):
     container = get_container()
     try:
         # Run exec_run() with a timeout using ThreadPoolExecutor
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(execute_command)
+        with concurrent.futures.ThreadPoolExecutor() as command_executor:
+            future = command_executor.submit(execute_command)
             exec_result = future.result(timeout=EXEC_TIMEOUT)  # Enforce timeout for execution
 
             logs = exec_result.output.decode("utf-8")
