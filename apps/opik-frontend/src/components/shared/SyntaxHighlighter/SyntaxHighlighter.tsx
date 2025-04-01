@@ -13,6 +13,8 @@ import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import { prettifyMessage } from "@/lib/traces";
+import { useSearchPanelTheme } from "@/hooks/useSearchPanelTheme";
+import { search } from "@codemirror/search";
 
 enum MODE_TYPE {
   yaml = "yaml",
@@ -67,6 +69,7 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
   );
 
   const theme = useCodemirrorTheme();
+  const searchPanelTheme = useSearchPanelTheme();
 
   const code: {
     message: string;
@@ -163,9 +166,14 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
             value={code.message}
             extensions={[
               EXTENSION_MAP[code.mode] as LRLanguage,
+              search({
+                top: true,
+              }),
               EditorView.lineWrapping,
               EditorState.readOnly.of(true),
               EditorView.editable.of(false),
+              EditorView.contentAttributes.of({ tabindex: "0" }),
+              searchPanelTheme,
             ]}
           />
         )}
