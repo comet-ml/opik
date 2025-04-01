@@ -87,7 +87,9 @@ class AutomationRuleEvaluatorServiceImplTest {
                                         new TestDropwizardAppExtensionUtils.CustomConfig("cacheManager.enabled",
                                                 "true"),
                                         new TestDropwizardAppExtensionUtils.CustomConfig("cacheManager.defaultDuration",
-                                                "PT1S")))
+                                                "PT1S"),
+                                        new TestDropwizardAppExtensionUtils.CustomConfig(
+                                                "serviceToggles.pythonEvaluatorEnabled", "true")))
                         .build());
     }
 
