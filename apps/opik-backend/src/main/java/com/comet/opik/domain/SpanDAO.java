@@ -923,7 +923,6 @@ class SpanDAO {
     private static final String ESTIMATED_COST_VERSION = "1.0";
 
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SpanSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
