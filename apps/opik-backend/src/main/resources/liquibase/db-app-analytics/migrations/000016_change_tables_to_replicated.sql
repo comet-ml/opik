@@ -1,4 +1,5 @@
 --liquibase formatted sql
+
 --changeset liyaka:change-tables-to-replicated-01 id:create-automation-rule-evaluator-logs
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1
 (
@@ -17,7 +18,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-02 id:migrate-automation-rule-evaluator-logs
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 TO ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs TO ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1;
@@ -43,7 +44,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-04 id:migrate-comments
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.comments;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 TO ${ANALYTICS_DB_DATABASE_NAME}.comments;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments TO ${ANALYTICS_DB_DATABASE_NAME}.comments1;
@@ -73,7 +74,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-06 id:migrate-dataset-items
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_items;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 TO ${ANALYTICS_DB_DATABASE_NAME}.dataset_items;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items TO ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1;
@@ -98,7 +99,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-08 id:migrate-experiment-items
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.experiment_items;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 TO ${ANALYTICS_DB_DATABASE_NAME}.experiment_items;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items TO ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1;
@@ -126,7 +127,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-10 id:migrate-experiments
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.experiments;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 TO ${ANALYTICS_DB_DATABASE_NAME}.experiments;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments TO ${ANALYTICS_DB_DATABASE_NAME}.experiments1;
@@ -155,7 +156,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-12 id:migrate-feedback-scores
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 TO ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores TO ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1;
@@ -194,7 +195,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-14 id:migrate-spans
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.spans;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1 TO ${ANALYTICS_DB_DATABASE_NAME}.spans;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans TO ${ANALYTICS_DB_DATABASE_NAME}.spans1;
@@ -226,34 +227,85 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:change-tables-to-replicated-16 id:migrate-traces
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.traces;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 TO ${ANALYTICS_DB_DATABASE_NAME}.traces;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces1;
 
---changeset liyaka:change-tables-to-replicated-17 id:create-attachments-table
+--changeset liyaka:change-tables-to-replicated-17 id:create-attachments
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.attachments1
 (
-    workspace_id    String,
-    container_id    FixedString(36),
-    entity_id       FixedString(36),
-    entity_type     ENUM('trace', 'span'),
-    file_name       String,
-    mime_type       String,
-    file_size       Int64,
-    created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
-    last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9),
-    deleted_at      DateTime64(9, 'UTC') DEFAULT toDateTime64(0, 9),
-    created_by      String DEFAULT '',
-    last_updated_by String DEFAULT ''
-) ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/attachments','{replica}',last_updated_at)
-    ORDER BY (workspace_id, container_id, entity_type, entity_id, file_name)
-    SETTINGS index_granularity = 8192;
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.attachments1;
+    `workspace_id` String,
+    `container_id` FixedString(36),
+    `entity_id` FixedString(36),
+    `entity_type` Enum8('trace' = 1, 'span' = 2),
+    `file_name` String,
+    `mime_type` String,
+    `file_size` Int64,
+    `created_at` DateTime64(9, 'UTC') DEFAULT now64(9),
+    `last_updated_at` DateTime64(9, 'UTC') DEFAULT now64(9),
+    `deleted_at` DateTime64(9, 'UTC') DEFAULT toDateTime64(0, 9),
+    `created_by` String DEFAULT '',
+    `last_updated_by` String DEFAULT ''
+)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/attachments', '{replica}',last_updated_at)
+ORDER BY (workspace_id, container_id, entity_type, entity_id, file_name)
+SETTINGS index_granularity = 8192;
+--rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1;
 
 --changeset liyaka:change-tables-to-replicated-18 id:migrate-attachments
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.attachments;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments DETACH PARTITION tuple();
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 TO ${ANALYTICS_DB_DATABASE_NAME}.attachments;
 --rollback RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments TO ${ANALYTICS_DB_DATABASE_NAME}.attachments1;
+
+--changeset liyaka:change-tables-to-replicated-19 id:migrate-databasechangelog
+CREATE TABLE IF NOT EXISTS default.DATABASECHANGELOG1
+(
+    `ID` String,
+    `AUTHOR` String,
+    `FILENAME` String,
+    `DATEEXECUTED` DateTime64(3),
+    `ORDEREXECUTED` UInt64,
+    `EXECTYPE` String,
+    `MD5SUM` Nullable(String),
+    `DESCRIPTION` Nullable(String),
+    `COMMENTS` Nullable(String),
+    `TAG` Nullable(String),
+    `LIQUIBASE` Nullable(String),
+    `CONTEXTS` Nullable(String),
+    `LABELS` Nullable(String),
+    `DEPLOYMENT_ID` Nullable(String)
+)
+ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/default/DATABASECHANGELOG', '{replica}')
+ORDER BY ID
+SETTINGS index_granularity = 8192
+--rollback DROP TABLE default.DATABASECHANGELOG1;
+
+--changeset liyaka:change-tables-to-replicated-20 id:migrate-databasechangelog
+ALTER TABLE default.DATABASECHANGELOG1 ATTACH PARTITION tuple() FROM default.DATABASECHANGELOG;
+ALTER TABLE default.DATABASECHANGELOG DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
+DROP TABLE default.DATABASECHANGELOG SYNC SETTINGS max_table_size_to_drop = 0;
+RENAME TABLE default.DATABASECHANGELOG1 TO default.DATABASECHANGELOG;
+--rollback RENAME TABLE default.DATABASECHANGELOG TO default.DATABASECHANGELOG1;
+
+--changeset liyaka:change-tables-to-replicated-21 id:migrate-databasechangeloglock
+CREATE TABLE IF NOT EXISTS default.DATABASECHANGELOGLOCK1
+(
+    `ID` Int64,
+    `LOCKED` UInt8,
+    `LOCKGRANTED` Nullable(DateTime64(3)),
+    `LOCKEDBY` Nullable(String)
+)
+ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/default/DATABASECHANGELOGLOCK', '{replica}')
+ORDER BY ID
+SETTINGS index_granularity = 8192
+--rollback DROP TABLE default.DATABASECHANGELOGLOCK1;
+
+--changeset liyaka:change-tables-to-replicated-22 id:migrate-databasechangeloglock
+ALTER TABLE default.DATABASECHANGELOGLOCK1 ATTACH PARTITION tuple() FROM default.DATABASECHANGELOGLOCK;
+ALTER TABLE default.DATABASECHANGELOGLOCK DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
+DROP TABLE default.DATABASECHANGELOGLOCK SYNC SETTINGS max_table_size_to_drop = 0;
+RENAME TABLE default.DATABASECHANGELOGLOCK1 TO default.DATABASECHANGELOGLOCK;
+--rollback RENAME TABLE default.DATABASECHANGELOGLOCK TO default.DATABASECHANGELOGLOCK1;
