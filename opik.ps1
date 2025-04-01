@@ -178,6 +178,7 @@ function Start-MissingContainers {
     Write-Host '[INFO] Waiting for all containers to be running and healthy...'
     $maxRetries = 60
     $interval = 1
+    $allRunning = $true
 
     foreach ($container in $REQUIRED_CONTAINERS) {
         $retries = 0
@@ -205,10 +206,12 @@ function Start-MissingContainers {
                 $retries++
                 if ($retries -ge $maxRetries) {
                     Write-Host "[WARN] $container is still not healthy after ${maxRetries}s"
+                    $allRunning = $false
                     break
                 }
             } else {
                 Write-Host "[INFO] $container health state is '$health'"
+                $allRunning = $false
                 break
             }
         }

@@ -91,6 +91,7 @@ start_missing_containers() {
   echo "⏳ Waiting for all containers to be running and healthy..."
   max_retries=60
   interval=1
+  all_running=true
 
   for container in "${REQUIRED_CONTAINERS[@]}"; do
     retries=0
@@ -114,10 +115,12 @@ start_missing_containers() {
         retries=$((retries + 1))
         if [[ $retries -ge $max_retries ]]; then
           echo "⚠️  $container is still not healthy after ${max_retries}s"
+          all_running=false
           break
         fi
       else
         echo "❌ $container health state is '$health'"
+        all_running=false
         break
       fi
     done
