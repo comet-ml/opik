@@ -81,7 +81,12 @@ start_missing_containers() {
 
   echo "🔄 Starting missing containers..."
   cd "$script_dir/deployment/docker-compose"
-  docker compose up -d
+
+  if [[ "${BUILD_MODE}" = "true" ]]; then
+    export COMPOSE_BAKE=true
+  fi
+
+  docker compose up -d ${BUILD_MODE:+--build}
 
   echo "⏳ Waiting for all containers to be running and healthy..."
   max_retries=60
@@ -237,7 +242,6 @@ EOF
   fi
 }
 
-
 # Default: no debug
 DEBUG_MODE=false
 
@@ -269,6 +273,19 @@ case "$1" in
   --debug)
     DEBUG_MODE=true
     echo "🐞 Debug mode enabled."
+    echo "🔍 Checking container status and starting missing ones..."
+    start_missing_containers
+    sleep 2
+    echo "🔄 Re-checking container status..."
+    if check_containers_status; then
+      print_banner
+    else
+      echo "⚠️  Some containers are still not healthy. Please check manually using './opik.sh --verify'"
+      exit 1
+    fi
+    ;;
+  --build)
+    BUILD_MODE=true
     echo "🔍 Checking container status and starting missing ones..."
     start_missing_containers
     sleep 2
