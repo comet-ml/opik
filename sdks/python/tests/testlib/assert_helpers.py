@@ -1,7 +1,7 @@
 from typing import List, Any, Optional, Dict
+from unittest import mock
 
 import logging
-from unittest import mock
 import deepdiff
 
 
@@ -11,7 +11,7 @@ LOGGER = logging.getLogger(__name__)
 def prepare_difference_report(expected: Any, actual: Any) -> str:
     try:
         diff_report = deepdiff.DeepDiff(
-            expected, actual, exclude_types=[mock.mock._ANY]
+            expected, actual, exclude_types=[type(mock.ANY)]
         ).pretty()
 
         # Remove from report lines like that "X type changed from int to ANY_BUT_NONE"
@@ -45,7 +45,9 @@ def assert_equal(expected, actual):
     from our ANY* comparison helpers were called instead of __eq__ operators
     of the actual object
     """
-    assert expected == actual, f"Details: {prepare_difference_report(actual, expected)}"
+    assert (
+        expected == actual
+    ), f"Details: {prepare_difference_report(actual=actual, expected=expected)}"
 
 
 def assert_dicts_equal(
