@@ -1,7 +1,0 @@
-url,status,state,parent,failureDetails
-"https://www.comet.com/docs/opik/",200,OK,"","[]"
-"https://files.buildwithfern.com/https://opik.docs.buildwithfern.com/docs/opik/2025-03-31T11:47:09.657Z/img/opik-logo.svg",200,OK,"https://www.comet.com/docs/opik/","[]"
-"https://files.buildwithfern.com/https://opik.docs.buildwithfern.com/docs/opik/2025-03-31T11:47:09.657Z/img/logo-dark-mode.svg",200,OK,"https://www.comet.com/docs/opik/","[]"
-"https://prod.ferndocs.com/_next/static/chunks/main-app-fe1e5a068f998802.js?dpl=dpl_2x5kUcTkHJYA7Gc8duCfgapKu6Sm",200,OK,"https://www.comet.com/docs/opik/","[]"
-"https://openai.com/docs/shit",402,BROKEN,"https://www.comet.com/docs/opik/","[]"
-"https://prod.ferndocs.com/_next/static/chunks/webpack-aa240233a92ce262.js?dpl=dpl_2x5kUcTkHJYA7Gc8duCfgapKu6Sm",200,OK,"https://www.comet.com/docs/opik/","[]"
