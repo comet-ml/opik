@@ -340,11 +340,11 @@ div.cm-theme div.cm-search.cm-panel {
   @apply px-2 py-1;
 
   input {
-    @apply rounded-md bg-background text-sm placeholder:text-light-slate focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray;
+    @apply h-8 px-3 pb-1.5 pt-1 rounded-md bg-background text-sm placeholder:text-light-slate focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray;
   }
 
   .cm-button {
-    @apply leading-none h-6 px-3 comet-body-s-accented whitespace-nowrap rounded-md transition-colors focus-visible:outline-none disabled:pointer-events-none bg-primary text-primary-foreground hover:bg-primary-hover bg-none active:bg-primary-active disabled:bg-muted-gray disabled:opacity-100;
+    @apply leading-none text-foreground h-8 px-3 comet-body-s border border-border bg-background hover:text-foreground active:bg-primary-100 active:text-foreground disabled:border-muted-disabled disabled:text-muted-gray disabled:opacity-100 whitespace-nowrap rounded-md transition-colors focus-visible:outline-none disabled:pointer-events-none bg-none disabled:bg-muted-gray;
   }
 
   label {
