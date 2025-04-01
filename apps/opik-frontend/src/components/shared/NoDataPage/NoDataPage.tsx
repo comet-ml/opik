@@ -26,7 +26,7 @@ const NoDataPage: React.FC<NoDataPageProps> = ({
         } as React.CSSProperties
       }
       className={cn(
-        "flex h-[calc(100vh-var(--page-difference))] min-h-[500px] w-full min-w-72 items-center justify-stretch py-6",
+        "flex h-[calc(100vh-var(--page-difference)-var(--banner-height))] min-h-[500px] w-full min-w-72 items-center justify-stretch py-6",
         className,
       )}
     >
