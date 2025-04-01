@@ -285,7 +285,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 Code metric
                               </ToggleGroupItem>
                             ) : (
-                              <TooltipWrapper content="This feature is not available for this environment">
+                              <TooltipWrapper content="This feature is coming soon, stay tuned !">
                                 <span>
                                   <ToggleGroupItem
                                     value={EVALUATORS_RULE_TYPE.python_code}
