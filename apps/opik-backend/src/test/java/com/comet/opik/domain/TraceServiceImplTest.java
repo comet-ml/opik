@@ -88,7 +88,8 @@ class TraceServiceImplTest {
                 projectService,
                 () -> Generators.timeBasedEpochGenerator().generate(),
                 DUMMY_LOCK_SERVICE,
-                eventBus);
+                eventBus,
+                traceSortingFactory);
     }
 
     @Nested

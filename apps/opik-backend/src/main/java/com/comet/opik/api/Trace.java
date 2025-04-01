@@ -64,8 +64,8 @@ public record Trace(
             @JsonView(Trace.View.Public.class) List<Trace> content,
             @JsonView(Trace.View.Public.class) List<String> sortableBy) implements com.comet.opik.api.Page<Trace> {
 
-        public static TracePage empty(int page) {
-            return new TracePage(page, 0, 0, List.of(), List.of());
+        public static TracePage empty(int page, List<String> sortableBy) {
+            return new TracePage(page, 0, 0, List.of(), sortableBy);
         }
     }
 

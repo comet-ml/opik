@@ -1321,7 +1321,7 @@ class TraceDAOImpl implements TraceDAO {
                         .orElse(null))
                 .comments(getComments(row.get("comments", List[].class)))
                 .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
-                        .map(scores -> mapFeedbackScores(scores))
+                        .map(this::mapFeedbackScores)
                         .filter(not(List::isEmpty))
                         .orElse(null))
                 .spanCount(row.get("span_count", Integer.class))

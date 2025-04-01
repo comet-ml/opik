@@ -66,8 +66,8 @@ public record Span(
             @JsonView(Span.View.Public.class) long total,
             @JsonView(Span.View.Public.class) List<Span> content,
             @JsonView(Span.View.Public.class) List<String> sortableBy) implements com.comet.opik.api.Page<Span> {
-        public static SpanPage empty(int page) {
-            return new SpanPage(page, 0, 0, List.of(), List.of());
+        public static SpanPage empty(int page, List<String> sortableBy) {
+            return new SpanPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 
