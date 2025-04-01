@@ -43,7 +43,7 @@ public abstract class SortingFactory {
         }
 
         List<String> illegalFields = sorting.stream()
-                .map(SortingField::rawField)
+                .map(SortingField::field)
                 .filter(f -> !isFieldSupported(f) && !isDynamicFieldSupported(f))
                 .toList();
         if (!illegalFields.isEmpty()) {
