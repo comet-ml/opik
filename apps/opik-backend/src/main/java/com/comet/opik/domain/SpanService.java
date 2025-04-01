@@ -11,6 +11,8 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.sorting.SpanSortingFactory;
+import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -60,6 +62,7 @@ public class SpanService {
     private final @NonNull LockService lockService;
     private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
+    private final @NonNull SpanSortingFactory sortingFactory;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -73,7 +76,7 @@ public class SpanService {
                 .flatMap(project -> project.stream().findFirst().map(Mono::just).orElseGet(Mono::empty))
                 .flatMap(project -> spanDAO.find(
                         page, size, searchCriteria.toBuilder().projectId(project.id()).build()))
-                .switchIfEmpty(Mono.just(Span.SpanPage.empty(page)));
+                .switchIfEmpty(Mono.just(Span.SpanPage.empty(page, sortingFactory.getSortableFields())));
     }
 
     private Mono<List<Project>> findProject(SpanSearchCriteria searchCriteria) {

@@ -1,6 +1,8 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
@@ -34,6 +36,7 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -57,6 +60,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static java.util.function.Predicate.not;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -477,7 +481,9 @@ class SpanDAO {
     private static final String SELECT_BY_ID = """
             SELECT
                 s.*,
-                groupArray(tuple(c.*)) AS comments
+                s.project_id as project_id,
+                groupArray(tuple(c.*)) AS comments,
+                any(fs.feedback_scores) as feedback_scores_list
             FROM (
                 SELECT
                     *,
@@ -506,6 +512,34 @@ class SpanDAO {
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS c ON s.id = c.entity_id
+            LEFT JOIN (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    groupArray(tuple(
+                         name,
+                         category_name,
+                         value,
+                         reason,
+                         source,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as feedback_scores
+                FROM (
+                    SELECT
+                        *
+                    FROM feedback_scores
+                    WHERE entity_type = 'span'
+                    AND workspace_id = :workspace_id
+                    AND entity_id = :id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY workspace_id, project_id, entity_id
+            ) AS fs ON s.id = fs.entity_id
             GROUP BY
                 s.*
             ;
@@ -539,6 +573,35 @@ class SpanDAO {
               AND project_id = :project_id
               ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
               LIMIT 1 BY id
+            ), feedback_scores_agg AS (
+                SELECT
+                    entity_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) as feedback_scores,
+                    groupArray(tuple(
+                         name,
+                         category_name,
+                         value,
+                         reason,
+                         source,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as feedback_scores_list
+                FROM (
+                    SELECT
+                        *
+                    FROM feedback_scores
+                    WHERE entity_type = 'span'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY workspace_id, project_id, entity_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -579,18 +642,23 @@ class SpanDAO {
                 s.created_by as created_by,
                 s.last_updated_by as last_updated_by,
                 s.duration as duration,
+                s.feedback_scores_list as feedback_scores_list,
+                s.feedback_scores as feedback_scores,
                 groupArray(tuple(c.*)) AS comments
             FROM (
                 SELECT
-                      *,
+                      spans.*,
                       if(end_time IS NOT NULL AND start_time IS NOT NULL
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                           NULL) AS duration
+                           NULL) AS duration,
+                      fsa.feedback_scores_list as feedback_scores_list,
+                      fsa.feedback_scores as feedback_scores
                 FROM spans
                 <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
                 <endif>
+                LEFT JOIN feedback_scores_agg AS fsa ON fsa.entity_id = spans.id
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
@@ -1264,6 +1332,10 @@ class SpanDAO {
                     .totalEstimatedCostVersion(row.getMetadata().contains("total_estimated_cost_version")
                             ? row.get("total_estimated_cost_version", String.class)
                             : null)
+                    .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
+                            .map(this::mapFeedbackScores)
+                            .filter(not(List::isEmpty))
+                            .orElse(null))
                     .tags(Optional.of(Arrays.stream(row.get("tags", String[].class)).collect(Collectors.toSet()))
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
@@ -1280,6 +1352,30 @@ class SpanDAO {
                     .duration(row.get("duration", Double.class))
                     .build();
         });
+    }
+
+    private List<FeedbackScore> mapFeedbackScores(List<List<Object>> feedbackScores) {
+        return Optional.ofNullable(feedbackScores)
+                .orElse(List.of())
+                .stream()
+                .map(feedbackScore -> FeedbackScore.builder()
+                        .name((String) feedbackScore.get(0))
+                        .categoryName(getIfNotEmpty(feedbackScore.get(1)))
+                        .value((BigDecimal) feedbackScore.get(2))
+                        .reason(getIfNotEmpty(feedbackScore.get(3)))
+                        .source(ScoreSource.fromString((String) feedbackScore.get(4)))
+                        .createdAt(((OffsetDateTime) feedbackScore.get(5)).toInstant())
+                        .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
+                        .createdBy((String) feedbackScore.get(7))
+                        .lastUpdatedBy((String) feedbackScore.get(8))
+                        .build())
+                .toList();
+    }
+
+    private String getIfNotEmpty(Object value) {
+        return Optional.ofNullable((String) value)
+                .filter(StringUtils::isNotEmpty)
+                .orElse(null);
     }
 
     private Publisher<Span> mapToPartialDto(Result result) {
@@ -1301,7 +1397,6 @@ class SpanDAO {
                 .flatMapMany(connection -> find(page, size, spanSearchCriteria, connection))
                 .flatMap(this::mapToDto)
                 .collectList()
-                .flatMap(this::enhanceWithFeedbackScores)
                 .map(spans -> new Span.SpanPage(page, spans.size(), total, spans, sortingFactory.getSortableFields()));
     }
 
@@ -1374,10 +1469,16 @@ class SpanDAO {
         Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
                 .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
 
+        var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(spanSearchCriteria.sortingFields());
+
         var statement = connection.createStatement(template.render())
                 .bind("project_id", spanSearchCriteria.projectId())
                 .bind("limit", size)
                 .bind("offset", (page - 1) * size);
+
+        if (hasDynamicKeys) {
+            statement = sortingQueryBuilder.bindDynamicKeys(statement, spanSearchCriteria.sortingFields());
+        }
 
         bindSearchCriteria(statement, spanSearchCriteria);
 
