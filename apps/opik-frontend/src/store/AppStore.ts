@@ -17,4 +17,7 @@ const useAppStore = create<AppStore>((set) => ({
   },
 }));
 
+export const useActiveWorkspaceName = () =>
+  useAppStore((state) => state.activeWorkspaceName);
+
 export default useAppStore;
