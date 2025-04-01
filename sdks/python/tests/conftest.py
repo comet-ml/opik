@@ -2,7 +2,7 @@ import random
 import string
 from typing import cast
 
-import mock
+from unittest import mock
 import pytest
 
 from opik import context_storage

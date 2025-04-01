@@ -1,7 +1,7 @@
 from typing import List, Any, Optional, Dict
 
 import logging
-import mock
+from unittest import mock
 import deepdiff
 
 

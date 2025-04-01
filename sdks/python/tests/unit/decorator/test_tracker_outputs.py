@@ -2,7 +2,7 @@ import asyncio
 import threading
 from typing import Dict
 
-import mock
+from unittest import mock
 import pytest
 
 from opik import context_storage, opik_context
