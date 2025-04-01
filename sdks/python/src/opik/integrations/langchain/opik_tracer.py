@@ -1,6 +1,9 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING, cast
 
+from datetime import datetime, timezone
+from langchain_core.tracers.schemas import Run
+
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 
@@ -21,6 +24,8 @@ if TYPE_CHECKING:
 
     from langchain_core.tracers.schemas import Run
     from langchain_core.runnables.graph import Graph
+
+    from langchain_core.messages import BaseMessage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -339,6 +344,65 @@ class OpikTracer(BaseTracer):
 
     def _on_llm_start(self, run: "Run") -> None:
         """Process the LLM Run upon start."""
+        if self._skip_tracking():
+            return
+
+        self._process_start_span(run)
+
+    def on_chat_model_start(
+        self,
+        serialized: dict[str, Any],
+        messages: list[list["BaseMessage"]],
+        *,
+        run_id: "UUID",
+        tags: Optional[list[str]] = None,
+        parent_run_id: Optional["UUID"] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        name: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "Run":
+        """Start a trace for an LLM run.
+
+        Duplicated from Langchain tracer, it is disabled by default in all tracers, see https://github.com/langchain-ai/langchain/blob/fdda1aaea14b257845a19023e8af5e20140ec9fe/libs/core/langchain_core/callbacks/manager.py#L270-L289 and https://github.com/langchain-ai/langchain/blob/fdda1aaea14b257845a19023e8af5e20140ec9fe/libs/core/langchain_core/tracers/core.py#L168-L180
+
+        Args:
+            serialized: The serialized model.
+            messages: The messages.
+            run_id: The run ID.
+            tags: The tags. Defaults to None.
+            parent_run_id: The parent run ID. Defaults to None.
+            metadata: The metadata. Defaults to None.
+            name: The name. Defaults to None.
+            kwargs: Additional keyword arguments.
+
+        Returns:
+            Run: The run.
+        """
+        start_time = datetime.now(timezone.utc)
+        if metadata:
+            kwargs.update({"metadata": metadata})
+
+        # We switched from langchain dumpd to model_dump() as we don't need all the langchain stuff
+        chat_model_run = Run(
+            id=run_id,
+            parent_run_id=parent_run_id,
+            serialized=serialized,
+            inputs={
+                "messages": [[msg.model_dump() for msg in batch] for batch in messages]
+            },
+            extra=kwargs,
+            events=[{"name": "start", "time": start_time}],
+            start_time=start_time,
+            run_type="llm",
+            tags=tags,
+            name=name,  # type: ignore[arg-type]
+        )
+        self._start_trace(chat_model_run)
+        self._on_chat_model_start(chat_model_run)
+        return chat_model_run
+
+    def _on_chat_model_start(self, run: "Run") -> None:
+        """Process the Chat Model Run upon start."""
         if self._skip_tracking():
             return
 
