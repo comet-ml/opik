@@ -17,6 +17,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
+import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -114,6 +115,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
+    private final @NonNull TraceSortingFactory sortingFactory;
 
     @Override
     @WithSpan
@@ -362,7 +364,7 @@ class TraceServiceImpl implements TraceService {
         return getProjectByName(criteria.projectName())
                 .flatMap(project -> template.nonTransaction(connection -> dao.find(
                         size, page, criteria.toBuilder().projectId(project.id()).build(), connection)))
-                .switchIfEmpty(Mono.just(TracePage.empty(page)));
+                .switchIfEmpty(Mono.just(TracePage.empty(page, sortingFactory.getSortableFields())));
     }
 
     @Override

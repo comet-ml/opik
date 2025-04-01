@@ -4453,7 +4453,7 @@ class TracesResourceTest {
                     sortingFields);
         }
 
-        static Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
+        private Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
 
             Comparator<Trace> inputComparator = Comparator.comparing(trace -> trace.input().toString());
             Comparator<Trace> outputComparator = Comparator.comparing(trace -> trace.output().toString());
