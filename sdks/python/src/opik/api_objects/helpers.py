@@ -54,12 +54,13 @@ def resolve_child_span_project_name(
 def add_usage_to_metadata(
     usage: Optional[Dict[str, Any]],
     metadata: Optional[Dict[str, Any]],
+    create_metadata: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    if usage is None and metadata is None:
-        return None
-
     if usage is None:
         return metadata
+
+    if metadata is None and not create_metadata:
+        return None
 
     metadata = {} if metadata is None else {**metadata}
 

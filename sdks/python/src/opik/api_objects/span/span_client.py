@@ -208,7 +208,9 @@ class Span:
         )
 
         if backend_compatible_usage is not None:
-            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
+            metadata = helpers.add_usage_to_metadata(
+                usage=usage, metadata=metadata, create_metadata=True
+            )
 
         create_span_message = messages.CreateSpanMessage(
             span_id=span_id,
