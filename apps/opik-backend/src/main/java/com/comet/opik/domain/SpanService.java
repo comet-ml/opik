@@ -12,7 +12,6 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.sorting.SpanSortingFactory;
-import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;

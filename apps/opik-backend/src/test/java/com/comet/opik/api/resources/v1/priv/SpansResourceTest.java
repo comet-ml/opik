@@ -4247,7 +4247,8 @@ class SpansResourceTest {
 
             List<SortingField> sortingFields = List.of(sortingField);
 
-            getAndAssertPage(workspaceName, projectName, List.of(), spans, expectedSpans, List.of(), apiKey, sortingFields);
+            getAndAssertPage(workspaceName, projectName, List.of(), spans, expectedSpans, List.of(), apiKey,
+                    sortingFields);
         }
     }
 

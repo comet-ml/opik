@@ -53,7 +53,6 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceCo
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
-import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -1243,7 +1242,6 @@ class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> getById(id, connection))
                 .flatMap(this::mapToDto)
-                .flatMap(span -> enhanceWithFeedbackScores(List.of(span)).map(List::getFirst))
                 .singleOrEmpty();
     }
 
@@ -1408,20 +1406,7 @@ class SpanDAO {
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
                 .filter(CollectionUtils::isNotEmpty)
-                .flatMap(this::enhanceWithFeedbackScores)
                 .flatMap(Flux::fromIterable);
-    }
-
-    private Mono<List<Span>> enhanceWithFeedbackScores(List<Span> spans) {
-        List<UUID> spanIds = spans.stream().map(Span::id).toList();
-
-        Segment segment = startSegment("spans", "Clickhouse", "enhance_with_feedback_scores");
-
-        return feedbackScoreDAO.getScores(EntityType.SPAN, spanIds)
-                .map(scoresMap -> spans.stream()
-                        .map(span -> span.toBuilder().feedbackScores(scoresMap.get(span.id())).build())
-                        .toList())
-                .doFinally(signalType -> endSegment(segment));
     }
 
     private BigDecimal calculateCost(Span span) {
