@@ -21,6 +21,8 @@ component:
     run_migration: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
@@ -95,6 +97,8 @@ component:
     enabled: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
@@ -145,6 +149,8 @@ component:
     enabled: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
