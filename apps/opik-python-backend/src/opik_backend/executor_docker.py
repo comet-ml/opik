@@ -7,19 +7,20 @@ from queue import Queue
 from threading import Lock
 from uuid6 import uuid7
 
-import docker
 
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
 from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
 
 logger = logging.getLogger(__name__)
-client = docker.from_env()
-executor = concurrent.futures.ThreadPoolExecutor()
 
 class DockerExecutor(CodeExecutorBase):
     def __init__(self):
         super().__init__()
         # Docker-specific configuration
+        import docker
+        client = docker.from_env()
+        executor = concurrent.futures.ThreadPoolExecutor()
+
         self.docker_registry = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY", "ghcr.io/comet-ml/opik")
         self.docker_image = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
         self.docker_tag = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
