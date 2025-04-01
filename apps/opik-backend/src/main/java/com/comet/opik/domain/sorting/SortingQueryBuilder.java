@@ -18,7 +18,7 @@ public class SortingQueryBuilder {
         }
 
         return sorting.stream()
-                .map(sortingField -> "%s %s".formatted(sortingField.field(), getDirection(sortingField)))
+                .map(sortingField -> "%s %s".formatted(sortingField.dbField(), getDirection(sortingField)))
                 .collect(Collectors.joining(", "));
     }
 
