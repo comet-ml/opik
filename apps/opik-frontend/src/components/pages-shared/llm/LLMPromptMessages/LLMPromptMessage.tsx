@@ -114,6 +114,7 @@ const LLMPromptMessage = ({
                 variant="outline"
                 size="icon-sm"
                 onClick={onRemoveMessage}
+                type="button"
               >
                 <Trash />
               </Button>
@@ -124,6 +125,7 @@ const LLMPromptMessage = ({
               variant="outline"
               size="icon-sm"
               onClick={onDuplicateMessage}
+              type="button"
             >
               <CopyPlus />
             </Button>
@@ -133,6 +135,7 @@ const LLMPromptMessage = ({
               variant="outline"
               className="cursor-move"
               size="icon-sm"
+              type="button"
               {...listeners}
             >
               <GripHorizontal />

@@ -26,6 +26,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   EVALUATORS_RULE_TYPE,
   EvaluatorsRule,
@@ -36,6 +37,7 @@ import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
@@ -45,9 +47,11 @@ import {
   EvaluationRuleFormSchema,
   EvaluationRuleFormType,
   LLMJudgeDetailsFormType,
+  PythonCodeDetailsFormType,
 } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import { LLM_JUDGE } from "@/types/llm";
 import { LLM_PROMPT_CUSTOM_TEMPLATE } from "@/constants/llm";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 
 export const DEFAULT_SAMPLING_RATE = 1;
 
@@ -60,6 +64,29 @@ export const DEFAULT_LLM_AS_JUDGE_DATA: LLMJudgeDetailsFormType = {
   messages: LLM_PROMPT_CUSTOM_TEMPLATE.messages,
   variables: LLM_PROMPT_CUSTOM_TEMPLATE.variables,
   schema: LLM_PROMPT_CUSTOM_TEMPLATE.schema,
+};
+
+export const DEFAULT_PYTHON_CODE_DATA: PythonCodeDetailsFormType = {
+  metric:
+    "from typing import Any\n" +
+    "from opik.evaluation.metrics import base_metric, score_result\n" +
+    "\n" +
+    "class MyCustomMetric(base_metric.BaseMetric):\n" +
+    '    def __init__(self, name: str = "my_custom_metric"):\n' +
+    "        self.name = name\n" +
+    "\n" +
+    "    def score(self, input: str, output: str, **ignored_kwargs: Any):\n" +
+    "        # Add you logic here\n" +
+    "\n" +
+    "        return score_result.ScoreResult(\n" +
+    "            value=0,\n" +
+    "            name=self.name,\n" +
+    '            reason="Optional reason for the score"\n' +
+    "        )",
+  arguments: {
+    input: "",
+    output: "",
+  },
 };
 
 type AddEditRuleDialogProps = {
@@ -75,6 +102,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   projectId,
   rule: defaultRule,
 }) => {
+  const isCodeMetricEnabled = useIsFeatureEnabled("python_evaluator_enabled");
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
@@ -88,7 +116,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       pythonCodeDetails:
         defaultRule && defaultRule.type === EVALUATORS_RULE_TYPE.python_code
           ? (defaultRule.code as PythonCodeObject)
-          : { code: "" },
+          : cloneDeep(DEFAULT_PYTHON_CODE_DATA),
       llmJudgeDetails:
         defaultRule && defaultRule.type === EVALUATORS_RULE_TYPE.llm_judge
           ? convertLLMJudgeObjectToLLMJudgeData(
@@ -106,6 +134,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const title = isEdit ? "Edit rule" : "Create a new rule";
   const submitText = isEdit ? "Update rule" : "Create rule";
 
+  const isCodeMetricEditBlock = !isCodeMetricEnabled && !isLLMJudge && isEdit;
+
   const getRule = useCallback(() => {
     const formData = form.getValues();
     return {
@@ -113,11 +143,12 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       project_id: formData.projectId,
       sampling_rate: formData.samplingRate,
       type: formData.type,
-      code: isLLMJudge
-        ? convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails)
-        : formData.pythonCodeDetails,
+      code:
+        formData.type === EVALUATORS_RULE_TYPE.llm_judge
+          ? convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails)
+          : formData.pythonCodeDetails,
     } as EvaluatorsRule;
-  }, [form, isLLMJudge]);
+  }, [form]);
 
   const createPrompt = useCallback(() => {
     createMutate({
@@ -224,6 +255,55 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   />
                 )}
               />
+              {!isEdit && (
+                <FormField
+                  control={form.control}
+                  name="type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label>Type</Label>
+                      <FormControl>
+                        <div className="flex">
+                          <ToggleGroup
+                            type="single"
+                            value={field.value}
+                            onValueChange={(value) =>
+                              value && field.onChange(value)
+                            }
+                          >
+                            <ToggleGroupItem
+                              value={EVALUATORS_RULE_TYPE.llm_judge}
+                              aria-label="LLM-as-judge"
+                            >
+                              LLM-as-judge
+                            </ToggleGroupItem>
+                            {isCodeMetricEnabled ? (
+                              <ToggleGroupItem
+                                value={EVALUATORS_RULE_TYPE.python_code}
+                                aria-label="Code metric"
+                              >
+                                Code metric
+                              </ToggleGroupItem>
+                            ) : (
+                              <TooltipWrapper content="This feature is coming soon, stay tuned !">
+                                <span>
+                                  <ToggleGroupItem
+                                    value={EVALUATORS_RULE_TYPE.python_code}
+                                    aria-label="Code metric"
+                                    disabled
+                                  >
+                                    Code metric
+                                  </ToggleGroupItem>
+                                </span>
+                              </TooltipWrapper>
+                            )}
+                          </ToggleGroup>
+                        </div>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              )}
               {isLLMJudge ? (
                 <LLMJudgeRuleDetails
                   workspaceName={workspaceName}
@@ -239,9 +319,19 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
-            {submitText}
-          </Button>
+          {isCodeMetricEditBlock ? (
+            <TooltipWrapper content="Code metric cannot be updated. This feature is not available for this environment">
+              <span>
+                <Button type="submit" disabled>
+                  {submitText}
+                </Button>
+              </span>
+            </TooltipWrapper>
+          ) : (
+            <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+              {submitText}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
