@@ -3,9 +3,9 @@ from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
 try:
-    import rouge_score as rouge_score
+    from rouge_score import rouge_scorer
 except ImportError:
-    rouge_score = None
+    rouge_scorer = None
 
 
 class ROUGE(base_metric.BaseMetric):
@@ -52,7 +52,7 @@ class ROUGE(base_metric.BaseMetric):
     ):
         super().__init__(name=name, track=track)
 
-        if rouge_score.rouge_scorer is None:
+        if rouge_scorer is None:
             raise ImportError(
                 "`rouge-score` libraries are required for ROUGE score calculation. "
                 "Install via `pip install rouge-score`."
@@ -65,7 +65,7 @@ class ROUGE(base_metric.BaseMetric):
             )
 
         self._rouge_type = rouge_type
-        self._rouge = rouge_score.rouge_scorer.RougeScorer(
+        self._rouge = rouge_scorer.RougeScorer(
             [rouge_type],
             use_stemmer=use_stemmer,
             split_summaries=split_summaries,
