@@ -24,15 +24,11 @@ jobs:
         run: |
           git diff --quiet || echo "CHANGES=true" >> $GITHUB_ENV
 
-      - name: Configure Git
+      - name: Commit Changes
         if: env.CHANGES == 'true'
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@comet.com"
-
-      - name: Create Branch and Commit Changes
-        if: env.CHANGES == 'true'
-        run: |
           git checkout -b span-cost-update-$(date +%Y-%m-%d)
           git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
           git commit -m "Update span cost file"
