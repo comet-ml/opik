@@ -94,7 +94,7 @@ def _patch_openai_responses(
 
     responses_create_decorator = responses_decorator_factory.track(
         type="llm",
-        name="response_create",
+        name="responses_create",
         generations_aggregator=response_events_aggregator.aggregate,
         project_name=project_name,
     )
