@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from overrides import override
+from typing_extensions import override
 
 from ..api_objects import opik_client, span
 from . import arguments_helpers, base_track_decorator, inspect_helpers
