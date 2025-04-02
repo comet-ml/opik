@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
-import com.comet.opik.api.Project;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.ErrorMessage;
@@ -54,7 +53,7 @@ public class LlmProviderApiKeyResource {
 
     @GET
     @Operation(operationId = "findLlmProviderKeys", summary = "Find LLM Provider's ApiKeys", description = "Find LLM Provider's ApiKeys", responses = {
-            @ApiResponse(responseCode = "200", description = "LLMProviderApiKey resource", content = @Content(schema = @Schema(implementation = Project.ProjectPage.class)))
+            @ApiResponse(responseCode = "200", description = "LLMProviderApiKey resource", content = @Content(schema = @Schema(implementation = ProviderApiKey.ProviderApiKeyPage.class)))
     })
     @JsonView({ProviderApiKey.View.Public.class})
     public Response find() {

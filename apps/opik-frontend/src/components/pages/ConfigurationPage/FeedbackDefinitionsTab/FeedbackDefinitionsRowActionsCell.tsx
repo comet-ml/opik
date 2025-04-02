@@ -37,6 +37,7 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className="justify-end p-0"
+      stopClickPropagation
     >
       <AddEditFeedbackDefinitionDialog
         key={`edit-${resetKeyRef.current}`}
@@ -60,11 +61,7 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          className="w-52"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
             onClick={() => {
               setOpen(2);

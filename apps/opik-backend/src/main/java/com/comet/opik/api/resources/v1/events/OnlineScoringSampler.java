@@ -11,6 +11,7 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.UserLog;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
@@ -48,14 +49,17 @@ public class OnlineScoringSampler {
     private final SecureRandom secureRandom;
     private final Logger userFacingLogger;
     private final Map<AutomationRuleEvaluatorType, OnlineScoringConfig.StreamConfiguration> streamConfigurations;
+    private final ServiceTogglesConfig serviceTogglesConfig;
 
     @Inject
-    public OnlineScoringSampler(@Config("onlineScoring") @NonNull OnlineScoringConfig config,
+    public OnlineScoringSampler(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull EventBus eventBus,
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.redisClient = redisClient;
+        this.serviceTogglesConfig = serviceTogglesConfig;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
         streamConfigurations = config.getStreams().stream()
@@ -119,12 +123,17 @@ public class OnlineScoringSampler {
                             enqueueInRedis(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                         }
                         case USER_DEFINED_METRIC_PYTHON -> {
-                            var messages = samples
-                                    .map(trace -> toScoreUserDefinedMetricPython(tracesBatch,
-                                            (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
-                                    .toList();
-                            logSampledTrace(tracesBatch, evaluator, messages);
-                            enqueueInRedis(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                            if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                                var messages = samples
+                                        .map(trace -> toScoreUserDefinedMetricPython(tracesBatch,
+                                                (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
+                                        .toList();
+                                logSampledTrace(tracesBatch, evaluator, messages);
+                                enqueueInRedis(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                            } else {
+                                log.warn("Python evaluator is disabled. Skipping sampling for evaluator type '{}'",
+                                        evaluator.getType());
+                            }
                         }
                         default -> log.warn("No process defined for evaluator type '{}'", evaluator.getType());
                     }

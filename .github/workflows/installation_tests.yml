@@ -6,9 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-readme-installation:
-    name: Test Main README.md Installation With Pull
+  test-opiksh:
+    name: opik.sh (main README)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
     steps:
@@ -28,12 +29,53 @@ jobs:
           pip install opik
           playwright install chromium
 
-      - name: Install via README.md instructions
+      - name: Install using opik.sh
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh
+
+      - name: Run trace test
+        run: |
+          cd ${{ github.workspace }}/tests_end_to_end
+          export PYTHONPATH='.'
+          pytest -xvs tests/Installation/test_trace_logging.py --browser chromium
+
+      - name: Stop Opik
+        if: always()
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --stop
+
+  test-docker-compose-up:
+    name: docker compose up --detach (Comet docs)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+          pip install opik
+          playwright install chromium
+
+      - name: Install using docker compose up --detach
         env:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose pull
           docker compose up --detach
 
       - name: Check Docker pods are up (Local)
@@ -60,9 +102,10 @@ jobs:
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
-  test-docs-installation:
-    name: Test Comet Documentation Installation No Pull First
+  test-docker-compose-build:
+    name: docker compose up --build (Comet docs)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
     steps:
@@ -82,67 +125,12 @@ jobs:
           pip install opik
           playwright install chromium
 
-      - name: Install via Documentation instructions
+      - name: Install with --build flag
         env:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose up --detach
-
-      - name: Check Docker pods are up (Local)
-        run: |
-          chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
-          ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
-        shell: bash
-
-      - name: Check backend health (Local)
-        run: |
-          chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
-          ./tests_end_to_end/installer_utils/check_backend.sh
-        shell: bash
-
-
-      - name: Run trace test
-        run: |
-          cd ${{ github.workspace }}/tests_end_to_end
-          export PYTHONPATH='.'
-          pytest -xvs tests/Installation/test_trace_logging.py --browser chromium
-
-      - name: Stop Opik
-        if: always()
-        run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
-
-  test-docker-compose-readme-default:
-    name: Test Deployment README Default
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Python dependencies
-        run: |
-          pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
-          pip install opik
-          playwright install chromium
-
-      - name: Install via Docker Compose README default method
-        env:
-          OPIK_USAGE_REPORT_ENABLED: false
-        run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose pull
-          docker compose -f docker-compose.yaml up -d
+          docker compose up --build
           
       - name: Check Docker pods are up (Local)
         run: |
@@ -168,9 +156,10 @@ jobs:
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
-  test-docker-compose-readme-specific-version:
-    name: Test Deployment README with Specific Version
+  test-docker-compose-with-version:
+    name: Set version - docker compose (deployment README)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
     steps:
@@ -190,13 +179,12 @@ jobs:
           pip install opik
           playwright install chromium
 
-      - name: Install via Docker Compose README with specific version
+      - name: Install with docker compose with specific version set
         env:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           export OPIK_VERSION=1.6.5
-          docker compose pull
           docker compose -f docker-compose.yaml up -d
           
       - name: Check Docker pods are up (Local)
@@ -223,9 +211,10 @@ jobs:
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
 
-  test-docker-compose-readme-build:
-    name: Test Deployment README with Build
+  test-docker-compose-with-pull:
+    name: Docker compose pull + up (Deployment README)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
     steps:
@@ -245,13 +234,13 @@ jobs:
           pip install opik
           playwright install chromium
 
-      - name: Install via Docker Compose README with build
+      - name: Install with docker compose after pulling latest version
         env:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose pull
-          docker compose -f docker-compose.yaml up -d --build
+          docker compose -f docker-compose.yaml up -d
           
       - name: Check Docker pods are up (Local)
         run: |

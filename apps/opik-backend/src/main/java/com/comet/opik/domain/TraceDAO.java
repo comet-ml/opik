@@ -1,7 +1,9 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceSearchCriteria;
@@ -37,6 +39,7 @@ import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -53,13 +56,13 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceCo
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
-import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static java.util.function.Predicate.not;
 
 @ImplementedBy(TraceDAOImpl.class)
 interface TraceDAO {
@@ -103,6 +106,8 @@ interface TraceDAO {
     Mono<Long> deleteThreads(UUID uuid, List<String> threadIds);
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
+
+    Mono<Trace> getPartialById(@NonNull UUID id);
 
     Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria);
 }
@@ -182,11 +187,7 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(CAST(old_trace.project_id AS Nullable(String))) > 0, old_trace.project_id,
                     new_trace.project_id
                 ) as project_id,
-                multiIf(
-                    LENGTH(CAST(old_trace.workspace_id AS Nullable(String))) > 0 AND notEquals(old_trace.workspace_id, new_trace.workspace_id), CAST(leftPad(new_trace.workspace_id, 40, '*') AS FixedString(19)),
-                    LENGTH(CAST(old_trace.workspace_id AS Nullable(String))) > 0, old_trace.workspace_id,
-                    new_trace.workspace_id
-                ) as workspace_id,
+                new_trace.workspace_id as workspace_id,
                 multiIf(
                     LENGTH(old_trace.name) > 0, old_trace.name,
                     new_trace.name
@@ -255,6 +256,7 @@ class TraceDAOImpl implements TraceDAO {
                     *
                 FROM traces
                 WHERE id = :id
+                AND workspace_id = :workspace_id
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_trace
@@ -295,9 +297,13 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_ID = """
             SELECT
                 t.*,
+                t.id as id,
+                t.project_id as project_id,
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
-                groupUniqArrayArray(c.comments_array) as comments
+                COUNT(s.id) AS span_count,
+                groupUniqArrayArray(c.comments_array) as comments,
+                any(fs.feedback_scores) as feedback_scores_list
             FROM (
                 SELECT
                     *,
@@ -315,10 +321,11 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     usage,
-                    total_estimated_cost
+                    total_estimated_cost,
+                    id
                 FROM spans
                 WHERE workspace_id = :workspace_id
-                AND trace_id = :id
+                  AND trace_id = :id
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
@@ -343,6 +350,34 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY entity_id
             ) AS c ON t.id = c.entity_id
+            LEFT JOIN (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    groupArray(tuple(
+                         name,
+                         category_name,
+                         value,
+                         reason,
+                         source,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as feedback_scores
+                FROM (
+                    SELECT
+                        *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND entity_id = :id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY workspace_id, project_id, entity_id
+            ) AS fs ON t.id = fs.entity_id
             GROUP BY
                 t.*
             ;
@@ -358,18 +393,47 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH spans_agg AS (
+            WITH feedback_scores_agg AS (
                 SELECT
-                    workspace_id,
-                    project_id,
+                    entity_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) as feedback_scores,
+                    groupArray(tuple(
+                         name,
+                         category_name,
+                         value,
+                         reason,
+                         source,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as feedback_scores_list
+                FROM (
+                    SELECT
+                        *
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY workspace_id, project_id, entity_id
+            ), spans_agg AS (
+                SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    COUNT(DISTINCT id) as span_count
                 FROM (
                     SELECT
                         workspace_id,
                         project_id,
                         trace_id,
+                        id,
                         usage,
                         total_estimated_cost
                     FROM spans
@@ -435,17 +499,23 @@ class TraceDAOImpl implements TraceDAO {
                   t.last_updated_by as last_updated_by,
                   t.duration as duration,
                   t.thread_id as thread_id,
+                  t.feedback_scores_list as feedback_scores_list,
+                  t.feedback_scores as feedback_scores,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
-                  groupUniqArrayArray(c.comments_array) as comments
+                  groupUniqArrayArray(c.comments_array) as comments,
+                  max(s.span_count) AS span_count
              FROM (
                  SELECT
-                     *,
+                     t.*,
                      if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration
+                         NULL) AS duration,
+                      fsagg.feedback_scores_list as feedback_scores_list,
+                      fsagg.feedback_scores as feedback_scores
                  FROM traces t
+                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
                  <if(trace_aggregation_filters)>
                  LEFT JOIN spans_agg s ON t.id = s.trace_id
                  <endif>
@@ -632,11 +702,7 @@ class TraceDAOImpl implements TraceDAO {
                     LENGTH(CAST(old_trace.project_id AS Nullable(String))) > 0, old_trace.project_id,
                     new_trace.project_id
                 ) as project_id,
-                multiIf(
-                    LENGTH(CAST(old_trace.workspace_id AS Nullable(String))) > 0 AND notEquals(old_trace.workspace_id, new_trace.workspace_id), CAST(leftPad(new_trace.workspace_id, 40, '*') AS FixedString(19)),
-                    LENGTH(CAST(old_trace.workspace_id AS Nullable(String))) > 0, old_trace.workspace_id,
-                    new_trace.workspace_id
-                ) as workspace_id,
+                new_trace.workspace_id as workspace_id,
                 multiIf(
                     LENGTH(new_trace.name) > 0, new_trace.name,
                     old_trace.name
@@ -711,10 +777,25 @@ class TraceDAOImpl implements TraceDAO {
                     *
                 FROM traces
                 WHERE id = :id
+                AND workspace_id = :workspace_id
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_trace
             ON new_trace.id = old_trace.id
+            ;
+            """;
+
+    private static final String SELECT_PARTIAL_BY_ID = """
+            SELECT
+                name,
+                project_id,
+                start_time
+            FROM traces
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            AND id = :id
+            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+            LIMIT 1
             ;
             """;
 
@@ -1002,7 +1083,6 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -1206,8 +1286,6 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return getById(id, connection)
                 .flatMap(this::mapToDto)
-                .flatMap(trace -> enhanceWithFeedbackLogs(List.of(trace)))
-                .flatMap(traces -> Mono.justOrEmpty(traces.stream().findFirst()))
                 .singleOrEmpty();
     }
 
@@ -1242,6 +1320,11 @@ class TraceDAOImpl implements TraceDAO {
                         .filter(it -> !it.isEmpty())
                         .orElse(null))
                 .comments(getComments(row.get("comments", List[].class)))
+                .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
+                        .map(this::mapFeedbackScores)
+                        .filter(not(List::isEmpty))
+                        .orElse(null))
+                .spanCount(row.get("span_count", Integer.class))
                 .usage(row.get("usage", Map.class))
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
                         ? null
@@ -1261,6 +1344,30 @@ class TraceDAOImpl implements TraceDAO {
                 .build());
     }
 
+    private List<FeedbackScore> mapFeedbackScores(List<List<Object>> feedbackScores) {
+        return Optional.ofNullable(feedbackScores)
+                .orElse(List.of())
+                .stream()
+                .map(feedbackScore -> FeedbackScore.builder()
+                        .name((String) feedbackScore.get(0))
+                        .categoryName(getIfNotEmpty(feedbackScore.get(1)))
+                        .value((BigDecimal) feedbackScore.get(2))
+                        .reason(getIfNotEmpty(feedbackScore.get(3)))
+                        .source(ScoreSource.fromString((String) feedbackScore.get(4)))
+                        .createdAt(((OffsetDateTime) feedbackScore.get(5)).toInstant())
+                        .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
+                        .createdBy((String) feedbackScore.get(7))
+                        .lastUpdatedBy((String) feedbackScore.get(8))
+                        .build())
+                .toList();
+    }
+
+    private String getIfNotEmpty(Object value) {
+        return Optional.ofNullable((String) value)
+                .filter(StringUtils::isNotEmpty)
+                .orElse(null);
+    }
+
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {
         return result.map((row, rowMetadata) -> TraceDetails.builder()
                 .projectId(row.get("project_id", String.class))
@@ -1277,7 +1384,6 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMap(total -> getTracesByProjectId(size, page, traceSearchCriteria, connection) //Get count then pagination
                         .flatMapMany(this::mapToDto)
                         .collectList()
-                        .flatMap(this::enhanceWithFeedbackLogs)
                         .map(traces -> new TracePage(page, traces.size(), total, traces,
                                 sortingFactory.getSortableFields())));
     }
@@ -1306,18 +1412,6 @@ class TraceDAOImpl implements TraceDAO {
                 .then();
     }
 
-    private Mono<List<Trace>> enhanceWithFeedbackLogs(List<Trace> traces) {
-        List<UUID> traceIds = traces.stream().map(Trace::id).toList();
-
-        Segment segment = startSegment("traces", "Clickhouse", "enhanceWithFeedbackLogs");
-
-        return feedbackScoreDAO.getScores(EntityType.TRACE, traceIds)
-                .map(logsMap -> traces.stream()
-                        .map(trace -> trace.toBuilder().feedbackScores(logsMap.get(trace.id())).build())
-                        .toList())
-                .doFinally(signalType -> endSegment(segment));
-    }
-
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
 
@@ -1331,11 +1425,18 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
                 .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
 
+        var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(traceSearchCriteria.sortingFields());
+
         template = ImageUtils.addTruncateToTemplate(template, traceSearchCriteria.truncate());
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
                 .bind("limit", size)
                 .bind("offset", offset);
+
+        if (hasDynamicKeys) {
+            statement = sortingQueryBuilder.bindDynamicKeys(statement, traceSearchCriteria.sortingFields());
+        }
+
         bindSearchCriteria(traceSearchCriteria, statement);
 
         Segment segment = startSegment("traces", "Clickhouse", "find");
@@ -1705,14 +1806,33 @@ class TraceDAOImpl implements TraceDAO {
         });
     }
 
+    @WithSpan
+    public Mono<Trace> getPartialById(@NonNull UUID id) {
+        log.info("Getting partial trace by id '{}'", id);
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_PARTIAL_BY_ID).bind("id", id);
+            var segment = startSegment("traces", "Clickhouse", "get_partial_by_id");
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .doFinally(signalType -> endSegment(segment));
+        })
+                .flatMapMany(this::mapToPartialDto)
+                .singleOrEmpty();
+    }
+
+    private Publisher<Trace> mapToPartialDto(Result result) {
+        return result.map((row, rowMetadata) -> Trace.builder()
+                .name(row.get("name", String.class))
+                .startTime(row.get("start_time", Instant.class))
+                .projectId(row.get("project_id", UUID.class))
+                .build());
+    }
+
     @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.stream(connection -> findTraceStream(limit, criteria, connection))
                 .flatMap(this::mapToDto)
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
-                .filter(CollectionUtils::isNotEmpty)
-                .flatMap(this::enhanceWithFeedbackLogs)
                 .flatMap(Flux::fromIterable);
     }
 

@@ -6,6 +6,8 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Function;
@@ -126,50 +128,47 @@ class ExperimentDAO {
                 e.prompt_id as prompt_id,
                 e.prompt_versions as prompt_versions,
                 if(
-                     notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
-                     arrayMap(
-                        vName -> (
-                            vName,
-                            if(
+                    notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
+                    mapFromArrays(
+                        arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
+                        arrayMap(
+                            vName -> if(
                                 arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
+                                        )
                                     )
                                 ) = 0,
                                 0,
                                 arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
+                                        )
                                     )
                                 ) / arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
+                                        )
                                     )
                                 )
-                            )
-                        ),
-                        arrayDistinct(arrayMap(vName -> vName.1, arrayFilter(curName -> length(curName.1) > 0, groupArray(tuple(tfs.name)))))
+                            ),
+                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name)))
+                        )
                     ),
-                    []
-                 ) as feedback_scores,
+                    map()
+                ) as feedback_scores,
                 count (DISTINCT ei.trace_id) as trace_count,
                 groupUniqArrayArray(tc.comments_array) as comments_array_agg
             FROM (
@@ -268,49 +267,46 @@ class ExperimentDAO {
                 e.prompt_id as prompt_id,
                 e.prompt_versions as prompt_versions,
                 if(
-                     notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
-                     arrayMap(
-                        vName -> (
-                            vName,
-                            if(
+                    notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
+                    mapFromArrays(
+                        arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
+                        arrayMap(
+                            vName -> if(
                                 arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
+                                        )
                                     )
                                 ) = 0,
                                 0,
                                 arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
+                                        )
                                     )
                                 ) / arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
+                                        )
                                     )
                                 )
-                            )
-                        ),
-                        arrayDistinct(arrayMap(vName -> vName.1, arrayFilter(curName -> length(curName.1) > 0, groupArray(tuple(tfs.name)))))
+                            ),
+                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name)))
+                        )
                     ),
-                    []
+                    map()
                 ) as feedback_scores,
                 count (DISTINCT ei.trace_id) as trace_count,
                 groupUniqArrayArray(tc.comments_array) as comments_array_agg
@@ -393,7 +389,7 @@ class ExperimentDAO {
                 e.prompt_version_id,
                 e.prompt_id,
                 e.prompt_versions
-            ORDER BY e.id DESC
+            ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             LIMIT :limit OFFSET :offset
             ;
             """;
@@ -491,6 +487,8 @@ class ExperimentDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull ExperimentSortingFactory sortingFactory;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -627,14 +625,17 @@ class ExperimentDAO {
     }
 
     private static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
-        List<FeedbackScoreAverage> feedbackScoresAvg = Arrays
-                .stream(Optional.ofNullable(row.get("feedback_scores", List[].class))
-                        .orElse(new List[0]))
-                .filter(scores -> CollectionUtils.isNotEmpty(scores) && scores.size() == 2
-                        && !scores.get(1).toString().isBlank())
-                .map(scores -> new FeedbackScoreAverage(scores.getFirst().toString(),
-                        new BigDecimal(scores.get(1).toString())))
+        List<FeedbackScoreAverage> feedbackScoresAvg = Optional
+                .ofNullable(row.get("feedback_scores", Map.class))
+                .map(map -> (Map<String, BigDecimal>) map)
+                .orElse(Map.of())
+                .entrySet()
+                .stream()
+                .map(scores -> {
+                    return new FeedbackScoreAverage(scores.getKey(), scores.getValue());
+                })
                 .toList();
+
         return feedbackScoresAvg.isEmpty() ? null : feedbackScoresAvg;
     }
 
@@ -650,16 +651,30 @@ class ExperimentDAO {
                 .flatMapMany(connection -> find(page, size, experimentSearchCriteria, connection))
                 .flatMap(this::mapToDto)
                 .collectList()
-                .map(experiments -> new ExperimentPage(page, experiments.size(), total, experiments));
+                .map(experiments -> new ExperimentPage(page, experiments.size(), total, experiments,
+                        sortingFactory.getSortableFields()));
     }
 
     private Publisher<? extends Result> find(
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
+
+        String sorting = sortingQueryBuilder.toOrderBySql(experimentSearchCriteria.sortingFields());
+
+        var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(experimentSearchCriteria.sortingFields());
+
         var template = newFindTemplate(FIND, experimentSearchCriteria);
+
+        template.add("sort_fields", sorting);
+
         var statement = connection.createStatement(template.render())
                 .bind("limit", size)
                 .bind("offset", (page - 1) * size);
+
+        if (hasDynamicKeys) {
+            statement = sortingQueryBuilder.bindDynamicKeys(statement, experimentSearchCriteria.sortingFields());
+        }
+
         bindSearchCriteria(statement, experimentSearchCriteria, false);
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }

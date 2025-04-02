@@ -30,8 +30,7 @@ class FeedbackScoreValidator(validator.Validator):
             for e in exception.errors():
                 component_name: str = ".".join(e["loc"])
                 msg: str = (
-                    f"{component_name} - {e['msg']}.\n"
-                    f"Expected dict: {EXPECTED_TYPES}."
+                    f"{component_name} - {e['msg']}.\nExpected dict: {EXPECTED_TYPES}."
                 )
                 failure_reasons.append(msg)
             self.validation_result = result.ValidationResult(

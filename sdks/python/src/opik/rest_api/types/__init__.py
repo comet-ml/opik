@@ -2,7 +2,14 @@
 
 from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
+from .attachment import Attachment
+from .attachment_page import AttachmentPage
 from .auth_details_holder import AuthDetailsHolder
+from .automation_rule_evaluator import (
+    AutomationRuleEvaluator,
+    AutomationRuleEvaluator_LlmAsJudge,
+    AutomationRuleEvaluator_UserDefinedMetricPython,
+)
 from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
 from .automation_rule_evaluator_llm_as_judge_public import (
     AutomationRuleEvaluatorLlmAsJudgePublic,
@@ -10,7 +17,22 @@ from .automation_rule_evaluator_llm_as_judge_public import (
 from .automation_rule_evaluator_llm_as_judge_write import (
     AutomationRuleEvaluatorLlmAsJudgeWrite,
 )
+from .automation_rule_evaluator_object_public import (
+    AutomationRuleEvaluatorObjectPublic,
+    AutomationRuleEvaluatorObjectPublic_LlmAsJudge,
+    AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython,
+)
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
+from .automation_rule_evaluator_public import (
+    AutomationRuleEvaluatorPublic,
+    AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
+)
+from .automation_rule_evaluator_update import (
+    AutomationRuleEvaluatorUpdate,
+    AutomationRuleEvaluatorUpdate_LlmAsJudge,
+    AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
+)
 from .automation_rule_evaluator_update_llm_as_judge import (
     AutomationRuleEvaluatorUpdateLlmAsJudge,
 )
@@ -25,6 +47,11 @@ from .automation_rule_evaluator_user_defined_metric_python_public import (
 )
 from .automation_rule_evaluator_user_defined_metric_python_write import (
     AutomationRuleEvaluatorUserDefinedMetricPythonWrite,
+)
+from .automation_rule_evaluator_write import (
+    AutomationRuleEvaluatorWrite,
+    AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
@@ -53,6 +80,10 @@ from .column_types_item import ColumnTypesItem
 from .comment import Comment
 from .comment_compare import CommentCompare
 from .comment_public import CommentPublic
+from .complete_multipart_upload_request import CompleteMultipartUploadRequest
+from .complete_multipart_upload_request_entity_type import (
+    CompleteMultipartUploadRequestEntityType,
+)
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
 from .data_point_number_public import DataPointNumberPublic
@@ -70,6 +101,8 @@ from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
+from .delete_attachments_request import DeleteAttachmentsRequest
+from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
 from .delete_feedback_score import DeleteFeedbackScore
 from .delta import Delta
 from .delta_role import DeltaRole
@@ -86,6 +119,7 @@ from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_public import ExperimentItemPublic
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
+from .export_trace_service_request import ExportTraceServiceRequest
 from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
 from .feedback_create import (
     FeedbackCreate,
@@ -153,6 +187,7 @@ from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
 from .message import Message
+from .multipart_upload_part import MultipartUploadPart
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
 from .numerical_feedback_definition_public import NumericalFeedbackDefinitionPublic
@@ -200,6 +235,7 @@ from .prompt_version_public import PromptVersionPublic
 from .prompt_version_public_type import PromptVersionPublicType
 from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
+from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
@@ -217,12 +253,16 @@ from .span_public_type import SpanPublicType
 from .span_type import SpanType
 from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
+from .spans_count_response import SpansCountResponse
+from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
 from .tool import Tool
 from .tool_call import ToolCall
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
+from .trace_filter_public import TraceFilterPublic
+from .trace_filter_public_operator import TraceFilterPublicOperator
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
 from .trace_thread import TraceThread
@@ -232,22 +272,40 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
-from .workspace_metadata import WorkspaceMetadata
+from .workspace_name_holder import WorkspaceNameHolder
+from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 
 __all__ = [
     "AssistantMessage",
     "AssistantMessageRole",
+    "Attachment",
+    "AttachmentPage",
     "AuthDetailsHolder",
+    "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorLlmAsJudge",
     "AutomationRuleEvaluatorLlmAsJudgePublic",
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
+    "AutomationRuleEvaluatorObjectPublic",
+    "AutomationRuleEvaluatorObjectPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorPagePublic",
+    "AutomationRuleEvaluatorPublic",
+    "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorPublic_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
+    "AutomationRuleEvaluatorUpdate_LlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_UserDefinedMetricPython",
     "AutomationRuleEvaluatorUserDefinedMetricPython",
     "AutomationRuleEvaluatorUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
+    "AutomationRuleEvaluatorWrite",
+    "AutomationRuleEvaluatorWrite_LlmAsJudge",
+    "AutomationRuleEvaluatorWrite_UserDefinedMetricPython",
+    "AutomationRuleEvaluator_LlmAsJudge",
+    "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
     "BiInformation",
@@ -275,6 +333,8 @@ __all__ = [
     "Comment",
     "CommentCompare",
     "CommentPublic",
+    "CompleteMultipartUploadRequest",
+    "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
     "DataPointNumberPublic",
@@ -292,6 +352,8 @@ __all__ = [
     "DatasetItemWriteSource",
     "DatasetPagePublic",
     "DatasetPublic",
+    "DeleteAttachmentsRequest",
+    "DeleteAttachmentsRequestEntityType",
     "DeleteFeedbackScore",
     "Delta",
     "DeltaRole",
@@ -308,6 +370,7 @@ __all__ = [
     "ExperimentItemPublic",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
     "FeedbackCreate_Categorical",
@@ -369,6 +432,7 @@ __all__ = [
     "LogItemLevel",
     "LogPage",
     "Message",
+    "MultipartUploadPart",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
     "NumericalFeedbackDefinitionPublic",
@@ -412,6 +476,7 @@ __all__ = [
     "PromptVersionPublicType",
     "PromptVersionType",
     "ProviderApiKey",
+    "ProviderApiKeyPagePublic",
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
     "ProviderApiKeyPublicProvider",
@@ -429,12 +494,16 @@ __all__ = [
     "SpanType",
     "SpanWrite",
     "SpanWriteType",
+    "SpansCountResponse",
+    "StartMultipartUploadResponse",
     "StreamOptions",
     "Tool",
     "ToolCall",
     "Trace",
     "TraceBatch",
     "TraceCountResponse",
+    "TraceFilterPublic",
+    "TraceFilterPublicOperator",
     "TracePagePublic",
     "TracePublic",
     "TraceThread",
@@ -444,6 +513,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
-    "WorkspaceMetadata",
+    "WorkspaceNameHolder",
+    "WorkspaceSpansCount",
     "WorkspaceTraceCount",
 ]

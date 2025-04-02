@@ -8,6 +8,7 @@ metadata:
   og:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
   og:url: "https://www.comet.com/docs/opik"
 
+title: Opik Documentation
 favicon: img/logo.svg
 
 js:
@@ -179,6 +180,9 @@ navigation:
               - page: Predibase
                 path: docs/tracing/integrations/predibase.mdx
                 slug: predibase
+              - page: Pydantic AI
+                path: docs/tracing/integrations/pydantic-ai.mdx
+                slug: pydantic-ai
               - page: Ragas
                 path: docs/tracing/integrations/ragas.mdx
                 slug: ragas
@@ -371,6 +375,9 @@ navigation:
           - page: Predibase
             path: docs/cookbook/predibase.mdx
             slug: predibase
+          - page: Pydantic AI
+            path: docs/cookbook/pydantic-ai.mdx
+            slug: pydantic-ai
           - page: Ragas
             path: docs/cookbook/ragas.mdx
             slug: ragas

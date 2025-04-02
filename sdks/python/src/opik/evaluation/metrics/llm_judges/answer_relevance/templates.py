@@ -87,15 +87,15 @@ def generate_query_with_context(
 ) -> str:
     examples_str = "\n\n".join(
         [
-            f"#### Example {i+1}: {example['title']}\n\n"
-            f"- **Input:** \"{example['input']}\"\n"
-            f"- **Output:** \"{example['output']}\"\n"
+            f"#### Example {i + 1}: {example['title']}\n\n"
+            f'- **Input:** "{example["input"]}"\n'
+            f'- **Output:** "{example["output"]}"\n'
             f"- **Context:** {example['context']}\n"
             f"- **Result:**\n"
             f"  ```json\n"
             f"  {{\n"
-            f"    \"answer_relevance_score\": {example['answer_relevance_score']},\n"
-            f"    \"reason\": \"{example['reason']}\"\n"
+            f'    "answer_relevance_score": {example["answer_relevance_score"]},\n'
+            f'    "reason": "{example["reason"]}"\n'
             f"  }}\n"
             f"  ```"
             for i, example in enumerate(few_shot_examples)
@@ -171,14 +171,14 @@ def generate_query_no_context(
 ) -> str:
     examples_str = "\n\n".join(
         [
-            f"#### Example {i+1}: {example['title']}\n\n"
-            f"- **Input:** \"{example['input']}\"\n"
-            f"- **Output:** \"{example['output']}\"\n"
+            f"#### Example {i + 1}: {example['title']}\n\n"
+            f'- **Input:** "{example["input"]}"\n'
+            f'- **Output:** "{example["output"]}"\n'
             f"- **Result:**\n"
             f"  ```json\n"
             f"  {{\n"
-            f"    \"answer_relevance_score\": {example['answer_relevance_score']},\n"
-            f"    \"reason\": \"{example['reason']}\"\n"
+            f'    "answer_relevance_score": {example["answer_relevance_score"]},\n'
+            f'    "reason": "{example["reason"]}"\n'
             f"  }}\n"
             f"  ```"
             for i, example in enumerate(few_shot_examples)

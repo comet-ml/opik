@@ -37,7 +37,7 @@ def get_page_frontmatter(path):
                     break
                 if ":" in line:
                     _ = line.split(":")
-                    k = _[:-1]
+                    k = ":".join(_[:-1])
                     v = _[-1]
                     k = k.strip()
                     if v == "true" or v == "True":

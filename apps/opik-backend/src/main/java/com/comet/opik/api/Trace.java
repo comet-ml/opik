@@ -50,8 +50,11 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal totalEstimatedCost,
         @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int spanCount,
+        @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId){
+    // TODO: add spanCount automation test
 
     @Builder(toBuilder = true)
     public record TracePage(
@@ -61,8 +64,8 @@ public record Trace(
             @JsonView(Trace.View.Public.class) List<Trace> content,
             @JsonView(Trace.View.Public.class) List<String> sortableBy) implements com.comet.opik.api.Page<Trace> {
 
-        public static TracePage empty(int page) {
-            return new TracePage(page, 0, 0, List.of(), List.of());
+        public static TracePage empty(int page, List<String> sortableBy) {
+            return new TracePage(page, 0, 0, List.of(), sortableBy);
         }
     }
 

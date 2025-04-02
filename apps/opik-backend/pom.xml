@@ -21,7 +21,7 @@
         <lombok.version>1.18.36</lombok.version>
         <mysql.version>9.2.0</mysql.version>
         <dropwizard-guicey.version>7.1.4</dropwizard-guicey.version>
-        <stringtemplate.version>3.48.0</stringtemplate.version>
+        <stringtemplate.version>3.49.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.8.2</clickhouse-java.version>
@@ -458,6 +458,9 @@
                         <transformer
                                 implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                             <mainClass>${mainClass}</mainClass>
+                            <manifestEntries>
+                                <Multi-Release>true</Multi-Release>
+                            </manifestEntries>
                         </transformer>
                     </transformers>
                     <!-- exclude signed Manifests -->

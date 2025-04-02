@@ -17,4 +17,5 @@ export interface GetSpansByProjectRequest {
     type?: OpikApi.GetSpansByProjectRequestType;
     filters?: string;
     truncate?: boolean;
+    sorting?: string;
 }

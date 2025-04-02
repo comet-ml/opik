@@ -54,7 +54,7 @@ const PageBodyScrollContainer: React.FC<PageBodyScrollContainerProps> = ({
         ref={ref}
         style={style}
         className={cn(
-          "relative h-[calc(100vh-var(--header-height))] overflow-auto -mx-6",
+          "relative h-[calc(100vh-var(--header-height)-var(--banner-height))] overflow-auto -mx-6",
           className,
         )}
       >

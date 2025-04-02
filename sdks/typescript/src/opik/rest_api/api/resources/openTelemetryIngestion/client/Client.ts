@@ -44,9 +44,9 @@ export class OpenTelemetryIngestion {
      * @param {OpenTelemetryIngestion.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.openTelemetryIngestion.receiveTraces()
+     *     await client.openTelemetryIngestion.receiveProtobufTraces()
      */
-    public async receiveTraces(requestOptions?: OpenTelemetryIngestion.RequestOptions): Promise<unknown> {
+    public async receiveProtobufTraces(requestOptions?: OpenTelemetryIngestion.RequestOptions): Promise<unknown> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??

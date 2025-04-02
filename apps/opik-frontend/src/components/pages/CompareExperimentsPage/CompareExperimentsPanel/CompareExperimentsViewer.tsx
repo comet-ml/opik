@@ -70,7 +70,13 @@ const CompareExperimentsViewer: React.FunctionComponent<
     }
 
     if (experimentItem.output) {
-      return <SyntaxHighlighter data={experimentItem.output} />;
+      return (
+        <SyntaxHighlighter
+          data={experimentItem.output}
+          prettifyConfig={{ fieldType: "output" }}
+          preserveKey={`syntax-highlighter-compare-experiment-output-${sectionIdx}`}
+        />
+      );
     }
 
     return null;
@@ -104,7 +110,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
 
       {isTraceExist && (
         <div className="sticky bottom-0 right-0 mt-auto flex max-h-[40vh] shrink-0 flex-col bg-white contain-content">
-          <div className="box-border min-h-[58px] shrink grow overflow-auto border-y  px-1 py-4">
+          <div className="box-border min-h-[58px] shrink grow overflow-auto border-y px-1 py-4">
             <FeedbackScoresEditor
               feedbackScores={feedbackScores}
               traceId={experimentItem.trace_id as string}
