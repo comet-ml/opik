@@ -12,8 +12,8 @@ LOGGER = logging.getLogger(__name__)
 original_stream_iter_method = openai.Stream.__iter__
 original_async_stream_aiter_method = openai.AsyncStream.__aiter__
 
-StreamItem = TypeVar('StreamItem')
-AggregatedResult = TypeVar('AggregatedResult')
+StreamItem = TypeVar("StreamItem")
+AggregatedResult = TypeVar("AggregatedResult")
 
 
 def patch_sync_stream(
@@ -30,7 +30,7 @@ def patch_sync_stream(
     for event in stream:
         print(event)
     ```
-    
+
     """
 
     def Stream__iter__decorator(dunder_iter_func: Callable) -> Callable:

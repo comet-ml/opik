@@ -45,7 +45,9 @@ class OpenAIResponsesUsage(base_original_provider_usage.BaseOriginalProviderUsag
         return result
 
     @classmethod
-    def from_original_usage_dict(cls, usage_dict: Dict[str, Any]) -> "OpenAIResponsesUsage":
+    def from_original_usage_dict(
+        cls, usage_dict: Dict[str, Any]
+    ) -> "OpenAIResponsesUsage":
         usage_dict = {**usage_dict}
         output_tokens_details_raw = usage_dict.pop("output_tokens_details", None)
         input_tokens_details_raw = usage_dict.pop("input_tokens_details", None)

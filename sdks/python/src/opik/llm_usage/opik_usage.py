@@ -131,8 +131,8 @@ class OpikUsage(pydantic.BaseModel):
 
     @classmethod
     def from_openai_responses_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
-        provider_usage = openai_agent_usage.OpenAIResponsesUsage.from_original_usage_dict(
-            usage
+        provider_usage = (
+            openai_agent_usage.OpenAIResponsesUsage.from_original_usage_dict(usage)
         )
 
         return cls(

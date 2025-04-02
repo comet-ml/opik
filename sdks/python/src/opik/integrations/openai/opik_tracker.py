@@ -2,7 +2,12 @@ from typing import Optional, TypeVar
 
 import openai
 
-from . import chat_completion_chunks_aggregator, openai_chat_completions_decorator, openai_responses_decorator
+from . import (
+    chat_completion_chunks_aggregator,
+    response_events_aggregator,
+    openai_chat_completions_decorator,
+    openai_responses_decorator,
+)
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
@@ -33,8 +38,12 @@ def track_openai(
 
     openai_client.opik_tracked = True
 
-    chat_completions_decorator_factory = openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
-    responses_decorator_factory = openai_responses_decorator.OpenaiResponsesTrackDecorator()
+    chat_completions_decorator_factory = (
+        openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
+    )
+    responses_decorator_factory = (
+        openai_responses_decorator.OpenaiResponsesTrackDecorator()
+    )
 
     if openai_client.base_url.host != "api.openai.com":
         chat_completions_decorator_factory.provider = openai_client.base_url.host
@@ -52,11 +61,11 @@ def track_openai(
         generations_aggregator=chat_completion_chunks_aggregator.aggregate,
         project_name=project_name,
     )
-    
+
     responses_create_decorator = responses_decorator_factory.track(
         type="llm",
         name="responses_create",
-        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+        generations_aggregator=response_events_aggregator.aggregate,
         project_name=project_name,
     )
 
@@ -70,8 +79,10 @@ def track_openai(
     openai_client.beta.chat.completions.parse = completions_parse_decorator(
         openai_client.beta.chat.completions.parse
     )
-    
-    if hasattr(openai_client, "responses") and hasattr(openai_client.responses, "create"):
+
+    if hasattr(openai_client, "responses") and hasattr(
+        openai_client.responses, "create"
+    ):
         openai_client.responses.create = responses_create_decorator(
             openai_client.responses.create
         )
