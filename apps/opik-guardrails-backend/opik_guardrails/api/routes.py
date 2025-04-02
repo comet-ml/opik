@@ -8,15 +8,17 @@ from opik_guardrails.services import validation_engine
 
 LOGGER = logging.getLogger(__name__)
 
-guardrails_blueprint = flask.Blueprint("guardrails", __name__, url_prefix="/api/v1/guardrails")
+guardrails_blueprint = flask.Blueprint(
+    "guardrails", __name__, url_prefix="/api/v1/guardrails"
+)
 
 
 @guardrails_blueprint.errorhandler(pydantic.ValidationError)
-def handle_validation_error(error: pydantic.ValidationError) -> tuple[flask.Response, int]:
+def handle_validation_error(
+    error: pydantic.ValidationError,
+) -> tuple[flask.Response, int]:
     LOGGER.warning(f"Validation error: {error.errors()}")
-    return flask.jsonify(
-        {"error": "Invalid input", "details": error.errors()}
-    ), 400
+    return flask.jsonify({"error": "Invalid input", "details": error.errors()}), 400
 
 
 @guardrails_blueprint.errorhandler(Exception)
@@ -47,9 +49,7 @@ def validate_combined() -> tuple[flask.Response, int]:
             config=validated_config,
         )
 
-        validation_results.append(
-            validation_result.model_dump(serialize_as_any=True)
-        )
+        validation_results.append(validation_result.model_dump(serialize_as_any=True))
 
         if not validation_result.validation_passed:
             all_validations_passed = False
