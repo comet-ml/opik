@@ -17,7 +17,6 @@ from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
 from tests.sdk_helpers import (
     create_project_via_api,
     delete_project_by_name_sdk,
-    get_random_string,
     wait_for_number_of_traces_to_be_visible,
     client_get_prompt_retries,
     find_project_by_name_sdk,
@@ -121,7 +120,7 @@ def video_dir():
             logging.warning(f"Failed to clean up video directory: {str(e)}")
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
     """Create a browser context with required permissions and authentication"""
     # Enable video recording
@@ -176,7 +175,7 @@ def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
     context.close()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def env_config() -> EnvConfig:
     """
     Get the environment configuration from environment variables.
@@ -188,9 +187,7 @@ def env_config() -> EnvConfig:
 
     # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
-
-    project_name = "project_" + get_random_string(5)
-    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name = project_name
+    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
 
     return env_config
 
@@ -209,7 +206,7 @@ def configure_logging(request):
         logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def client(env_config: EnvConfig, browser_context) -> opik.Opik:
     """Create an Opik client configured for the current environment"""
     kwargs = {
