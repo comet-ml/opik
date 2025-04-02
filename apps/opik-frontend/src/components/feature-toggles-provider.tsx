@@ -16,6 +16,7 @@ type FeatureTogglesState = {
 
 const DEFAULT_STATE: FeatureToggles = {
   python_evaluator_enabled: false,
+  guardrails_enabled: false,
 };
 
 const initialState: FeatureTogglesState = {
