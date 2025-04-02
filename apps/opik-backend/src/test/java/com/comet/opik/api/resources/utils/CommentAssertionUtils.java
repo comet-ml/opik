@@ -17,7 +17,10 @@ public class CommentAssertionUtils {
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS_COMMENTS)
                 .isEqualTo(expected);
+        assertIgnoredFields(actual);
+    }
 
+    private static void assertIgnoredFields(Comment actual) {
         assertThat(actual.createdAt()).isNotNull();
         assertThat(actual.lastUpdatedAt()).isNotNull();
         assertThat(actual.createdBy()).isNotNull();
@@ -40,5 +43,10 @@ public class CommentAssertionUtils {
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS_COMMENTS)
                 .isEqualTo(expected);
+        if (actual != null) {
+            for (var actualComment : actual) {
+                assertIgnoredFields(actualComment);
+            }
+        }
     }
 }
