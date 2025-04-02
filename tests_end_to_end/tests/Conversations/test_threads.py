@@ -100,7 +100,7 @@ class TestThreadsCrud:
                     f"Error: {str(e)}"
                 ) from e
 
-    def test_thread_removal(self, page, log_threads_low_level, create_project_api):
+    def test_thread_removal(self, page, create_project_api, log_threads_low_level):
         """Test thread removal.
 
         Steps:
