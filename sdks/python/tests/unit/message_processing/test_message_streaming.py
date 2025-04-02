@@ -1,5 +1,5 @@
 import pytest
-import mock
+from unittest import mock
 from opik.message_processing import streamer_constructors
 from opik.message_processing import messages
 
