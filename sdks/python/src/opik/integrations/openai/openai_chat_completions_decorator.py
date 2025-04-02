@@ -14,6 +14,7 @@ from typing import (
 import openai
 from openai import _types as _openai_types
 from openai.types.chat import chat_completion, chat_completion_chunk
+from typing_extensions import override
 
 from opik import dict_utils, llm_usage
 from opik.api_objects import span
@@ -43,6 +44,7 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         super().__init__()
         self.provider = "openai"
 
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -89,6 +91,7 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
 
         return result
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -124,6 +127,7 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
 
         return result
 
+    @override
     def _streams_handler(  # type: ignore
         self,
         output: Any,
