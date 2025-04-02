@@ -12,7 +12,8 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.domain.GuardrailsService;
+import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.GuardrailsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -72,7 +73,7 @@ public class GuardrailsResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     @Inject
-    private GuardrailsService guardrailsService;
+    private GuardrailsDAO guardrailsDAO;
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
@@ -106,6 +107,8 @@ public class GuardrailsResourceTest {
     @Test
     @DisplayName("test create guardrails")
     void testCreateGuardrails() {
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
                 .projectName(DEFAULT_PROJECT)
@@ -122,7 +125,7 @@ public class GuardrailsResourceTest {
                 .toList();
 
         traceResourceClient.guardrails(guardrails, API_KEY, TEST_WORKSPACE);
-        var actual = guardrailsService.getTraceGuardrails(traceId).collectList().block();
+        var actual = guardrailsDAO.getTraceGuardrails(workspaceId, EntityType.TRACE, traceId).collectList().block();
 
         assertThat(actual).hasSize(guardrails.size());
         // TODO: this should be replaced with the actual guardrails assertion in the future

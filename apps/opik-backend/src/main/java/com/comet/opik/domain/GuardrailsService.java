@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.GuardrailBatchItem;
-import com.comet.opik.api.GuardrailsCheck;
 import com.comet.opik.api.Project;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
@@ -10,21 +9,18 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
 
 @ImplementedBy(GuardrailsServiceImpl.class)
 public interface GuardrailsService {
-    Flux<GuardrailsCheck> getTraceGuardrails(UUID traceId);
     Mono<Void> addTraceGuardrails(List<GuardrailBatchItem> guardrails);
 }
 
@@ -34,11 +30,6 @@ public interface GuardrailsService {
 class GuardrailsServiceImpl implements GuardrailsService {
     private final @NonNull ProjectService projectService;
     private final @NonNull GuardrailsDAO guardrailsDAO;
-
-    @Override
-    public Flux<GuardrailsCheck> getTraceGuardrails(UUID traceId) {
-        throw new NotImplementedException();
-    }
 
     @Override
     public Mono<Void> addTraceGuardrails(List<GuardrailBatchItem> guardrails) {

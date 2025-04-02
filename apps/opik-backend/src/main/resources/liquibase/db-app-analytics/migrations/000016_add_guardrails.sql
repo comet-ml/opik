@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails
     config          String,
     details         String,
     created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
-    last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9)
+    last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9),
+    created_by      String,
+    last_updated_by String
     ) ENGINE = ReplacingMergeTree(last_updated_at)
     ORDER BY (workspace_id, project_id, entity_type, entity_id, name);
 
