@@ -4,11 +4,12 @@ from typing import Dict, Any, Callable, Optional, Union
 from opik.types import LLMProvider
 
 
-# TODO: since it was discovered that one provider may have more than one token usage formats, and
-# sometimes we support some usage format but not the cost tracking for its provider.
-# This dictionary and corresponding logic should be updated.
+# TODO: it was discovered that one provider may have more than one token usage formats, and
+# sometimes we support one usage format but not the cost tracking for its provider.
+# So, this dictionary and corresponding logic should be updated.
 # We need to have one dict - USAGE_FORMAT: OPIK_USAGE_BUILDER, and probably
 # another dict - PROVIDER: USAGE_FORMATS.
+# See the ticket: OPIK-1407
 _PROVIDER_TO_OPIK_USAGE_BUILDER: Dict[
     Union[str, LLMProvider], Callable[[Dict[str, Any]], opik_usage.OpikUsage]
 ] = {
