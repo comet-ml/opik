@@ -4,6 +4,14 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1")
 
+generate_uuid() {
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen
+  else
+    cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s%N
+  fi
+}
+
 print_usage() {
   echo "Usage: opik.sh [OPTION]"
   echo ""
@@ -53,6 +61,10 @@ check_containers_status() {
 start_missing_containers() {
   check_docker_status
 
+  uuid=$(generate_uuid)
+  start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  send_install_report "$uuid" "false" "$start_time"
+
   [[ "$DEBUG_MODE" == true ]] && echo "🔍 Checking required containers..."
   all_running=true
 
@@ -69,11 +81,17 @@ start_missing_containers() {
 
   echo "🔄 Starting missing containers..."
   cd "$script_dir/deployment/docker-compose"
-  docker compose up -d
+
+  if [[ "${BUILD_MODE}" = "true" ]]; then
+    export COMPOSE_BAKE=true
+  fi
+
+  docker compose up -d ${BUILD_MODE:+--build}
 
   echo "⏳ Waiting for all containers to be running and healthy..."
   max_retries=60
   interval=1
+  all_running=true
 
   for container in "${REQUIRED_CONTAINERS[@]}"; do
     retries=0
@@ -97,14 +115,20 @@ start_missing_containers() {
         retries=$((retries + 1))
         if [[ $retries -ge $max_retries ]]; then
           echo "⚠️  $container is still not healthy after ${max_retries}s"
+          all_running=false
           break
         fi
       else
         echo "❌ $container health state is '$health'"
+        all_running=false
         break
       fi
     done
   done
+
+  if $all_running; then
+    send_install_report "$uuid" "true" "$start_time"
+  fi
 }
 
 stop_containers() {
@@ -132,7 +156,7 @@ print_banner() {
   echo "║  📊 Access the UI:                                              ║"
   echo "║     $ui_url                                       ║"
   echo "║                                                                 ║"
-  echo "║  🛠️  Configure the Python SDK:                                   ║"
+  echo "║  🛠️ Configure the Python SDK:                                   ║"
   echo "║     \$ python --version                                          ║"
   echo "║     \$ pip install opik                                          ║"
   echo "║     \$ opik configure                                            ║"
@@ -142,6 +166,83 @@ print_banner() {
   echo "║  💬 Need help? Join our community: https://chat.comet.com       ║"
   echo "║                                                                 ║"
   echo "╚═════════════════════════════════════════════════════════════════╝"
+}
+
+# Check installation
+send_install_report() {
+  uuid="$1"
+  event_completed="$2"  # Pass "true" to send install_completed
+  start_time="$3"  # Optional: start time in ISO 8601 format
+
+  if [ "$OPIK_USAGE_REPORT_ENABLED" != "true" ] && [ "$OPIK_USAGE_REPORT_ENABLED" != "" ]; then
+    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Usage reporting is disabled. Skipping install report."
+    return
+  fi
+
+  INSTALL_MARKER_FILE="$script_dir/.opik_install_reported"
+
+  if [ -f "$INSTALL_MARKER_FILE" ]; then
+    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Install report already sent; skipping."
+    return
+  fi
+
+  # Check if either curl or wget is available
+  if command -v curl >/dev/null 2>&1; then
+    HTTP_TOOL="curl"
+  elif command -v wget >/dev/null 2>&1; then
+    HTTP_TOOL="wget"
+  else
+    [[ "$DEBUG_MODE" == true ]] && echo "[WARN] Neither curl nor wget is available; skipping usage report."
+    return
+  fi
+
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  if [ "$event_completed" = "true" ]; then
+    event_type="opik_install_completed"
+    end_time="$timestamp"
+    json_payload=$(cat <<EOF
+{
+  "anonymous_id": "$uuid",
+  "event_type": "$event_type",
+  "event_properties": {
+    "start_time": "$start_time",
+    "end_time": "$end_time"
+  }
+}
+EOF
+)
+  else
+    event_type="opik_install_started"
+    json_payload=$(cat <<EOF
+{
+  "anonymous_id": "$uuid",
+  "event_type": "$event_type",
+  "event_properties": {
+    "start_time": "$start_time"
+  }
+}
+EOF
+)
+  fi
+
+  url="https://stats.comet.com/notify/event/"
+
+  if [ "$HTTP_TOOL" = "curl" ]; then
+    curl -s -X POST -H "Content-Type: application/json" -d "$json_payload" "$url" >/dev/null 2>&1
+  else
+    tmpfile=$(mktemp)
+    echo "$json_payload" > "$tmpfile"
+    wget --quiet --method POST --header="Content-Type: application/json" --body-file="$tmpfile" -O /dev/null "$url"
+    rm -f "$tmpfile"
+  fi
+
+  if [ $event_type = "install_completed" ]; then
+    touch "$INSTALL_MARKER_FILE"
+    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Post-install report sent successfully."
+  else
+    [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Install started report sent successfully."
+  fi
 }
 
 # Default: no debug
@@ -175,6 +276,19 @@ case "$1" in
   --debug)
     DEBUG_MODE=true
     echo "🐞 Debug mode enabled."
+    echo "🔍 Checking container status and starting missing ones..."
+    start_missing_containers
+    sleep 2
+    echo "🔄 Re-checking container status..."
+    if check_containers_status; then
+      print_banner
+    else
+      echo "⚠️  Some containers are still not healthy. Please check manually using './opik.sh --verify'"
+      exit 1
+    fi
+    ;;
+  --build)
+    BUILD_MODE=true
     echo "🔍 Checking container status and starting missing ones..."
     start_missing_containers
     sleep 2

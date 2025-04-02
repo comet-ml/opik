@@ -76,8 +76,79 @@ function Test-ContainersStatus {
     return $allOk
 }
 
+function Send-InstallReport {
+    param (
+        [string]$Uuid,
+        [string]$EventCompleted = $null,   # Pass "true" to send install_completed
+        [string]$StartTime = $null         # Optional ISO 8601 format
+    )
+
+    $DebugMode = $DEBUG_MODE -eq "true"
+    $OpikUsageEnabled = $env:OPIK_USAGE_REPORT_ENABLED
+
+    if ($OpikUsageEnabled -ne "true" -and $null -ne $OpikUsageEnabled) {
+        if ($DebugMode) { Write-Host "[DEBUG] Usage reporting is disabled. Skipping install report." }
+        return
+    }
+
+    $InstallMarkerFile = Join-Path $scriptDir ".opik_install_reported"
+
+    if (Test-Path $InstallMarkerFile) {
+        if ($DebugMode) { Write-Host "[DEBUG] Install report already sent; skipping." }
+        return
+    }
+
+    $Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+
+    if ($EventCompleted -eq "true") {
+        $EventType = "opik_install_completed"
+        $EndTime = $Timestamp
+
+        $Payload = @{
+            anonymous_id = $Uuid
+            event_type   = $EventType
+            event_properties = @{
+                start_time = $StartTime
+                end_time   = $EndTime
+            }
+        }
+    } else {
+        $EventType = "opik_install_started"
+
+        $Payload = @{
+            anonymous_id = $Uuid
+            event_type   = $EventType
+            event_properties = @{
+                start_time = $StartTime
+            }
+        }
+    }
+
+    $JsonPayload = $Payload | ConvertTo-Json -Depth 3 -Compress
+    $Url = "https://stats.comet.com/notify/event/"
+
+    try {
+        Invoke-WebRequest -Uri $Url -Method POST -ContentType "application/json" -Body $JsonPayload -UseBasicParsing | Out-Null
+    } catch {
+        Write-Warning "[WARN] Failed to send usage report: $_"
+        return
+    }
+
+    if ($EventType -eq "install_completed") {
+        New-Item -ItemType File -Path $InstallMarkerFile -Force | Out-Null
+        if ($DebugMode) { Write-Host "[DEBUG] Post-install report sent successfully." }
+    } else {
+        if ($DebugMode) { Write-Host "[DEBUG] Install started report sent successfully." }
+    }
+}
+
 function Start-MissingContainers {
     Test-DockerStatus
+
+    $Uuid = [guid]::NewGuid().ToString()
+    $startTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    Send-InstallReport -Uuid $uuid -EventCompleted "false" -StartTime $startTime
 
     if ($DEBUG_MODE) { Write-Host '[DEBUG] Checking required containers...' }
     $allRunning = $true
@@ -96,11 +167,18 @@ function Start-MissingContainers {
 
     Write-Host '[INFO] Starting missing containers...'
     Set-Location -Path "$scriptDir\deployment\docker-compose"
-    docker compose up -d | Where-Object { $_.Trim() -ne '' }
+    $dockerArgs = @("compose", "up", "-d")
+
+    if ($BUILD_MODE -eq "true") {
+        $dockerArgs += "--build"
+    }
+
+    docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
 
     Write-Host '[INFO] Waiting for all containers to be running and healthy...'
     $maxRetries = 60
     $interval = 1
+    $allRunning = $true
 
     foreach ($container in $REQUIRED_CONTAINERS) {
         $retries = 0
@@ -128,13 +206,19 @@ function Start-MissingContainers {
                 $retries++
                 if ($retries -ge $maxRetries) {
                     Write-Host "[WARN] $container is still not healthy after ${maxRetries}s"
+                    $allRunning = $false
                     break
                 }
             } else {
                 Write-Host "[INFO] $container health state is '$health'"
+                $allRunning = $false
                 break
             }
         }
+    }
+
+    if ($allRunning) {
+        Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime
     }
 
     Set-Location -Path $originalDir
@@ -212,6 +296,19 @@ switch ($option) {
         Start-MissingContainers
         Start-Sleep -Seconds 2
         Write-Host '[DEBUG] Re-checking container status...'
+        if (Test-ContainersStatus -ShowOutput:$true) {
+            Show-Banner
+        } else {
+            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
+            exit 1
+        }
+    }
+    '--build' {
+        $BUILD_MODE = $true
+        Write-Host '[INFO] Checking container status and starting missing ones...'
+        Start-MissingContainers
+        Start-Sleep -Seconds 2
+        Write-Host '[INFO] Re-checking container status...'
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {
