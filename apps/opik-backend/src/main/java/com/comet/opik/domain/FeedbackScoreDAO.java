@@ -14,7 +14,6 @@ import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,16 +42,6 @@ import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(FeedbackScoreDAOImpl.class)
 public interface FeedbackScoreDAO {
-
-    @Getter
-    @RequiredArgsConstructor
-    enum EntityType {
-        TRACE("trace", "traces"),
-        SPAN("span", "spans");
-
-        private final String type;
-        private final String tableName;
-    }
 
     Mono<Map<UUID, List<FeedbackScore>>> getScores(EntityType entityType, List<UUID> entityIds);
 

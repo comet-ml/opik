@@ -20,7 +20,7 @@ import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
-import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -381,7 +381,7 @@ public class DatasetsResource {
                 .datasetId(datasetId)
                 .experimentIds(experimentIds)
                 .filters(queryFilters)
-                .entityType(FeedbackScoreDAO.EntityType.TRACE)
+                .entityType(EntityType.TRACE)
                 .truncate(truncate)
                 .build();
 
