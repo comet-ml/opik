@@ -8,8 +8,6 @@ import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.ProjectStats;
-import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -55,6 +53,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.json.JsonWriteFeature;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -66,6 +65,7 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -74,6 +74,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.glassfish.jersey.client.ChunkedInput;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -169,6 +170,10 @@ class SpansResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+    public static final String INVALID_SEARCH_REQUEST = "{\"filters\": [{\"field\": \"input\", \"key\": \"\", \"type\": \"string\", \"operator\": \"contains\", \"value\": \"If Opik had a motto\"}], \"last_retrieved_id\": null, \"limit\": 1000, \"project_id\": \"Ellipsis\", \"project_name\": \"Demo chatbot \uD83E\uDD16\", \"trace_id\": null, \"truncate\": true, \"type\": \"Ellipsis\"}";
+    public static final String INVVALID_SEARCH_RESPONSE_MESSAGE = """
+            Unable to process JSON. Cannot deserialize value of type `java.util.UUID` from String "Ellipsis": UUID has to be represented by standard 36-char representation
+             at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 160] (through reference chain: com.comet.opik.api.SpanSearchStreamRequest["project_id"])""";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -4250,6 +4255,34 @@ class SpansResourceTest {
             getAndAssertPage(workspaceName, projectName, List.of(), spans, expectedSpans, List.of(), apiKey,
                     sortingFields);
         }
+
+        @Test
+        void search__whenFilterIsInvalid__thenReturnProperStatusCode() {
+
+            var body = JsonUtils.getJsonNodeFromString(INVALID_SEARCH_REQUEST);
+
+            try (Response actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("search")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(body))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+                try (var inputStream = actualResponse.readEntity(new GenericType<ChunkedInput<String>>() {
+                })) {
+                    TypeReference<io.dropwizard.jersey.errors.ErrorMessage> typeReference = new TypeReference<>() {
+                    };
+                    String line = inputStream.read();
+                    var errorMessage = JsonUtils.readValue(line, typeReference);
+
+                    assertThat(errorMessage.getMessage()).isEqualTo(INVVALID_SEARCH_RESPONSE_MESSAGE);
+                    assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                }
+            }
+        }
+
     }
 
     private void getAndAssertPage(
@@ -6289,20 +6322,6 @@ class SpansResourceTest {
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), spans.reversed(), spans.reversed(), List.of(),
                     API_KEY, List.of());
         }
-    }
-
-    private void getStatsAndAssert(String projectName,
-            UUID projectId,
-            List<? extends SpanFilter> filters,
-            String apiKey,
-            String workspaceName,
-            List<ProjectStatItem<?>> expectedStats,
-            Map<String, String> queryParams) {
-
-        ProjectStats actualStats = spanResourceClient.getSpansStats(projectName, projectId, filters, apiKey,
-                workspaceName, queryParams);
-
-        SpanAssertions.assertionStatusPage(actualStats.stats(), expectedStats);
     }
 
     private static int randomNumber() {
