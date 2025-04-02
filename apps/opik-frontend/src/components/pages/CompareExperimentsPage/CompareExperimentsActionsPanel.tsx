@@ -82,7 +82,7 @@ const CompareExperimentsActionsPanel: React.FC<
       return columnsToExport.reduce<Record<string, unknown>>(
         (accumulator, column) => {
           const keys = column.split(".");
-          const key = keys[1] ?? keys[0];
+          const key = column;
           const keyPrefix = first(keys) as string;
 
           if (

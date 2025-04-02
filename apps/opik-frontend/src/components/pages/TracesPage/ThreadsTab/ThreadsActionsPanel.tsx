@@ -36,9 +36,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
   const mapRowData = useCallback(() => {
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        const keys = column.split(".");
-        const key = keys[1] ?? keys[0];
-        acc[key] = get(row, keys, "");
+        acc[column] = get(row, column, "");
 
         return acc;
       }, {});
