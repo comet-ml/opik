@@ -1,9 +1,10 @@
 from typing import List
+
 import httpx
-import opik.guardrails.guards as guards
-import opik.guardrails.api_client as api_client
-from opik.guardrails import schemas
+
 from opik import exceptions
+
+from . import guards, rest_api_client, schemas
 
 
 class Guardrail:
@@ -33,7 +34,7 @@ class Guardrail:
         )
 
     def _initialize_api_client(self, host_url: str) -> None:
-        self._api_client = api_client.GuardrailsApiClient(
+        self._api_client = rest_api_client.GuardrailsApiClient(
             httpx_client=httpx.Client(),
             host_url=host_url,
         )
