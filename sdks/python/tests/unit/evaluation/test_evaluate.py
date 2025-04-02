@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-import mock
+from unittest import mock
 import pytest
 
 import opik
