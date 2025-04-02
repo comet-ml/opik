@@ -4,7 +4,7 @@ import {
 } from "@langchain/core/callbacks/base";
 import { Serialized } from "@langchain/core/load/serializable";
 import { ChainValues } from "@langchain/core/utils/types";
-import { Opik, Span, Trace, logger } from "opik";
+import { Opik, Span, Trace, logger, SpanType } from "opik";
 import {
   extractCallArgs,
   inputFromChainValues,
@@ -18,13 +18,6 @@ import { RunnableConfig } from "@langchain/core/runnables";
 import { ChatResult, LLMResult } from "@langchain/core/outputs";
 import { BaseMessage } from "@langchain/core/messages";
 import { AgentAction, AgentFinish } from "@langchain/core/agents";
-
-export type SpanType = "general" | "tool" | "llm";
-export const SpanType = {
-  General: "general",
-  Tool: "tool",
-  Llm: "llm",
-} as const;
 
 type JsonNode = Record<string, unknown>;
 export interface OpikCallbackHandlerOptions {

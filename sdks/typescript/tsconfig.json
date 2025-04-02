@@ -18,7 +18,6 @@
     "paths": {
       "opik": ["./src/opik/index.ts"],
       "opik/vercel": ["./src/opik/integrations/vercel/index.ts"],
-      "opik/langchain": ["./src/opik/integrations/langchain/index.ts"],
       "@/*": ["./src/opik/*"],
       "@tests/*": ["./tests/*"]
     }
