@@ -24,23 +24,27 @@ jobs:
         run: |
           git diff --quiet || echo "CHANGES=true" >> $GITHUB_ENV
 
+      - name: Set branch name
+        if: env.CHANGES == 'true'
+        run: echo "BRANCH_NAME=span-cost-update-$(date +%Y-%m-%d)" >> $GITHUB_ENV
+
       - name: Commit Changes
         if: env.CHANGES == 'true'
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@comet.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git checkout -b span-cost-update-$(date +%Y-%m-%d)
+          git checkout -b ${{ env.BRANCH_NAME }}
           git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
           git commit -m "Update span cost file"
-          git push origin span-cost-update-$(date +%Y-%m-%d)
+          git push origin ${{ env.BRANCH_NAME }}
 
       - name: Create Pull Request
         if: env.CHANGES == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: span-cost-update-$(date +%Y-%m-%d)
+          branch: ${{ env.BRANCH_NAME }}
           title: "Update span cost from LiteLLM"
           body: "Automated update of model_prices_and_context_window.json file, which includes span prices information from the LiteLLM repo."
           base: main
