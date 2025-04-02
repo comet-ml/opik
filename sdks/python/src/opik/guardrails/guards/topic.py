@@ -52,7 +52,7 @@ class Topic(guard.Guard):
         if self._allowed_topics:
             result.append(
                 {
-                    "type": schemas.ValidationType.TOPIC_MATCH,
+                    "type": schemas.ValidationType.TOPIC,
                     "config": {
                         "topics": self._allowed_topics,
                         "threshold": self._threshold,
@@ -64,7 +64,7 @@ class Topic(guard.Guard):
         if self._restricted_topics:
             result.append(
                 {
-                    "type": schemas.ValidationType.TOPIC_MATCH,
+                    "type": schemas.ValidationType.TOPIC,
                     "config": {
                         "topics": self._restricted_topics,
                         "threshold": self._threshold,

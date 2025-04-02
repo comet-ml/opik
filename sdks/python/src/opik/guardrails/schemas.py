@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 
 class ValidationType(str, enum.Enum):
     PII = "PII"
-    TOPIC_MATCH = "TOPIC_MATCH"
+    TOPIC = "TOPIC"
 
 
 class ValidationResult(pydantic.BaseModel):
