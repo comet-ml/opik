@@ -1,5 +1,5 @@
 import time
-import mock
+from unittest import mock
 from opik.message_processing.batching import (
     batchers,
     flushing_thread,
