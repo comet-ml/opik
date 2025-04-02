@@ -12,7 +12,7 @@ MAX_CONCURRENT_REQUESTS = 4
 
 
 def send_classification_request(text, topics):
-    url = "http://127.02:5000/api/validate"
+    url = "http://127.02:5000/api/v1/guardrails/validations"
     payload = {
         "text": text,
         "validations": [

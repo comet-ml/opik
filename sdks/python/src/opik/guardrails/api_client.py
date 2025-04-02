@@ -23,7 +23,7 @@ class GuardrailsApiClient:
         payload = {"text": text, "validations": validations}
 
         response = self._httpx_client.post(
-            f"{self._api_url}/api/validate", json=payload
+            f"{self._api_url}/api/v1/guardrails/validations", json=payload
         )
         response.raise_for_status()
         return schemas.ValidationResponse(**response.json())
