@@ -36,7 +36,7 @@ class PIIValidationConfig(ValidationConfig):
             "EMAIL_ADDRESS",
             "IBAN_CODE",
         ],
-        description="Optional list of entity types to detect. If not provided, all supported entity types will be detected.",
+        description="Optional list of entity types to detect. If not provided, the default list will be used.",
     )
     language: str = pydantic.Field("en", description="Language of the text")
     threshold: float = pydantic.Field(
