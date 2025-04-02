@@ -1,9 +1,8 @@
 import atexit
 import datetime
 import functools
-import json
 import logging
-from typing import Any, Dict, Iterable, List, Optional, Type, TypeVar, Union
+from typing import Any, Dict, List, Optional, TypeVar, Union
 
 import httpx
 
@@ -33,6 +32,7 @@ from . import (
     trace,
     validation_helpers,
 )
+from . import rest_stream_parser
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
@@ -881,7 +881,7 @@ class Opik:
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
-        metadata, tags, etc or based on the trace ID.
+        metadata, tags, etc. or based on the trace ID.
 
         Args:
             project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -892,7 +892,10 @@ class Opik:
         """
         spans: List[span_public.SpanPublic] = []
 
-        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+        filter_expressions = opik_query_language.OpikQueryLanguage(
+            filter_string
+        ).get_filter_expressions()
+        filters = helpers.parse_search_span_expressions(filter_expressions)
 
         # this is the constant for maximum object sent from backend side
         max_endpoint_batch_size = 2_000
@@ -901,7 +904,7 @@ class Opik:
             spans_amount_left = max_results - len(spans)
             current_batch_size = min(spans_amount_left, max_endpoint_batch_size)
 
-            page_spans_stream = self._rest_client.spans.search_spans(
+            spans_stream = self._rest_client.spans.search_spans(
                 trace_id=trace_id,
                 project_name=project_name or self._project_name,
                 filters=filters,
@@ -910,8 +913,8 @@ class Opik:
                 last_retrieved_id=spans[-1].id if len(spans) > 0 else None,
             )
 
-            new_spans = self._read_and_parse_stream(
-                stream=page_spans_stream, item_class=span_public.SpanPublic
+            new_spans = rest_stream_parser.read_and_parse_stream(
+                stream=spans_stream, item_class=span_public.SpanPublic
             )
             if len(new_spans) == 0:
                 break
@@ -919,56 +922,6 @@ class Opik:
             spans.extend(new_spans)
 
         return spans
-
-    def _read_and_parse_stream(
-        self,
-        stream: Iterable[bytes],
-        item_class: Type[T],
-    ) -> List[T]:
-        result: List[T] = []
-
-        # last record in chunk may be incomplete, we will use this buffer to concatenate strings
-        buffer = b""
-
-        for chunk in stream:
-            buffer += chunk
-            lines = buffer.split(b"\n")
-
-            # last record in chunk may be incomplete
-            for line in lines[:-1]:
-                item = self._parse_stream_line(line=line, item_class=item_class)
-                if item is not None:
-                    result.append(item)
-
-            # Keep the last potentially incomplete line in buffer
-            buffer = lines[-1]
-
-        # Process any remaining data in the buffer after the stream ends
-        if buffer:
-            item = self._parse_stream_line(line=buffer, item_class=item_class)
-            if item is not None:
-                result.append(item)
-
-        return result
-
-    def _parse_stream_line(
-        self,
-        line: bytes,
-        item_class: Type[T],
-    ) -> Optional[T]:
-        try:
-            item_dict = json.loads(line.decode("utf-8"))
-            item_obj = item_class(**item_dict)
-            return item_obj
-
-        except json.JSONDecodeError as e:
-            LOGGER.error(f"Error decoding span: {e}")
-        except (TypeError, ValueError) as e:
-            LOGGER.error(f"Error parsing span: {e}")
-        except Exception as e:
-            LOGGER.error(f"Error decoding or parsing span: {e}")
-
-        return None
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
