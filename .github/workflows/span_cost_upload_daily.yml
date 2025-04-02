@@ -1,0 +1,45 @@
+name: Update Span Cost Daily
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  update-file:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false # Prevent issues with GitHub token
+
+      - name: Download File
+        run: |
+          curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
+
+      - name: Check for Changes
+        id: check_changes
+        run: |
+          git diff --quiet || echo "CHANGES=true" >> $GITHUB_ENV
+
+      - name: Commit Changes
+        if: env.CHANGES == 'true'
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@comet.com"
+          git checkout -b span-cost-update-$(date +%Y-%m-%d)
+          git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
+          git commit -m "Update span cost file"
+          git push origin span-cost-update-$(date +%Y-%m-%d)
+
+      - name: Create Pull Request
+        if: env.CHANGES == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: span-cost-update-$(date +%Y-%m-%d)
+          title: "Update span cost from LiteLLM"
+          body: "Automated update of model_prices_and_context_window.json file, which includes span prices information from the LiteLLM repo."
+          base: main
