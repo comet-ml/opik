@@ -2,7 +2,7 @@ from typing import Optional, TypeVar
 
 import openai
 
-from . import chat_completion_chunks_aggregator, openai_decorator, openai_responses_decorator
+from . import chat_completion_chunks_aggregator, openai_chat_completions_decorator, openai_responses_decorator
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
@@ -33,7 +33,7 @@ def track_openai(
 
     openai_client.opik_tracked = True
 
-    chat_completions_decorator_factory = openai_decorator.OpenaiTrackDecorator()
+    chat_completions_decorator_factory = openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
     responses_decorator_factory = openai_responses_decorator.OpenaiResponsesTrackDecorator()
 
     if openai_client.base_url.host != "api.openai.com":
@@ -56,6 +56,7 @@ def track_openai(
     responses_create_decorator = responses_decorator_factory.track(
         type="llm",
         name="responses_create",
+        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
         project_name=project_name,
     )
 
