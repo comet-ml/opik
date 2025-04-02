@@ -1,11 +1,10 @@
 import logging
+import datetime
 from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING, cast
-
-from datetime import datetime, timezone
-from langchain_core.tracers.schemas import Run
 
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
+from langchain_core.tracers.schemas import Run
 
 from opik import dict_utils, opik_context, llm_usage
 from opik.api_objects import span, trace
@@ -22,7 +21,6 @@ from ...api_objects import helpers, opik_client
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from langchain_core.tracers.schemas import Run
     from langchain_core.runnables.graph import Graph
 
     from langchain_core.messages import BaseMessage
@@ -351,13 +349,13 @@ class OpikTracer(BaseTracer):
 
     def on_chat_model_start(
         self,
-        serialized: dict[str, Any],
-        messages: list[list["BaseMessage"]],
+        serialized: Dict[str, Any],
+        messages: List[List["BaseMessage"]],
         *,
         run_id: "UUID",
-        tags: Optional[list[str]] = None,
+        tags: Optional[List[str]] = None,
         parent_run_id: Optional["UUID"] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
         **kwargs: Any,
     ) -> "Run":
@@ -378,7 +376,7 @@ class OpikTracer(BaseTracer):
         Returns:
             Run: The run.
         """
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.datetime.now(datetime.timezone.utc)
         if metadata:
             kwargs.update({"metadata": metadata})
 
