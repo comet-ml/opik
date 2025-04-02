@@ -21,6 +21,8 @@ component:
     run_migration: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
@@ -71,6 +73,7 @@ component:
       AWS_ACCESS_KEY_ID: THAAIOSFODNN7EXAMPLE # rootUser for minio
       AWS_SECRET_ACCESS_KEY: LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY # rootPassword for minio
       S3_URL: "http://opik-minio:9000"
+      TOGGLE_PYTHON_EVALUATOR_ENABLED: true
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -94,6 +97,8 @@ component:
     enabled: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
@@ -107,6 +112,9 @@ component:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
+      PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
+      PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
     envFrom:
       - configMapRef:
@@ -141,6 +149,8 @@ component:
     enabled: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent

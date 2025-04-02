@@ -362,3 +362,8 @@ pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
   url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
+
+serviceToggles:
+  # Default: true
+  # Description: Whether or not Python evaluator is enabled
+  pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-"true"}

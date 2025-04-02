@@ -4,7 +4,7 @@
 
 ## Creating an account on Comet.com
 
-[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=haystack&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=haystack&utm_campaign=opik) and grab you API Key.
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=haystack&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=haystack&utm_campaign=opik) and grab your API Key.
 
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=haystack&utm_campaign=opik) for more information.
 
@@ -27,9 +27,7 @@ Configure your development environment (If you click the key icon on the left si
 ```python
 import opik
 
-opik.configure(
-    use_local=False
-)
+opik.configure(use_local=False)
 
 os.environ["OPIK_PROJECT_NAME"] = "opik-cookbook-instructor"
 ```
@@ -107,7 +105,9 @@ from anthropic import Anthropic
 anthropic_client = track_anthropic(Anthropic())
 
 # Patch the Anthropic client for Instructor
-client = instructor.from_anthropic(anthropic_client, mode=instructor.Mode.ANTHROPIC_JSON)
+client = instructor.from_anthropic(
+    anthropic_client, mode=instructor.Mode.ANTHROPIC_JSON
+)
 
 user_info = client.chat.completions.create(
     model="claude-3-5-sonnet-20241022",
@@ -131,7 +131,9 @@ from google import genai
 gemini_client = track_genai(genai.Client())
 
 # Patch the GenAI client for Instructor
-client = instructor.from_genai(gemini_client, mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS)
+client = instructor.from_genai(
+    gemini_client, mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS
+)
 
 user_info = client.chat.completions.create(
     model="gemini-2.0-flash-001",
