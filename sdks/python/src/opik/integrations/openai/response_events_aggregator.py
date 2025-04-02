@@ -15,7 +15,14 @@ def aggregate(
         completed_event = [
             event
             for event in items
-            if isinstance(event, openai_responses.ResponseCompletedEvent)
+            if isinstance(
+                event,
+                (
+                    openai_responses.ResponseCompletedEvent,
+                    openai_responses.ResponseErrorEvent,
+                    openai_responses.ResponseIncompleteEvent,
+                ),
+            )
         ]
 
         response = completed_event[0].response
