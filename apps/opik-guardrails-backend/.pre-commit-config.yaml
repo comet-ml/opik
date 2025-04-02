@@ -1,0 +1,27 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        files: ^apps/opik-guardrails-backend
+      - id: end-of-file-fixer
+        files: ^apps/opik-guardrails-backend
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.9
+    hooks:
+      - id: ruff
+        args: [ --fix, --show-fixes]
+        files: ^apps/opik-guardrails-backend
+      - id: ruff-format
+        files: ^apps/opik-guardrails-backend
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^apps/opik-guardrails-backend
+        # `exclude` option will work only from here.
+        # The rest of mypy configuration can be moved to pyproject.toml
+        exclude: '(^apps/opik-guardrails-backend/tests/)|(^apps/opik-guardrails-backend/scripts/)'
+        args: [--config-file, apps/opik-guardrails-backend/pyproject.toml]

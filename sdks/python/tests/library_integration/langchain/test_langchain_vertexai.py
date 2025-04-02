@@ -51,7 +51,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
 ):
     llm = llm_model(
         max_tokens=10,
-        model_name="gemini-1.5-flash",
+        model_name="gemini-2.0-flash",
         name="custom-google-vertexai-llm-name",
     )
 
@@ -144,7 +144,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                         usage=ANY_DICT,
                         spans=[],
                         provider="google_vertexai",
-                        model=ANY_STRING(startswith="gemini-1.5-flash"),
+                        model=ANY_STRING(startswith="gemini-2.0-flash"),
                     ),
                 ],
             )
