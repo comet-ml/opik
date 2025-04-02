@@ -29,6 +29,7 @@ jobs:
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@comet.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git checkout -b span-cost-update-$(date +%Y-%m-%d)
           git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
           git commit -m "Update span cost file"
