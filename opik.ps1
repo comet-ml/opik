@@ -101,7 +101,7 @@ function Send-InstallReport {
     $Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
 
     if ($EventCompleted -eq "true") {
-        $EventType = "install_completed"
+        $EventType = "opik_install_completed"
         $EndTime = $Timestamp
 
         $Payload = @{
@@ -113,7 +113,7 @@ function Send-InstallReport {
             }
         }
     } else {
-        $EventType = "install_started"
+        $EventType = "opik_install_started"
 
         $Payload = @{
             anonymous_id = $Uuid

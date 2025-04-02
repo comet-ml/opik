@@ -199,7 +199,7 @@ send_install_report() {
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   if [ "$event_completed" = "true" ]; then
-    event_type="install_completed"
+    event_type="opik_install_completed"
     end_time="$timestamp"
     json_payload=$(cat <<EOF
 {
@@ -213,7 +213,7 @@ send_install_report() {
 EOF
 )
   else
-    event_type="install_started"
+    event_type="opik_install_started"
     json_payload=$(cat <<EOF
 {
   "anonymous_id": "$uuid",
