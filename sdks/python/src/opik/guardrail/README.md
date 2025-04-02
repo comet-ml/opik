@@ -181,14 +181,13 @@ from opik.evaluation.metrics import BaseMetric
 class TopicFilterMetric(BaseMetric):
     """A metric that uses an LLM to check if a response contains content about a specific topic."""
     
-    def __init__(self, topic: str, api_key: str):
+    def __init__(self, topic: str):
         self.topic = topic
-        self.api_key = api_key
         super().__init__(name=f"topic_filter_{topic}")
     
     async def score(self, output: str, **kwargs) -> Dict[str, Any]:
         """Score the output by checking if it contains content about the restricted topic."""
-        client = openai.AsyncOpenAI(api_key=self.api_key)
+        client = openai.AsyncOpenAI(api_key = os.environ.get("API_KEY"))
         
         prompt = f"""Analyze the following text and determine if it contains content about {self.topic}.
         Return a JSON object with two fields:
@@ -213,13 +212,6 @@ class TopicFilterMetric(BaseMetric):
             }
         }
 
-def no_topics_detected(results):
-    """Check if any topic was detected."""
-    return all(
-        not result.get("metadata", {}).get("contains_topic", False)
-        for result in results
-    )
-
 # Create a guardrail that filters out F1 racing content
 guardrail = Guardrail(
     metrics=[
@@ -228,7 +220,7 @@ guardrail = Guardrail(
             api_key="your-openai-api-key"
         )
     ],
-    calculate_success=no_topics_detected,
+    calculate_success=lambda results: all(result.value == 1.0 for result in results),
     on_failure=lambda result: print(f"Response blocked: {result.reasons['topic_filter_Formula 1 racing']}")
 )
 
@@ -242,26 +234,3 @@ if not result.passed:
     print("Response was blocked due to F1 content!")
 ```
 
-This example demonstrates:
-1. Creating a custom metric that uses OpenAI's API to check for topic content
-2. Defining a success calculation callback
-3. Configuring the guardrail with the topic filter metric
-4. Setting up a failure hook to handle blocked responses
-5. Testing the guardrail with content that should be blocked
-
-The `TopicFilterMetric` uses GPT-3.5-turbo to analyze the content and determine if it contains information about the restricted topic. The metric:
-- Returns a score of 0.0 if the topic is detected
-- Returns a score of 1.0 if the topic is not detected
-- Stores the detection result and reason in the metadata
-
-The `no_topics_detected` callback implements the success calculation by checking if any topic was detected across all metrics.
-
-You can extend this example by:
-1. Adding multiple topic filters
-2. Implementing more sophisticated topic detection
-3. Adding additional metrics for other types of content filtering
-4. Customizing the failure handling behavior
-
-## Contributing
-
-Please refer to the main Opik project's contributing guidelines for information on how to contribute to this module. 
