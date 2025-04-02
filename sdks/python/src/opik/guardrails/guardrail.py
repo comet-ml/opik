@@ -25,7 +25,7 @@ class Guardrail:
         Args:
             guards: List of Guard objects to validate text against
             host_url: URL of the Opik Guardrails API
-        
+
         Example:
 
         ```python
