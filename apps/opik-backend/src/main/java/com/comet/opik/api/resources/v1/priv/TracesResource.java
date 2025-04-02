@@ -9,6 +9,7 @@ import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.GuardrailBatch;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
@@ -25,6 +26,7 @@ import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.GuardrailsService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadata;
@@ -90,6 +92,7 @@ public class TracesResource {
 
     private final @NonNull TraceService service;
     private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull GuardrailsService guardrailsService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
@@ -422,6 +425,30 @@ public class TracesResource {
                 .block();
 
         log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", batch.scores().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PUT
+    @Path("/guardrails")
+    @Operation(operationId = "addGuardrailsBatch", summary = "Batch guardrails for traces", description = "Batch guardrails for traces", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
+    public Response addGuardrailsBatch(
+            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid GuardrailBatch batch) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Add guardrails batch for traces, size {} on  workspaceId '{}'", batch.guardrails().size(),
+                workspaceId);
+
+        guardrailsService.addTraceGuardrails(batch.guardrails())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(AsyncUtils.handleConnectionError())
+                .block();
+
+        log.info("Done adding guardrails batch for traces, size {} on  workspaceId '{}'", batch.guardrails().size(),
+                workspaceId);
 
         return Response.noContent().build();
     }
