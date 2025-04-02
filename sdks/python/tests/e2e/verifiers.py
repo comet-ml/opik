@@ -8,7 +8,7 @@ from opik.api_objects.dataset import dataset_item
 from opik import Prompt, synchronization
 
 from .. import testlib
-import mock
+from unittest import mock
 
 
 def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:

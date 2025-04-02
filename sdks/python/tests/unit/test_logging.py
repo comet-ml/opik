@@ -1,4 +1,4 @@
-import mock
+from unittest import mock
 import logging
 from opik import _logging
 

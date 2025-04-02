@@ -1,4 +1,4 @@
-import mock
+from unittest import mock
 import time
 
 from opik.message_processing import messages

@@ -1,4 +1,4 @@
-import mock
+from unittest import mock
 
 from opik.api_objects import opik_client
 from opik.decorator import tracker

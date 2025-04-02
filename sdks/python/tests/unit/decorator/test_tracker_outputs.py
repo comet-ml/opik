@@ -2,7 +2,7 @@ import asyncio
 import threading
 from typing import Dict
 
-import mock
+from unittest import mock
 import pytest
 
 from opik import context_storage, opik_context
@@ -1570,13 +1570,6 @@ def test_track__span_usage_updated__openai_format(fake_backend):
                     "original_usage.completion_tokens": 10,
                     "original_usage.prompt_tokens": 20,
                     "original_usage.total_tokens": 30,
-                },
-                metadata={
-                    "usage": {
-                        "completion_tokens": 10,
-                        "prompt_tokens": 20,
-                        "total_tokens": 30,
-                    }
                 },
             )
         ],

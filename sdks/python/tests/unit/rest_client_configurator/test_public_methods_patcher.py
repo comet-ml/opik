@@ -1,4 +1,4 @@
-import mock
+from unittest import mock
 from opik.rest_client_configurator import public_methods_patcher
 
 
