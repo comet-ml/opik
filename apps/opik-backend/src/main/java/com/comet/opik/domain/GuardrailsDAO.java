@@ -3,10 +3,10 @@ package com.comet.opik.domain;
 import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.api.GuardrailsCheck;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
+import com.comet.opik.utils.JsonUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
@@ -27,6 +27,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
+
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 
 @ImplementedBy(GuardrailsDAOImpl.class)
