@@ -37,7 +37,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         const keys = column.split(".");
-        const key = keys[1];
+        const key = keys.length > 1 ? keys[1] : keys[0];
         acc[key] = get(row, keys, "");
 
         return acc;
