@@ -73,7 +73,7 @@ class AnyString:
         return "<ANY_STRING>"
 
 
-ANY = mock.mock.ANY
+ANY = mock.ANY
 ANY_BUT_NONE = AnyButNone()
 ANY_DICT = AnyDict()
 ANY_LIST = AnyList()
