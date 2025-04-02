@@ -1,6 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Database, Trash } from "lucide-react";
-import last from "lodash/last";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -48,7 +47,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         // we need split by dot to parse usage into correct structure
         const keys = column.split(".");
-        const key = last(keys) as string;
+        const key = keys[1];
         const keyPrefix = first(keys) as string;
 
         if (keyPrefix === "feedback_scores") {

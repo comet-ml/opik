@@ -1,6 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Split } from "lucide-react";
-import last from "lodash/last";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -83,7 +82,7 @@ const CompareExperimentsActionsPanel: React.FC<
       return columnsToExport.reduce<Record<string, unknown>>(
         (accumulator, column) => {
           const keys = column.split(".");
-          const key = last(keys) as string;
+          const key = keys[1];
           const keyPrefix = first(keys) as string;
 
           if (
