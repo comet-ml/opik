@@ -22,7 +22,7 @@ import { AgentAction, AgentFinish } from "@langchain/core/agents";
 type JsonNode = Record<string, unknown>;
 export interface OpikCallbackHandlerOptions {
   tags?: [];
-  metadata?: Record<string, unknown>;
+  metadata?: JsonNode;
   projectName?: string;
   client?: Opik;
 }
