@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.utils.WorkspaceUtils;
+import com.comet.opik.api.Project;
+import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -19,6 +21,7 @@ import java.util.UUID;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
+
 
 @ImplementedBy(GuardrailsServiceImpl.class)
 public interface GuardrailsService {
