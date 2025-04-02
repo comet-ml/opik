@@ -16,10 +16,12 @@ def get_opik_api_client():
         api_key=os.getenv("OPIK_API_KEY", None),
     )
 
+
 def get_random_string(length):
     letters = string.ascii_lowercase
-    result_str = ''.join(random.choice(letters) for _ in range(length))
+    result_str = "".join(random.choice(letters) for _ in range(length))
     return result_str
+
 
 def create_project_via_api(name: str):
     client = get_opik_api_client()

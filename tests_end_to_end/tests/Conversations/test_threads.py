@@ -7,15 +7,16 @@ from page_objects.ThreadsPage import ThreadsPage
 
 logger = logging.getLogger(__name__)
 
+
 class TestThreadsCrud:
     @pytest.mark.parametrize(
-        "threads_fixture",
-        ["log_threads_low_level", 
-         "log_threads_with_decorator"]
+        "threads_fixture", ["log_threads_low_level", "log_threads_with_decorator"]
     )
     @pytest.mark.sanity
     @allure.title("Conversation creation and verification - {threads_fixture}")
-    def test_thread_visibility(self, page, request, create_project_api, threads_fixture):
+    def test_thread_visibility(
+        self, page, request, create_project_api, threads_fixture
+    ):
         """Test thread visibility.
 
         Steps:
@@ -34,7 +35,7 @@ class TestThreadsCrud:
         # Navigate to project
         logger.info(f"Navigating to project '{project_name}'")
         projects_page = ProjectsPage(page)
-        
+
         try:
             projects_page.go_to_page()
             projects_page.click_project(project_name)
@@ -46,7 +47,7 @@ class TestThreadsCrud:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Navigate to threads tab
         threads_page = ThreadsPage(page)
         logger.info(f"Navigating to project threads'{project_name}'")
@@ -60,7 +61,6 @@ class TestThreadsCrud:
                 f"Error: {str(e)}"
             ) from e
 
-        
         # Check quantity of threads
         logger.info("Checking quantity of logged threads")
         assert (
@@ -79,7 +79,7 @@ class TestThreadsCrud:
                     try:
                         threads_page.check_message_in_thread(input)
                         threads_page.check_message_in_thread(output, True)
-     
+
                     except Exception as e:
                         raise AssertionError(
                             f"Failed to verify messages exist in the thread.\n"
@@ -87,7 +87,7 @@ class TestThreadsCrud:
                             f"Error: {str(e)}\n"
                             f"Note: This could be due to message not found in thread view"
                         ) from e
-                
+
                 threads_page.close_thread_content()
                 logger.info(f"Successfully verified content for thread '{thread_id}'")
 
@@ -99,8 +99,8 @@ class TestThreadsCrud:
                     f"Expected outputs: {thread['outputs']}\n"
                     f"Error: {str(e)}"
                 ) from e
-    
-    def test_thread_removal(self,page,log_threads_low_level,create_project_api):
+
+    def test_thread_removal(self, page, log_threads_low_level, create_project_api):
         """Test thread removal.
 
         Steps:
@@ -121,7 +121,7 @@ class TestThreadsCrud:
         # Navigate to project
         logger.info(f"Navigating to project '{project_name}'")
         projects_page = ProjectsPage(page)
-        
+
         try:
             projects_page.go_to_page()
             projects_page.click_project(project_name)
@@ -133,7 +133,7 @@ class TestThreadsCrud:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Navigate to threads tab
         threads_page = ThreadsPage(page)
         logger.info(f"Navigating to project threads'{project_name}'")
@@ -146,7 +146,7 @@ class TestThreadsCrud:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Check quantity of threads
         logger.info("Checking quantity of logged threads")
         assert (
@@ -166,7 +166,7 @@ class TestThreadsCrud:
                 f"Thread id: {thread1_id}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         logger.info("Removing thread via checkbox")
         try:
             threads_page.delete_thread_from_table()
@@ -178,7 +178,7 @@ class TestThreadsCrud:
                 f"Thread id: {thread1_id}\n"
                 f"Error: {str(e)}"
             ) from e
-         
+
         logger.info("Checking thread is not present in the table")
         try:
             threads_page.check_thread_is_deleted(thread1_id)
@@ -190,7 +190,7 @@ class TestThreadsCrud:
                 f"Thread id: {thread1_id}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Remove thread with content delete button
         thread2_id = thread_configs[1]["thread_id"]
         logger.info("Searching for trace in the table")
@@ -204,7 +204,7 @@ class TestThreadsCrud:
                 f"Thread id: {thread2_id}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         logger.info("Removing thread via button in thread content bar")
         try:
             threads_page.open_thread_content(thread2_id)
@@ -217,7 +217,7 @@ class TestThreadsCrud:
                 f"Thread id: {thread2_id}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         logger.info("Checking thread is not present in the table")
         try:
             threads_page.check_thread_is_deleted(thread2_id)
