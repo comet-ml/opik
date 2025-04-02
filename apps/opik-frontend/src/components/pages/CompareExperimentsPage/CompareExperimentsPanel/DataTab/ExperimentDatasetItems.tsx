@@ -9,7 +9,7 @@ import NoData from "@/components/shared/NoData/NoData";
 import React, { useMemo } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { pick } from "lodash";
-import { extractImageUrls } from "@/lib/images";
+import { extractImageUrls, replaceBase64ImageValues } from "@/lib/images";
 
 interface ExperimentDatasetItemsProps {
   data: DatasetItem["data"] | undefined;
@@ -34,11 +34,17 @@ const ExperimentDatasetItems = ({
   );
   const showImages = imagesUrls?.length > 0;
 
+  const formattedSelectedData = useMemo(
+    () => replaceBase64ImageValues(selectedData),
+    [selectedData],
+  );
+
   if (!showImages) {
     return data ? (
       <SyntaxHighlighter
         data={selectedData}
         prettifyConfig={{ fieldType: "input" }}
+        preserveKey="syntax-highlighter-compare-experiment-input"
       />
     ) : (
       <NoData />
@@ -79,10 +85,11 @@ const ExperimentDatasetItems = ({
       <AccordionItem value="data">
         <AccordionTrigger>Selected data</AccordionTrigger>
         <AccordionContent>
-          {data ? (
+          {formattedSelectedData ? (
             <SyntaxHighlighter
-              data={selectedData || {}}
+              data={formattedSelectedData ?? {}}
               prettifyConfig={{ fieldType: "input" }}
+              preserveKey="syntax-highlighter-compare-experiment-input"
             />
           ) : (
             <NoData />

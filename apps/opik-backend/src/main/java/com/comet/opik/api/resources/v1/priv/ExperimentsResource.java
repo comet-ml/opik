@@ -13,11 +13,15 @@ import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Identifier;
 import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
+import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.workspaces.WorkspaceMetadata;
+import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
@@ -56,6 +60,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -79,10 +84,14 @@ public class ExperimentsResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
+    private final @NonNull ExperimentSortingFactory sortingFactory;
+    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
 
     @GET
     @Operation(operationId = "findExperiments", summary = "Find experiments", description = "Find experiments", responses = {
-            @ApiResponse(responseCode = "200", description = "Experiments resource", content = @Content(schema = @Schema(implementation = Experiment.ExperimentPage.class)))})
+            @ApiResponse(responseCode = "200", description = "Experiments resource", content = @Content(schema = @Schema(implementation = Experiment.ExperimentPage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
     @JsonView(Experiment.View.Public.class)
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -90,7 +99,19 @@ public class ExperimentsResource {
             @QueryParam("datasetId") UUID datasetId,
             @QueryParam("name") String name,
             @QueryParam("dataset_deleted") boolean datasetDeleted,
-            @QueryParam("prompt_id") UUID promptId) {
+            @QueryParam("prompt_id") UUID promptId,
+            @QueryParam("sorting") String sorting) {
+
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+
+        WorkspaceMetadata metadata = workspaceMetadataService
+                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+            sortingFields = List.of();
+        }
 
         var experimentSearchCriteria = ExperimentSearchCriteria.builder()
                 .datasetId(datasetId)
@@ -98,9 +119,17 @@ public class ExperimentsResource {
                 .entityType(EntityType.TRACE)
                 .datasetDeleted(datasetDeleted)
                 .promptId(promptId)
+                .sortingFields(sortingFields)
                 .build();
+
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
+                .map(experimentPage -> {
+                    if (!metadata.canUseDynamicSorting()) {
+                        return experimentPage.toBuilder().sortableBy(List.of()).build();
+                    }
+                    return experimentPage;
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found experiments by '{}', count '{}', page '{}', size '{}'",

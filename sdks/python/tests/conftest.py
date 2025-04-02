@@ -2,7 +2,7 @@ import random
 import string
 from typing import cast
 
-import mock
+from unittest import mock
 import pytest
 
 from opik import context_storage
@@ -28,6 +28,7 @@ def shutdown_cached_client_after_test():
 
 @pytest.fixture
 def patch_streamer():
+    streamer = None
     try:
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor()
@@ -40,11 +41,13 @@ def patch_streamer():
 
         yield streamer, fake_message_processor_
     finally:
-        streamer.close(timeout=5)
+        if streamer is not None:
+            streamer.close(timeout=5)
 
 
 @pytest.fixture
 def patch_streamer_without_batching():
+    streamer = None
     try:
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor()
@@ -57,7 +60,8 @@ def patch_streamer_without_batching():
 
         yield streamer, fake_message_processor_
     finally:
-        streamer.close(timeout=5)
+        if streamer is not None:
+            streamer.close(timeout=5)
 
 
 @pytest.fixture

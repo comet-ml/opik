@@ -63,3 +63,6 @@ deployment/helm_chart/opik/charts
 deployment/helm_chart/opik/values-*.yaml
 temp
 opik-sandbox-executor-python.tar.gz
+
+# init
+.opik_install_reported

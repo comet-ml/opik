@@ -52,6 +52,8 @@ tags:
   description: Feedback definitions related resources
 - name: LlmProviderKey
   description: LLM Provider Key
+- name: OpenTelemetry Ingestion
+  description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -208,7 +210,34 @@ paths:
       operationId: startMultiPartUpload
       requestBody:
         content:
-          '*/*':
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteMultipartUploadRequest"
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/attachment/delete:
+    post:
+      tags:
+      - Attachments
+      summary: Delete attachments
+      description: Delete attachments
+      operationId: deleteAttachments
+      requestBody:
+        content:
+          application/json:
             schema:
               $ref: "#/components/schemas/CompleteMultipartUploadRequest"
       responses:
@@ -1015,6 +1044,10 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Experiments resource
@@ -1022,6 +1055,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
     post:
       tags:
       - Experiments
@@ -1487,6 +1526,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/otel/v1/traces:
+    post:
+      tags:
+      - OpenTelemetry Ingestion
+      operationId: receiveProtobufTraces
+      requestBody:
+        content:
+          application/x-protobuf:
+            schema:
+              $ref: "#/components/schemas/JsonNode"
+      responses:
+        default:
+          description: default response
+          content:
+            '*/*': {}
   /v1/private/projects:
     get:
       tags:
@@ -3207,6 +3261,10 @@ components:
           type: integer
           format: int32
     Attachment:
+      required:
+      - file_name
+      - file_size
+      - mime_type
       type: object
       properties:
         link:
@@ -3298,6 +3356,30 @@ components:
         part_number:
           type: integer
           format: int32
+    DeleteAttachmentsRequest:
+      required:
+      - container_id
+      - entity_id
+      - entity_type
+      - file_names
+      type: object
+      properties:
+        file_names:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        entity_type:
+          type: string
+          enum:
+          - trace
+          - span
+        entity_id:
+          type: string
+          format: uuid
+        container_id:
+          type: string
+          format: uuid
     StartMultipartUploadResponse:
       required:
       - pre_sign_urls
@@ -5138,6 +5220,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Experiment_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     Experiment_Public:
       required:
       - dataset_name
@@ -5775,6 +5861,8 @@ components:
           maxLength: 150
           minLength: 0
           type: string
+    ExportTraceServiceRequest:
+      $ref: "#/components/schemas/JsonNode"
     PercentageValues:
       type: object
       properties:
@@ -6707,6 +6795,10 @@ components:
         id:
           type: string
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
         project_id:
           type: string
           format: uuid

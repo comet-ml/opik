@@ -8,6 +8,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -61,6 +62,9 @@ class TraceServiceImplTest {
     private CommentDAO commentDAO;
 
     @Mock
+    private AttachmentService attachmentService;
+
+    @Mock
     private TransactionTemplateAsync template;
 
     @Mock
@@ -79,11 +83,13 @@ class TraceServiceImplTest {
                 spanService,
                 feedbackScoreDAO,
                 commentDAO,
+                attachmentService,
                 template,
                 projectService,
                 () -> Generators.timeBasedEpochGenerator().generate(),
                 DUMMY_LOCK_SERVICE,
-                eventBus);
+                eventBus,
+                traceSortingFactory);
     }
 
     @Nested

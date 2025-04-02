@@ -6,6 +6,7 @@ from .api_objects.experiment.experiment_item import (
 )
 from .api_objects.opik_client import Opik
 from .api_objects.prompt import Prompt
+from .api_objects.prompt.types import PromptType
 from .api_objects.span import Span
 from .api_objects.trace import Trace
 from .configurator.configure import configure
@@ -34,6 +35,7 @@ __all__ = [
     "llm_unit",
     "configure",
     "Prompt",
+    "PromptType",
     "LLMProvider",
 ]
 
