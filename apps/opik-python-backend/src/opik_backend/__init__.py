@@ -1,5 +1,7 @@
-from flask import Flask
 import logging
+import os
+
+from flask import Flask
 
 def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
@@ -15,9 +17,12 @@ def create_app(test_config=None):
         # load the test config if passed in
         app.config.from_mapping(test_config)
 
-    from opik_backend.evaluator import evaluator
+    from opik_backend.evaluator import evaluator, init_executor
     from opik_backend.post_user_signup import post_user_signup
     from opik_backend.healthcheck import healthcheck
+
+    # Initialize the code executor
+    init_executor(app)
 
     app.register_blueprint(healthcheck)
     app.register_blueprint(evaluator)

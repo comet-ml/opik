@@ -3,7 +3,7 @@ import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export enum EVALUATORS_RULE_TYPE {
   llm_judge = "llm_as_judge",
-  python_code = "python_code",
+  python_code = "user_defined_metric_python",
 }
 
 export interface LLMJudgeModel {
@@ -31,7 +31,8 @@ export interface LLMJudgeDetails {
 }
 
 export interface PythonCodeObject {
-  code: string;
+  metric: string;
+  arguments: Record<string, string>;
 }
 
 export interface PythonCodeDetails {

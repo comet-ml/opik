@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -12,6 +13,8 @@ import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import { prettifyMessage } from "@/lib/traces";
+import { useSearchPanelTheme } from "@/hooks/useSearchPanelTheme";
+import { search } from "@codemirror/search";
 
 enum MODE_TYPE {
   yaml = "yaml",
@@ -30,6 +33,8 @@ const EXTENSION_MAP: { [key in MODE_TYPE]: LRLanguage | null } = {
   [MODE_TYPE.pretty]: null,
 };
 
+const UNUSED_SYNTAX_HIGHLIGHTER_KEY = "__unused_syntax_highlighter_key__";
+
 type PrettifyConfig = {
   fieldType: "input" | "output";
 };
@@ -37,16 +42,34 @@ type PrettifyConfig = {
 type SyntaxHighlighterProps = {
   data: object;
   prettifyConfig?: PrettifyConfig;
+  preserveKey?: string;
 };
 
 const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
   data,
   prettifyConfig,
+  preserveKey,
 }) => {
-  const [mode, setMode] = useState(
-    prettifyConfig ? MODE_TYPE.pretty : MODE_TYPE.yaml,
+  const defaultMode = prettifyConfig ? MODE_TYPE.pretty : MODE_TYPE.yaml;
+  const [localMode, setLocalMode] = useState(defaultMode);
+
+  const [preservedMode, setPreservedMode] = useLocalStorageState(
+    preserveKey ?? UNUSED_SYNTAX_HIGHLIGHTER_KEY,
+    {
+      defaultValue: defaultMode,
+    },
   );
+
+  const [mode, setMode] = useMemo(
+    () =>
+      preserveKey
+        ? [preservedMode, setPreservedMode]
+        : [localMode, setLocalMode],
+    [localMode, preserveKey, preservedMode, setPreservedMode],
+  );
+
   const theme = useCodemirrorTheme();
+  const searchPanelTheme = useSearchPanelTheme();
 
   const code: {
     message: string;
@@ -143,9 +166,14 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
             value={code.message}
             extensions={[
               EXTENSION_MAP[code.mode] as LRLanguage,
+              search({
+                top: true,
+              }),
               EditorView.lineWrapping,
               EditorState.readOnly.of(true),
               EditorView.editable.of(false),
+              EditorView.contentAttributes.of({ tabindex: "0" }),
+              searchPanelTheme,
             ]}
           />
         )}

@@ -13,12 +13,16 @@ registry: &registry ghcr.io/comet-ml/opik
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
 
+demoDataJob: true
+
 component:
   backend:
     enabled: true
     run_migration: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
@@ -33,13 +37,13 @@ component:
       image: curlimages/curl:8.12.1
       command: ["/bin/sh", "-c"]
       args: ['while [ $(curl -ksw "%{http_code}" "http://clickhouse-opik-clickhouse:8123" -o /dev/null) -ne 200 ]; do sleep 5; echo "Clickhouse is not available. Waiting for the Clickhouse..."; done']
-    # livenessProbe:
-    #   path: /health-check?name=all&type=alive
-    #   port:  8080
-    # readinessProbe:
-    #   path: /health-check?name=all&type=ready
-    #   port:  8080
-    #   initialDelaySeconds: 20
+    livenessProbe:
+      path: /health-check?name=all&type=alive
+      port:  8080
+    readinessProbe:
+      path: /health-check?name=all&type=ready
+      port:  8080
+      initialDelaySeconds: 20
 
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
@@ -65,6 +69,11 @@ component:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+      PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
+      AWS_ACCESS_KEY_ID: THAAIOSFODNN7EXAMPLE # rootUser for minio
+      AWS_SECRET_ACCESS_KEY: LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY # rootPassword for minio
+      S3_URL: "http://opik-minio:9000"
+      TOGGLE_PYTHON_EVALUATOR_ENABLED: true
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -88,6 +97,8 @@ component:
     enabled: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
@@ -101,6 +112,9 @@ component:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
+      PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
+      PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
     envFrom:
       - configMapRef:
@@ -131,11 +145,12 @@ component:
     ingress:
       enabled: false
 
-    
   frontend:
     enabled: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
@@ -202,6 +217,25 @@ mysql:
       CREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';
       GRANT ALL ON `opik`.* TO 'opik'@'%';
       FLUSH PRIVILEGES;
+
+minio:
+  enabled: true
+  mode: standalone
+  disableWebUI: true
+  persistence:
+    enabled: true
+    size: 50Gi
+  auth:
+    rootUser: "THAAIOSFODNN7EXAMPLE"
+    rootPassword: "LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  provisioning:
+    enabled: true
+    extraCommands: 
+      - mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4
+      - mc mb --ignore-existing s3/public
+      - mc anonymous set download s3/public/
+  fullnameOverride: opik-minio
+
 
 redis:
   enabled: true

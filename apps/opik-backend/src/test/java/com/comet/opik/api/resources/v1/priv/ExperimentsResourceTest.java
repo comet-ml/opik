@@ -29,16 +29,19 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -54,6 +57,7 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
@@ -71,6 +75,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -83,6 +88,7 @@ import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
+import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -113,6 +119,9 @@ import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
@@ -924,19 +933,21 @@ class ExperimentsResourceTest {
             createAndAssert(noItemExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
-            var trace1 = makeTrace(apiKey, workspaceName);
+            var trace1 = makeTrace();
 
-            var trace2 = makeTrace(apiKey, workspaceName);
+            var trace2 = makeTrace();
 
-            var trace3 = makeTrace(apiKey, workspaceName);
+            var trace3 = makeTrace();
 
-            var trace4 = makeTrace(apiKey, workspaceName);
+            var trace4 = makeTrace();
 
-            var trace5 = makeTrace(apiKey, workspaceName);
+            var trace5 = makeTrace();
 
-            var trace6 = makeTrace(apiKey, workspaceName);
+            var trace6 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3, trace4, trace5);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -1062,19 +1073,21 @@ class ExperimentsResourceTest {
             createAndAssert(expectedExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
-            var trace1 = makeTrace(apiKey, workspaceName);
+            var trace1 = makeTrace();
 
-            var trace2 = makeTrace(apiKey, workspaceName);
+            var trace2 = makeTrace();
 
-            var trace3 = makeTrace(apiKey, workspaceName);
+            var trace3 = makeTrace();
 
-            var trace4 = makeTrace(apiKey, workspaceName);
+            var trace4 = makeTrace();
 
-            var trace5 = makeTrace(apiKey, workspaceName);
+            var trace5 = makeTrace();
 
-            var trace6 = makeTrace(apiKey, workspaceName);
+            var trace6 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3, trace4, trace5, trace6);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -1340,11 +1353,13 @@ class ExperimentsResourceTest {
                     .datasetName(null)
                     .build();
 
-            var trace1 = makeTrace(apiKey, workspaceName);
+            var trace = makeTrace();
 
-            var traces = List.of(trace1);
+            var traces = List.of(trace);
 
-            var scoreForTrace1 = makeTraceScores(trace1);
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var scoreForTrace1 = makeTraceScores(trace);
 
             var traceIdToScoresMap = Stream
                     .of(scoreForTrace1.stream())
@@ -1483,6 +1498,232 @@ class ExperimentsResourceTest {
                     arguments(10, 0),
                     arguments(10, 5));
         }
+
+        Stream<Arguments> whenSortingByFieldAndDirection__thenReturnPage() {
+            return Stream.of(
+                    arguments(
+                            Comparator.comparing(Experiment::name),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(Experiment::name).reversed(),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(Experiment::createdAt)
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(Experiment::createdAt).reversed()
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(Experiment::lastUpdatedAt)
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                                    .build()),
+                    arguments(
+                            Comparator.comparing(Experiment::lastUpdatedAt).reversed()
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()),
+                    arguments(
+                            Comparator.comparing(Experiment::createdBy)
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(Experiment::createdBy).reversed()
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+                    arguments(
+                            Comparator.comparing(Experiment::traceCount)
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.TRACE_COUNT).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing(Experiment::traceCount).reversed()
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.TRACE_COUNT).direction(Direction.DESC)
+                                    .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource("whenSortingByFieldAndDirection__thenReturnPage")
+        @DisplayName("when sorting by field and direction, then return page")
+        void whenSortingByFieldAndDirection__thenReturnPage(Comparator<Experiment> comparator,
+                SortingField sortingField) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<FeedbackScoreBatchItem> scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchItem.class);
+
+            var experiments = IntStream.range(0, 5)
+                    .mapToObj(i -> experimentResourceClient.createPartialExperiment()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build())
+                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace))
+                    .toList();
+
+            var expectedExperiments = experiments
+                    .stream()
+                    .sorted(comparator)
+                    .toList();
+
+            Map<UUID, Map<String, BigDecimal>> expectedScores = expectedExperiments
+                    .stream()
+                    .map(experiment -> Map.entry(experiment.id(), experiment.feedbackScores()
+                            .stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField));
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        @DisplayName("when sorting by feedback scores, then return page")
+        void whenSortingByFeedbackScores__thenReturnPage(Direction direction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<FeedbackScoreBatchItem> scoreForTrace = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchItem.class);
+
+            var experiments = IntStream.range(0, 5)
+                    .mapToObj(i -> experimentResourceClient.createPartialExperiment()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .build())
+                    .map(experiment -> generateFullExperiment(apiKey, workspaceName, experiment, scoreForTrace))
+                    .toList();
+
+            var sortingField = new SortingField(
+                    "feedback_scores.%s".formatted(scoreForTrace.getFirst().name()),
+                    direction);
+
+            Comparator<Experiment> comparing = Comparator.comparing(experiment -> experiment.feedbackScores()
+                    .stream()
+                    .filter(score -> score.name().equals(scoreForTrace.getFirst().name()))
+                    .findFirst()
+                    .orElseThrow()
+                    .value());
+
+            var expectedExperiments = experiments
+                    .stream()
+                    .sorted(direction == Direction.ASC ? comparing : comparing.reversed())
+                    .toList();
+
+            Map<UUID, Map<String, BigDecimal>> expectedScores = expectedExperiments
+                    .stream()
+                    .map(experiment -> Map.entry(experiment.id(), experiment.feedbackScores()
+                            .stream()
+                            .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"feedback_scores", "feedback_score.dsfsdfd", "feedback_scores."})
+        void whenSortingByFeedbackScores__thenReturnPage(String field) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            try (Response response = findExperiment(
+                    workspaceName,
+                    apiKey,
+                    1,
+                    10,
+                    UUID.randomUUID(),
+                    null,
+                    false,
+                    UUID.randomUUID(),
+                    List.of(new SortingField(field, Direction.ASC)))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        private Experiment generateFullExperiment(String apiKey, String workspaceName, Experiment expectedExperiment,
+                List<FeedbackScoreBatchItem> scoreForTrace) {
+
+            createAndAssert(expectedExperiment, apiKey, workspaceName);
+
+            int tracesNumber = PodamUtils.getIntegerInRange(1, 10);
+
+            List<Trace> traces = IntStream.range(0, tracesNumber)
+                    .parallel()
+                    .mapToObj(i -> makeTrace())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Map<UUID, List<FeedbackScoreBatchItem>> traceIdToScoresMap = traces.stream()
+                    .map(trace -> copyScoresFrom(scoreForTrace, trace))
+                    .flatMap(List::stream)
+                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+
+            var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
+            feedbackScoreBatch = feedbackScoreBatch.toBuilder()
+                    .scores(Stream.concat(
+                            feedbackScoreBatch.scores().stream(),
+                            traceIdToScoresMap.values().stream().flatMap(List::stream))
+                            .toList())
+                    .build();
+
+            createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
+
+            int totalNumberOfScores = traceIdToScoresMap.size();
+
+            var experimentItems = IntStream.range(0, totalNumberOfScores)
+                    .mapToObj(i -> podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(expectedExperiment.id())
+                            .traceId(traces.get(i % traces.size()).id())
+                            .feedbackScores(
+                                    traceIdToScoresMap.get(traces.get(i % traces.size()).id()).stream()
+                                            .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                            .toList())
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = addRandomExperiments(experimentItems);
+
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment = getExpectedScoresPerExperiment(
+                    List.of(expectedExperiment), experimentItems);
+
+            return expectedExperiment.toBuilder()
+                    .traceCount((long) traces.size())
+                    .feedbackScores(
+                            expectedScoresPerExperiment.get(expectedExperiment.id())
+                                    .entrySet()
+                                    .stream()
+                                    .map(e -> FeedbackScoreAverage.builder()
+                                            .name(e.getKey())
+                                            .value(avgFromList(List.of(e.getValue())))
+                                            .build())
+                                    .toList())
+                    .build();
+        }
     }
 
     private static PromptVersionLink buildVersionLink(PromptVersion promptVersion) {
@@ -1510,17 +1751,10 @@ class ExperimentsResourceTest {
     }
 
     private void deleteTrace(UUID id, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(getTracesPath())
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .delete()) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-        }
+        traceResourceClient.deleteTrace(id, workspaceName, apiKey);
     }
 
-    private @NotNull Map<UUID, Map<String, BigDecimal>> getExpectedScoresPerExperiment(
+    private Map<UUID, Map<String, BigDecimal>> getExpectedScoresPerExperiment(
             List<Experiment> experiments, List<ExperimentItem> experimentItems) {
         return experiments.stream()
                 .map(experiment -> Map.entry(experiment.id(), experimentItems
@@ -1563,6 +1797,19 @@ class ExperimentsResourceTest {
             boolean datasetDeleted,
             Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
             UUID promptId) {
+        findAndAssert(workspaceName, page, pageSize, datasetId, name, expectedExperiments, expectedTotal,
+                unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null);
+    }
+
+    public Response findExperiment(String workspaceName,
+            String apiKey,
+            int page,
+            int pageSize,
+            UUID datasetId,
+            String name,
+            boolean datasetDeleted,
+            UUID promptId,
+            List<SortingField> sortingFields) {
 
         WebTarget webTarget = client.target(getExperimentsPath())
                 .queryParam("page", page)
@@ -1581,11 +1828,35 @@ class ExperimentsResourceTest {
             webTarget = webTarget.queryParam("prompt_id", promptId);
         }
 
-        try (var actualResponse = webTarget
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
+        }
+
+        return webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .get()) {
+                .get();
+    }
+
+    private void findAndAssert(
+            String workspaceName,
+            int page,
+            int pageSize,
+            UUID datasetId,
+            String name,
+            List<Experiment> expectedExperiments,
+            long expectedTotal,
+            List<Experiment> unexpectedExperiments,
+            String apiKey,
+            boolean datasetDeleted,
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
+            UUID promptId,
+            List<SortingField> sortingFields) {
+
+        try (var actualResponse = findExperiment(workspaceName, apiKey, page, pageSize, datasetId, name, datasetDeleted,
+                promptId, sortingFields)) {
+
             var actualPage = actualResponse.readEntity(ExperimentPage.class);
             var actualExperiments = actualPage.content();
 
@@ -1628,17 +1899,8 @@ class ExperimentsResourceTest {
         createScoreAndAssert(feedbackScoreBatch, API_KEY, TEST_WORKSPACE);
     }
 
-    private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(getTracesPath())
-                .path("feedback-scores")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(feedbackScoreBatch))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+    private void createScoreAndAssert(FeedbackScoreBatch batch, String apiKey, String workspaceName) {
+        traceResourceClient.feedbackScores(batch.scores(), apiKey, workspaceName);
     }
 
     private int customComparator(BigDecimal v1, BigDecimal v2) {
@@ -1694,6 +1956,8 @@ class ExperimentsResourceTest {
             var trace3 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3);
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -1805,6 +2069,8 @@ class ExperimentsResourceTest {
             var trace3 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3);
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -2000,19 +2266,21 @@ class ExperimentsResourceTest {
             createAndAssert(expectedExperiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
-            var trace1 = makeTrace(apiKey, workspaceName);
+            var trace1 = makeTrace();
 
-            var trace2 = makeTrace(apiKey, workspaceName);
+            var trace2 = makeTrace();
 
-            var trace3 = makeTrace(apiKey, workspaceName);
+            var trace3 = makeTrace();
 
-            var trace4 = makeTrace(apiKey, workspaceName);
+            var trace4 = makeTrace();
 
-            var trace5 = makeTrace(apiKey, workspaceName);
+            var trace5 = makeTrace();
 
-            var trace6 = makeTrace(apiKey, workspaceName);
+            var trace6 = makeTrace();
 
             var traces = List.of(trace1, trace2, trace3, trace4, trace5, trace6);
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -2182,34 +2450,7 @@ class ExperimentsResourceTest {
     }
 
     private Trace makeTrace() {
-        Trace trace = podamFactory.manufacturePojo(Trace.class);
-        createTraceAndAssert(trace, API_KEY, TEST_WORKSPACE);
-        return trace;
-    }
-
-    private Trace makeTrace(String apiKey, String workspaceName) {
-        Trace trace = podamFactory.manufacturePojo(Trace.class);
-        createTraceAndAssert(trace, apiKey, workspaceName);
-        return trace;
-    }
-
-    private String getTracesPath() {
-        return URL_TEMPLATE_TRACES.formatted(baseURI);
-    }
-
-    private void createTraceAndAssert(Trace trace, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(getTracesPath())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
-            assertThat(actualResponse.hasEntity()).isFalse();
-
-            var actualHeaderString = actualResponse.getHeaderString("Location");
-            assertThat(actualHeaderString).isEqualTo(getTracesPath() + "/" + trace.id());
-        }
+        return podamFactory.manufacturePojo(Trace.class);
     }
 
     private synchronized UUID createAndAssert(Experiment expectedExperiment, String apiKey, String workspaceName) {
@@ -2222,7 +2463,7 @@ class ExperimentsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
 
-            var actualId = TestUtils.getIdFromLocation(actualResponse.getLocation());
+            var actualId = getIdFromLocation(actualResponse.getLocation());
 
             assertThat(actualResponse.hasEntity()).isFalse();
 
@@ -2767,6 +3008,30 @@ class ExperimentsResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
+                List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
+
+            var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class);
+
+            try (var actualResponse = experimentResourceClient.callCreateExperimentItem(Set.of(experimentItem), API_KEY,
+                    workspaceName)) {
+                if (isLimitReached) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
+                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                    assertThat(actualError).isEqualTo(expectedError);
+                } else {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                }
+            }
+        }
     }
 
     @Nested
@@ -2875,16 +3140,7 @@ class ExperimentsResourceTest {
     }
 
     private void createAndAssert(ExperimentItemsBatch request, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(getExperimentItemsPath())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
-
+        experimentResourceClient.createExperimentItem(request.experimentItems(), apiKey, workspaceName);
     }
 
     private void getAndAssert(ExperimentItem expectedExperimentItem, String workspaceName, String apiKey) {

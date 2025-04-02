@@ -1,4 +1,4 @@
-import mock
+from unittest import mock
 import pytest
 from typing import Dict, Any
 
