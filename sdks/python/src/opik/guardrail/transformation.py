@@ -1,6 +1,5 @@
 from typing import Any, Callable, Optional
-from opik.utils.naming_utils import random_id
-
+import uuid
 class Transformation:
     """A class that defines a transformation to be applied to data before validation.
     
@@ -17,7 +16,7 @@ class Transformation:
         description: Optional[str] = None
     ):
         self.transform_fn = transform_fn
-        self.name = name or f"transform-{random_id()}"
+        self.name = name or f"transform-{uuid.uuid4()}"
         self.description = description
 
     def apply(self, input_data: Any) -> Any:

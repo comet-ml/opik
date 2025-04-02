@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
+from opik.evaluation.metrics.score_result import ScoreResult
 
 class ValidationResult:
     """A class that holds the results of a validation process.
@@ -15,15 +16,11 @@ class ValidationResult:
     def __init__(
         self,
         passed: bool,
-        scores: Dict[str, float],
-        reasons: Dict[str, str],
+        results: List[ScoreResult],
         transformed_output: Any,
         raw_output: Any,
-        metadata: Optional[Dict[str, Any]] = None
     ):
         self.passed = passed
-        self.scores = scores
-        self.reasons = reasons
+        self.results = results
         self.transformed_output = transformed_output
         self.raw_output = raw_output
-        self.metadata = metadata or {} 
