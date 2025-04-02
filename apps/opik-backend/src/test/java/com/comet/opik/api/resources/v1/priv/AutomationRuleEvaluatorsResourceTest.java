@@ -223,7 +223,8 @@ class AutomationRuleEvaluatorsResourceTest {
                         }))
                         .customConfigs(List.of(
                                 new CustomConfig("pythonEvaluator.url",
-                                        wireMock.runtimeInfo().getHttpBaseUrl() + "/pythonBackendMock")))
+                                        wireMock.runtimeInfo().getHttpBaseUrl() + "/pythonBackendMock"),
+                                new CustomConfig("serviceToggles.pythonEvaluatorEnabled", "true")))
                         .build());
     }
 

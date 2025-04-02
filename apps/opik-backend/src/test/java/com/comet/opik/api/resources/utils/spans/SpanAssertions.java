@@ -66,6 +66,7 @@ public class SpanAssertions {
                                     .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                                     .withIgnoredFields(IGNORED_FIELDS_SCORES)
                                     .build())
+                    .ignoringCollectionOrder()
                     .isEqualTo(expectedFeedbackScores);
             var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
                     expectedSpan.startTime(), expectedSpan.endTime());

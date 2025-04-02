@@ -21,6 +21,8 @@ component:
     run_migration: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
@@ -71,6 +73,7 @@ component:
       AWS_ACCESS_KEY_ID: THAAIOSFODNN7EXAMPLE # rootUser for minio
       AWS_SECRET_ACCESS_KEY: LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY # rootPassword for minio
       S3_URL: "http://opik-minio:9000"
+      TOGGLE_PYTHON_EVALUATOR_ENABLED: true
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -94,6 +97,8 @@ component:
     enabled: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
@@ -144,6 +149,8 @@ component:
     enabled: true
     serviceAccount: 
       create: true
+    metrics:
+      enabled: false
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
