@@ -15,7 +15,7 @@ ProviderUsage = Union[
     google_usage.GoogleGeminiUsage,
     anthropic_usage.AnthropicUsage,
     bedrock_usage.BedrockUsage,
-    openai_agent_usage.OpenAIAgentUsage,
+    openai_agent_usage.OpenAIResponsesUsage,
     unknown_usage.UnknownUsage,
 ]
 
@@ -130,8 +130,8 @@ class OpikUsage(pydantic.BaseModel):
         )
 
     @classmethod
-    def from_openai_agent_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
-        provider_usage = openai_agent_usage.OpenAIAgentUsage.from_original_usage_dict(
+    def from_openai_responses_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        provider_usage = openai_agent_usage.OpenAIResponsesUsage.from_original_usage_dict(
             usage
         )
 

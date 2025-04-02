@@ -4,8 +4,8 @@ from . import base_original_provider_usage
 from opik import dict_utils
 
 
-class OpenAIAgentUsage(base_original_provider_usage.BaseOriginalProviderUsage):
-    """OpenAI Agentic calls token usage data. Updated 11.03.2025"""
+class OpenAIResponsesUsage(base_original_provider_usage.BaseOriginalProviderUsage):
+    """OpenAI Responses API calls token usage data. Updated 11.03.2025"""
 
     output_tokens: int
     """Number of tokens in the generated response."""
@@ -45,7 +45,7 @@ class OpenAIAgentUsage(base_original_provider_usage.BaseOriginalProviderUsage):
         return result
 
     @classmethod
-    def from_original_usage_dict(cls, usage_dict: Dict[str, Any]) -> "OpenAIAgentUsage":
+    def from_original_usage_dict(cls, usage_dict: Dict[str, Any]) -> "OpenAIResponsesUsage":
         usage_dict = {**usage_dict}
         output_tokens_details_raw = usage_dict.pop("output_tokens_details", None)
         input_tokens_details_raw = usage_dict.pop("input_tokens_details", None)
