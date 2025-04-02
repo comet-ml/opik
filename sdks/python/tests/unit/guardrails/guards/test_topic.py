@@ -42,7 +42,7 @@ def test_topic__allowed_and_restricted_topics_set():
     assert len(configs) == 2
     assert configs == [
         {
-            "type": schemas.ValidationType.TOPIC_MATCH,
+            "type": schemas.ValidationType.TOPIC,
             "config": {
                 "topics": ["education"],
                 "threshold": 0.5,
@@ -50,7 +50,7 @@ def test_topic__allowed_and_restricted_topics_set():
             },
         },
         {
-            "type": schemas.ValidationType.TOPIC_MATCH,
+            "type": schemas.ValidationType.TOPIC,
             "config": {
                 "topics": ["finance"],
                 "threshold": 0.5,
