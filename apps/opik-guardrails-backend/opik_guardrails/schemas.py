@@ -6,14 +6,14 @@ import pydantic
 
 class ValidationType(str, enum.Enum):
     PII = "PII"
-    TOPIC_MATCH = "TOPIC_MATCH"
+    TOPIC = "TOPIC"
 
 
 class ValidationConfig(pydantic.BaseModel):
     pass
 
 
-class TopicMatchValidationConfig(ValidationConfig):
+class TopicValidationConfig(ValidationConfig):
     topics: List[str] = pydantic.Field(
         min_items=1, description="A list of topics to check"
     )
@@ -41,20 +41,6 @@ class PIIValidationConfig(ValidationConfig):
     language: str = pydantic.Field("en", description="Language of the text")
     threshold: float = pydantic.Field(
         0.5, description="A threshold value for PII detector"
-    )
-
-
-class TopicMatchValidationRequest(pydantic.BaseModel):
-    text: str = pydantic.Field(description="The text to classify")
-    config: TopicMatchValidationConfig = pydantic.Field(
-        description="Configuration for the topic matching"
-    )
-
-
-class PIIValidationRequest(pydantic.BaseModel):
-    text: str = pydantic.Field(description="The text to analyze for PII")
-    config: PIIValidationConfig = pydantic.Field(
-        description="Configuration for the PII detection"
     )
 
 

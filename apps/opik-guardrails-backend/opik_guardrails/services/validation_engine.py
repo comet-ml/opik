@@ -3,7 +3,7 @@ from typing import Dict, Any, Type
 from opik_guardrails import schemas
 
 from .validators import pii
-from .validators import topic_match
+from .validators import topic
 from .validators import base_validator
 
 
@@ -11,13 +11,13 @@ _VALIDATION_CONFIG_TYPES_MAPPING: Dict[
     schemas.ValidationType, Type[schemas.ValidationConfig]
 ] = {
     schemas.ValidationType.PII: schemas.PIIValidationConfig,
-    schemas.ValidationType.TOPIC_MATCH: schemas.TopicMatchValidationConfig,
+    schemas.ValidationType.TOPIC: schemas.TopicValidationConfig,
 }
 
 
 _VALIDATORS_MAPPING: Dict[schemas.ValidationType, base_validator.BaseValidator] = {
     schemas.ValidationType.PII: pii.construct_pii_validator(),
-    schemas.ValidationType.TOPIC_MATCH: topic_match.construct_topic_match_validator(),
+    schemas.ValidationType.TOPIC: topic.construct_topic_validator(),
 }
 
 

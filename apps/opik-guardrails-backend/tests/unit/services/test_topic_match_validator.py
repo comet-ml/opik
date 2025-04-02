@@ -1,6 +1,6 @@
 import mock
 
-from opik_guardrails.services.validators.topic_match import validator
+from opik_guardrails.services.validators.topic import validator
 from opik_guardrails import schemas
 
 
@@ -11,9 +11,9 @@ def test_validate_with_no_matched_topics__restrict_mode__validation_passed():
         "scores": [0.3, 0.2, 0.1],
     }
 
-    topic_validator = validator.TopicMatchValidator(pipeline=mock_pipeline)
+    topic_validator = validator.TopicValidator(pipeline=mock_pipeline)
     text = "This is a test text about nothing in particular."
-    config = schemas.TopicMatchValidationConfig(
+    config = schemas.TopicValidationConfig(
         topics=["finance", "healthcare", "politics"], threshold=0.7, mode="restrict"
     )
 
@@ -34,7 +34,7 @@ def test_validate_with_no_matched_topics__restrict_mode__validation_passed():
             "threshold": 0.7,
             "mode": "restrict",
         },
-        "type": schemas.ValidationType.TOPIC_MATCH,
+        "type": schemas.ValidationType.TOPIC,
     }
 
 
@@ -45,9 +45,9 @@ def test_validate_with_matched_topics__restrict_mode__validation_failed():
         "scores": [0.8, 0.3, 0.2],
     }
 
-    topic_validator = validator.TopicMatchValidator(pipeline=mock_pipeline)
+    topic_validator = validator.TopicValidator(pipeline=mock_pipeline)
     text = "This is a financial text about stocks and market trends."
-    config = schemas.TopicMatchValidationConfig(
+    config = schemas.TopicValidationConfig(
         topics=["finance", "healthcare", "politics"], threshold=0.7, mode="restrict"
     )
 
@@ -64,7 +64,7 @@ def test_validate_with_matched_topics__restrict_mode__validation_failed():
             "threshold": 0.7,
             "mode": "restrict",
         },
-        "type": schemas.ValidationType.TOPIC_MATCH,
+        "type": schemas.ValidationType.TOPIC,
     }
 
 
@@ -72,9 +72,9 @@ def test_validate_with_custom_threshold__restrict_mode__validation_failed():
     mock_pipeline = mock.Mock()
     mock_pipeline.return_value = {"labels": ["healthcare"], "scores": [0.35]}
 
-    topic_validator = validator.TopicMatchValidator(pipeline=mock_pipeline)
+    topic_validator = validator.TopicValidator(pipeline=mock_pipeline)
     text = "This is a text that is slightly healthcare-related."
-    config = schemas.TopicMatchValidationConfig(
+    config = schemas.TopicValidationConfig(
         topics=["healthcare"], threshold=0.3, mode="restrict"
     )
 
@@ -91,7 +91,7 @@ def test_validate_with_custom_threshold__restrict_mode__validation_failed():
             "threshold": 0.3,
             "mode": "restrict",
         },
-        "type": schemas.ValidationType.TOPIC_MATCH,
+        "type": schemas.ValidationType.TOPIC,
     }
 
 
@@ -102,9 +102,9 @@ def test_validate_with_no_matched_topics__allow_mode__validation_failed():
         "scores": [0.3, 0.2, 0.1],
     }
 
-    topic_validator = validator.TopicMatchValidator(pipeline=mock_pipeline)
+    topic_validator = validator.TopicValidator(pipeline=mock_pipeline)
     text = "This is a test text about nothing in particular."
-    config = schemas.TopicMatchValidationConfig(
+    config = schemas.TopicValidationConfig(
         topics=["finance", "healthcare", "politics"], threshold=0.7, mode="allow"
     )
 
@@ -125,7 +125,7 @@ def test_validate_with_no_matched_topics__allow_mode__validation_failed():
             "threshold": 0.7,
             "mode": "allow",
         },
-        "type": schemas.ValidationType.TOPIC_MATCH,
+        "type": schemas.ValidationType.TOPIC,
     }
 
 
@@ -136,9 +136,9 @@ def test_validate_with_matched_topics__allow_mode__validation_passed():
         "scores": [0.8, 0.3, 0.2],
     }
 
-    topic_validator = validator.TopicMatchValidator(pipeline=mock_pipeline)
+    topic_validator = validator.TopicValidator(pipeline=mock_pipeline)
     text = "This is a financial text about stocks and market trends."
-    config = schemas.TopicMatchValidationConfig(
+    config = schemas.TopicValidationConfig(
         topics=["finance", "healthcare", "politics"], threshold=0.7, mode="allow"
     )
 
@@ -155,7 +155,7 @@ def test_validate_with_matched_topics__allow_mode__validation_passed():
             "threshold": 0.7,
             "mode": "allow",
         },
-        "type": schemas.ValidationType.TOPIC_MATCH,
+        "type": schemas.ValidationType.TOPIC,
     }
 
 
@@ -166,9 +166,9 @@ def test_multiple_topics_with_mixed_matches__restrict_mode__validation_failed():
         "scores": [0.8, 0.3, 0.7, 0.4],
     }
 
-    topic_validator = validator.TopicMatchValidator(pipeline=mock_pipeline)
+    topic_validator = validator.TopicValidator(pipeline=mock_pipeline)
     text = "This text discusses financial policies and political implications."
-    config = schemas.TopicMatchValidationConfig(
+    config = schemas.TopicValidationConfig(
         topics=["finance", "healthcare", "politics", "technology"],
         threshold=0.6,
         mode="restrict",
@@ -192,7 +192,7 @@ def test_multiple_topics_with_mixed_matches__restrict_mode__validation_failed():
             "threshold": 0.6,
             "mode": "restrict",
         },
-        "type": schemas.ValidationType.TOPIC_MATCH,
+        "type": schemas.ValidationType.TOPIC,
     }
 
 
@@ -203,9 +203,9 @@ def test_multiple_topics_with_mixed_matches__allow_mode__validation_passed():
         "scores": [0.8, 0.3, 0.7, 0.4],
     }
 
-    topic_validator = validator.TopicMatchValidator(pipeline=mock_pipeline)
+    topic_validator = validator.TopicValidator(pipeline=mock_pipeline)
     text = "This text discusses financial policies and political implications."
-    config = schemas.TopicMatchValidationConfig(
+    config = schemas.TopicValidationConfig(
         topics=["finance", "healthcare", "politics", "technology"],
         threshold=0.6,
         mode="allow",
@@ -229,5 +229,5 @@ def test_multiple_topics_with_mixed_matches__allow_mode__validation_passed():
             "threshold": 0.6,
             "mode": "allow",
         },
-        "type": schemas.ValidationType.TOPIC_MATCH,
+        "type": schemas.ValidationType.TOPIC,
     }

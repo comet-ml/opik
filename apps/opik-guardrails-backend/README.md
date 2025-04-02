@@ -54,110 +54,7 @@ The service will automatically detect if CUDA is available at startup. If no GPU
 
 ## API Endpoints
 
-### Topic Validation
-
-```bash
-curl -X POST http://localhost:5000/api/validate-topic \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "This text is about artificial intelligence and machine learning.",
-    "config": {
-      "topics": ["politics", "religion", "artificial intelligence"],
-      "threshold": 0.5,
-      "mode": "restrict"
-    }
-  }'
-```
-
-Parameters:
-- `text`: The text to classify (required)
-- `config`: Configuration for the topic classification (required)
-  - `topics`: Array of topics to check against (required)
-  - `threshold`: Confidence threshold for topic detection (default: 0.5)
-  - `mode`: Mode for topic matching, either "restrict" or "allow" (required)
-    - `restrict`: Validation passes if NONE of the topics match (used for content filtering)
-    - `allow`: Validation passes if at least one of the topics matches (used for content classification)
-
-Example response:
-```json
-{
-  "validation_passed": false,
-  "type": "TOPIC_MATCH",
-  "validation_config": {
-    "topics": ["politics", "religion", "artificial intelligence"],
-    "threshold": 0.5,
-    "mode": "restrict"
-  },
-  "validation_details": {
-    "matched_topics_scores": {
-      "artificial intelligence": 0.92
-    },
-    "scores": {
-      "politics": 0.12,
-      "religion": 0.05,
-      "artificial intelligence": 0.92
-    }
-  }
-}
-```
-
-### PII Validation
-
-```bash
-curl -X POST http://localhost:5000/api/validate-pii \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "My name is John Doe and my email is john.doe@example.com",
-    "config": {
-      "entities": ["PERSON", "EMAIL_ADDRESS"],
-      "language": "en",
-      "threshold": 0.5
-    }
-  }'
-```
-
-Parameters:
-- `text`: The text to analyze for PII (required)
-- `config`: Configuration for the PII detection (required)
-  - `entities`: Array of specific entity types to detect (if not provided, all supported entity types will be detected). Default entities include: "IP_ADDRESS", "PHONE_NUMBER", "PERSON", "MEDICAL_LICENSE", "URL", "EMAIL_ADDRESS", "IBAN_CODE". Supported entities can be found here: https://microsoft.github.io/presidio/supported_entities/
-  - `language`: Language of the text (default: "en")
-  - `threshold`: Confidence threshold for PII detection (default: 0.5)
-
-
-Example response:
-```json
-{
-  "validation_passed": false,
-  "type": "PII",
-  "validation_config": {
-    "entities": ["PERSON", "EMAIL_ADDRESS"],
-    "language": "en",
-    "threshold": 0.5
-  },
-  "validation_details": {
-    "detected_entities": {
-      "PERSON": [
-        {
-          "start": 11,
-          "end": 19,
-          "score": 0.85,
-          "text": "John Doe"
-        }
-      ],
-      "EMAIL_ADDRESS": [
-        {
-          "start": 33,
-          "end": 52,
-          "score": 1.0,
-          "text": "john.doe@example.com"
-        }
-      ]
-    }
-  }
-}
-```
-
-### Combined Validation
+### Validation
 
 This endpoint allows you to perform multiple validations on the same text in a single request.
 
@@ -168,7 +65,7 @@ curl -X POST http://localhost:5000/api/validate \
     "text": "This text is about artificial intelligence. My name is John Doe and my email is john.doe@example.com.",
     "validations": [
       {
-        "type": "TOPIC_MATCH",
+        "type": "TOPIC",
         "config": {
           "topics": ["politics", "religion", "artificial intelligence"],
           "threshold": 0.5,
@@ -191,10 +88,18 @@ Parameters:
 - `text`: The text to validate (required)
 - `validations`: Array of validation instructions (required)
   - Each validation requires:
-    - `type`: Type of validation to perform (`TOPIC_MATCH` or `PII`)
+    - `type`: Type of validation to perform (`TOPIC` or `PII`)
     - `config`: Configuration specific to the validation type
-      - For `TOPIC_MATCH` type: A TopicMatchValidationConfig object
-      - For `PII` type: A PIIValidationConfig object
+      - For `TOPIC` type: A TopicValidationConfig object with parameters:
+        - `topics`: Array of topics to check against (required)
+        - `threshold`: Confidence threshold for topic detection (default: 0.5)
+        - `mode`: Mode for topic matching, either "restrict" or "allow" (required)
+          - `restrict`: Validation passes if NONE of the topics match (used for content filtering)
+          - `allow`: Validation passes if at least one of the topics matches (used for content classification)
+      - For `PII` type: A PIIValidationConfig object with parameters:
+        - `entities`: Array of specific entity types to detect (if not provided, all supported entity types will be detected). Default entities include: "IP_ADDRESS", "PHONE_NUMBER", "PERSON", "MEDICAL_LICENSE", "URL", "EMAIL_ADDRESS", "IBAN_CODE". Supported entities can be found here: https://microsoft.github.io/presidio/supported_entities/
+        - `language`: Language of the text (default: "en")
+        - `threshold`: Confidence threshold for PII detection (default: 0.5)
 
 Example response:
 ```json
@@ -203,7 +108,7 @@ Example response:
   "validations": [
     {
       "validation_passed": false,
-      "type": "TOPIC_MATCH",
+      "type": "TOPIC",
       "validation_config": {
         "topics": ["politics", "religion", "artificial intelligence"],
         "threshold": 0.5,

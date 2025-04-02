@@ -7,12 +7,12 @@ from .. import base_validator
 import transformers
 
 
-class TopicMatchValidationDetails(pydantic.BaseModel):
+class TopicValidationDetails(pydantic.BaseModel):
     matched_topics_scores: Dict[str, float]
     scores: Dict[str, float]
 
 
-class TopicMatchValidator(base_validator.BaseValidator):
+class TopicValidator(base_validator.BaseValidator):
     """A wrapper for the zero-shot classification model."""
 
     def __init__(self, pipeline: transformers.Pipeline) -> None:
@@ -21,7 +21,7 @@ class TopicMatchValidator(base_validator.BaseValidator):
     def validate(
         self,
         text: str,
-        config: schemas.TopicMatchValidationConfig,
+        config: schemas.TopicValidationConfig,
     ) -> schemas.ValidationResult:
         classification_result = self._classification_pipeline(text, config.topics)
         scores = {
@@ -43,10 +43,10 @@ class TopicMatchValidator(base_validator.BaseValidator):
 
         return schemas.ValidationResult(
             validation_passed=passed,
-            validation_details=TopicMatchValidationDetails(
+            validation_details=TopicValidationDetails(
                 matched_topics_scores=matched_topics_scores,
                 scores=scores,
             ),
-            type=schemas.ValidationType.TOPIC_MATCH,
+            type=schemas.ValidationType.TOPIC,
             validation_config=config,
         )

@@ -11,60 +11,6 @@ LOGGER = logging.getLogger(__name__)
 guardrails_blueprint = flask.Blueprint("api", __name__, url_prefix="/api")
 
 
-@guardrails_blueprint.route("/validate-topic", methods=["POST"])
-def validate_topic() -> flask.Response:
-    try:
-        data = flask.request.get_json()
-        validated_request = schemas.TopicMatchValidationRequest(**data)
-
-        validation_result = validation_engine.run_validator(
-            schemas.ValidationType.TOPIC_MATCH,
-            validated_request.text,
-            validated_request.config,
-        )
-
-        response = validation_result.model_dump(serialize_as_any=True)
-
-        return flask.jsonify(response), 200
-
-    except pydantic.ValidationError as validation_error:
-        LOGGER.warning(f"Validation error: {validation_error.errors()}")
-        return flask.jsonify(
-            {"error": "Invalid input", "details": validation_error.errors()}
-        ), 400
-
-    except Exception as exception:
-        LOGGER.error(f"Topic match validation failed: {str(exception)}", exc_info=True)
-        flask.abort(500, description=f"Topic match validation failed: {str(exception)}")
-
-
-@guardrails_blueprint.route("/validate-pii", methods=["POST"])
-def validate_pii() -> flask.Response:
-    try:
-        data = flask.request.get_json()
-        validated_request = schemas.PIIValidationRequest(**data)
-
-        validation_result = validation_engine.run_validator(
-            schemas.ValidationType.PII,
-            validated_request.text,
-            validated_request.config,
-        )
-
-        response = validation_result.model_dump(serialize_as_any=True)
-
-        return flask.jsonify(response), 200
-
-    except pydantic.ValidationError as validation_error:
-        LOGGER.warning(f"Validation error: {validation_error.errors()}")
-        return flask.jsonify(
-            {"error": "Invalid input", "details": validation_error.errors()}
-        ), 400
-
-    except Exception as exception:
-        LOGGER.error(f"PII detection failed: {str(exception)}", exc_info=True)
-        flask.abort(500, description=f"PII detection failed: {str(exception)}")
-
-
 @guardrails_blueprint.route("/validate", methods=["POST"])
 def validate_combined() -> flask.Response:
     try:
