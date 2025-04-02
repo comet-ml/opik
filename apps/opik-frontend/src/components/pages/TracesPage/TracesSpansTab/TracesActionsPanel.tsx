@@ -46,8 +46,8 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         // we need split by dot to parse usage into correct structure
-        const key = column;
         const keys = column.split(".");
+        const key = column;
         const keyPrefix = first(keys) as string;
 
         if (keyPrefix === "feedback_scores") {
