@@ -58,6 +58,8 @@ tags:
   description: Project related resources
 - name: Prompts
   description: Prompt resources
+- name: Service Toggles
+  description: Service Toggles resources
 - name: Spans
   description: Span related resources
 - name: Traces
@@ -1175,31 +1177,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
-  /v1/private/experiments/retrieve:
-    post:
-      tags:
-      - Experiments
-      summary: Get experiment by name
-      description: Get experiment by name
-      operationId: getExperimentByName
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Identifier_Public"
-      responses:
-        "200":
-          description: Experiments resource
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Experiment_Public"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/experiments/items/{id}:
     get:
       tags:
@@ -1252,6 +1229,31 @@ paths:
                   anyOf:
                   - $ref: "#/components/schemas/ExperimentItem"
                   - $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/experiments/stream:
+    post:
+      tags:
+      - Experiments
+      summary: Stream experiments
+      description: Stream experiments
+      operationId: streamExperiments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentStreamRequest_Public"
+      responses:
+        "200":
+          description: Experiments stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                  - $ref: "#/components/schemas/Experiment_Public"
+                  - $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/feedback-definitions:
     get:
       tags:
@@ -2144,6 +2146,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/toggles:
+    get:
+      tags:
+      - Service Toggles
+      summary: Get Service Toggles
+      description: Get Service Toggles
+      operationId: getServiceToggles
+      responses:
+        "200":
+          description: Service Toggles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceTogglesConfig"
   /v1/private/spans/{id}/comments:
     post:
       tags:
@@ -5314,13 +5330,6 @@ components:
           type: string
         details:
           type: string
-    Identifier_Public:
-      required:
-      - name
-      type: object
-      properties:
-        name:
-          type: string
     ExperimentItemStreamRequest:
       required:
       - experiment_name
@@ -5340,6 +5349,31 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
+    ChunkedOutputJsonNode_Public:
+      type: object
+      properties:
+        type:
+          type: object
+          properties:
+            typeName:
+              type: string
+        closed:
+          type: boolean
+    ExperimentStreamRequest_Public:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          type: string
+        limit:
+          maximum: 2000
+          minimum: 1
+          type: integer
+          format: int32
+        last_retrieved_id:
+          type: string
+          format: uuid
     CategoricalFeedbackDefinition:
       required:
       - details
@@ -6519,6 +6553,13 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+    ServiceTogglesConfig:
+      required:
+      - pythonEvaluatorEnabled
+      type: object
+      properties:
+        pythonEvaluatorEnabled:
+          type: boolean
     ErrorInfo:
       required:
       - exception_type
@@ -7004,16 +7045,6 @@ components:
           - ui
           - sdk
           - online_scoring
-    ChunkedOutputJsonNode_Public:
-      type: object
-      properties:
-        type:
-          type: object
-          properties:
-            typeName:
-              type: string
-        closed:
-          type: boolean
     SpanFilter_Public:
       type: object
       properties:

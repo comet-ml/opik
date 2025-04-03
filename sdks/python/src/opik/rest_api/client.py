@@ -16,6 +16,7 @@ from .llm_provider_key.client import LlmProviderKeyClient
 from .open_telemetry_ingestion.client import OpenTelemetryIngestionClient
 from .projects.client import ProjectsClient
 from .prompts.client import PromptsClient
+from .service_toggles.client import ServiceTogglesClient
 from .spans.client import SpansClient
 from .traces.client import TracesClient
 from .redirect.client import RedirectClient
@@ -36,6 +37,7 @@ from .llm_provider_key.client import AsyncLlmProviderKeyClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient
 from .projects.client import AsyncProjectsClient
 from .prompts.client import AsyncPromptsClient
+from .service_toggles.client import AsyncServiceTogglesClient
 from .spans.client import AsyncSpansClient
 from .traces.client import AsyncTracesClient
 from .redirect.client import AsyncRedirectClient
@@ -133,6 +135,7 @@ class OpikApi:
         )
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
+        self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
         self.redirect = RedirectClient(client_wrapper=self._client_wrapper)
@@ -316,6 +319,9 @@ class AsyncOpikApi:
         )
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)
+        self.service_toggles = AsyncServiceTogglesClient(
+            client_wrapper=self._client_wrapper
+        )
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
         self.redirect = AsyncRedirectClient(client_wrapper=self._client_wrapper)

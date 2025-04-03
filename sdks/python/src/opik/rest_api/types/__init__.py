@@ -243,6 +243,7 @@ from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .results_number_public import ResultsNumberPublic
 from .score_name import ScoreName
+from .service_toggles_config import ServiceTogglesConfig
 from .span import Span
 from .span_batch import SpanBatch
 from .span_filter_public import SpanFilterPublic
@@ -484,6 +485,7 @@ __all__ = [
     "ResponseFormatType",
     "ResultsNumberPublic",
     "ScoreName",
+    "ServiceTogglesConfig",
     "Span",
     "SpanBatch",
     "SpanFilterPublic",
