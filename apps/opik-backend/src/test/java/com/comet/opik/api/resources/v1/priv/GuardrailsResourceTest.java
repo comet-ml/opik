@@ -12,12 +12,10 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.domain.EntityType;
-import com.comet.opik.domain.GuardrailsDAO;
+import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.google.inject.Inject;
 import com.redis.testcontainers.RedisContainer;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -34,7 +32,12 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
@@ -72,8 +75,6 @@ public class GuardrailsResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
-    @Inject
-    private GuardrailsDAO guardrailsDAO;
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
@@ -105,8 +106,8 @@ public class GuardrailsResourceTest {
     }
 
     @Test
-    @DisplayName("test create guardrails")
-    void testCreateGuardrails() {
+    @DisplayName("test create guardrails, get trace by id")
+    void testCreateGuardrails_getTraceById() {
         String workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -117,19 +118,64 @@ public class GuardrailsResourceTest {
                 .build();
         var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-        var guardrails = PodamFactoryUtils.manufacturePojoList(factory, GuardrailBatchItem.class).stream()
-                .map(guardrail -> guardrail.toBuilder()
-                        .id(traceId)
-                        .projectName(trace.projectName())
+        var guardrails = createGuardrails(traceId, trace.projectName());
+
+        traceResourceClient.guardrails(guardrails, API_KEY, TEST_WORKSPACE);
+        Trace actual = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+
+        assertThat(actual).isNotNull();
+        assertThat(actual.guardrailsChecks()).hasSize(guardrails.size());
+        assertThat(actual.guardrailsChecks()).containsExactlyInAnyOrder(
+                guardrails.stream().map(GuardrailsMapper.INSTANCE::toGuardrailCheck).toArray(GuardrailsCheck[]::new));
+    }
+
+    @Test
+    @DisplayName("test create guardrails, find traces")
+    void testCreateGuardrails_findTraces() {
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                .map(trace -> trace.toBuilder()
+                        .projectName(DEFAULT_PROJECT)
+                        .usage(null)
+                        .feedbackScores(null)
                         .build())
                 .toList();
 
-        traceResourceClient.guardrails(guardrails, API_KEY, TEST_WORKSPACE);
-        var actual = guardrailsDAO.getTraceGuardrails(workspaceId, EntityType.TRACE, traceId).collectList().block();
+        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
-        assertThat(actual).hasSize(guardrails.size());
-        // TODO: this should be replaced with the actual guardrails assertion in the future
-        assertThat(actual.stream().map(GuardrailsCheck::name).toList())
-                .containsExactlyInAnyOrderElementsOf(guardrails.stream().map(GuardrailBatchItem::name).toList());
+        var guardrailsByTraceId = traces.stream()
+                .collect(Collectors.toMap(Trace::id, trace -> createGuardrails(trace.id(), trace.projectName())));
+
+        guardrailsByTraceId.values()
+                .forEach(guardrail -> traceResourceClient.guardrails(guardrail, API_KEY, TEST_WORKSPACE));
+        Trace.TracePage actual = traceResourceClient.getTraces(DEFAULT_PROJECT, null, API_KEY, TEST_WORKSPACE,
+                null, null, traces.size(), Map.of());
+
+        assertThat(actual).isNotNull();
+        assertThat(actual.content()).hasSize(traces.size());
+        actual.content().forEach(actualTrace -> {
+            assertThat(actualTrace.guardrailsChecks()).hasSize(guardrailsByTraceId.get(actualTrace.id()).size());
+            assertThat(actualTrace.guardrailsChecks()).containsExactlyInAnyOrder(
+                    guardrailsByTraceId.get(actualTrace.id()).stream()
+                            .map(GuardrailsMapper.INSTANCE::toGuardrailCheck)
+                            .toArray(GuardrailsCheck[]::new));
+        });
+
+    }
+
+    private List<GuardrailBatchItem> createGuardrails(UUID traceId, String projectName) {
+        return PodamFactoryUtils.manufacturePojoList(factory, GuardrailBatchItem.class).stream()
+                .map(guardrail -> guardrail.toBuilder()
+                        .id(traceId)
+                        .projectName(projectName)
+                        .build())
+                // deduplicate by guardrail name
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toMap(
+                                GuardrailBatchItem::name,
+                                Function.identity(),
+                                (existing, replacement) -> existing),
+                        map -> new ArrayList<>(map.values())));
     }
 }

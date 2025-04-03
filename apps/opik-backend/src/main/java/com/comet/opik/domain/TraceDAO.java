@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.GuardrailType;
+import com.comet.opik.api.GuardrailsCheck;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
@@ -303,7 +305,8 @@ class TraceDAOImpl implements TraceDAO {
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
                 groupUniqArrayArray(c.comments_array) as comments,
-                any(fs.feedback_scores) as feedback_scores_list
+                any(fs.feedback_scores) as feedback_scores_list,
+                any(gr.guardrails) as guardrails_list
             FROM (
                 SELECT
                     *,
@@ -378,6 +381,32 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_id
             ) AS fs ON t.id = fs.entity_id
+            LEFT JOIN (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    groupArray(tuple(
+                         name,
+                         passed,
+                         details,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as guardrails
+                FROM (
+                    SELECT
+                        *
+                    FROM guardrails
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND entity_id = :id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY workspace_id, project_id, entity_id
+            ) AS gr ON t.id = gr.entity_id
             GROUP BY
                 t.*
             ;
@@ -415,6 +444,29 @@ class TraceDAOImpl implements TraceDAO {
                     SELECT
                         *
                     FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY workspace_id, project_id, entity_id
+            ), guardrails_agg AS (
+                SELECT
+                    entity_id,
+                    groupArray(tuple(
+                         name,
+                         passed,
+                         details,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as guardrails_list
+                FROM (
+                    SELECT
+                        *
+                    FROM guardrails
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -501,6 +553,7 @@ class TraceDAOImpl implements TraceDAO {
                   t.thread_id as thread_id,
                   t.feedback_scores_list as feedback_scores_list,
                   t.feedback_scores as feedback_scores,
+                  t.guardrails_list as guardrails_list,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
                   groupUniqArrayArray(c.comments_array) as comments,
@@ -513,9 +566,11 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration,
                       fsagg.feedback_scores_list as feedback_scores_list,
-                      fsagg.feedback_scores as feedback_scores
+                      fsagg.feedback_scores as feedback_scores,
+                      gagg.guardrails_list as guardrails_list
                  FROM traces t
                  LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
+                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
                  <if(trace_aggregation_filters)>
                  LEFT JOIN spans_agg s ON t.id = s.trace_id
                  <endif>
@@ -1324,6 +1379,10 @@ class TraceDAOImpl implements TraceDAO {
                         .map(this::mapFeedbackScores)
                         .filter(not(List::isEmpty))
                         .orElse(null))
+                .guardrailsChecks(Optional.ofNullable(row.get("guardrails_list", List.class))
+                        .map(this::mapGuardrails)
+                        .filter(not(List::isEmpty))
+                        .orElse(null))
                 .spanCount(row.get("span_count", Integer.class))
                 .usage(row.get("usage", Map.class))
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
@@ -1359,6 +1418,25 @@ class TraceDAOImpl implements TraceDAO {
                         .createdBy((String) feedbackScore.get(7))
                         .lastUpdatedBy((String) feedbackScore.get(8))
                         .build())
+                .toList();
+    }
+
+    private List<GuardrailsCheck> mapGuardrails(List<List<Object>> guardrails) {
+        return Optional.ofNullable(guardrails)
+                .orElse(List.of())
+                .stream()
+                .map(guardrail -> {
+                    GuardrailType name = GuardrailType.fromString((String) guardrail.get(0));
+                    return GuardrailsCheck.builder()
+                            .name(name)
+                            .passed((Boolean) guardrail.get(1))
+                            .items(Optional.ofNullable((String) guardrail.get(2))
+                                    .filter(it -> !it.isBlank())
+                                    .map(JsonUtils::getJsonNodeFromString)
+                                    .map(node -> GuardrailsMapper.INSTANCE.mapToItems(name, node))
+                                    .orElse(List.of()))
+                            .build();
+                })
                 .toList();
     }
 
