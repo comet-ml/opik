@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.GuardrailBatchItem;
+import com.comet.opik.api.GuardrailsCheck;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -12,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -129,6 +131,8 @@ public class GuardrailsResourceTest {
 
         assertThat(actual).isNotNull();
         assertThat(actual.guardrailsChecks()).hasSize(guardrails.size());
+        assertThat(actual.guardrailsChecks()).containsExactlyInAnyOrder(
+                guardrails.stream().map(GuardrailsMapper.INSTANCE::toGuardrailCheck).toArray(GuardrailsCheck[]::new));
     }
 
     private List<GuardrailBatchItem> createGuardrails(UUID traceId, String projectName) {
