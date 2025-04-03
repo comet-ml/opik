@@ -36,6 +36,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -112,8 +113,8 @@ public class GuardrailsResourceTest {
     }
 
     @Test
-    @DisplayName("test create guardrails")
-    void testCreateGuardrails() {
+    @DisplayName("test create guardrails, get trace by id")
+    void testCreateGuardrails_getTraceById() {
         String workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -133,6 +134,41 @@ public class GuardrailsResourceTest {
         assertThat(actual.guardrailsChecks()).hasSize(guardrails.size());
         assertThat(actual.guardrailsChecks()).containsExactlyInAnyOrder(
                 guardrails.stream().map(GuardrailsMapper.INSTANCE::toGuardrailCheck).toArray(GuardrailsCheck[]::new));
+    }
+
+    @Test
+    @DisplayName("test create guardrails, find traces")
+    void testCreateGuardrails_findTraces() {
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                .map(trace -> trace.toBuilder()
+                        .projectName(DEFAULT_PROJECT)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .build())
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+        var guardrailsByTraceId = traces.stream()
+                .collect(Collectors.toMap(Trace::id, trace -> createGuardrails(trace.id(), trace.projectName())));
+
+        guardrailsByTraceId.values()
+                .forEach(guardrail -> traceResourceClient.guardrails(guardrail, API_KEY, TEST_WORKSPACE));
+        Trace.TracePage actual = traceResourceClient.getTraces(DEFAULT_PROJECT, null, API_KEY, TEST_WORKSPACE,
+                null, null, traces.size(), Map.of());
+
+        assertThat(actual).isNotNull();
+        assertThat(actual.content()).hasSize(traces.size());
+        actual.content().forEach(actualTrace -> {
+            assertThat(actualTrace.guardrailsChecks()).hasSize(guardrailsByTraceId.get(actualTrace.id()).size());
+            assertThat(actualTrace.guardrailsChecks()).containsExactlyInAnyOrder(
+                    guardrailsByTraceId.get(actualTrace.id()).stream()
+                            .map(GuardrailsMapper.INSTANCE::toGuardrailCheck)
+                            .toArray(GuardrailsCheck[]::new));
+        });
+
     }
 
     private List<GuardrailBatchItem> createGuardrails(UUID traceId, String projectName) {
