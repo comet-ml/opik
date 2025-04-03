@@ -52,7 +52,9 @@ def setup_telemetry(app):
     metric_readers.append(prometheus_reader)
     
     # Add OTLP reader if endpoint is configured
-    if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
+    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if otlp_endpoint:
+        app.logger.info(f"Configured OTLP endpoint: {otlp_endpoint}. Will push metrics to this endpoint.")
         otlp_reader = PeriodicExportingMetricReader(
             OTLPMetricExporter(),
             export_interval_millis=5000
