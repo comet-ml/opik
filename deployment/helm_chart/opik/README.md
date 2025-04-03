@@ -212,9 +212,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
 | component.python-backend.image.tag | string | `"latest"` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
-| component.python-backend.metrics.enabled | bool | `true` |  |
-| component.python-backend.metrics.path | string | `"/metrics"` |  |
-| component.python-backend.metrics.port | int | `8000` |  |
+| component.python-backend.metrics.enabled | bool | `false` |  |
 | component.python-backend.networkPolicy.enabled | bool | `true` |  |
 | component.python-backend.networkPolicy.engineEgress.except[0] | string | `"10.0.0.0/8"` |  |
 | component.python-backend.networkPolicy.engineEgress.except[1] | string | `"100.64.0.0/10"` |  |
