@@ -59,7 +59,9 @@ class OpikQueryLanguage:
 
         self._cursor = 0
         self._filter_expressions = self._parse_expressions()
-        self.parsed_filters = json.dumps(self._filter_expressions)
+        self.parsed_filters = None
+        if self._filter_expressions is not None:
+            self.parsed_filters = json.dumps(self._filter_expressions)
 
     def get_filter_expressions(self) -> Optional[List[Dict[str, Any]]]:
         return self._filter_expressions
