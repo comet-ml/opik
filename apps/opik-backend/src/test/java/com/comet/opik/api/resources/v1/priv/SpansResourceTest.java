@@ -108,6 +108,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1362,8 +1363,9 @@ class SpansResourceTest {
                     List.of());
         }
 
-        @Test
-        void createAndGetByProjectIdAndTraceIdAndType() {
+        @ParameterizedTest
+        @EnumSource(SpanType.class)
+        void createAndGetByProjectIdAndTraceIdAndType(SpanType expectedType) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -1379,7 +1381,7 @@ class SpansResourceTest {
                             .parentSpanId(null)
                             .projectName(projectName)
                             .traceId(traceId)
-                            .type(SpanType.llm)
+                            .type(expectedType)
                             .feedbackScores(null)
                             .build())
                     .toList();
@@ -1396,7 +1398,7 @@ class SpansResourceTest {
                     .projectName(projectName)
                     .traceId(traceId)
                     .parentSpanId(null)
-                    .type(SpanType.general)
+                    .type(findOtherSpanType(expectedType))
                     .build());
             unexpectedSpans.forEach(
                     expectedSpan -> SpansResourceTest.this.createAndAssert(expectedSpan, apiKey, workspaceName));
@@ -1406,7 +1408,7 @@ class SpansResourceTest {
                     null,
                     projectId,
                     traceId,
-                    SpanType.llm,
+                    expectedType,
                     null,
                     1,
                     pageSize,
@@ -1420,7 +1422,7 @@ class SpansResourceTest {
                     null,
                     projectId,
                     traceId,
-                    SpanType.llm,
+                    expectedType,
                     null,
                     2,
                     pageSize,
@@ -1429,6 +1431,11 @@ class SpansResourceTest {
                     unexpectedSpans,
                     apiKey,
                     List.of());
+        }
+
+        private SpanType findOtherSpanType(SpanType expectedType) {
+            return Arrays.stream(SpanType.values()).filter(type -> type != expectedType).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("expected to find another span type"));
         }
 
         @ParameterizedTest
@@ -6338,11 +6345,9 @@ class SpansResourceTest {
     class GetFeedbackScoreNames {
 
         Stream<Arguments> getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
-            return Stream.of(
-                    arguments(Optional.empty()),
-                    arguments(Optional.of(SpanType.llm)),
-                    arguments(Optional.of(SpanType.general)),
-                    arguments(Optional.of(SpanType.tool)));
+            return Stream.concat(
+                    Stream.of(arguments(Optional.empty())),
+                    Arrays.stream(SpanType.values()).map(type -> arguments(Optional.of(type))));
         }
 
         @ParameterizedTest
