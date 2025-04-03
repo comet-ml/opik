@@ -1897,7 +1897,8 @@ class ProjectsResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method(HttpMethod.PATCH,
-                            Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate).isPublic(true).build()))) {
+                            Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate).isPublic(true)
+                                    .build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
