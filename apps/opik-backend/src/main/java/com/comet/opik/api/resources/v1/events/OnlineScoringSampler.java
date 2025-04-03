@@ -110,7 +110,7 @@ public class OnlineScoringSampler {
             try (MDC.MDCCloseable logScope = MDC.putCloseable(UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name());
                     MDC.MDCCloseable scope = MDC.putCloseable("workspace_id", tracesBatch.workspaceId())) {
 
-                evaluators.parallelStream().forEach(evaluator -> {
+                evaluators.forEach(evaluator -> {
                     // samples traces for this rule
                     var samples = traces.stream().filter(trace -> shouldSampleTrace(evaluator, trace));
                     switch (evaluator.getType()) {
