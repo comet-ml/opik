@@ -19,18 +19,11 @@ jobs:
         run: |
           echo "BRANCH_NAME=span-cost-update-$(date +%Y-%m-%d)" >> $GITHUB_ENV
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
-          ls
 
-      # - name: Commit Changes
-      #   run: |
-      #     git config --global user.name "github-actions"
-      #     git config --global user.email "github-actions@comet.com"
-      #     git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-      #     git checkout -b ${{ env.BRANCH_NAME }}
-      #     curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
-      #     git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
-      #     git commit -m "Update span cost file"
-      #     git push origin ${{ env.BRANCH_NAME }}
+      - name: Create branch
+        uses: JosiahSiegel/remote-branch-action@v1.2.0
+        with:
+          branch: ${{ env.BRANCH_NAME }}
 
       - name: Push updated file
         uses: comet-ml/push-files@main
