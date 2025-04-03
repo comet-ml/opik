@@ -52,7 +52,6 @@ const processNestedExportColumn = (
 
   if (EVALUATION_EXPORT_COLUMNS.includes(prefixColumnKey)) {
     const evaluationName = column.replace(`${prefixColumnKey}.`, "");
-
     accumulator[`${prefix}evaluation_task.${evaluationName}`] = get(
       item ?? {},
       keys,
@@ -61,6 +60,8 @@ const processNestedExportColumn = (
 
     return;
   }
+
+  accumulator[`${prefix}dataset.${column}`] = get(item ?? {}, keys, "-");
 };
 
 type CompareExperimentsActionsPanelProps = {
