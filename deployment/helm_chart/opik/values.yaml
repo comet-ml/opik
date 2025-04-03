@@ -98,9 +98,7 @@ component:
     serviceAccount: 
       create: true
     metrics:
-      enabled: true
-      path: /metrics
-      port: 8000
+      enabled: false
     image:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
