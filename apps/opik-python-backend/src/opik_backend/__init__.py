@@ -77,4 +77,5 @@ def setup_telemetry(app):
     @app.route("/metrics")
     def prometheus_metrics():
         """Endpoint for Prometheus metrics scraping."""
+        app.logger.info("Returning metrics for Prometheus scraping.")
         return make_response(generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST})
