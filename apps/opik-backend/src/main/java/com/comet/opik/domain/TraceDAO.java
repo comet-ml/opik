@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsCheck;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
@@ -1422,7 +1423,7 @@ class TraceDAOImpl implements TraceDAO {
                 .orElse(List.of())
                 .stream()
                 .map(guardrail -> GuardrailsCheck.builder()
-                        .name((String) guardrail.get(0))
+                        .name(GuardrailType.fromString((String) guardrail.get(0)))
                         .passed((Boolean) guardrail.get(1))
                         // TODO: populate items
                         .items(List.of())
