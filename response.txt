@@ -1,0 +1,53 @@
+{
+  "content": {
+    "name": "model_prices_and_context_window.json",
+    "path": "apps/opik-backend/src/main/resources/model_prices_and_context_window.json",
+    "sha": "4c56210625f07f123871babfb4a26ffb9506b9a4",
+    "size": 393698,
+    "url": "https://api.github.com/repos/comet-ml/opik/contents/apps/opik-backend/src/main/resources/model_prices_and_context_window.json?ref=span-cost-update-2025-04-03",
+    "html_url": "https://github.com/comet-ml/opik/blob/span-cost-update-2025-04-03/apps/opik-backend/src/main/resources/model_prices_and_context_window.json",
+    "git_url": "https://api.github.com/repos/comet-ml/opik/git/blobs/4c56210625f07f123871babfb4a26ffb9506b9a4",
+    "download_url": "https://raw.githubusercontent.com/comet-ml/opik/span-cost-update-2025-04-03/apps/opik-backend/src/main/resources/model_prices_and_context_window.json",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/comet-ml/opik/contents/apps/opik-backend/src/main/resources/model_prices_and_context_window.json?ref=span-cost-update-2025-04-03",
+      "git": "https://api.github.com/repos/comet-ml/opik/git/blobs/4c56210625f07f123871babfb4a26ffb9506b9a4",
+      "html": "https://github.com/comet-ml/opik/blob/span-cost-update-2025-04-03/apps/opik-backend/src/main/resources/model_prices_and_context_window.json"
+    }
+  },
+  "commit": {
+    "sha": "f0fdbb6256e3b43ec2405046d09a65f0b7d084ea",
+    "node_id": "C_kwDOJhWgDtoAKGYwZmRiYjYyNTZlM2I0M2VjMjQwNTA0NmQwOWE2NWYwYjdkMDg0ZWE",
+    "url": "https://api.github.com/repos/comet-ml/opik/git/commits/f0fdbb6256e3b43ec2405046d09a65f0b7d084ea",
+    "html_url": "https://github.com/comet-ml/opik/commit/f0fdbb6256e3b43ec2405046d09a65f0b7d084ea",
+    "author": {
+      "name": "Github Actions (liyaka)",
+      "email": "github-actions@comet.com",
+      "date": "2025-04-03T09:05:50Z"
+    },
+    "committer": {
+      "name": "Github Actions (liyaka)",
+      "email": "github-actions@comet.com",
+      "date": "2025-04-03T09:05:50Z"
+    },
+    "tree": {
+      "sha": "d15360c5d664a6211e5b68ed53c0ac43375e798e",
+      "url": "https://api.github.com/repos/comet-ml/opik/git/trees/d15360c5d664a6211e5b68ed53c0ac43375e798e"
+    },
+    "message": "Update span cost file",
+    "parents": [
+      {
+        "sha": "74d1e0b373a414caab2b023672f8c16d0416b423",
+        "url": "https://api.github.com/repos/comet-ml/opik/git/commits/74d1e0b373a414caab2b023672f8c16d0416b423",
+        "html_url": "https://github.com/comet-ml/opik/commit/74d1e0b373a414caab2b023672f8c16d0416b423"
+      }
+    ],
+    "verification": {
+      "verified": false,
+      "reason": "unsigned",
+      "signature": null,
+      "payload": null,
+      "verified_at": null
+    }
+  }
+}
