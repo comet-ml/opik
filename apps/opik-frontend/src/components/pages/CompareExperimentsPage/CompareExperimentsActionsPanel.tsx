@@ -1,6 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Split } from "lucide-react";
-import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
 import uniq from "lodash/uniq";
