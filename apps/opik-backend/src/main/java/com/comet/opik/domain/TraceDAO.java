@@ -1422,12 +1422,18 @@ class TraceDAOImpl implements TraceDAO {
         return Optional.ofNullable(guardrails)
                 .orElse(List.of())
                 .stream()
-                .map(guardrail -> GuardrailsCheck.builder()
-                        .name(GuardrailType.fromString((String) guardrail.get(0)))
-                        .passed((Boolean) guardrail.get(1))
-                        // TODO: populate items
-                        .items(List.of())
-                        .build())
+                .map(guardrail -> {
+                    GuardrailType name = GuardrailType.fromString((String) guardrail.get(0));
+                    return GuardrailsCheck.builder()
+                            .name(name)
+                            .passed((Boolean) guardrail.get(1))
+                            .items(Optional.ofNullable((String) guardrail.get(2))
+                                    .filter(it -> !it.isBlank())
+                                    .map(JsonUtils::getJsonNodeFromString)
+                                    .map(node -> GuardrailsMapper.INSTANCE.mapToItems(name, node))
+                                    .orElse(List.of()))
+                            .build();
+                })
                 .toList();
     }
 
