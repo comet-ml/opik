@@ -8,10 +8,10 @@ import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
-import com.comet.opik.api.Identifier;
 import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
@@ -190,25 +190,26 @@ public class ExperimentsResource {
     }
 
     @POST
-    @Path("/retrieve")
-    @Operation(operationId = "getExperimentByName", summary = "Get experiment by name", description = "Get experiment by name", responses = {
-            @ApiResponse(responseCode = "200", description = "Experiments resource", content = @Content(schema = @Schema(implementation = Experiment.class))),
-            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    @Path("/stream")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "streamExperiments", summary = "Stream experiments", description = "Stream experiments", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiments stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    Experiment.class,
+                    ErrorMessage.class
+            }), maxItems = 2000)))
     })
     @JsonView(Experiment.View.Public.class)
-    public Response getExperimentByName(
-            @RequestBody(content = @Content(schema = @Schema(implementation = Identifier.class))) @NotNull @Valid Identifier identifier) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String name = identifier.name();
-
-        log.info("Finding experiment by name '{}' on workspace_id '{}'", name, workspaceId);
-        var experiment = experimentService.getByName(name)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-        log.info("Found experiment by name '{}' on workspace_id '{}'", name, workspaceId);
-
-        return Response.ok(experiment).build();
+    public ChunkedOutput<JsonNode> streamExperiments(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentStreamRequest.class))) @NotNull @Valid ExperimentStreamRequest request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+        log.info("Streaming experiments by '{}', workspaceId '{}', userName '{}'", request, workspaceId, userName);
+        var experiments = experimentService.get(request)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+        var stream = streamer.getOutputStream(experiments);
+        log.info("Streamed experiments by '{}', workspaceId '{}', userName '{}'", request, workspaceId, userName);
+        return stream;
     }
 
     // Experiment Item Resources

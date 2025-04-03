@@ -1,5 +1,4 @@
 pytest
 pytest-cov
 pytest-env
-mock
 deepdiff

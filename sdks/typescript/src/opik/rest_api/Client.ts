@@ -18,6 +18,7 @@ import { LlmProviderKey } from "./api/resources/llmProviderKey/client/Client";
 import { OpenTelemetryIngestion } from "./api/resources/openTelemetryIngestion/client/Client";
 import { Projects } from "./api/resources/projects/client/Client";
 import { Prompts } from "./api/resources/prompts/client/Client";
+import { ServiceToggles } from "./api/resources/serviceToggles/client/Client";
 import { Spans } from "./api/resources/spans/client/Client";
 import { Traces } from "./api/resources/traces/client/Client";
 import { Redirect } from "./api/resources/redirect/client/Client";
@@ -62,6 +63,7 @@ export class OpikApiClient {
     protected _openTelemetryIngestion: OpenTelemetryIngestion | undefined;
     protected _projects: Projects | undefined;
     protected _prompts: Prompts | undefined;
+    protected _serviceToggles: ServiceToggles | undefined;
     protected _spans: Spans | undefined;
     protected _traces: Traces | undefined;
     protected _redirect: Redirect | undefined;
@@ -114,6 +116,10 @@ export class OpikApiClient {
 
     public get prompts(): Prompts {
         return (this._prompts ??= new Prompts(this._options));
+    }
+
+    public get serviceToggles(): ServiceToggles {
+        return (this._serviceToggles ??= new ServiceToggles(this._options));
     }
 
     public get spans(): Spans {

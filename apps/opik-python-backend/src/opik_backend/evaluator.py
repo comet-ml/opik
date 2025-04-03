@@ -5,8 +5,6 @@ from flask import request, abort, jsonify, Blueprint, current_app
 from werkzeug.exceptions import HTTPException
 
 from opik_backend.executor import CodeExecutorBase
-from opik_backend.executor_docker import DockerExecutor
-from opik_backend.executor_process import ProcessExecutor
 from opik_backend.http_utils import build_error_response
 
 # Environment variable to control execution strategy
@@ -17,8 +15,10 @@ evaluator = Blueprint('evaluator', __name__, url_prefix='/v1/private/evaluators'
 def init_executor(app):
     """Initialize the code executor when the Flask app starts."""
     if EXECUTION_STRATEGY == "docker":
+        from opik_backend.executor_docker import DockerExecutor
         app.executor = DockerExecutor()
     elif EXECUTION_STRATEGY == "process":
+        from opik_backend.executor_process import ProcessExecutor
         app.executor = ProcessExecutor()
     else:
         raise ValueError(f"Unknown execution strategy: {EXECUTION_STRATEGY}")
