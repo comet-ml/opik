@@ -46,7 +46,7 @@ const processExportColumn = (
     const scoreObject = item.feedback_scores?.find((f) => f.name === scoreName);
     accumulator[`${prefix}${column}`] = get(scoreObject, "value", "-");
 
-    if (scoreObject && scoreObject.reason) {
+    if (scoreObject?.reason) {
       accumulator[`${prefix}${column}_reason`] = scoreObject.reason;
     }
 
