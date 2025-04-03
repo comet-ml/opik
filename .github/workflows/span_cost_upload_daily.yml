@@ -6,7 +6,7 @@ on:
   workflow_dispatch: # Allows manual trigger
 
 jobs:
-  update-file:
+  update-span-cost:
     runs-on: ubuntu-latest
 
     steps:
