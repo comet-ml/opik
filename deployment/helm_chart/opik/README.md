@@ -196,6 +196,11 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |
 | component.python-backend.env.OPIK_REVERSE_PROXY_URL | string | `"http://opik-frontend:5173/api"` |  |
+| component.python-backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
+| component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION | string | `"BASE2_EXPONENTIAL_BUCKET_HISTOGRAM"` |  |
+| component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE | string | `"delta"` |  |
+| component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage,b3"` |  |
+| component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
@@ -207,7 +212,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
 | component.python-backend.image.tag | string | `"latest"` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
-| component.python-backend.metrics.enabled | bool | `false` |  |
+| component.python-backend.metrics.enabled | bool | `true` |  |
+| component.python-backend.metrics.path | string | `"/metrics"` |  |
+| component.python-backend.metrics.port | int | `8000` |  |
 | component.python-backend.networkPolicy.enabled | bool | `true` |  |
 | component.python-backend.networkPolicy.engineEgress.except[0] | string | `"10.0.0.0/8"` |  |
 | component.python-backend.networkPolicy.engineEgress.except[1] | string | `"100.64.0.0/10"` |  |
