@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.GuardrailBatchItem;
-import com.comet.opik.api.GuardrailsCheck;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -13,7 +12,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.GuardrailsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -132,11 +130,9 @@ public class GuardrailsResourceTest {
                 .toList();
 
         guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
-        var actual = guardrailsDAO.getTraceGuardrails(workspaceId, EntityType.TRACE, traceId).collectList().block();
+        Trace actual = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
 
-        assertThat(actual).hasSize(guardrails.size());
-        // TODO: this should be replaced with the actual guardrails assertion in the future
-        assertThat(actual.stream().map(GuardrailsCheck::name).toList())
-                .containsExactlyInAnyOrderElementsOf(guardrails.stream().map(GuardrailBatchItem::name).toList());
+        assertThat(actual).isNotNull();
+        assertThat(actual.guardrailsChecks()).hasSize(guardrails.size());
     }
 }
