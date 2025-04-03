@@ -100,8 +100,18 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                         type="llm",
                         name="custom-anthropic-llm-name",
                         input={
-                            "prompts": [
-                                "Human: Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                            "messages": [
+                                [
+                                    {
+                                        "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                                        "additional_kwargs": {},
+                                        "response_metadata": {},
+                                        "type": "human",
+                                        "name": None,
+                                        "id": None,
+                                        "example": False,
+                                    }
+                                ]
                             ]
                         },
                         output=ANY_BUT_NONE,
@@ -206,8 +216,18 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                         type="llm",
                         name="custom-anthropic-llm-name",
                         input={
-                            "prompts": [
-                                "Human: Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                            "messages": [
+                                [
+                                    {
+                                        "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
+                                        "additional_kwargs": {},
+                                        "response_metadata": {},
+                                        "type": "human",
+                                        "name": None,
+                                        "id": None,
+                                        "example": False,
+                                    }
+                                ]
                             ]
                         },
                         output=ANY_BUT_NONE,
