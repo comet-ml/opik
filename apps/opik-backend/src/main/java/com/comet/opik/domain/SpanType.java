@@ -7,6 +7,7 @@ public enum SpanType {
     general,
     tool,
     llm,
+    guardrail,
     ;
 
     public static SpanType fromString(String value) {

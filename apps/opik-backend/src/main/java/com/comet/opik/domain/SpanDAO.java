@@ -240,7 +240,7 @@ class SpanDAO {
                     :trace_id as trace_id,
                     :parent_span_id as parent_span_id,
                     :name as name,
-                    CAST(:type, 'Enum8(\\'unknown\\' = 0 , \\'general\\' = 1, \\'tool\\' = 2, \\'llm\\' = 3)') as type,
+                    CAST(:type, 'Enum8(\\'unknown\\' = 0 , \\'general\\' = 1, \\'tool\\' = 2, \\'llm\\' = 3, \\'guardrail\\' = 4)') as type,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
                     <if(end_time)> parseDateTime64BestEffort(:end_time, 9) as end_time, <else> null as end_time, <endif>
                     :input as input,
