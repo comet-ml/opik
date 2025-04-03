@@ -100,8 +100,8 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
                     .bind("entity_id" + i, guardrailBatchItem.entityId())
                     .bind("secondary_entity_id" + i, guardrailBatchItem.secondaryId())
                     .bind("project_id" + i, guardrailBatchItem.projectId())
-                    .bind("name" + i, guardrailBatchItem.name())
-                    .bind("result" + i, guardrailBatchItem.result().getResult())
+                    .bind("name" + i, guardrailBatchItem.name().toString())
+                    .bind("passed" + i, guardrailBatchItem.result().getResult())
                     .bind("config" + i, getOrDefault(guardrailBatchItem.config()))
                     .bind("details" + i, getOrDefault(guardrailBatchItem.details()));
         }
