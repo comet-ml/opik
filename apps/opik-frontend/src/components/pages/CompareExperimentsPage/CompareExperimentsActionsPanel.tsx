@@ -23,29 +23,50 @@ import {
 export const EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX = "feedback_scores";
 export const EXPERIMENT_ITEM_OUTPUT_PREFIX = "output";
 
-const processExperimentItems = (
+const EVALUATION_COLUMNS = [EXPERIMENT_ITEM_OUTPUT_PREFIX, COLUMN_COMMENTS_ID];
+const NO_SECTION_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
+
+const processColumn = (
   item: ExperimentItem,
-  key: string,
-  keys: string[],
-  keyPrefix: string,
+  row: ExperimentsCompare,
+  column: string,
   accumulator: Record<string, unknown>,
   prefix: string = "",
 ) => {
-  if (keyPrefix === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
-    const scoreObject = item.feedback_scores?.find((f) => f.name === key);
-    accumulator[`${prefix}feedback_scores.${key}`] = get(
-      scoreObject,
-      "value",
+  const keys = column.split(".");
+  const prefixKey = keys[0];
+
+  if (prefixKey === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
+    const scoreName = column.replace(
+      `${EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX}.`,
+      "",
+    );
+    const scoreObject = item.feedback_scores?.find((f) => f.name === scoreName);
+    accumulator[`${prefix}${column}`] = get(scoreObject, "value", "-");
+
+    if (scoreObject && scoreObject.reason) {
+      accumulator[`${prefix}${column}_reason`] = scoreObject.reason;
+    }
+
+    return;
+  }
+
+  if (EVALUATION_COLUMNS.includes(prefixKey)) {
+    accumulator[`${prefix}evaluation_task.${prefixKey}`] = get(
+      item ?? {},
+      keys,
       "-",
     );
 
-    if (scoreObject && scoreObject.reason) {
-      accumulator[`${prefix}feedback_scores.${key}_reason`] =
-        scoreObject.reason;
-    }
-  } else {
-    accumulator[`${prefix}dataset.${key}`] = get(item ?? {}, keys, "-");
+    return;
   }
+
+  if (NO_SECTION_COLUMNS.includes(prefixKey)) {
+    accumulator[column] = get(row, keys, "");
+    return;
+  }
+
+  accumulator[`${prefix}dataset.${column}`] = get(row.data, keys, "");
 };
 
 type CompareExperimentsActionsPanelProps = {
@@ -81,38 +102,14 @@ const CompareExperimentsActionsPanel: React.FC<
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>(
         (accumulator, column) => {
-          const keys = column.split(".");
-          const key = column;
-          const keyPrefix = first(keys) as string;
-
-          if (
-            keyPrefix === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX ||
-            keyPrefix === EXPERIMENT_ITEM_OUTPUT_PREFIX ||
-            keyPrefix === COLUMN_COMMENTS_ID
-          ) {
-            if (isCompare) {
-              (row.experiment_items ?? []).forEach((item) => {
-                const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
-                processExperimentItems(
-                  item,
-                  key,
-                  keys,
-                  keyPrefix,
-                  accumulator,
-                  prefix,
-                );
-              });
-            } else {
-              const item = row.experiment_items?.[0];
-              processExperimentItems(item, key, keys, keyPrefix, accumulator);
-            }
-          } else if (
-            keyPrefix === COLUMN_CREATED_AT_ID ||
-            keyPrefix === COLUMN_ID_ID
-          ) {
-            accumulator[key] = get(row, keys, "");
+          if (isCompare) {
+            (row.experiment_items ?? []).forEach((item) => {
+              const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
+              processColumn(item, row, column, accumulator, prefix);
+            });
           } else {
-            accumulator[`evaluation_task.${key}`] = get(row.data, keys, "");
+            const item = row.experiment_items?.[0];
+            processColumn(item, row, column, accumulator);
           }
 
           return accumulator;
