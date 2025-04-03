@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.api.GuardrailPiiDetails;
 import com.comet.opik.api.GuardrailTopicDetails;
+import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsCheck;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -24,9 +25,14 @@ public interface GuardrailsMapper {
 
     @Named("mapToItems")
     default List<GuardrailsCheck.Item> mapToItems(@NonNull GuardrailBatchItem guardrailBatchItem) {
-        return switch (guardrailBatchItem.name()) {
-            case TOPIC -> mapToTopicItems(guardrailBatchItem.details());
-            case PII -> mapToPiiItems(guardrailBatchItem.details());
+        return mapToItems(guardrailBatchItem.name(), guardrailBatchItem.details());
+    }
+
+    @Named("mapToItems")
+    default List<GuardrailsCheck.Item> mapToItems(@NonNull GuardrailType name, @NonNull JsonNode details) {
+        return switch (name) {
+            case TOPIC -> mapToTopicItems(details);
+            case PII -> mapToPiiItems(details);
         };
     }
 
