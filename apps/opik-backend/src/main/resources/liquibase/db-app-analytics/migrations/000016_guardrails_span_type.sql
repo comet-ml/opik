@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:0000017_guardrails_span_type
+--changeset idoberko2:0000016_guardrails_span_type
 
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans MODIFY COLUMN type Enum8(
