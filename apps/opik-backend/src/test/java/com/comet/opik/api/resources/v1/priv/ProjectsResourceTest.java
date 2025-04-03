@@ -1551,6 +1551,7 @@ class ProjectsResourceTest {
             var id = createProject(project);
 
             assertProject(project.toBuilder().id(id)
+                    .isPublic(false)
                     .lastUpdatedTraceAt(null)
                     .build());
         }
@@ -1896,7 +1897,7 @@ class ProjectsResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method(HttpMethod.PATCH,
-                            Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate).build()))) {
+                            Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate).isPublic(true).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -1913,6 +1914,7 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualEntity.description()).isEqualTo(descriptionUpdate);
+                assertThat(actualEntity.isPublic()).isTrue();
                 assertThat(actualEntity.name()).isEqualTo(name);
             }
         }

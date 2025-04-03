@@ -173,6 +173,7 @@ class ProjectServiceImpl implements ProjectService {
                         workspaceId,
                         projectUpdate.name(),
                         projectUpdate.description(),
+                        projectUpdate.isPublic(),
                         userName);
 
                 return null;
@@ -450,6 +451,7 @@ class ProjectServiceImpl implements ProjectService {
                     log.info("Creating project with name '{}' on workspaceId '{}'", projectName, workspaceId);
                     var project = Project.builder()
                             .name(projectName)
+                            .isPublic(false)
                             .build();
 
                     UUID projectId = idGenerator.generateId();

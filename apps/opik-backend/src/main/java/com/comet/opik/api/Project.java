@@ -1,7 +1,9 @@
 package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.annotation.Nulls;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -25,6 +27,7 @@ public record Project(
         @JsonView( {
                 Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({Project.View.Public.class, View.Write.class}) @NotBlank String name,
+        @JsonView({Project.View.Public.class, View.Write.class}) @JsonSetter(nulls = Nulls.AS_EMPTY) Boolean isPublic, // If null, default to false
         @JsonView({Project.View.Public.class,
                 View.Write.class}) String description,
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,

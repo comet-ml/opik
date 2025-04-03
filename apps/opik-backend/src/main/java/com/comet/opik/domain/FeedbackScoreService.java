@@ -201,6 +201,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         UUID projectId = idGenerator.generateId();
                         var newProject = Project.builder()
                                 .name(projectName)
+                                .isPublic(false)
                                 .id(projectId)
                                 .createdBy(userName)
                                 .lastUpdatedBy(userName)

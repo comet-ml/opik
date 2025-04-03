@@ -26,18 +26,20 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 interface ProjectDAO {
 
-    @SqlUpdate("INSERT INTO projects (id, name, description, workspace_id, created_by, last_updated_by) VALUES (:bean.id, :bean.name, :bean.description, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy)")
+    @SqlUpdate("INSERT INTO projects (id, name, description, workspace_id, is_public, created_by, last_updated_by) VALUES (:bean.id, :bean.name, :bean.description, :workspaceId, :bean.isPublic, :bean.createdBy, :bean.lastUpdatedBy)")
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Project project);
 
     @SqlUpdate("UPDATE projects SET " +
             "name = COALESCE(:name, name), " +
             "description = COALESCE(:description, description), " +
+            "is_public = COALESCE(:isPublic, is_public), " +
             "last_updated_by = :lastUpdatedBy " +
             "WHERE id = :id AND workspace_id = :workspaceId")
     void update(@Bind("id") UUID id,
             @Bind("workspaceId") String workspaceId,
             @Bind("name") String name,
             @Bind("description") String description,
+            @Bind("isPublic") Boolean isPublic,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlUpdate("DELETE FROM projects WHERE id = :id AND workspace_id = :workspaceId")
