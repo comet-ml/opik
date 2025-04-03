@@ -34,6 +34,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithClosableMdc;
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
+
 /**
  * This service listens for Traces creation server in-memory event (via EventBus). When it happens, it fetches
  * Automation Rules for the trace's project and samples the trace batch for the proper scoring. The trace and code
@@ -107,10 +110,12 @@ public class OnlineScoringSampler {
                     projectId, tracesBatch.workspaceId());
 
             // Important to set the workspaceId for logging purposes
-            try (MDC.MDCCloseable logScope = MDC.putCloseable(UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name());
-                    MDC.MDCCloseable scope = MDC.putCloseable("workspace_id", tracesBatch.workspaceId())) {
+            try (var logContext = wrapWithClosableMdc(Map.of(
+                    UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(), "workspace_id",
+                    tracesBatch.workspaceId()))) {
 
-                evaluators.forEach(evaluator -> {
+                //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
+                evaluators.parallelStream().forEach(wrapWithMdc(evaluator -> {
                     // samples traces for this rule
                     var samples = traces.stream().filter(trace -> shouldSampleTrace(evaluator, trace));
                     switch (evaluator.getType()) {
@@ -137,7 +142,7 @@ public class OnlineScoringSampler {
                         }
                         default -> log.warn("No process defined for evaluator type '{}'", evaluator.getType());
                     }
-                });
+                }));
             }
         });
     }
