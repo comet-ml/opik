@@ -180,6 +180,7 @@ export * from "./PromptVersionPublicType";
 export * from "./PromptVersionPublic";
 export * from "./PromptPagePublic";
 export * from "./PromptPublic";
+export * from "./ServiceTogglesConfig";
 export * from "./ErrorInfo";
 export * from "./SpanType";
 export * from "./Span";

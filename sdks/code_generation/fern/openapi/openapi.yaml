@@ -59,7 +59,7 @@ tags:
 - name: Prompts
   description: Prompt resources
 - name: Service Toggles
-  description: Service Toggles
+  description: Service Toggles resources
 - name: Spans
   description: Span related resources
 - name: Traces
@@ -2146,6 +2146,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/toggles:
+    get:
+      tags:
+      - Service Toggles
+      summary: Get Service Toggles
+      description: Get Service Toggles
+      operationId: getServiceToggles
+      responses:
+        "200":
+          description: Service Toggles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceTogglesConfig"
   /v1/private/spans/{id}/comments:
     post:
       tags:
@@ -6539,6 +6553,13 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+    ServiceTogglesConfig:
+      required:
+      - pythonEvaluatorEnabled
+      type: object
+      properties:
+        pythonEvaluatorEnabled:
+          type: boolean
     ErrorInfo:
       required:
       - exception_type
