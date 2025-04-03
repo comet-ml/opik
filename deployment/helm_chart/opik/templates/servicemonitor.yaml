@@ -7,9 +7,8 @@ metadata:
   name: {{ template "opik.name" $ }}-{{ $key | lower }}
   namespace: {{ default $.Release.Namespace $value.metrics.namespace | quote }}
   labels:
-    app: {{ template "opik.name" $ }}
-    component: {{ $key | lower }}
-    {{- include "opik.labels" $ | nindent 4 }}
+    {{- include "opik.labels" $  | nindent 4 }}
+    component: {{ include "opik.name" $ }}-{{ $key | lower }}
     {{- with $value.metrics.additionalLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -22,7 +21,7 @@ metadata:
   {{- end }}
 spec:
   endpoints:
-    - port: {{ $value.metrics.portName | default "http-metrics" }}
+    - port: {{ $value.metrics.portName | default "http" }}
       {{- if $value.metrics.interval }}
       interval: {{ $value.metrics.interval }}
       {{- end }}
@@ -49,7 +48,7 @@ spec:
       - {{ default $.Release.Namespace $value.metrics.namespace | quote }}
   selector:
     matchLabels:
-      app: {{ template "opik.name" $ }}
-      component: {{ $key | lower }}
+      {{- include "opik.labels" $  | nindent 6 }}
+      component: {{ include "opik.name" $ }}-{{ $key | lower }}
 {{- end }}
 {{- end }}
