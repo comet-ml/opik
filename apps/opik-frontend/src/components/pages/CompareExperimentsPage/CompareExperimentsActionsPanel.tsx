@@ -26,11 +26,10 @@ const EVALUATION_EXPORT_COLUMNS = [
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
   COLUMN_COMMENTS_ID,
 ];
-const NO_PREFIX_EXPORT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
+const FLAT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
 
-const processExportColumn = (
+const processNestedExportColumn = (
   item: ExperimentItem,
-  row: ExperimentsCompare,
   column: string,
   accumulator: Record<string, unknown>,
   prefix: string = "",
@@ -39,10 +38,7 @@ const processExportColumn = (
   const prefixColumnKey = keys[0];
 
   if (prefixColumnKey === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
-    const scoreName = column.replace(
-      `${EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX}.`,
-      "",
-    );
+    const scoreName = column.replace(`${prefixColumnKey}.`, "");
     const scoreObject = item.feedback_scores?.find((f) => f.name === scoreName);
     accumulator[`${prefix}${column}`] = get(scoreObject, "value", "-");
 
@@ -54,7 +50,9 @@ const processExportColumn = (
   }
 
   if (EVALUATION_EXPORT_COLUMNS.includes(prefixColumnKey)) {
-    accumulator[`${prefix}evaluation_task.${prefixColumnKey}`] = get(
+    const evaluationName = column.replace(`${prefixColumnKey}.`, "");
+
+    accumulator[`${prefix}evaluation_task.${evaluationName}`] = get(
       item ?? {},
       keys,
       "-",
@@ -62,13 +60,6 @@ const processExportColumn = (
 
     return;
   }
-
-  if (NO_PREFIX_EXPORT_COLUMNS.includes(prefixColumnKey)) {
-    accumulator[column] = get(row, keys, "");
-    return;
-  }
-
-  accumulator[`${prefix}dataset.${column}`] = get(row.data, keys, "");
 };
 
 type CompareExperimentsActionsPanelProps = {
@@ -104,14 +95,20 @@ const CompareExperimentsActionsPanel: React.FC<
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>(
         (accumulator, column) => {
+          if (FLAT_COLUMNS.includes(column)) {
+            accumulator[column] = get(row, column, "");
+
+            return accumulator;
+          }
+
           if (isCompare) {
             (row.experiment_items ?? []).forEach((item) => {
               const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
-              processExportColumn(item, row, column, accumulator, prefix);
+              processNestedExportColumn(item, column, accumulator, prefix);
             });
           } else {
             const item = row.experiment_items?.[0];
-            processExportColumn(item, row, column, accumulator);
+            processNestedExportColumn(item, column, accumulator);
           }
 
           return accumulator;
