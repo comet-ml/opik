@@ -60,6 +60,8 @@ def setup_telemetry(app):
             export_interval_millis=5000
         )
         metric_readers.append(otlp_reader)
+    else:
+        app.logger.info("No OTLP endpoint configured. Will not push metrics.")
     
     # Create MeterProvider with all readers
     resource = Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "opik-python-backend")})
