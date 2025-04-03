@@ -3,6 +3,7 @@ import { Split } from "lucide-react";
 import get from "lodash/get";
 import slugify from "slugify";
 import uniq from "lodash/uniq";
+import first from "lodash/first";
 
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -35,7 +36,7 @@ const processNestedExportColumn = (
   prefix: string = "",
 ) => {
   const keys = column.split(".");
-  const prefixColumnKey = keys[0];
+  const prefixColumnKey = first(keys) as string;
 
   if (prefixColumnKey === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
     const scoreName = column.replace(`${prefixColumnKey}.`, "");
