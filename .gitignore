@@ -66,3 +66,6 @@ opik-sandbox-executor-python.tar.gz
 
 # init
 .opik_install_reported
+
+# Update span cost workflow
+response.txt

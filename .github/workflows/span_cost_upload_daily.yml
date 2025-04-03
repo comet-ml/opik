@@ -6,40 +6,41 @@ on:
   workflow_dispatch: # Allows manual trigger
 
 jobs:
-  update-file:
+  update-span-cost:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false # Prevent issues with GitHub token
+        # with:
+        #   persist-credentials: false # Prevent issues with GitHub token
 
-      - name: Download File
+      - name: Set branch name and update the file
         run: |
+          echo "BRANCH_NAME=span-cost-update-$(date +%Y-%m-%d)" >> $GITHUB_ENV
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
 
-      - name: Check for Changes
-        id: check_changes
-        run: |
-          git diff --quiet || echo "CHANGES=true" >> $GITHUB_ENV
+      - name: Create branch
+        uses: JosiahSiegel/remote-branch-action@v1.2.0
+        with:
+          branch: ${{ env.BRANCH_NAME }}
 
-      - name: Commit Changes
-        if: env.CHANGES == 'true'
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@comet.com"
-          git checkout -b span-cost-update-$(date +%Y-%m-%d)
-          git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
-          git commit -m "Update span cost file"
-          git push origin span-cost-update-$(date +%Y-%m-%d)
+      - name: Push updated file
+        uses: comet-ml/push-files@main
+        with:
+          branch: ${{ env.BRANCH_NAME }}
+          files: apps/opik-backend/src/main/resources/model_prices_and_context_window.json:apps/opik-backend/src/main/resources/model_prices_and_context_window.json
+          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          repository: 'comet-ml/opik'
+          commit_user_email: github-actions@comet.com
+          commit_user_name: 'Github Actions (${{ github.actor }})'
+          commit_message: "Update span cost file"
 
       - name: Create Pull Request
-        if: env.CHANGES == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: span-cost-update-$(date +%Y-%m-%d)
+          branch: ${{ env.BRANCH_NAME }}
           title: "Update span cost from LiteLLM"
           body: "Automated update of model_prices_and_context_window.json file, which includes span prices information from the LiteLLM repo."
           base: main
