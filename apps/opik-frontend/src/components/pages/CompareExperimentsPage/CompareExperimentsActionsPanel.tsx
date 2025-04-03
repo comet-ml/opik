@@ -22,10 +22,13 @@ import {
 export const EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX = "feedback_scores";
 export const EXPERIMENT_ITEM_OUTPUT_PREFIX = "output";
 
-const EVALUATION_COLUMNS = [EXPERIMENT_ITEM_OUTPUT_PREFIX, COLUMN_COMMENTS_ID];
-const NO_SECTION_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
+const EVALUATION_EXPORT_COLUMNS = [
+  EXPERIMENT_ITEM_OUTPUT_PREFIX,
+  COLUMN_COMMENTS_ID,
+];
+const NO_PREFIX_EXPORT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
 
-const processColumn = (
+const processExportColumn = (
   item: ExperimentItem,
   row: ExperimentsCompare,
   column: string,
@@ -33,9 +36,9 @@ const processColumn = (
   prefix: string = "",
 ) => {
   const keys = column.split(".");
-  const prefixKey = keys[0];
+  const prefixColumnKey = keys[0];
 
-  if (prefixKey === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
+  if (prefixColumnKey === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
     const scoreName = column.replace(
       `${EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX}.`,
       "",
@@ -50,8 +53,8 @@ const processColumn = (
     return;
   }
 
-  if (EVALUATION_COLUMNS.includes(prefixKey)) {
-    accumulator[`${prefix}evaluation_task.${prefixKey}`] = get(
+  if (EVALUATION_EXPORT_COLUMNS.includes(prefixColumnKey)) {
+    accumulator[`${prefix}evaluation_task.${prefixColumnKey}`] = get(
       item ?? {},
       keys,
       "-",
@@ -60,7 +63,7 @@ const processColumn = (
     return;
   }
 
-  if (NO_SECTION_COLUMNS.includes(prefixKey)) {
+  if (NO_PREFIX_EXPORT_COLUMNS.includes(prefixColumnKey)) {
     accumulator[column] = get(row, keys, "");
     return;
   }
@@ -104,11 +107,11 @@ const CompareExperimentsActionsPanel: React.FC<
           if (isCompare) {
             (row.experiment_items ?? []).forEach((item) => {
               const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
-              processColumn(item, row, column, accumulator, prefix);
+              processExportColumn(item, row, column, accumulator, prefix);
             });
           } else {
             const item = row.experiment_items?.[0];
-            processColumn(item, row, column, accumulator);
+            processExportColumn(item, row, column, accumulator);
           }
 
           return accumulator;
