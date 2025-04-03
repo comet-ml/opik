@@ -70,8 +70,11 @@ def setup_telemetry(app):
     # Set the global MeterProvider
     metrics.set_meter_provider(provider)
     
-    # Instrument Flask
-    FlaskInstrumentor().instrument_app(app)
+    # Configure Flask instrumentation to exclude metrics endpoint
+    FlaskInstrumentor().instrument_app(
+        app,
+        excluded_urls="/metrics"
+    )
     
     # Add Prometheus metrics endpoint
     @app.route("/metrics")
