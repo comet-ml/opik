@@ -19,7 +19,6 @@ jobs:
         run: |
           echo "BRANCH_NAME=span-cost-update-$(date +%Y-%m-%d)" >> $GITHUB_ENV
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
-          echo "response.txt" >> .gitignore
           ls
 
       # - name: Commit Changes
