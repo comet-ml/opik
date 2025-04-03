@@ -1,7 +1,16 @@
 import logging
 import os
 
-from flask import Flask
+from flask import Flask, make_response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from opentelemetry import metrics
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.prometheus import PrometheusMetricReader
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+
 
 def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
@@ -17,6 +26,9 @@ def create_app(test_config=None):
         # load the test config if passed in
         app.config.from_mapping(test_config)
 
+    # Setup OpenTelemetry before registering blueprints
+    setup_telemetry(app)
+
     from opik_backend.evaluator import evaluator, init_executor
     from opik_backend.post_user_signup import post_user_signup
     from opik_backend.healthcheck import healthcheck
@@ -29,3 +41,36 @@ def create_app(test_config=None):
     app.register_blueprint(post_user_signup)
 
     return app
+
+def setup_telemetry(app):
+    """Configure OpenTelemetry metrics for the application."""
+    # Create metric readers based on environment
+    metric_readers = []
+    
+    # Always add Prometheus reader for k8s scraping
+    prometheus_reader = PrometheusMetricReader()
+    metric_readers.append(prometheus_reader)
+    
+    # Add OTLP reader if endpoint is configured
+    if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
+        otlp_reader = PeriodicExportingMetricReader(
+            OTLPMetricExporter(),
+            export_interval_millis=5000
+        )
+        metric_readers.append(otlp_reader)
+    
+    # Create MeterProvider with all readers
+    resource = Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "opik-python-backend")})
+    provider = MeterProvider(resource=resource, metric_readers=metric_readers)
+    
+    # Set the global MeterProvider
+    metrics.set_meter_provider(provider)
+    
+    # Instrument Flask
+    FlaskInstrumentor().instrument_app(app)
+    
+    # Add Prometheus metrics endpoint
+    @app.route("/metrics")
+    def prometheus_metrics():
+        """Endpoint for Prometheus metrics scraping."""
+        return make_response(generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST})
