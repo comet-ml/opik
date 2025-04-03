@@ -3,17 +3,23 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
+import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
+import org.glassfish.jersey.client.ChunkedInput;
 import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +30,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ExperimentResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/experiments";
+
+    private static final GenericType<ChunkedInput<String>> CHUNKED_INPUT_STRING_GENERIC_TYPE = new GenericType<>() {
+    };
+
+    private static final TypeReference<Experiment> EXPERIMENT_TYPE_REFERENCE = new TypeReference<>() {
+    };
 
     private final ClientSupport client;
     private final String baseURI;
@@ -42,25 +54,38 @@ public class ExperimentResourceClient {
     }
 
     public UUID create(Experiment experiment, String apiKey, String workspaceName) {
-
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(experiment))) {
-
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return TestUtils.getIdFromLocation(response.getLocation());
         }
     }
 
-    public UUID createExperiment(String apiKey, String workspaceName) {
-        Experiment experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
-                .promptVersion(null)
-                .promptVersions(null)
-                .build();
-
+    public UUID create(String apiKey, String workspaceName) {
+        var experiment = createPartialExperiment().build();
         return create(experiment, apiKey, workspaceName);
+    }
+
+    public List<Experiment> streamExperiments(ExperimentStreamRequest experimentStreamRequest, String apiKey,
+            String workspaceName) {
+        try (var actualResponse = streamExperiments(experimentStreamRequest, apiKey, workspaceName, HttpStatus.SC_OK)) {
+            return getStreamed(actualResponse, EXPERIMENT_TYPE_REFERENCE);
+        }
+    }
+
+    public Response streamExperiments(ExperimentStreamRequest experimentStreamRequest, String apiKey,
+            String workspaceName, int expectedStatus) {
+        var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("stream")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(experimentStreamRequest));
+        assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        return response;
     }
 
     public void createExperimentItem(Set<ExperimentItem> experimentItems, String apiKey, String workspaceName) {
@@ -76,5 +101,16 @@ public class ExperimentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(new ExperimentItemsBatch(experimentItems)));
+    }
+
+    public <T> List<T> getStreamed(Response response, TypeReference<T> valueTypeRef) {
+        var items = new ArrayList<T>();
+        try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
+            String stringItem;
+            while ((stringItem = inputStream.read()) != null) {
+                items.add(JsonUtils.readValue(stringItem, valueTypeRef));
+            }
+        }
+        return items;
     }
 }

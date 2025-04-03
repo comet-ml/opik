@@ -10,7 +10,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
@@ -24,7 +24,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -70,7 +69,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull AutomationRuleEvaluatorLogsDAO logsDAO;
-    private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
@@ -97,7 +96,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
                 case AutomationRuleEvaluatorUserDefinedMetricPython userDefinedMetricPython -> {
-                    if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                    if (!opikConfiguration.getServiceToggles().isPythonEvaluatorEnabled()) {
                         throw new ServerErrorException("Python evaluator is disabled", 501);
                     }
                     var definition = userDefinedMetricPython.toBuilder()
@@ -153,7 +152,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                 .lastUpdatedBy(userName)
                                 .build();
                     case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython -> {
-                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                        if (!opikConfiguration.getServiceToggles().isPythonEvaluatorEnabled()) {
                             throw new ServerErrorException("Python evaluator is disabled", 501);
                         }
                         yield UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
