@@ -20,6 +20,6 @@ public record GuardrailsCheck(
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    record Item(@NonNull String name, double score) {
+    public record Item(@NonNull String name, double score) {
     }
 }
