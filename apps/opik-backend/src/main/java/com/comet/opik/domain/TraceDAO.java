@@ -553,6 +553,7 @@ class TraceDAOImpl implements TraceDAO {
                   t.thread_id as thread_id,
                   t.feedback_scores_list as feedback_scores_list,
                   t.feedback_scores as feedback_scores,
+                  t.guardrails_list as guardrails_list,
                   sumMap(s.usage) as usage,
                   sum(s.total_estimated_cost) as total_estimated_cost,
                   groupUniqArrayArray(c.comments_array) as comments,
@@ -565,9 +566,11 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration,
                       fsagg.feedback_scores_list as feedback_scores_list,
-                      fsagg.feedback_scores as feedback_scores
+                      fsagg.feedback_scores as feedback_scores,
+                      gagg.guardrails_list as guardrails_list
                  FROM traces t
                  LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
+                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
                  <if(trace_aggregation_filters)>
                  LEFT JOIN spans_agg s ON t.id = s.trace_id
                  <endif>
