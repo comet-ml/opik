@@ -38,6 +38,7 @@ jobs:
           branch: ${{ env.BRANCH_NAME }}
           files: apps/opik-backend/src/main/resources/model_prices_and_context_window.json:apps/opik-backend/src/main/resources/model_prices_and_context_window.json
           github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          repository: 'comet-ml/opik'
           commit_user_email: github-actions@comet.com
           commit_user_name: 'Github Actions (${{ github.actor }})'
           commit_message: "Update span cost file"
