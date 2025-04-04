@@ -40,8 +40,25 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with $value.initContainers}}
       initContainers:
+      {{- if and (empty $value.initContainers) $value.waitForClickhouse.enabled }}
+        - name: wait-for-clickhouse-service
+          image: "{{ default $.Values.registry $value.waitForClickhouse.image.registry }}/{{ $value.waitForClickhouse.image.repository }}:{{ $value.waitForClickhouse.image.tag }}"
+          imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForClickhouse.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              while [ $(curl -ksw "%{http_code}" "{{ $value.waitForClickhouse.clickhouse.protocol }}://{{ $value.waitForClickhouse.clickhouse.host }}:{{ $value.waitForClickhouse.clickhouse.port }}" -o /dev/null) -ne 200 ];
+              do
+                sleep 5;
+                echo "Clickhouse is not available. Waiting for the Clickhouse...";
+              done
+      {{- else }}
+        {{- with $value.initContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- with $value.extraInitContainers }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- if and (eq $key "backend") $value.run_migration }}
