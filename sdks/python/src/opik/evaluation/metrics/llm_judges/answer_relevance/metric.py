@@ -9,6 +9,7 @@ from opik.evaluation.models import base_model, models_factory
 
 from . import templates
 from opik import exceptions
+from .. import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ class AnswerRelevance(base_metric.BaseMetric):
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
-            dict_content = json.loads(content)
+            dict_content = parsing_helpers.convert_to_json(content)
             score: float = dict_content["answer_relevance_score"]
 
             if not (0.0 <= score <= 1.0):

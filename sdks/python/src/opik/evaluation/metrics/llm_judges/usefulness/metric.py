@@ -7,6 +7,7 @@ from opik.evaluation.metrics import score_result, base_metric
 
 from . import template
 from opik.exceptions import MetricComputationError
+from .. import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ class Usefulness(base_metric.BaseMetric):
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         """Parse the model output string into a ScoreResult."""
         try:
-            dict_content = json.loads(content)
+            dict_content = parsing_helpers.convert_to_json(content)
             score: float = float(dict_content["score"])
 
             if not (0.0 <= score <= 1.0):

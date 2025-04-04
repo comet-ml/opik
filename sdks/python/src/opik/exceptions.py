@@ -29,7 +29,11 @@ class MetricComputationError(Exception):
 
     pass
 
+class JSONParsingError(Exception):
+    """Exception raised when we fail to parse an LLM response to a dictionary"""
 
+    pass
+    
 class PromptPlaceholdersDontMatchFormatArguments(OpikException):
     def __init__(self, prompt_placeholders: Set[str], format_arguments: Set[str]):
         self.prompt_placeholders = prompt_placeholders
