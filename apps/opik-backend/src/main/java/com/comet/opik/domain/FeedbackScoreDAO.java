@@ -14,7 +14,6 @@ import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,20 +38,9 @@ import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(FeedbackScoreDAOImpl.class)
 public interface FeedbackScoreDAO {
-
-    @Getter
-    @RequiredArgsConstructor
-    enum EntityType {
-        TRACE("trace", "traces"),
-        SPAN("span", "spans");
-
-        private final String type;
-        private final String tableName;
-    }
 
     Mono<Map<UUID, List<FeedbackScore>>> getScores(EntityType entityType, List<UUID> entityIds);
 
@@ -318,15 +306,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return scoreBatchOf(entityType, List.of(item));
     }
 
-    private ST getBatchSql(String sql, int size) {
-        var template = new ST(sql);
-        List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(size);
-
-        template.add("items", queryItems);
-
-        return template;
-    }
-
     private String getValueOrDefault(String value) {
         return Optional.ofNullable(value)
                 .map(String::trim)
@@ -342,7 +321,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+            ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
 
             var statement = connection.createStatement(template.render());
 

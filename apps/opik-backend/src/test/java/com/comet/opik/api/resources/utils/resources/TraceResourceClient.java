@@ -5,6 +5,8 @@ import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.GuardrailBatch;
+import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
@@ -98,6 +100,19 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public void guardrails(List<GuardrailBatchItem> score, String apiKey, String workspaceName) {
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("guardrails")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(new GuardrailBatch(score)))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
