@@ -24,7 +24,8 @@ const GuardrailConfigCode: React.FC<GuardrailConfigCodeProps> = ({
       </div>
       <ConfiguredCodeHighlighter
         projectName={projectName}
-        code={`from opik.guardrails import Guardrail${
+        code={`import os
+from opik.guardrails import Guardrail${
           codeImportNames.length > 0 ? `, ${codeImportNames.join(", ")}` : ""
         }
 from opik import exceptions
@@ -37,8 +38,7 @@ guard = Guardrail(
     ]
 )
 
-result = guard.validate("How can I start with evaluation in Opik 
-platform?")
+result = guard.validate("How can I start with evaluation in Opik platform?")
 # Guardrail passes
 
 try:
