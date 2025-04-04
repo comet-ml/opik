@@ -78,7 +78,8 @@ class AttachmentResourceMinIOTest {
     public static final String FILE_NAME = "test.jpg";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
 

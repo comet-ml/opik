@@ -52,6 +52,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
@@ -96,7 +97,8 @@ class RateLimitE2ETest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
@@ -123,7 +125,7 @@ class RateLimitE2ETest {
     }
 
     {
-        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 

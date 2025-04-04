@@ -32,6 +32,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -61,7 +62,9 @@ class LlmProviderApiKeyResourceTest {
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     @RegisterApp
@@ -70,7 +73,7 @@ class LlmProviderApiKeyResourceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     {
-        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
+        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 

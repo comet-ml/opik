@@ -59,6 +59,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.apache.commons.lang3.RandomStringUtils;
@@ -194,14 +195,16 @@ class AutomationRuleEvaluatorsResourceTest {
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> mysql = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer clickhouse = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer clickhouse = ClickHouseContainerUtils.newClickHouseContainer(zookeeper);
+
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
     private final TestDropwizardAppExtension app;
 
     {
-        Startables.deepStart(redis, mysql, clickhouse).join();
+        Startables.deepStart(redis, mysql, clickhouse, zookeeper).join();
         wireMock = WireMockUtils.startWireMock();
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, DATABASE_NAME);
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
