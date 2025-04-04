@@ -16,12 +16,10 @@
     "types": ["vitest/globals"],
     "baseUrl": ".",
     "paths": {
-      "opik": ["./src/opik/index.ts"],
-      "opik/vercel": ["./src/opik/integrations/vercel/index.ts"],
-      "@/*": ["./src/opik/*"],
+      "@/*": ["./src/*"],
       "@tests/*": ["./tests/*"]
     }
   },
   "include": ["src", "tests"],
-  "exclude": ["node_modules", "src/opik/integrations/opik-langchain"]
+  "exclude": ["node_modules"]
 }
