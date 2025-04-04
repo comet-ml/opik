@@ -19,7 +19,7 @@ if True:
     g_eval_metric = metrics.GEval(
         task_introduction="You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
         evaluation_criteria="The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
-        #model="ollama/llama3"
+        # model="ollama/llama3"
     )
 
     g_eval_score = g_eval_metric.score(
@@ -35,7 +35,7 @@ if True:
     print("g_eval_score:", g_eval_score)
 
 # Moderation metric example
-if False:
+if True:
     print("\n\nModeration metric example:")
 
     moderation_metric = metrics.Moderation()
@@ -51,7 +51,7 @@ if False:
     print("moderation_score:", moderation_score)
 
 # Answer Relevance metric example
-if False:
+if True:
     print("\n\nAnswer Relevance metric example:")
 
     answer_relevance_metric = metrics.AnswerRelevance()
@@ -65,7 +65,7 @@ if False:
     print("answer_relevance_score:", answer_relevance_score)
 
 # ContextPrecision metric example
-if False:
+if True:
     print("\n\nContextPrecision metric example:")
 
     context_precision_metric = metrics.ContextPrecision()
@@ -80,7 +80,7 @@ if False:
     print("context_precision_score:", context_precision_score)
 
 # ContextRecall metric example
-if False:
+if True:
     print("\n\nContextRecall metric example:")
 
     context_recall_metric = metrics.ContextRecall()

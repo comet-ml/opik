@@ -14,6 +14,7 @@ from .template import G_EVAL_COT_TEMPLATE, G_EVAL_QUERY_TEMPLATE
 from opik import exceptions
 from .. import parsing_helpers
 
+
 class GEvalScoreFormat(pydantic.BaseModel):
     score: int
     reason: str
@@ -50,7 +51,7 @@ class GEval(base_metric.BaseMetric):
 
         self.task_introduction = task_introduction
         self.evaluation_criteria = evaluation_criteria
-        self._log_probs_supported = None
+        self._log_probs_supported = False
 
     @cached_property
     def llm_chain_of_thought(self) -> str:
@@ -66,14 +67,14 @@ class GEval(base_metric.BaseMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(
-                model_name=model
-            )
+            self._model = models_factory.get(model_name=model)
 
-            if "logprobs" in self._model.supported_params and "top_logprobs" in self._model.supported_params:
+            if (
+                hasattr(self._model, "supported_params")
+                and "logprobs" in self._model.supported_params
+                and "top_logprobs" in self._model.supported_params
+            ):
                 self._log_probs_supported = True
-            else:
-                self._log_probs_supported = False
 
     def score(
         self,
@@ -163,26 +164,28 @@ class GEval(base_metric.BaseMetric):
         """
         try:
             if not self._log_probs_supported:
-                dict_content = parsing_helpers.convert_to_json(content.choices[0].message.content)
+                dict_content = parsing_helpers.convert_to_json(
+                    content.choices[0].message.content
+                )
 
-                score = float(dict_content["score"]) 
+                score = float(dict_content["score"])
                 if not 0 <= score <= 10:
                     raise ValueError
-            
+
                 reason = str(dict_content["reason"])
-                
+
                 return score_result.ScoreResult(
                     name=self.name,
                     value=score / 10,
                     reason=reason,
                 )
-            
+
             else:
                 # Compute score using top logprobs
                 score_token_position = 3
-                log_probs_content = content.choices[0].model_extra["logprobs"]["content"][
-                    score_token_position
-                ]
+                log_probs_content = content.choices[0].model_extra["logprobs"][
+                    "content"
+                ][score_token_position]
 
                 top_score_logprobs = log_probs_content["top_logprobs"]
                 log_probs_token = log_probs_content["token"]
