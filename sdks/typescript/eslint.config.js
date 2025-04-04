@@ -4,7 +4,14 @@ import tseslint from "typescript-eslint";
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
-  { ignores: ["dist/**", "node_modules/**", "src/opik/rest_api/**"] },
+  {
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "src/opik/rest_api/**",
+      "src/opik/integrations/opik-langchain/**",
+    ],
+  },
   { files: ["src/**/*.{js,mjs,cjs,ts}", "tests/**/*.{js,mjs,cjs,ts}"] },
   { languageOptions: { globals: globals.browser } },
   pluginJs.configs.recommended,

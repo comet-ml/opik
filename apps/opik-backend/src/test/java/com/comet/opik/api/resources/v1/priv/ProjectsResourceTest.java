@@ -10,6 +10,7 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -1554,6 +1555,7 @@ class ProjectsResourceTest {
             var id = createProject(project);
 
             assertProject(project.toBuilder().id(id)
+                    .visibility(ProjectVisibility.PRIVATE)
                     .lastUpdatedTraceAt(null)
                     .build());
         }
@@ -1899,7 +1901,9 @@ class ProjectsResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method(HttpMethod.PATCH,
-                            Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate).build()))) {
+                            Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate)
+                                    .visibility(ProjectVisibility.PUBLIC)
+                                    .build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -1916,6 +1920,7 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualEntity.description()).isEqualTo(descriptionUpdate);
+                assertThat(actualEntity.visibility()).isEqualTo(ProjectVisibility.PUBLIC);
                 assertThat(actualEntity.name()).isEqualTo(name);
             }
         }

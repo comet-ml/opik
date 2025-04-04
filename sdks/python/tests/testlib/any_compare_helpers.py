@@ -1,6 +1,6 @@
 from typing import Optional
 
-import mock
+from unittest import mock
 
 
 class AnyButNone:
