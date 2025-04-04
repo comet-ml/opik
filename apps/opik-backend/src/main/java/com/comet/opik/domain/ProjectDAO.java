@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectIdLastUpdated;
+import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -26,18 +27,20 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 interface ProjectDAO {
 
-    @SqlUpdate("INSERT INTO projects (id, name, description, workspace_id, created_by, last_updated_by) VALUES (:bean.id, :bean.name, :bean.description, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy)")
+    @SqlUpdate("INSERT INTO projects (id, name, description, workspace_id, visibility, created_by, last_updated_by) VALUES (:bean.id, :bean.name, :bean.description, :workspaceId, COALESCE(:bean.visibility, 'private'), :bean.createdBy, :bean.lastUpdatedBy)")
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Project project);
 
     @SqlUpdate("UPDATE projects SET " +
             "name = COALESCE(:name, name), " +
             "description = COALESCE(:description, description), " +
+            "visibility = COALESCE(:visibility, visibility), " +
             "last_updated_by = :lastUpdatedBy " +
             "WHERE id = :id AND workspace_id = :workspaceId")
     void update(@Bind("id") UUID id,
             @Bind("workspaceId") String workspaceId,
             @Bind("name") String name,
             @Bind("description") String description,
+            @Bind("visibility") ProjectVisibility visibility,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlUpdate("DELETE FROM projects WHERE id = :id AND workspace_id = :workspaceId")

@@ -215,7 +215,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
     }
 
     @Override
-    public Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds) {
+    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
         if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(0L);
         }

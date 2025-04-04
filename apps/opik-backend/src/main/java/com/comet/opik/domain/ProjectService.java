@@ -7,6 +7,7 @@ import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.Direction;
@@ -173,6 +174,7 @@ class ProjectServiceImpl implements ProjectService {
                         workspaceId,
                         projectUpdate.name(),
                         projectUpdate.description(),
+                        projectUpdate.visibility(),
                         userName);
 
                 return null;
@@ -450,6 +452,7 @@ class ProjectServiceImpl implements ProjectService {
                     log.info("Creating project with name '{}' on workspaceId '{}'", projectName, workspaceId);
                     var project = Project.builder()
                             .name(projectName)
+                            .visibility(ProjectVisibility.PRIVATE)
                             .build();
 
                     UUID projectId = idGenerator.generateId();
