@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn, updateTextAreaHeight } from "@/lib/utils";
 import { CheckedState } from "@radix-ui/react-checkbox";
 import { Info } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
+import { PiiSupportedEntities, PiiSupportedEntity } from "./guardrailsConfig";
 
 type ThresholdProps = {
   id: string;
@@ -36,17 +37,19 @@ const Threshold: React.FC<ThresholdProps> = ({
   );
 };
 
-const restrictedLabelList = [
-  "Address",
-  "Age",
-  "Name",
-  "Email",
-  "Phone number",
-  "Password",
-  "Credit card number",
-  "Bank account number",
-  "IP address",
-];
+const restrictedLabelMap = {
+  [PiiSupportedEntities.CREDIT_CARD]: "Credit card number",
+  [PiiSupportedEntities.PHONE_NUMBER]: "Phone number",
+  [PiiSupportedEntities.EMAIL_ADDRESS]: "Email",
+  [PiiSupportedEntities.IBAN_CODE]: "Bank account number",
+  [PiiSupportedEntities.IP_ADDRESS]: "IP address",
+  [PiiSupportedEntities.NRP]: "National Registration Plate",
+  [PiiSupportedEntities.LOCATION]: "Address",
+  [PiiSupportedEntities.PERSON]: "Name",
+  [PiiSupportedEntities.CRYPTO]: "Cryptocurrency",
+  [PiiSupportedEntities.MEDICAL_LICENSE]: "Medical license",
+  [PiiSupportedEntities.URL]: "URL",
+};
 type RestrictedListProps = {
   id: string;
   value: string[];
@@ -67,18 +70,25 @@ const RestrictedList: React.FC<RestrictedListProps> = ({
     onChange(newList);
   };
 
+  const restrictedLabelList = Object.keys(restrictedLabelMap);
+
   return (
     <div className="grid w-full">
       <p className="comet-body-s-accented flex h-10 items-center">{label}</p>
       {restrictedLabelList.map((label, idx) => (
-        <Label key={id + idx} className="flex h-10 items-center gap-2">
+        <Label
+          key={id + idx}
+          className="flex h-10 cursor-pointer items-center gap-2"
+        >
           <Checkbox
             id={id + idx}
             checked={value.includes(label)}
             onCheckedChange={(v) => onCheckedChange(v, label)}
           />
 
-          <div className="comet-body-s">{label}</div>
+          <div className="comet-body-s">
+            {restrictedLabelMap[label as PiiSupportedEntity]}
+          </div>
         </Label>
       ))}
     </div>
@@ -142,21 +152,21 @@ type GuardrailConfigComponents = {
 type GuardrailConfigProps = {
   title: string;
   hintText: string;
-  defaultEnabled?: boolean;
+  enabled: boolean;
+  toggleEnabled: () => void;
   className?: string;
   children: React.ReactNode;
 };
 
 const GuardrailConfig: GuardrailConfigComponents &
   React.FC<GuardrailConfigProps> = ({
-  defaultEnabled,
   title,
   hintText,
+  enabled,
+  toggleEnabled,
   className,
   children,
 }) => {
-  const [enabled, setEnabled] = useState(Boolean(defaultEnabled));
-
   return (
     <div className={cn(className)}>
       <div className="flex h-10 items-center justify-between">
@@ -166,7 +176,7 @@ const GuardrailConfig: GuardrailConfigComponents &
             <Info className="ml-1 size-3.5 text-light-slate" />
           </TooltipWrapper>
         </div>
-        <Switch size="sm" checked={enabled} onCheckedChange={setEnabled} />
+        <Switch size="sm" checked={enabled} onCheckedChange={toggleEnabled} />
       </div>
       {enabled && <div className="space-y-4 pb-3">{children}</div>}
     </div>

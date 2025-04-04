@@ -1,26 +1,55 @@
-import React, { useState } from "react";
-import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
+import React from "react";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
-import CreateExperimentCode from "@/components/pages-shared/onboarding/CreateExperimentCode/CreateExperimentCode";
 import GuardrailConfig from "./GuardrailConfig";
 import { Separator } from "@/components/ui/separator";
+import DocsLinkCard from "@/components/pages-shared/onboarding/DocsLinkCard/DocsLinkCard";
+import GuardrailConfigCode from "./GuardrailConfigCode";
+import {
+  GuardrailType,
+  GuardrailTypes,
+  guardrailsMap,
+} from "./guardrailsConfig";
+import { useGuardrailConfigState } from "./useGuardrailConfigState";
 
 type SetGuardrailDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  projectName?: string;
 };
 
 const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
   open,
   setOpen,
+  projectName,
 }) => {
-  const [topicThreshold, setTopicThreshold] = useState(0.5);
-  const [piiThreshold, setPIIThreshold] = useState(0.5);
+  const {
+    state: guardrailsState,
+    updateThreshold,
+    updateEntities,
+    toggleEnabled,
+    getEnabledGuardrailTypes,
+  } = useGuardrailConfigState();
 
-  const [topicList, setTopicList] = useState<string[]>([]);
-  const [piiList, setPIIList] = useState<string[]>([]);
+  const enabledGuardrailsKeys = getEnabledGuardrailTypes();
+  const importCodeNames = enabledGuardrailsKeys.map(
+    (key) => guardrailsMap[key as GuardrailType].codeImportName,
+  );
+  const codeList = enabledGuardrailsKeys.map((key) =>
+    guardrailsMap[key as GuardrailType].codeBuilder(
+      guardrailsState[key as GuardrailType].entities
+        .map((v) => v.trim())
+        .filter((v) => v),
+      guardrailsState[key as GuardrailType].threshold,
+    ),
+  );
+
+  const TOPIC_GUARDRAIL_CONFIG = guardrailsMap[GuardrailTypes.TOPIC];
+  const PII_GUARDRAIL_CONFIG = guardrailsMap[GuardrailTypes.PII];
+  const TOPIC_GUARDRAIL_STATE = guardrailsState[GuardrailTypes.TOPIC];
+  const PII_GUARDRAIL_STATE = guardrailsState[GuardrailTypes.PII];
+
   return (
     <SideDialog open={open} setOpen={setOpen}>
       <div className="pb-20">
@@ -36,74 +65,57 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
           <div className="flex w-[250px] shrink-0 flex-col">
             <GuardrailConfig
-              title="Topic guardrail"
-              hintText="The topic guardrail is designed to prevent the model from generating responses on certain topics that might be inappropriate, unsafe, unethical, or outside its intended scope."
+              title={TOPIC_GUARDRAIL_CONFIG.title}
+              hintText={TOPIC_GUARDRAIL_CONFIG.hintText}
+              enabled={TOPIC_GUARDRAIL_STATE.enabled}
+              toggleEnabled={() => toggleEnabled(GuardrailTypes.TOPIC)}
             >
               <GuardrailConfig.Threshold
-                id="topic-threshold"
-                value={topicThreshold}
-                onChange={setTopicThreshold}
+                id={`${TOPIC_GUARDRAIL_CONFIG.id}-threshold`}
+                value={TOPIC_GUARDRAIL_STATE.threshold}
+                onChange={(v) => updateThreshold(GuardrailTypes.TOPIC, v)}
               />
               <GuardrailConfig.TopicsList
-                id="topic-list"
-                onChange={setTopicList}
-                value={topicList}
+                id={`${TOPIC_GUARDRAIL_CONFIG.id}-list`}
+                onChange={(v) => updateEntities(GuardrailTypes.TOPIC, v)}
+                value={TOPIC_GUARDRAIL_STATE.entities}
               />
             </GuardrailConfig>
             <Separator className="my-1" />
             <GuardrailConfig
-              title="PII guardrail"
-              hintText="The PII (Personally Identifiable Information) guardrail is designed to prevent the model from generating, storing, or processing sensitive personal data that could identify individuals."
+              title={PII_GUARDRAIL_CONFIG.title}
+              hintText={PII_GUARDRAIL_CONFIG.hintText}
+              enabled={PII_GUARDRAIL_STATE.enabled}
+              toggleEnabled={() => toggleEnabled(GuardrailTypes.PII)}
             >
               <GuardrailConfig.Threshold
-                id="pii-threshold"
-                value={piiThreshold}
-                onChange={setPIIThreshold}
+                id={`${PII_GUARDRAIL_CONFIG.id}-threshold`}
+                value={PII_GUARDRAIL_STATE.threshold}
+                onChange={(v) => updateThreshold(GuardrailTypes.PII, v)}
               />
               <GuardrailConfig.RestrictedList
-                id="pii-list"
-                value={piiList}
-                onChange={setPIIList}
+                id={`${PII_GUARDRAIL_CONFIG.id}-list`}
+                value={PII_GUARDRAIL_STATE.entities}
+                onChange={(v) => updateEntities(GuardrailTypes.PII, v)}
               />
             </GuardrailConfig>
             <Separator className="my-1" />
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-slate-200 p-6">
-            <div className="comet-body-s mt-4 text-foreground-secondary">
-              2. Install the SDK
-            </div>
-            <CodeHighlighter data={"pip install opik"} />
-            <div className="comet-body-s mt-4 text-foreground-secondary">
-              Use the following code to configure your guardrail
-            </div>
-            <CreateExperimentCode
-              code={`from opik.guardrails import Guardrail, PII, Topic
-from opik import exceptions
-guard = Guardrail(
-    guards=[
-        Topic(restricted_topics=["finance"], threshold=0.8),
-        PII(blocked_entities=["CREDIT_CARD", "PERSON"], threshold=0.4),
-    ]
-)
-
-result = guard.validate("How can I start with evaluation in Opik 
-platform?")
-# Guardrail passes
-
-try:
-    result = guard.validate("Where should I invest my money?")
-except exceptions.GuardrailValidationFailed as e:
-    print("Guardrail failed:", e)
-
-try:
-    result = guard.validate("John Doe, here is my card number 4111111111111111 how can I use it in Opik platform?.")
-except exceptions.GuardrailValidationFailed as e:
-    print("Guardrail failed:", e)`}
+            <GuardrailConfigCode
+              codeImportNames={importCodeNames}
+              codeList={codeList}
+              projectName={projectName}
             />
           </div>
 
           <div className="flex w-[250px] shrink-0 flex-col gap-6 self-start">
             <ApiKeyCard />
+            <DocsLinkCard
+              description="Learn how to configure your guardrails in our docs."
+              // TODO: Replace with Guardrails docs
+              link="https://www.comet.com/docs/opik?from=llm"
+            />
           </div>
         </div>
       </div>

@@ -6,7 +6,7 @@ import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/G
 import { FrameworkIntegrationsProps } from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import { CommentsViewerCoreProps } from "@/components/pages-shared/traces/TraceDetailsPanel/CommentsViewer/CommentsViewerCore";
 import { ExperimentCommentsViewerCoreProps } from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/ExperimentCommentsViewerCore";
-import { CreateExperimentCodeCoreProps } from "@/components/pages-shared/onboarding/CreateExperimentCode/CreateExperimentCodeCore";
+import { ConfiguredCodeHighlighterCoreProps } from "@/components/pages-shared/onboarding/CreateExperimentCode/ConfiguredCodeHighlighterCore";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -16,7 +16,7 @@ type PluginStore = {
   FrameworkIntegrations: React.ComponentType<FrameworkIntegrationsProps> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   ApiKeyCard: React.ComponentType | null;
-  CreateExperimentCode: React.ComponentType<CreateExperimentCodeCoreProps> | null;
+  ConfiguredCodeHighlighter: React.ComponentType<ConfiguredCodeHighlighterCoreProps> | null;
   EvaluationExamples: React.ComponentType | null;
   CommentsViewer: React.ComponentType<CommentsViewerCoreProps> | null;
   ExperimentCommentsViewer: React.ComponentType<ExperimentCommentsViewerCoreProps> | null;
@@ -35,7 +35,7 @@ const PLUGIN_NAMES = [
   "FrameworkIntegrations",
   "GoogleColabCard",
   "ApiKeyCard",
-  "CreateExperimentCode",
+  "ConfiguredCodeHighlighter",
   "CommentsViewer",
   "WorkspacePreloader",
   "EvaluationExamples",
@@ -52,7 +52,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   GoogleColabCard: null,
   ApiKeyCard: null,
   WorkspacePreloader: null,
-  CreateExperimentCode: null,
+  ConfiguredCodeHighlighter: null,
   CommentsViewer: null,
   EvaluationExamples: null,
   ExperimentCommentsViewer: null,

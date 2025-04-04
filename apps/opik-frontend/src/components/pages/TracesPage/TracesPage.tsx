@@ -10,9 +10,17 @@ import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesS
 import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
+import { Button } from "@/components/ui/button";
+import { Construction } from "lucide-react";
+import { useState } from "react";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
+  const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
+    useState<boolean>(false);
+  const isGuardrailsEnabled = useIsFeatureEnabled("guardrails_enabled");
 
   const [type = TRACE_DATA_TYPE.traces, setType] = useQueryParam(
     "type",
@@ -33,69 +41,86 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
+  const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
+
   return (
-    <PageBodyScrollContainer>
-      <PageBodyStickyContainer
-        className="mb-4 mt-6 flex items-center justify-between"
-        direction="horizontal"
-      >
-        <h1
-          data-testid="traces-page-title"
-          className="comet-title-l truncate break-words"
+    <>
+      <PageBodyScrollContainer>
+        <PageBodyStickyContainer
+          className="mb-4 mt-6 flex items-center justify-between"
+          direction="horizontal"
         >
-          {projectName}
-        </h1>
-      </PageBodyStickyContainer>
-      <Tabs
-        defaultValue="traces"
-        value={type as string}
-        onValueChange={setType}
-        className="min-w-min"
-      >
-        <PageBodyStickyContainer direction="horizontal" limitWidth>
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.traces}>
-              Traces
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.llm}>
-              LLM calls
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value="threads">
-              Threads
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value="metrics">
-              Metrics
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value="rules">
-              Online evaluation
-            </TabsTrigger>
-          </TabsList>
+          <h1
+            data-testid="traces-page-title"
+            className="comet-title-l truncate break-words"
+          >
+            {projectName}
+          </h1>
+          {isGuardrailsEnabled && (
+            <Button variant="outline" size="sm" onClick={openGuardrailsDialog}>
+              <Construction className="mr-2 size-3.5" />
+              Set a guardrail
+            </Button>
+          )}
         </PageBodyStickyContainer>
-        <TabsContent value={TRACE_DATA_TYPE.traces}>
-          <TracesSpansTab
-            type={TRACE_DATA_TYPE.traces}
-            projectId={projectId}
-            projectName={projectName}
-          />
-        </TabsContent>
-        <TabsContent value={TRACE_DATA_TYPE.llm}>
-          <TracesSpansTab
-            type={TRACE_DATA_TYPE.llm}
-            projectId={projectId}
-            projectName={projectName}
-          />
-        </TabsContent>
-        <TabsContent value="threads">
-          <ThreadsTab projectId={projectId} projectName={projectName} />
-        </TabsContent>
-        <TabsContent value="metrics">
-          <MetricsTab projectId={projectId} />
-        </TabsContent>
-        <TabsContent value="rules">
-          <RulesTab projectId={projectId} />
-        </TabsContent>
-      </Tabs>
-    </PageBodyScrollContainer>
+        <Tabs
+          defaultValue="traces"
+          value={type as string}
+          onValueChange={setType}
+          className="min-w-min"
+        >
+          <PageBodyStickyContainer direction="horizontal" limitWidth>
+            <TabsList variant="underline">
+              <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.traces}>
+                Traces
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.llm}>
+                LLM calls
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="threads">
+                Threads
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="metrics">
+                Metrics
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="rules">
+                Online evaluation
+              </TabsTrigger>
+            </TabsList>
+          </PageBodyStickyContainer>
+          <TabsContent value={TRACE_DATA_TYPE.traces}>
+            <TracesSpansTab
+              type={TRACE_DATA_TYPE.traces}
+              projectId={projectId}
+              projectName={projectName}
+            />
+          </TabsContent>
+          <TabsContent value={TRACE_DATA_TYPE.llm}>
+            <TracesSpansTab
+              type={TRACE_DATA_TYPE.llm}
+              projectId={projectId}
+              projectName={projectName}
+            />
+          </TabsContent>
+          <TabsContent value="threads">
+            <ThreadsTab projectId={projectId} projectName={projectName} />
+          </TabsContent>
+          <TabsContent value="metrics">
+            <MetricsTab projectId={projectId} />
+          </TabsContent>
+          <TabsContent value="rules">
+            <RulesTab projectId={projectId} />
+          </TabsContent>
+        </Tabs>
+      </PageBodyScrollContainer>
+      {isGuardrailsEnabled && (
+        <SetGuardrailDialog
+          open={isGuardrailsDialogOpened}
+          setOpen={setIsGuardrailsDialogOpened}
+          projectName={projectName}
+        />
+      )}
+    </>
   );
 };
 

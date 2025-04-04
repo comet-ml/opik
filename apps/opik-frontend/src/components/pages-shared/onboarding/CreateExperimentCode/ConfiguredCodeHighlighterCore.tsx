@@ -2,25 +2,27 @@ import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import useAppStore from "@/store/AppStore";
 
-export type CreateExperimentCodeCoreProps = {
+export type ConfiguredCodeHighlighterCoreProps = {
   apiKey?: string;
   code: string;
+  projectName?: string;
 };
-const CreateExperimentCodeCore: React.FC<CreateExperimentCodeCoreProps> = ({
-  apiKey,
-  code,
-}) => {
+const ConfiguredCodeHighlighterCore: React.FC<
+  ConfiguredCodeHighlighterCoreProps
+> = ({ apiKey, code, projectName }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { code: codeWithConfig } = putConfigInCode({
     code,
     workspaceName,
     apiKey,
     shouldMaskApiKey: true,
+    projectName,
   });
   const { code: codeWithConfigToCopy } = putConfigInCode({
     code,
     workspaceName,
     apiKey,
+    projectName,
   });
 
   return (
@@ -28,4 +30,4 @@ const CreateExperimentCodeCore: React.FC<CreateExperimentCodeCoreProps> = ({
   );
 };
 
-export default CreateExperimentCodeCore;
+export default ConfiguredCodeHighlighterCore;
