@@ -1,0 +1,45 @@
+name: Check Documentation Links
+
+on:
+  schedule:
+    - cron: '0 12 * * *'  # Run daily at noon UTC
+  workflow_dispatch:
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install pytest and allure
+        run: |
+          pip install pytest allure-pytest
+
+      - name: Install Test Dependencies
+        run: |
+          pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+        
+      - name: Install linkinator
+        run: |
+          npm install linkinator
+        
+      - name: Run linkinator
+        run: |
+          npx linkinator https://www.comet.com/docs/opik/ --recurse --format csv > ${{ github.workspace }}/tests_end_to_end/tests/Documentation/output.csv
+
+      - name: Check for broken Comet links
+        run: |
+          cd ${{ github.workspace }}/tests_end_to_end
+          export PYTHONPATH='.'
+          allurectl watch -- pytest -s tests/Documentation/test_links.py --browser chromium --alluredir="${ALLURE_RESULTS}"
