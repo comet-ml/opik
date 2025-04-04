@@ -60,8 +60,6 @@ const processNestedExportColumn = (
 
     return;
   }
-
-  accumulator[`${prefix}dataset.${column}`] = get(item ?? {}, keys, "-");
 };
 
 type CompareExperimentsActionsPanelProps = {
@@ -99,6 +97,18 @@ const CompareExperimentsActionsPanel: React.FC<
         (accumulator, column) => {
           if (FLAT_COLUMNS.includes(column)) {
             accumulator[column] = get(row, column, "");
+
+            return accumulator;
+          }
+
+          const prefix = first(column.split(".")) as string;
+          const isDatasetColumn = !(
+            EVALUATION_EXPORT_COLUMNS.includes(prefix) ||
+            prefix === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX
+          );
+
+          if (isDatasetColumn) {
+            accumulator[`dataset.${column}`] = get(row.data, column, "-");
 
             return accumulator;
           }
