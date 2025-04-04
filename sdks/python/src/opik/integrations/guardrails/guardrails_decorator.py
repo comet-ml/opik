@@ -10,6 +10,7 @@ from typing import (
     Tuple,
     Union,
 )
+from typing_extensions import override
 
 from guardrails import validators
 
@@ -23,6 +24,7 @@ RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["output"]
 
 
 class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorator):
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -59,6 +61,7 @@ class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorat
 
         return result
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -79,6 +82,7 @@ class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorat
 
         return result
 
+    @override
     def _streams_handler(
         self,
         output: Any,

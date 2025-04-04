@@ -10,6 +10,7 @@ from typing import (
     Tuple,
     Union,
 )
+from typing_extensions import override
 
 import aisuite.framework as aisuite_chat_completion
 from openai.types.chat import chat_completion as openai_chat_completion
@@ -30,6 +31,7 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
     calls of AISuite's `chat.completion.create`
     """
 
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -94,6 +96,7 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return model, provider
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -150,6 +153,7 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _streams_handler(
         self,
         output: Any,

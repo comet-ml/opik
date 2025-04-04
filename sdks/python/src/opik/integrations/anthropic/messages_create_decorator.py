@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import anthropic
 from anthropic.types import Message as AnthropicMessage
+from typing_extensions import override
 
 from opik import dict_utils, llm_usage
 from opik.api_objects import span
@@ -25,6 +26,7 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
     def __init__(self, provider: str) -> None:
         self.provider: str = provider
 
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -57,6 +59,7 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Union[str, AnthropicMessage],
@@ -88,6 +91,7 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _streams_handler(
         self,
         output: Any,

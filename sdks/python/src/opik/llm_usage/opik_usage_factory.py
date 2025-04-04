@@ -3,6 +3,13 @@ from . import opik_usage
 from typing import Dict, Any, Callable, Optional, Union
 from opik.types import LLMProvider
 
+
+# TODO: it was discovered that one provider may have more than one token usage formats, and
+# sometimes we support one usage format but not the cost tracking for its provider.
+# So, this dictionary and corresponding logic should be updated.
+# We need to have one dict - USAGE_FORMAT: OPIK_USAGE_BUILDER, and probably
+# another dict - PROVIDER: USAGE_FORMATS.
+# See the ticket: OPIK-1407
 _PROVIDER_TO_OPIK_USAGE_BUILDER: Dict[
     Union[str, LLMProvider], Callable[[Dict[str, Any]], opik_usage.OpikUsage]
 ] = {
@@ -11,7 +18,7 @@ _PROVIDER_TO_OPIK_USAGE_BUILDER: Dict[
     LLMProvider.GOOGLE_AI: opik_usage.OpikUsage.from_google_dict,
     LLMProvider.ANTHROPIC: opik_usage.OpikUsage.from_anthropic_dict,
     "_bedrock": opik_usage.OpikUsage.from_bedrock_dict,
-    "_openai_agent": opik_usage.OpikUsage.from_openai_agent_dict,
+    "_openai_responses": opik_usage.OpikUsage.from_openai_responses_dict,
 }
 
 

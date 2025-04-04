@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing_extensions import override
 
 from opik import dict_utils, llm_usage
 from opik.api_objects import span
@@ -22,6 +23,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
     overrides _generators_handler() method to work correctly with bedrock's streams
     """
 
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -51,6 +53,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -76,6 +79,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _streams_handler(  # type: ignore
         self,
         output: Any,
