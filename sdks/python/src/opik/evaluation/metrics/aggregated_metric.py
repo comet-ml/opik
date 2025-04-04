@@ -1,9 +1,13 @@
-from typing import List, Callable, Any
+from typing import List, Callable, Any, Dict
 
-from . import base_metric, score_result
+from .. import types as evaluation_types
+
+from . import arguments_helpers, arguments_validator, base_metric, score_result
 
 
-class AggregatedMetric(base_metric.BaseMetric):
+class AggregatedMetric(
+    base_metric.BaseMetric, arguments_validator.ScoreArgumentsValidator
+):
     """A metric that aggregates results obtained from a list of provided metrics using specified aggregation function.
 
     Args:
@@ -34,5 +38,21 @@ class AggregatedMetric(base_metric.BaseMetric):
 
     def score(self, *args: Any, **kwargs: Any) -> score_result.ScoreResult:
         score_results: List[score_result.ScoreResult] = []
+        for metric in self.metrics:
+            metric_result = metric.score(*args, **kwargs)
+            score_results.append(metric_result)
 
         return self.aggregator(score_results)
+
+    def validate_score_arguments(
+        self,
+        key_mapping: evaluation_types.ScoringKeyMappingType,
+        score_kwargs: Dict[str, Any],
+    ) -> None:
+        for metric in self.metrics:
+            arguments_helpers.raise_if_score_arguments_are_missing(
+                score_function=metric.score,
+                score_name=metric.name,
+                kwargs=score_kwargs,
+                scoring_key_mapping=key_mapping,
+            )
