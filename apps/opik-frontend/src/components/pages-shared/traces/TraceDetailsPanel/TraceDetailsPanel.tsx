@@ -114,7 +114,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 
   const dataToView = useMemo(() => {
     return spanId
-      ? find(spansData?.content || [], (span: Span) => span.id === spanId)
+      ? find(spansData?.content || [], (span: Span) => span.id === spanId) ??
+          trace
       : trace;
   }, [spanId, spansData?.content, trace]);
 
