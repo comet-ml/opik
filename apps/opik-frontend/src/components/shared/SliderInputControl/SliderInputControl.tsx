@@ -18,7 +18,8 @@ interface SliderInputControlProps {
   onChange: (v: number) => void;
   id: string;
   label: string;
-  tooltip: TooltipWrapperProps["content"];
+  tooltip?: TooltipWrapperProps["content"];
+  resetDisabled?: boolean;
 }
 
 const SliderInputControl = ({
@@ -31,6 +32,7 @@ const SliderInputControl = ({
   id,
   label,
   tooltip,
+  resetDisabled,
 }: SliderInputControlProps) => {
   const sliderId = `${id}-slider`;
   const inputId = `${id}-input`;
@@ -86,13 +88,15 @@ const SliderInputControl = ({
           <Label htmlFor={sliderId} className="text-foreground">
             {label}
           </Label>
-          <TooltipWrapper content={tooltip}>
-            <Info className="ml-1 size-4 text-light-slate" />
-          </TooltipWrapper>
+          {tooltip && (
+            <TooltipWrapper content={tooltip}>
+              <Info className="ml-1 size-4 text-light-slate" />
+            </TooltipWrapper>
+          )}
         </div>
 
         <div className="flex items-center">
-          {numLocalValue !== defaultValue && (
+          {!resetDisabled && numLocalValue !== defaultValue && (
             <Button variant="minimal" size="icon-sm" onClick={handleResetValue}>
               <RotateCcw />
             </Button>
@@ -110,6 +114,7 @@ const SliderInputControl = ({
             value={localValue || ""}
             dimension="sm"
             variant="ghost"
+            max={max}
           />
         </div>
       </div>
