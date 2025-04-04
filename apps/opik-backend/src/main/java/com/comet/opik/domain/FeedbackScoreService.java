@@ -4,6 +4,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
@@ -201,6 +202,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         UUID projectId = idGenerator.generateId();
                         var newProject = Project.builder()
                                 .name(projectName)
+                                .visibility(ProjectVisibility.PRIVATE)
                                 .id(projectId)
                                 .createdBy(userName)
                                 .lastUpdatedBy(userName)
