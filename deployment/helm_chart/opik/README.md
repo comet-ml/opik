@@ -138,15 +138,11 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
 | component.backend.env.TOGGLE_PYTHON_EVALUATOR_ENABLED | bool | `true` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
+| component.backend.extraInitContainers | list | `[]` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
 | component.backend.image.tag | string | `"latest"` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
-| component.backend.initContainers[0].args[0] | string | `"while [ $(curl -ksw \"%{http_code}\" \"http://clickhouse-opik-clickhouse:8123\" -o /dev/null) -ne 200 ]; do sleep 5; echo \"Clickhouse is not available. Waiting for the Clickhouse...\"; done"` |  |
-| component.backend.initContainers[0].command[0] | string | `"/bin/sh"` |  |
-| component.backend.initContainers[0].command[1] | string | `"-c"` |  |
-| component.backend.initContainers[0].image | string | `"curlimages/curl:8.12.1"` |  |
-| component.backend.initContainers[0].name | string | `"wait-for-clickhouse-service"` |  |
 | component.backend.livenessProbe.path | string | `"/health-check?name=all&type=alive"` |  |
 | component.backend.livenessProbe.port | int | `8080` |  |
 | component.backend.metrics.enabled | bool | `false` |  |
@@ -165,6 +161,12 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.ports[1].targetPort | int | `3003` |  |
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
+| component.backend.waitForClickhouse.clickhouse.host | string | `"clickhouse-opik-clickhouse"` |  |
+| component.backend.waitForClickhouse.clickhouse.port | int | `8123` |  |
+| component.backend.waitForClickhouse.clickhouse.protocol | string | `"http"` |  |
+| component.backend.waitForClickhouse.enabled | bool | `true` |  |
+| component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
+| component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
