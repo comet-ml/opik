@@ -50,7 +50,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription; // Store the subscription reference
 
-    public OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
+    protected OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull AutomationRuleEvaluatorType type) {
