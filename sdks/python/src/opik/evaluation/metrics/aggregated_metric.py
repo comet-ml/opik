@@ -1,4 +1,4 @@
-from typing import List, Callable, Any, Dict
+from typing import List, Callable, Any, Dict, Optional
 
 from .. import types as evaluation_types
 
@@ -40,14 +40,17 @@ class AggregatedMetric(
         score_results: List[score_result.ScoreResult] = []
         for metric in self.metrics:
             metric_result = metric.score(*args, **kwargs)
-            score_results.append(metric_result)
+            if isinstance(metric_result, list):
+                score_results.extend(metric_result)
+            else:
+                score_results.append(metric_result)
 
         return self.aggregator(score_results)
 
     def validate_score_arguments(
         self,
-        key_mapping: evaluation_types.ScoringKeyMappingType,
         score_kwargs: Dict[str, Any],
+        key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
     ) -> None:
         for metric in self.metrics:
             arguments_helpers.raise_if_score_arguments_are_missing(

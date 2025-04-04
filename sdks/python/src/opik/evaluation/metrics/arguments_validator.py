@@ -13,8 +13,8 @@ class ScoreArgumentsValidator(abc.ABC):
     @abc.abstractmethod
     def validate_score_arguments(
         self,
-        key_mapping: evaluation_types.ScoringKeyMappingType,
         score_kwargs: Dict[str, Any],
+        key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
     ) -> None:
         """The subclasses must implement this method to provide actual validation logic."""
         pass
