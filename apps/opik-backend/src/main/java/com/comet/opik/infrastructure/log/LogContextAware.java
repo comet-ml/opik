@@ -2,12 +2,15 @@ package com.comet.opik.infrastructure.log;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.UtilityClass;
 import org.slf4j.MDC;
 
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
+@UtilityClass
 public class LogContextAware {
 
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
@@ -38,17 +41,32 @@ public class LogContextAware {
         };
     }
 
-    public static <T> Consumer<T> wrapWithMdc(Consumer<T> task) {
-        var contextMap = MDC.getCopyOfContextMap(); // capture from current thread
+    public static <T> Predicate<T> wrapFilterWithMdc(Predicate<T> task) {
+        var contextMap = MDC.getCopyOfContextMap();
         return item -> {
             if (contextMap != null) {
-                MDC.setContextMap(contextMap); // set in worker thread
+                MDC.setContextMap(contextMap);
+            }
+
+            try {
+                return task.test(item);
+            } finally {
+                MDC.clear();
+            }
+        };
+    }
+
+    public static <T> Consumer<T> wrapWithMdc(Consumer<T> task) {
+        var contextMap = MDC.getCopyOfContextMap();
+        return item -> {
+            if (contextMap != null) {
+                MDC.setContextMap(contextMap);
             }
 
             try {
                 task.accept(item);
             } finally {
-                MDC.clear(); // always clear to prevent leakage
+                MDC.clear();
             }
         };
     }

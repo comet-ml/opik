@@ -22,7 +22,6 @@ import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import org.slf4j.Logger;
-import org.slf4j.MDC;
 import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -34,6 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapFilterWithMdc;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithClosableMdc;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
@@ -117,7 +117,8 @@ public class OnlineScoringSampler {
                 //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
                 evaluators.parallelStream().forEach(wrapWithMdc(evaluator -> {
                     // samples traces for this rule
-                    var samples = traces.stream().filter(trace -> shouldSampleTrace(evaluator, trace));
+                    var samples = traces.stream()
+                            .filter(wrapFilterWithMdc(trace -> shouldSampleTrace(evaluator, trace)));
                     switch (evaluator.getType()) {
                         case LLM_AS_JUDGE -> {
                             var messages = samples
@@ -150,8 +151,9 @@ public class OnlineScoringSampler {
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?> evaluator, Trace trace) {
         var shouldBeSampled = secureRandom.nextFloat() < evaluator.getSamplingRate();
         if (!shouldBeSampled) {
-            try (var ruleScope = MDC.putCloseable("rule_id", evaluator.getId().toString());
-                    var traceScope = MDC.putCloseable("trace_id", trace.id().toString())) {
+            try (var logContext = wrapWithClosableMdc(Map.of("rule_id", evaluator.getId().toString(),
+                    "trace_id", trace.id().toString()))) {
+
                 userFacingLogger.info(
                         "The traceId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
                         trace.id(), evaluator.getName(), evaluator.getSamplingRate());
