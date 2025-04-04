@@ -70,13 +70,13 @@ export type GuardrailsState = Record<
   GuardrailType,
   Pick<GuardrailConfig, "threshold" | "entities" | "enabled">
 >;
-export const guardrailsDefaultState: GuardrailsState = Object.keys(
-  guardrailsMap,
+export const guardrailsDefaultState: GuardrailsState = (
+  Object.keys(guardrailsMap) as GuardrailType[]
 ).reduce<GuardrailsState>((acc, key) => {
-  acc[key as GuardrailType] = {
-    threshold: guardrailsMap[key as GuardrailType].threshold,
-    entities: guardrailsMap[key as GuardrailType].entities,
-    enabled: guardrailsMap[key as GuardrailType].enabled,
+  acc[key] = {
+    threshold: guardrailsMap[key].threshold,
+    entities: guardrailsMap[key].entities,
+    enabled: guardrailsMap[key].enabled,
   };
   return acc;
 }, {} as GuardrailsState);

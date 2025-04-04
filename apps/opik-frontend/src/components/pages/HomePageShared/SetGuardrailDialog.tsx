@@ -13,6 +13,9 @@ import {
 } from "./guardrailsConfig";
 import { useGuardrailConfigState } from "./useGuardrailConfigState";
 
+// TODO: Replace with Guardrails docs
+const GUARDRAIL_DOCS_LINK = "https://www.comet.com/docs/opik?from=llm";
+
 type SetGuardrailDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -32,21 +35,20 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
     getEnabledGuardrailTypes,
   } = useGuardrailConfigState();
 
-  const enabledGuardrailsKeys = getEnabledGuardrailTypes();
+  const enabledGuardrailsKeys = getEnabledGuardrailTypes() as GuardrailType[];
   const importCodeNames = enabledGuardrailsKeys.map(
-    (key) => guardrailsMap[key as GuardrailType].codeImportName,
+    (key) => guardrailsMap[key].codeImportName,
   );
   const codeList = enabledGuardrailsKeys.map((key) =>
-    guardrailsMap[key as GuardrailType].codeBuilder(
-      guardrailsState[key as GuardrailType].entities
-        .map((v) => v.trim())
-        .filter((v) => v),
-      guardrailsState[key as GuardrailType].threshold,
+    guardrailsMap[key].codeBuilder(
+      guardrailsState[key].entities.map((v) => v.trim()).filter((v) => v),
+      guardrailsState[key].threshold,
     ),
   );
 
   const TOPIC_GUARDRAIL_CONFIG = guardrailsMap[GuardrailTypes.TOPIC];
   const PII_GUARDRAIL_CONFIG = guardrailsMap[GuardrailTypes.PII];
+
   const TOPIC_GUARDRAIL_STATE = guardrailsState[GuardrailTypes.TOPIC];
   const PII_GUARDRAIL_STATE = guardrailsState[GuardrailTypes.PII];
 
@@ -113,8 +115,7 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
             <ApiKeyCard />
             <DocsLinkCard
               description="Learn how to configure your guardrails in our docs."
-              // TODO: Replace with Guardrails docs
-              link="https://www.comet.com/docs/opik?from=llm"
+              link={GUARDRAIL_DOCS_LINK}
             />
           </div>
         </div>

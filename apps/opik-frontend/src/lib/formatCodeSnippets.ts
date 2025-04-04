@@ -58,10 +58,10 @@ export const getConfigCode = (
     withHighlight,
   );
   const projectNameConfig = projectName
-    ? buildProjectNameConfig(projectName)
+    ? `\n${buildProjectNameConfig(projectName)}`
     : "";
 
-  return `${apiKeyConfig} \n${workspaceConfig} \n${projectNameConfig}`;
+  return `${apiKeyConfig} \n${workspaceConfig}${projectNameConfig}`;
 };
 
 export const putConfigInCode = ({
