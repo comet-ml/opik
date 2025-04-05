@@ -11,11 +11,11 @@ from opik.evaluation import (
     test_case,
     test_result,
 )
-from opik.evaluation.metrics import arguments_helpers, base_metric, score_result
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers
 from .types import EvaluationTask
+from ..metrics import arguments_validator, arguments_helpers, base_metric, score_result
 
 LOGGER = logging.getLogger(__name__)
 
@@ -49,9 +49,8 @@ class EvaluationEngine:
         for metric in self._scoring_metrics:
             try:
                 score_kwargs = test_case_.scoring_inputs
-                arguments_helpers.raise_if_score_arguments_are_missing(
-                    score_function=metric.score,
-                    score_name=metric.name,
+                arguments_validator.validate_score_arguments(
+                    metric=metric,
                     kwargs=score_kwargs,
                     scoring_key_mapping=self._scoring_key_mapping,
                 )

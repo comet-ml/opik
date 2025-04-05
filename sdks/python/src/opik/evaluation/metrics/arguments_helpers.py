@@ -3,7 +3,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from opik import exceptions
-from opik.evaluation.types import ScoringKeyMappingType
+from .. import types as evaluation_types
 
 LOGGER = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ def raise_if_score_arguments_are_missing(
     score_function: Callable,
     score_name: str,
     kwargs: Dict[str, Any],
-    scoring_key_mapping: Optional[ScoringKeyMappingType],
+    scoring_key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
 ) -> None:
     signature = inspect.signature(score_function)
 
@@ -56,7 +56,7 @@ def raise_if_score_arguments_are_missing(
 def create_scoring_inputs(
     dataset_item: Dict[str, Any],
     task_output: Dict[str, Any],
-    scoring_key_mapping: Optional[ScoringKeyMappingType],
+    scoring_key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
 ) -> Dict[str, Any]:
     mapped_inputs = {**dataset_item, **task_output}
 
