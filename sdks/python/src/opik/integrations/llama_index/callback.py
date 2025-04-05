@@ -5,7 +5,7 @@ import uuid
 from llama_index.core.callbacks import schema as llama_index_schema
 from llama_index.core.callbacks import base_handler
 
-from opik import opik_context
+from opik import opik_context, datetime_helpers
 from opik.api_objects import opik_client, span, trace
 
 from . import event_parsing_utils
@@ -25,6 +25,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             event_starts_to_ignore if event_starts_to_ignore else []
         )
         event_ends_to_ignore = event_ends_to_ignore if event_ends_to_ignore else []
+        print("LlamaIndexCallbackHandler", locals())
         super().__init__(
             event_starts_to_ignore=event_starts_to_ignore,
             event_ends_to_ignore=event_ends_to_ignore,
@@ -40,6 +41,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
         self._map_event_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_event_id_to_output: Dict[str, Any] = {}
+        self._events_without_output_span_ids: Dict[str, Any] = {}
 
     def _create_trace_data(self, trace_name: Optional[str]) -> trace.TraceData:
         trace_data = trace.TraceData(
@@ -71,12 +73,20 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         trace_id: Optional[str] = None,
         trace_map: Optional[Dict[str, List[str]]] = None,
     ) -> None:
+        print("END TRACE", trace_id)
         if not trace_map:
             return
 
         # When a trace finishes, we first get the last event output
         last_event = self._get_last_event(trace_map)
         last_event_output = self._map_event_id_to_output.get(last_event, None)
+
+        for event_id, span_data in self._map_event_id_to_span_data.items():
+            span_id = self._opik_client.span(**span_data.__dict__)
+            self._events_without_output_span_ids[event_id] = (
+                span_id.id,
+                self._opik_trace_data.id,
+            )
 
         # And then end the trace with the optional output
         if self._opik_trace_data:
@@ -95,6 +105,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         parent_id: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
+        print("ON EVENT START", event_type)
         if not event_id:
             event_id = str(uuid.uuid4())
 
@@ -145,6 +156,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         event_id: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
+        print()
+        print("#" * 80)
+        print("ON EVENT STOP", event_type)
         # Get the span output from the event and store it so we can use it if needed
         # when finishing the trace
         span_output = event_parsing_utils.get_span_output_from_event(
@@ -162,6 +176,25 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
                 span_data.update(output=span_output).init_end_time()
                 self._opik_client.span(**span_data.__dict__)
+
+                del self._map_event_id_to_span_data[event_id]
+            # Orphaned events where the output was received after end_trace
+            # was called, this can happen for streaming LLM calls
+            elif event_id in self._events_without_output_span_ids:
+                span_id, trace_id = self._events_without_output_span_ids[event_id]
+
+                import time
+
+                time.sleep(10)
+                print("UPDATE", trace_id, span_id, span_output)
+                self._opik_client._rest_client.spans.update_span(
+                    trace_id=trace_id,
+                    id=span_id,
+                    output=span_output,
+                    end_time=datetime_helpers.local_timestamp(),
+                )
+
+                pass
 
     def flush(self) -> None:
         """Sends pending Opik data to the backend"""
