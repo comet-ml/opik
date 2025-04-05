@@ -2,7 +2,7 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, TypeVar, Union
 
 import httpx
 
@@ -32,6 +32,7 @@ from . import (
     trace,
     validation_helpers,
 )
+from . import rest_stream_parser
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
@@ -40,6 +41,8 @@ from .prompt.client import PromptClient
 from .trace import migration as trace_migration
 
 LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 class Opik:
@@ -248,7 +251,7 @@ class Opik:
 
         Note: This method is not optimized for large projects, if you run into any issues please raise
         an issue on GitHub. In addition, be aware that deleting traces that are linked to experiments
-        will lead to inconsistancies in the UI.
+        will lead to inconsistencies in the UI.
 
         Args:
             project_name: The name of the project to copy traces from.
@@ -878,7 +881,7 @@ class Opik:
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
-        metadata, tags, etc or based on the trace ID.
+        metadata, tags, etc. or based on the trace ID.
 
         Args:
             project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -887,29 +890,38 @@ class Opik:
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output or metadata
         """
-        page_size = 100
         spans: List[span_public.SpanPublic] = []
 
-        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+        filter_expressions = opik_query_language.OpikQueryLanguage(
+            filter_string
+        ).get_filter_expressions()
+        filters = helpers.parse_search_span_expressions(filter_expressions)
 
-        page = 1
+        # this is the constant for maximum object sent from backend side
+        max_endpoint_batch_size = 2_000
+
         while len(spans) < max_results:
-            page_spans = self._rest_client.spans.get_spans_by_project(
-                project_name=project_name or self._project_name,
+            spans_amount_left = max_results - len(spans)
+            current_batch_size = min(spans_amount_left, max_endpoint_batch_size)
+
+            spans_stream = self._rest_client.spans.search_spans(
                 trace_id=trace_id,
+                project_name=project_name or self._project_name,
                 filters=filters,
-                page=page,
-                size=page_size,
+                limit=current_batch_size,
                 truncate=truncate,
+                last_retrieved_id=spans[-1].id if len(spans) > 0 else None,
             )
 
-            if len(page_spans.content) == 0:
+            new_spans = rest_stream_parser.read_and_parse_stream(
+                stream=spans_stream, item_class=span_public.SpanPublic
+            )
+            if len(new_spans) == 0:
                 break
 
-            spans.extend(page_spans.content)
-            page += 1
+            spans.extend(new_spans)
 
-        return spans[:max_results]
+        return spans
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
