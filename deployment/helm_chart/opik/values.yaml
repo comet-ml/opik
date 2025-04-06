@@ -18,7 +18,6 @@ demoDataJob: true
 component:
   backend:
     enabled: true
-    run_migration: true
     serviceAccount:
       create: true
     metrics:
@@ -32,6 +31,7 @@ component:
       enabled: false
     backendConfigMap:
       enabled: true
+    run_migration: true
     waitForClickhouse:
       enabled: true
       clickhouse:
@@ -41,7 +41,6 @@ component:
       image:
         repository: curlimages/curl
         tag: 8.12.1
-    extraInitContainers: []
     livenessProbe:
       path: /health-check?name=all&type=alive
       port:  8080
