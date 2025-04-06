@@ -33,12 +33,12 @@ component:
       enabled: true
     run_migration: true
     waitForClickhouse:
-      enabled: true
       clickhouse:
         host: clickhouse-opik-clickhouse
         port: 8123
         protocol: http
       image:
+        registry: docker.io
         repository: curlimages/curl
         tag: 8.12.1
     livenessProbe:
