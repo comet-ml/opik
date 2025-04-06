@@ -163,7 +163,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForClickhouse.clickhouse.host | string | `"clickhouse-opik-clickhouse"` |  |
 | component.backend.waitForClickhouse.clickhouse.port | int | `8123` |  |
 | component.backend.waitForClickhouse.clickhouse.protocol | string | `"http"` |  |
-| component.backend.waitForClickhouse.enabled | bool | `true` |  |
+| component.backend.waitForClickhouse.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
 | component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
