@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans1
     `trace_id` FixedString(36),
     `parent_span_id` String DEFAULT '',
     `name` String,
-    `type` Enum8('unknown' = 0, 'general' = 1, 'tool' = 2, 'llm' = 3),
+    `type` Enum8('unknown' = 0, 'general' = 1, 'tool' = 2, 'llm' = 3, 'guardrail' = 4),
     `start_time` DateTime64(9, 'UTC') DEFAULT now64(9),
     `end_time` Nullable(DateTime64(9, 'UTC')),
     `input` String DEFAULT '',
