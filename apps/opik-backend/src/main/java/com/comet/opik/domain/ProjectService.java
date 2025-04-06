@@ -560,6 +560,7 @@ class ProjectServiceImpl implements ProjectService {
                         UUID projectId = idGenerator.generateId();
                         var newProject = Project.builder()
                                 .name(projectName)
+                                .visibility(ProjectVisibility.PRIVATE)
                                 .id(projectId)
                                 .createdBy(userName)
                                 .lastUpdatedBy(userName)
