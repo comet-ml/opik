@@ -4,7 +4,6 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
-import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
@@ -18,10 +17,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
@@ -106,7 +102,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .collect(groupingBy(FeedbackScoreBatchItem::projectName));
 
         return projectService.retrieveByNamesOrCreate(scoresPerProject.keySet())
-                .map(this::groupByName)
+                .map(ProjectService::groupByName)
                 .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
                 .flatMap(projects -> processScoreBatch(entityType, projects, scores.size())) // score all scores
                 .then();
@@ -134,14 +130,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                                     .toList());
                 })
                 .toList();
-    }
-
-    private Map<String, Project> groupByName(List<Project> projects) {
-        return projects.stream().collect(Collectors.toMap(
-                Project::name,
-                Function.identity(),
-                BinaryOperatorUtils.last(),
-                () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
     }
 
     @Override

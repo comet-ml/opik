@@ -94,6 +94,14 @@ public interface ProjectService {
 
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
+
+    static Map<String, Project> groupByName(List<Project> projects) {
+        return projects.stream().collect(Collectors.toMap(
+                Project::name,
+                Function.identity(),
+                BinaryOperatorUtils.last(),
+                () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
+    }
 }
 
 @Slf4j
@@ -546,7 +554,7 @@ class ProjectServiceImpl implements ProjectService {
     private void checkIfNeededToCreateProjects(Set<String> projectNames,
             String userName, String workspaceId) {
 
-        Map<String, Project> projectsPerLowerCaseName = groupByName(
+        Map<String, Project> projectsPerLowerCaseName = ProjectService.groupByName(
                 getAllProjectsByName(workspaceId, projectNames));
 
         template.inTransaction(WRITE, handle -> {
@@ -579,13 +587,5 @@ class ProjectServiceImpl implements ProjectService {
 
             return null;
         });
-    }
-
-    private Map<String, Project> groupByName(List<Project> projects) {
-        return projects.stream().collect(Collectors.toMap(
-                Project::name,
-                Function.identity(),
-                BinaryOperatorUtils.last(),
-                () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
     }
 }
