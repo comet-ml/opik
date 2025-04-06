@@ -1,0 +1,85 @@
+[LangChainJS](https://js.langchain.com/docs/introduction/) is the Javascript package for LangChain which allows you to develop
+applications powered by Large Language Models.
+
+Opik provides an integration that allows you to log all your chain executions to
+the Opik dashboard, making it easier to debug your chains and monitor your
+applicaation in production.
+
+<Note>
+  If you are using the Python LangChain package, refer to [this integration guide](/tracing/integrations/langchain)
+</Note>
+
+## Getting Started
+
+To use Opik with LangChainJS, make sure you have the following installed:
+
+```bash
+npm install langchain @langchain/core opik-langchain
+```
+
+In addition you will need to set the following environment variables to make
+sure the data is logged to Opik if you are using the Cloud platform:
+
+```bash
+export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
+export OPIK_API_KEY=<your-api-key>
+export OPIK_WORKSPACE_NAME=<your-workspace-name>
+```
+
+## Logging a chain
+
+In order to log a chain, you will need to create the Opik callback:
+
+```js
+import { OpikCallbackHandler } from "opik-langchain";
+
+const opikCallback = new OpikCallbackHandler();
+```
+
+You can then use this callback in your LangChain chain:
+
+```js {3,15,19}
+import { OpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { OpikCallbackHandler } from "opik/langchain";
+
+// This is just a demo that doesn't require API key
+const model = new OpenAI({
+  temperature: 0.9,
+});
+
+const prompt = PromptTemplate.fromTemplate("What is a good name for a company that makes {product}?");
+
+const chain = prompt.pipe(model);
+const opikHandler = new OpikCallbackHandler();
+
+const result = await chain.invoke({ product: "colorful socks" }, { callbacks: [opikHandler] });
+```
+
+## Settings tags and metadata
+
+You can also customize the `OpikCallbackHandler` to include additional metadata,
+tags. For example:
+
+```js {pytest_codeblocks_skip=true}
+const opikHandler = new OpikCallbackHandler({
+  tags: ["langchain"],
+  metadata: { "use-case": "documentation-example" },
+});
+```
+
+## Logging to a specific project
+
+You can also log to a specific project by setting the `project` parameter:
+
+```js {pytest_codeblocks_skip=true}
+const opikHandler = new OpikCallbackHandler({
+  projectName: "my-project",
+});
+```
+
+Or alternatively, you can use the environment variable:
+
+```bash
+export OPIK_PROJECT_NAME="my-project"
+```
