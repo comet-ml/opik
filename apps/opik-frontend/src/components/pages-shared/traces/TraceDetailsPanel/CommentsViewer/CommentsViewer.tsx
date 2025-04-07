@@ -12,7 +12,7 @@ import { LastSectionValue } from "../TraceDetailsPanel";
 import UserComment from "../../UserComment/UserComment";
 import LastSectionLayout from "../LastSectionLayout";
 import { orderBy } from "lodash";
-import { useActiveUserName } from "@/store/AppStore";
+import { useLoggedInUserName } from "@/store/AppStore";
 
 export type CommentsViewerProps = {
   data: Trace | Span;
@@ -40,7 +40,7 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
   const updateSpanMutation = useUpdateSpanCommentMutation();
   const updateTraceMutation = useUpdateTraceCommentMutation();
 
-  const userName = useActiveUserName();
+  const userName = useLoggedInUserName();
 
   const onSubmit = (text: string) => {
     if (!spanId) {

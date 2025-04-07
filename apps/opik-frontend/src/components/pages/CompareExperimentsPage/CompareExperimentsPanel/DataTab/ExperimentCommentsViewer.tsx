@@ -10,7 +10,7 @@ import UserComment from "@/components/pages-shared/traces/UserComment/UserCommen
 import { ArrayParam, useQueryParam } from "use-query-params";
 import { Button } from "@/components/ui/button";
 import { Maximize2, MessageSquareMore, Minimize2 } from "lucide-react";
-import { useActiveUserName } from "@/store/AppStore";
+import { useLoggedInUserName } from "@/store/AppStore";
 
 export type ExperimentCommentsViewerProps = {
   comments?: CommentItems;
@@ -28,7 +28,7 @@ const ExperimentCommentsViewer: React.FC<ExperimentCommentsViewerProps> = ({
       updateType: "replaceIn",
     });
   const currentSectionIdx = String(sectionIdx);
-  const userName = useActiveUserName();
+  const userName = useLoggedInUserName();
 
   const isExpanded = expandedCommentSections?.includes(currentSectionIdx);
   const toggleIsExpanded = () => {

@@ -1,8 +1,8 @@
 import ApiKeyInput from "@/components/shared/ApiKeyInput/ApiKeyInput";
-import { useActiveUserApiKey } from "@/store/AppStore";
+import { useUserApiKey } from "@/store/AppStore";
 
 const ApiKeyCard = () => {
-  const apiKey = useActiveUserApiKey();
+  const apiKey = useUserApiKey();
 
   if (!apiKey) {
     return null;

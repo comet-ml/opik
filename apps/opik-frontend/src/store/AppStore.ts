@@ -1,20 +1,23 @@
 import { create } from "zustand";
 import axiosInstance from "@/api/api";
+import { DEFAULT_USERNAME, isDefaultUser } from "@/constants/user";
 
-type ActiveUser = {
-  apiKeys: string[];
-  defaultWorkspace: string;
+type AppUser = {
+  apiKey: string;
   userName: string;
 };
 type AppStore = {
-  activeUser: ActiveUser | null;
+  user: AppUser;
   activeWorkspaceName: string;
   setActiveWorkspaceName: (workspaceName: string) => void;
-  setActiveUser: (user: ActiveUser) => void;
+  setUser: (user: AppUser) => void;
 };
 
 const useAppStore = create<AppStore>((set) => ({
-  activeUser: null,
+  user: {
+    apiKey: "",
+    userName: DEFAULT_USERNAME,
+  },
   activeWorkspaceName: "",
   setActiveWorkspaceName: (workspaceName) => {
     axiosInstance.defaults.headers.common["Comet-Workspace"] = workspaceName;
@@ -23,18 +26,17 @@ const useAppStore = create<AppStore>((set) => ({
       activeWorkspaceName: workspaceName,
     }));
   },
-  setActiveUser: (user: ActiveUser) =>
-    set((state) => ({ ...state, activeUser: user })),
+  setUser: (user: AppUser) => set((state) => ({ ...state, user })),
 }));
 
 export const useActiveWorkspaceName = () =>
   useAppStore((state) => state.activeWorkspaceName);
-export const useActiveUserName = () =>
-  useAppStore((state) => state.activeUser?.userName);
-export const useActiveUserApiKey = () =>
-  useAppStore((state) => state.activeUser?.apiKeys[0]);
+export const useLoggedInUserName = () =>
+  useAppStore((state) =>
+    isDefaultUser(state.user.userName) ? undefined : state.user.userName,
+  );
+export const useUserApiKey = () => useAppStore((state) => state.user.apiKey);
 
-export const useSetActiveUser = () =>
-  useAppStore((state) => state.setActiveUser);
+export const useSetAppUser = () => useAppStore((state) => state.setUser);
 
 export default useAppStore;

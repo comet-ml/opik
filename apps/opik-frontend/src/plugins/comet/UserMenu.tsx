@@ -35,7 +35,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
-import useAppStore, { useSetActiveUser } from "@/store/AppStore";
+import useAppStore, { useSetAppUser } from "@/store/AppStore";
 import api from "./api";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
@@ -51,7 +51,7 @@ const UserMenu = () => {
   const { toast } = useToast();
   const [openQuickstart, setOpenQuickstart] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const setActiveUser = useSetActiveUser();
+  const setAppUser = useSetAppUser();
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -80,9 +80,12 @@ const UserMenu = () => {
 
   useEffect(() => {
     if (user && user.loggedIn) {
-      setActiveUser(user);
+      setAppUser({
+        apiKey: user.apiKeys[0],
+        userName: user.userName,
+      });
     }
-  }, [user, setActiveUser]);
+  }, [user, setAppUser]);
 
   if (
     !user ||

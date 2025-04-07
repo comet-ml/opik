@@ -1,6 +1,6 @@
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
-import useAppStore, { useActiveUserApiKey } from "@/store/AppStore";
+import useAppStore, { useUserApiKey } from "@/store/AppStore";
 
 export type CreateExperimentCodeProps = {
   code: string;
@@ -8,7 +8,7 @@ export type CreateExperimentCodeProps = {
 const CreateExperimentCode: React.FC<CreateExperimentCodeProps> = ({
   code,
 }) => {
-  const apiKey = useActiveUserApiKey();
+  const apiKey = useUserApiKey();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { code: codeWithConfig } = putConfigInCode({
     code,

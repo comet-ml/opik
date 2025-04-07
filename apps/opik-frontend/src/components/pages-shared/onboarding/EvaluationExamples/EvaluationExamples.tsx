@@ -7,7 +7,7 @@ import IntegrationListLayout from "../IntegrationListLayout/IntegrationListLayou
 import IntegrationTabs from "../IntegrationTabs/IntegrationTabs";
 import IntegrationTemplate from "../FrameworkIntegrations/IntegrationTemplate";
 import UsingPlaygroundTab from "./UsingPlaygroundTab";
-import { useActiveUserApiKey } from "@/store/AppStore";
+import { useUserApiKey } from "@/store/AppStore";
 
 type TabValue = "evaluate-prompts" | "evaluate-llm" | "using-playground";
 type TabItem = {
@@ -35,7 +35,7 @@ const tabList: TabItem[] = [
 
 const EvaluationExamples: React.FC = () => {
   const [exampleTab, setExampleTab] = useState<TabValue>(tabList[0].value);
-  const apiKey = useActiveUserApiKey();
+  const apiKey = useUserApiKey();
 
   const tabContentMap: Record<TabValue, JSX.Element> = {
     "evaluate-prompts": (

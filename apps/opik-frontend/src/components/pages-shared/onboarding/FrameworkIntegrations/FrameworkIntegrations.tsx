@@ -11,7 +11,7 @@ import {
 } from "./quickstart-integrations";
 import IntegrationListLayout from "../IntegrationListLayout/IntegrationListLayout";
 import IntegrationTabs from "../IntegrationTabs/IntegrationTabs";
-import { useActiveUserApiKey } from "@/store/AppStore";
+import { useUserApiKey } from "@/store/AppStore";
 
 export type FrameworkIntegrationsProps = {
   integrationList?: FrameworkIntegration[];
@@ -23,7 +23,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
 }) => {
   const [integrationIndex, setIntegrationIndex] = useState<number>(0);
   const integration = integrationList[integrationIndex];
-  const apiKey = useActiveUserApiKey();
+  const apiKey = useUserApiKey();
 
   return (
     <IntegrationListLayout
