@@ -308,9 +308,9 @@ import opik
 
 # Get the experiment
 opik_client = opik.Opik()
-experiment = opik_client.get_experiment_by_name("My experiment")
+experiments = opik_client.get_experiments_by_name("My experiment")
 
-# Access the experiment content
-items = experiment.get_items()
+# Access the first experiment content
+items = experiments[0].get_items()
 print(items)
 ```
