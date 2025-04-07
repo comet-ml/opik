@@ -13,7 +13,7 @@ import { Link } from "@tanstack/react-router";
 import { SheetTitle } from "@/components/ui/sheet";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
-import { FeatureToggleKey } from "@/types/feature-toggles";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -22,7 +22,9 @@ const GetStartedSection = () => {
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
   const [isLogTraceDialogOpened, setIsLogTraceDialogOpened] = useState(false);
-  const isGuardrailsEnabled = useIsFeatureEnabled(FeatureToggleKey.GUARDRAILS);
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
 
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
   const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);

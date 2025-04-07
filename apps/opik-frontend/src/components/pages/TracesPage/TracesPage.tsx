@@ -15,13 +15,15 @@ import { Construction } from "lucide-react";
 import { useState } from "react";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
-import { FeatureToggleKey } from "@/types/feature-toggles";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
-  const isGuardrailsEnabled = useIsFeatureEnabled(FeatureToggleKey.GUARDRAILS);
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
 
   const [type = TRACE_DATA_TYPE.traces, setType] = useQueryParam(
     "type",

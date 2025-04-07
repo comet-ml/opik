@@ -1,9 +1,6 @@
-export interface FeatureToggles {
-  python_evaluator_enabled: boolean;
-  guardrails_enabled: boolean;
-}
+export type FeatureToggles = Record<FeatureToggleKeys, boolean>;
 
-export enum FeatureToggleKey {
-  PYTHON_EVALUATOR = "python_evaluator_enabled",
-  GUARDRAILS = "guardrails_enabled",
+export enum FeatureToggleKeys {
+  PYTHON_EVALUATOR_ENABLED = "python_evaluator_enabled",
+  GUARDRAILS_ENABLED = "guardrails_enabled",
 }
