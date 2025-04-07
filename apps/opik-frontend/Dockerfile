@@ -23,7 +23,6 @@ ENV NODE_OPTIONS="--max-old-space-size=8192"
 ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
-
 # Production stage
 FROM nginx:1.27.4-alpine3.21
 
