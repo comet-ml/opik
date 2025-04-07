@@ -13,8 +13,8 @@ import {
 } from "./guardrailsConfig";
 import { useGuardrailConfigState } from "./useGuardrailConfigState";
 
-// TODO: Replace with Guardrails docs
-const GUARDRAIL_DOCS_LINK = "https://www.comet.com/docs/opik?from=llm";
+const GUARDRAIL_DOCS_LINK =
+  "https://www.comet.com/docs/opik/production/guardrails";
 
 type SetGuardrailDialogProps = {
   open: boolean;
@@ -96,7 +96,6 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
                 onChange={(v) => updateThreshold(GuardrailTypes.PII, v)}
               />
               <GuardrailConfig.RestrictedList
-                id={`${PII_GUARDRAIL_CONFIG.id}-list`}
                 value={PII_GUARDRAIL_STATE.entities}
                 onChange={(v) => updateEntities(GuardrailTypes.PII, v)}
               />

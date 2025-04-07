@@ -51,13 +51,11 @@ const restrictedLabelMap = {
   [PiiSupportedEntities.URL]: "URL",
 };
 type RestrictedListProps = {
-  id: string;
   value: string[];
   label?: string;
   onChange: (v: string[]) => void;
 };
 const RestrictedList: React.FC<RestrictedListProps> = ({
-  id,
   value,
   label = "Restricted personal data",
   onChange,
@@ -75,13 +73,13 @@ const RestrictedList: React.FC<RestrictedListProps> = ({
   return (
     <div className="grid w-full">
       <p className="comet-body-s-accented flex h-10 items-center">{label}</p>
-      {restrictedLabelList.map((label, idx) => (
+      {restrictedLabelList.map((label) => (
         <Label
-          key={id + idx}
+          key={label}
           className="flex h-10 cursor-pointer items-center gap-2"
         >
           <Checkbox
-            id={id + idx}
+            id={label}
             checked={value.includes(label)}
             onCheckedChange={(v) => onCheckedChange(v, label)}
           />
@@ -104,7 +102,7 @@ type TopicsListProps = {
 const TopicsList: React.FC<TopicsListProps> = ({
   id,
   value,
-  label = "Denied topics",
+  label = "Restricted topics",
   onChange,
 }) => {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);

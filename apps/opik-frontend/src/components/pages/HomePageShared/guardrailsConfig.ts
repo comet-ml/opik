@@ -37,7 +37,7 @@ export const guardrailsMap: Record<GuardrailType, GuardrailConfig> = {
     hintText:
       "The topic guardrail is designed to prevent the model from generating responses on certain topics that might be inappropriate, unsafe, unethical, or outside its intended scope.",
     enabled: true,
-    threshold: 0.5,
+    threshold: 0.8,
     entities: [],
     codeImportName: "Topic",
     codeBuilder(entities, threshold) {
@@ -52,7 +52,7 @@ export const guardrailsMap: Record<GuardrailType, GuardrailConfig> = {
     hintText:
       "The PII (Personally Identifiable Information) guardrail is designed to prevent the model from generating, storing, or processing sensitive personal data that could identify individuals.",
     enabled: true,
-    threshold: 0.8,
+    threshold: 0.5,
     entities: [
       PiiSupportedEntities.CREDIT_CARD,
       PiiSupportedEntities.PHONE_NUMBER,
