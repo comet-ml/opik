@@ -8,6 +8,7 @@ import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -117,7 +118,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         return Mono.just(rowsUpdated);
                     }
 
-                    return Mono.error(failWithNotFound("Error while processing scores batch"));
+                    log.error("Error while processing scores batch. actualBatchSize={}, rowsUpdated={}",
+                            actualBatchSize, rowsUpdated);
+                    return Mono.error(new InternalServerErrorException("Error while processing scores batch"));
                 });
     }
 
