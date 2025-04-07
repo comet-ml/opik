@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing_extensions import override
 
 from ..api_objects import opik_client, span
 from . import arguments_helpers, base_track_decorator, inspect_helpers
@@ -12,6 +13,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
     Default implementation of BaseTrackDecorator
     """
 
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -42,6 +44,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -57,6 +60,7 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _streams_handler(
         self,
         output: Any,
