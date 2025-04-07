@@ -36,10 +36,10 @@ class AggregatedMetric(
         if aggregator is None:
             raise ValueError("No aggregator provided")
 
-    def score(self, *args: Any, **kwargs: Any) -> score_result.ScoreResult:
+    def score(self, **kwargs: Any) -> score_result.ScoreResult:
         score_results: List[score_result.ScoreResult] = []
         for metric in self.metrics:
-            metric_result = metric.score(*args, **kwargs)
+            metric_result = metric.score(**kwargs)
             if isinstance(metric_result, list):
                 score_results.extend(metric_result)
             else:
