@@ -35,8 +35,8 @@ else
 fi
 
 echo "Starting the Opik Python Backend server"
-gunicorn --access-logfile '-' \
+opentelemetry-instrument gunicorn --access-logfile '-' \
          --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
          --workers 4 \
          --bind=0.0.0.0:8000 \
-         --chdir ./src 'opik_backend:create_app()' 
+         --chdir ./src 'opik_backend:create_app()'

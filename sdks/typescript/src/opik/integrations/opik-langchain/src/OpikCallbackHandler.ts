@@ -1,13 +1,10 @@
-import { logger } from "@/utils/logger";
 import {
   BaseCallbackHandler,
   BaseCallbackHandlerInput,
 } from "@langchain/core/callbacks/base";
 import { Serialized } from "@langchain/core/load/serializable";
 import { ChainValues } from "@langchain/core/utils/types";
-import { OpikClient } from "@/client/Client";
-import { Opik, Span, Trace } from "opik";
-import { OpikApi } from "@/rest_api";
+import { Opik, Span, Trace, logger, SpanType } from "opik";
 import {
   extractCallArgs,
   inputFromChainValues,
@@ -17,39 +14,39 @@ import {
   outputFromToolOutput,
   safeParseSerializedJson,
 } from "./utils";
-import { SpanType } from "@/rest_api/api";
 import { RunnableConfig } from "@langchain/core/runnables";
 import { ChatResult, LLMResult } from "@langchain/core/outputs";
 import { BaseMessage } from "@langchain/core/messages";
 import { AgentAction, AgentFinish } from "@langchain/core/agents";
 
+type JsonNode = Record<string, unknown>;
 export interface OpikCallbackHandlerOptions {
   tags?: [];
-  metadata?: OpikApi.JsonNode;
+  metadata?: JsonNode;
   projectName?: string;
-  client?: OpikClient;
+  client?: Opik;
 }
 
 type StartTracingArgs = {
   runId: string;
   parentRunId?: string;
   name: string;
-  input: OpikApi.JsonNode;
+  input: JsonNode;
   tags?: string[];
-  metadata?: OpikApi.JsonNode & {
+  metadata?: JsonNode & {
     ls_provider?: string;
     ls_model_name?: string;
   };
-  type?: OpikApi.SpanType;
+  type?: SpanType;
 };
 
 type EndTracingArgs = {
   runId: string;
-  output?: OpikApi.JsonNode;
+  output?: JsonNode;
   tags?: string[];
   error?: Error;
   usage?: Record<string, number>;
-  metadata?: OpikApi.JsonNode;
+  metadata?: JsonNode;
 };
 
 export class OpikCallbackHandler
@@ -59,7 +56,7 @@ export class OpikCallbackHandler
   name = "OpikCallbackHandler";
 
   private options: OpikCallbackHandlerOptions;
-  private client: OpikClient;
+  private client: Opik;
   private rootTraceId?: string;
   private rootTrace?: Trace;
   private spansMap: Map<string, Span> = new Map();
