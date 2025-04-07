@@ -53,7 +53,6 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.api.attachment.EntityType.TRACE;
-import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)

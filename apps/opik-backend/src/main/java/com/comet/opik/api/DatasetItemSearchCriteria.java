@@ -1,7 +1,7 @@
 package com.comet.opik.api;
 
 import com.comet.opik.api.filter.Filter;
-import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.EntityType;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -13,7 +13,7 @@ import java.util.UUID;
 public record DatasetItemSearchCriteria(
         @NonNull UUID datasetId,
         @NonNull Set<UUID> experimentIds,
-        @NonNull FeedbackScoreDAO.EntityType entityType,
+        @NonNull EntityType entityType,
         List<? extends Filter> filters,
         boolean truncate) {
 }

@@ -447,7 +447,7 @@ class ExperimentDAO {
 
     private Publisher<? extends Result> get(String query, Connection connection, Function<Statement, Statement> bind) {
         var statement = connection.createStatement(query)
-                .bind("entity_type", FeedbackScoreDAO.EntityType.TRACE.getType());
+                .bind("entity_type", EntityType.TRACE.getType());
         return makeFluxContextAware(bindWorkspaceIdToFlux(bind.apply(statement)));
     }
 
