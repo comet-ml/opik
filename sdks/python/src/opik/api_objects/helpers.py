@@ -6,8 +6,8 @@ from opik import llm_usage
 
 from .. import config, datetime_helpers, logging_messages
 from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
-from ..rest_api.types import span_filter_public as rest_api_types
-from ..rest_api.core import IS_PYDANTIC_V2
+from ..rest_api import types as rest_api_types
+from ..rest_api import core as rest_api_core
 
 LOGGER = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def parse_search_span_expressions(
     if filter_expressions is None:
         return None
 
-    if IS_PYDANTIC_V2:
+    if rest_api_core.IS_PYDANTIC_V2:
         return [
             rest_api_types.SpanFilterPublic.model_validate(expression)
             for expression in filter_expressions
