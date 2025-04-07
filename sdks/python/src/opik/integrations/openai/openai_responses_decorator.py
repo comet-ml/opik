@@ -24,8 +24,14 @@ LOGGER = logging.getLogger(__name__)
 KWARGS_KEYS_TO_LOG_AS_INPUTS = [
     "input",
     "instructions",
+    "reasoning",
+    "previous_response_id",
 ]
-RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["output", "choices", "reasoning"]
+RESPONSE_KEYS_TO_LOG_AS_OUTPUT = [
+    "output",
+    "choices",
+    "reasoning",
+]
 
 
 class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
