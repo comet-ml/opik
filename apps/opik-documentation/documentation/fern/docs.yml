@@ -168,6 +168,9 @@ navigation:
               - page: Instructor
                 path: docs/tracing/integrations/instructor.mdx
                 slug: instructor
+              - page: LangChainJS
+                path: docs/tracing/integrations/langchainjs.mdx
+                slug: langchainjs
               - page: LangGraph
                 path: docs/tracing/integrations/langgraph.mdx
                 slug: langgraph
