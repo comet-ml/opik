@@ -26,6 +26,10 @@ RUN npm run build -- --mode $BUILD_MODE
 # Production stage
 FROM nginx:1.27.4-alpine3.21
 
+# Add label for later inspection
+ARG BUILD_MODE=production
+LABEL build.mode="${BUILD_MODE}"
+
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
