@@ -21,7 +21,7 @@ def construct_streamer(
     n_consumers: int,
     use_batching: bool,
 ) -> streamer.Streamer:
-    message_queue: "queue.Queue[Any]" = queue.Queue()
+    message_queue: queue.Queue[Any] = queue.Queue()
 
     queue_consumers: List[queue_consumer.QueueConsumer] = [
         queue_consumer.QueueConsumer(
