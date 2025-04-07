@@ -84,7 +84,7 @@ class RemoteAuthService implements AuthService {
             }
         } catch (ClientErrorException authException) {
             if (isEndpointPublic(contextInfo)) {
-                log.info("Authentication failed for public endpoint: {}", path);
+                log.info("Using visibility PUBLIC for endpoint: {}", path);
                 String workspaceId = getWorkspaceId(currentWorkspaceName);
                 requestContext.get().setWorkspaceId(workspaceId);
                 requestContext.get().setVisibility(ProjectVisibility.PUBLIC);
