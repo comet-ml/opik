@@ -15,6 +15,8 @@ const getFeatureToggles = async ({ signal }: QueryFunctionContext) => {
     },
   );
 
+  data.guardrails_enabled = true;
+
   return data;
 };
 

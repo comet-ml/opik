@@ -7,11 +7,11 @@ if [ "$PYTHON_CODE_EXECUTOR_STRATEGY" = "docker" ]; then
   dockerd-entrypoint.sh &
 
   SLEEP_SECONDS=1
-  MAX_ATTEMPTS=5
+  MAX_ATTEMPTS=30
   attempts=1
 
   until docker info >/dev/null 2>&1 || [ $attempts -ge $MAX_ATTEMPTS ]; do
-    echo "Waiting ${SLEEP_SECONDS}s for the Docker daemon to start, attempt: $attempts"
+    echo "Waiting ${SLEEP_SECONDS}s for the Docker daemon to start, attempt: $attempts, out of: $MAX_ATTEMPTS"
     sleep $SLEEP_SECONDS
     attempts=$((attempts+1))
   done
@@ -35,8 +35,8 @@ else
 fi
 
 echo "Starting the Opik Python Backend server"
-gunicorn --access-logfile '-' \
+opentelemetry-instrument gunicorn --access-logfile '-' \
          --access-logformat '{"body_bytes_sent": %(B)s, "http_referer": "%(f)s", "http_user_agent": "%(a)s", "remote_addr": "%(h)s", "remote_user": "%(u)s", "request_length": 0, "request_time": %(L)s, "request": "%(r)s", "source": "gunicorn", "status": %(s)s, "time_local": "%(t)s", "time": %(T)s, "x_forwarded_for": "%(h)s"}' \
          --workers 4 \
          --bind=0.0.0.0:8000 \
-         --chdir ./src 'opik_backend:create_app()' 
+         --chdir ./src 'opik_backend:create_app()'

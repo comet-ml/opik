@@ -10,7 +10,7 @@ import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
-import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/CreateExperimentCode/ConfiguredCodeHighlighter";
+import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",

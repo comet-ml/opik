@@ -1,6 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash } from "lucide-react";
-import last from "lodash/last";
 import get from "lodash/get";
 import slugify from "slugify";
 
@@ -37,9 +36,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
   const mapRowData = useCallback(() => {
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        const keys = column.split(".");
-        const key = last(keys) as string;
-        acc[key] = get(row, keys, "");
+        acc[column] = get(row, column, "");
 
         return acc;
       }, {});

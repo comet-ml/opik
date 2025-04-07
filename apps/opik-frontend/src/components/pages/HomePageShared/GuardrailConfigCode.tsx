@@ -1,5 +1,5 @@
 import React from "react";
-import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/CreateExperimentCode/ConfiguredCodeHighlighter";
+import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 
 type GuardrailConfigCodeProps = {

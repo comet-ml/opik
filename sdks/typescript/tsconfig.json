@@ -18,11 +18,10 @@
     "paths": {
       "opik": ["./src/opik/index.ts"],
       "opik/vercel": ["./src/opik/integrations/vercel/index.ts"],
-      "opik/langchain": ["./src/opik/integrations/langchain/index.ts"],
       "@/*": ["./src/opik/*"],
       "@tests/*": ["./tests/*"]
     }
   },
   "include": ["src", "tests"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "src/opik/integrations/opik-langchain"]
 }

@@ -1,12 +1,12 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Database, Trash } from "lucide-react";
-import last from "lodash/last";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
+import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -46,21 +46,24 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const mapRowData = useCallback(() => {
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        // we need split by dot to parse usage into correct structure
+        // we need split by dot to parse feedback_scores into correct structure
         const keys = column.split(".");
-        const key = last(keys) as string;
         const keyPrefix = first(keys) as string;
 
-        if (keyPrefix === "feedback_scores") {
-          const scoreObject = row.feedback_scores?.find((f) => f.name === key);
-          acc[key] = get(scoreObject, "value", "-");
+        if (keyPrefix === COLUMN_FEEDBACK_SCORES_ID) {
+          const scoreName = column.replace(`${COLUMN_FEEDBACK_SCORES_ID}.`, "");
+          const scoreObject = row.feedback_scores?.find(
+            (f) => f.name === scoreName,
+          );
+          acc[column] = get(scoreObject, "value", "-");
 
           if (scoreObject && scoreObject.reason) {
-            acc[`${key}_reason`] = scoreObject.reason;
+            acc[`${column}_reason`] = scoreObject.reason;
           }
         } else {
-          acc[key] = get(row, keys, "");
+          acc[column] = get(row, keys, "");
         }
+
         return acc;
       }, {});
     });

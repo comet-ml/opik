@@ -955,6 +955,43 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertLogResponse(logPage, id, trace);
             });
         }
+
+        @Test
+        void getLogsTraceSkipped() {
+            // Adding 2 rules to a project, as there was a bug in the sampler causing the logs to fail when having
+            // multiple rules. This test should have at least 2 rules to ensure that the bug is fixed.
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Added a Python rule with sampling rate 0
+            var evaluatorPython = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class)
+                    .toBuilder()
+                    .samplingRate(0f)
+                    .projectId(projectId)
+                    .build();
+            var idPython = evaluatorsResourceClient.createEvaluator(evaluatorPython, WORKSPACE_NAME, API_KEY);
+
+            // Added a LLM rule with sampling rate 0
+            var evaluatorLlm = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .samplingRate(0f)
+                    .projectId(projectId)
+                    .build();
+            var idLlm = evaluatorsResourceClient.createEvaluator(evaluatorLlm, WORKSPACE_NAME, API_KEY);
+
+            // Sending a trace, that shouldn't be sampled as the rate is 0 for both rules
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+                var logPagePython = evaluatorsResourceClient.getLogs(idPython, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(logPagePython, idPython, evaluatorPython, trace);
+                var logPageLlm = evaluatorsResourceClient.getLogs(idLlm, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(logPageLlm, idLlm, evaluatorLlm, trace);
+            });
+        }
     }
 
     private UUID createGetAndAssertId(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, UUID projectId) {
@@ -1013,10 +1050,7 @@ class AutomationRuleEvaluatorsResourceTest {
     }
 
     private void assertLogResponse(LogPage logPage, UUID id, Trace trace) {
-        assertThat(logPage.content()).hasSize(4);
-        assertThat(logPage.total()).isEqualTo(4);
-        assertThat(logPage.size()).isEqualTo(4);
-        assertThat(logPage.page()).isEqualTo(1);
+        assertLogPage(logPage, 4);
 
         assertThat(logPage.content())
                 .allSatisfy(log -> {
@@ -1038,5 +1072,28 @@ class AutomationRuleEvaluatorsResourceTest {
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "Evaluating traceId '.*' sampled by rule '.*'"));
+    }
+
+    private static void assertLogPage(LogPage logPage, int expectedSize) {
+        assertThat(logPage.content()).hasSize(expectedSize);
+        assertThat(logPage.total()).isEqualTo(expectedSize);
+        assertThat(logPage.size()).isEqualTo(expectedSize);
+        assertThat(logPage.page()).isEqualTo(1);
+    }
+
+    private void assertLogResponse(LogPage logPage, UUID ruleId, AutomationRuleEvaluator<?> rule, Trace trace) {
+        assertLogPage(logPage, 1);
+
+        assertThat(logPage.content())
+                .allSatisfy(log -> {
+                    assertThat(log.timestamp()).isBetween(trace.createdAt(), Instant.now());
+                    assertThat(log.ruleId()).isEqualTo(ruleId);
+                    assertThat(log.level()).isEqualTo(LogLevel.INFO);
+                    assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                });
+
+        assertThat(logPage.content().getFirst().message())
+                .isEqualTo("The traceId '%s' was skipped for rule: '%s' and per the sampling rate '0.0'".formatted(
+                        trace.id(), rule.getName()));
     }
 }
