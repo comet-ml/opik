@@ -25,6 +25,7 @@ class AuthServiceImplTest {
     private UriInfo uriInfo;
 
     private AuthServiceImpl authService = new AuthServiceImpl(() -> requestContext);
+    private ContextInfoHolder infoHolder = new ContextInfoHolder(uriInfo, "GET");
 
     @Test
     void testAuthenticate__whenCookieAndHeaderNotPresent__thenUseDefault() {
@@ -32,7 +33,7 @@ class AuthServiceImplTest {
         Cookie sessionToken = null;
 
         // When
-        authService.authenticate(headers, sessionToken, uriInfo);
+        authService.authenticate(headers, sessionToken, infoHolder);
 
         // Then
         verify(requestContext).setUserName(ProjectService.DEFAULT_USER);
@@ -44,7 +45,7 @@ class AuthServiceImplTest {
         Cookie sessionToken = new Cookie("sessionToken", "token");
 
         // When
-        authService.authenticate(headers, sessionToken, uriInfo);
+        authService.authenticate(headers, sessionToken, infoHolder);
 
         // Then
         verify(requestContext).setUserName(ProjectService.DEFAULT_USER);
@@ -61,6 +62,6 @@ class AuthServiceImplTest {
 
         Assertions.assertThrows(
                 jakarta.ws.rs.ClientErrorException.class,
-                () -> authService.authenticate(headers, sessionToken, uriInfo));
+                () -> authService.authenticate(headers, sessionToken, infoHolder));
     }
 }

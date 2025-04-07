@@ -78,6 +78,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -91,6 +92,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
+import static com.comet.opik.api.ProjectVisibility.PRIVATE;
+import static com.comet.opik.api.ProjectVisibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
@@ -192,6 +195,10 @@ class ProjectsResourceTest {
                 USER);
     }
 
+    private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
+        AuthTestUtils.mockGetWorkspaceIdByName(wireMock.server(), workspaceName, workspaceId);
+    }
+
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
@@ -228,6 +235,13 @@ class ProjectsResourceTest {
                     arguments(okApikey, true, null),
                     arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
                     arguments("", false, NO_API_KEY_RESPONSE));
+        }
+
+        Stream<Arguments> publicCredentials() {
+            return Stream.of(
+                    arguments(okApikey, PRIVATE),
+                    arguments(fakeApikey, PUBLIC),
+                    arguments("", PUBLIC));
         }
 
         @BeforeEach
@@ -366,18 +380,17 @@ class ProjectsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("publicCredentials")
         @DisplayName("get projects: when api key is present, then return proper response")
-        void getProjects__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void getProjects__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, ProjectVisibility visibility) {
 
             var workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
 
-            var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
-
+            var projects = prepareProjectsListWithOnePublic();
             projects.forEach(project -> createProject(project, okApikey, workspaceName));
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -385,18 +398,14 @@ class ProjectsResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
 
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-
-                    var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+                if (visibility == PRIVATE) {
                     assertThat(actualEntity.content()).hasSize(projects.size());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualEntity.content()).hasSize(1);
                 }
             }
         }
@@ -415,6 +424,12 @@ class ProjectsResourceTest {
             return Stream.of(
                     arguments(sessionToken, true, "OK_" + UUID.randomUUID()),
                     arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
+        }
+
+        Stream<Arguments> publicCredentials() {
+            return Stream.of(
+                    arguments(sessionToken, PRIVATE, "OK_" + UUID.randomUUID()),
+                    arguments(fakeSessionToken, PUBLIC, UUID.randomUUID().toString()));
         }
 
         @BeforeAll
@@ -538,21 +553,21 @@ class ProjectsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("publicCredentials")
         @DisplayName("get projects: when session token is present, then return proper response")
-        void getProjects__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
+        void getProjects__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                ProjectVisibility visibility,
                 String workspaceName) {
 
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class);
-
-            projects.forEach(project -> createProject(project, apiKey, workspaceName));
-
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, workspaceId);
+
+            var projects = prepareProjectsListWithOnePublic();
+            projects.forEach(project -> createProject(project, apiKey, workspaceName));
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request()
@@ -560,17 +575,14 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
 
-                    var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
+                if (visibility == PRIVATE) {
                     assertThat(actualEntity.content()).hasSize(projects.size());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualEntity.content()).hasSize(1);
                 }
             }
         }
@@ -1552,7 +1564,7 @@ class ProjectsResourceTest {
             var id = createProject(project);
 
             assertProject(project.toBuilder().id(id)
-                    .visibility(ProjectVisibility.PRIVATE)
+                    .visibility(PRIVATE)
                     .lastUpdatedTraceAt(null)
                     .build());
         }
@@ -2159,5 +2171,16 @@ class ProjectsResourceTest {
                     apiKey, workspaceName);
             assertFeedbackScoreNames(feedbackScoreNamesByProjectId, expectedNames);
         }
+    }
+
+    private List<Project> prepareProjectsListWithOnePublic() {
+        var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class).stream()
+                .map(project -> project.toBuilder()
+                        .visibility(PRIVATE)
+                        .build())
+                .collect(Collectors.toCollection(ArrayList::new));
+        projects.set(0, projects.getFirst().toBuilder().visibility(PUBLIC).build());
+
+        return projects;
     }
 }

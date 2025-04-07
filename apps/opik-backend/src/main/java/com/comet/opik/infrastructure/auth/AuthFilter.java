@@ -35,7 +35,7 @@ public class AuthFilter implements ContainerRequestFilter {
         UriInfo uriInfo = context.getUriInfo();
 
         if (Pattern.matches("/v1/private/.*", uriInfo.getRequestUri().getPath())) {
-            authService.authenticate(headers, sessionToken, uriInfo);
+            authService.authenticate(headers, sessionToken, new ContextInfoHolder(uriInfo, context.getMethod()));
         } else if (Pattern.matches("/v1/session/.*", uriInfo.getRequestUri().getPath())) {
             authService.authenticateSession(sessionToken);
         }

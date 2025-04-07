@@ -57,14 +57,18 @@ interface ProjectDAO {
 
     @SqlQuery("SELECT COUNT(*) FROM projects " +
             " WHERE workspace_id = :workspaceId " +
-            " <if(name)> AND name like concat('%', :name, '%') <endif> ")
+            " <if(name)> AND name like concat('%', :name, '%') <endif> " +
+            " <if(visibility)> AND visibility = :visibility <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    long findCount(@Bind("workspaceId") String workspaceId, @Define("name") @Bind("name") String name);
+    long findCount(@Bind("workspaceId") String workspaceId,
+            @Define("name") @Bind("name") String name,
+            @Define("visibility") @Bind("visibility") ProjectVisibility visibility);
 
     @SqlQuery("SELECT * FROM projects " +
             " WHERE workspace_id = :workspaceId " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
+            " <if(visibility)> AND visibility = :visibility <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
@@ -73,15 +77,18 @@ interface ProjectDAO {
             @Bind("offset") int offset,
             @Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
+            @Define("visibility") @Bind("visibility") ProjectVisibility visibility,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     @SqlQuery("SELECT id, last_updated_at FROM projects" +
             " WHERE workspace_id = :workspaceId" +
-            " <if(name)> AND name like concat('%', :name, '%') <endif>")
+            " <if(name)> AND name like concat('%', :name, '%') <endif>" +
+            " <if(visibility)> AND visibility = :visibility <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<ProjectIdLastUpdated> getAllProjectIdsLastUpdated(@Bind("workspaceId") String workspaceId,
-            @Define("name") @Bind("name") String name);
+            @Define("name") @Bind("name") String name,
+            @Define("visibility") @Bind("visibility") ProjectVisibility visibility);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));

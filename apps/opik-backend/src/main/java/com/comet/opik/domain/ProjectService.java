@@ -289,6 +289,7 @@ class ProjectServiceImpl implements ProjectService {
             @NonNull List<SortingField> sortingFields) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        ProjectVisibility visibility = requestContext.get().getVisibility();
 
         if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
             return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
@@ -301,9 +302,9 @@ class ProjectServiceImpl implements ProjectService {
             int offset = (page - 1) * size;
 
             return new ProjectRecordSet(
-                    repository.find(size, offset, workspaceId, criteria.projectName(),
+                    repository.find(size, offset, workspaceId, criteria.projectName(), visibility,
                             sortingQueryBuilder.toOrderBySql(sortingFields)),
-                    repository.findCount(workspaceId, criteria.projectName()));
+                    repository.findCount(workspaceId, criteria.projectName(), visibility));
         });
 
         if (projectRecordSet.content().isEmpty()) {
@@ -356,12 +357,13 @@ class ProjectServiceImpl implements ProjectService {
     private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull SortingField sortingField) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        ProjectVisibility visibility = requestContext.get().getVisibility();
 
         // get all project ids and last updated
         List<ProjectIdLastUpdated> allProjectIdsLastUpdated = template.inTransaction(READ_ONLY, handle -> {
             ProjectDAO repository = handle.attach(ProjectDAO.class);
 
-            return repository.getAllProjectIdsLastUpdated(workspaceId, criteria.projectName());
+            return repository.getAllProjectIdsLastUpdated(workspaceId, criteria.projectName(), visibility);
         });
 
         if (allProjectIdsLastUpdated.isEmpty()) {

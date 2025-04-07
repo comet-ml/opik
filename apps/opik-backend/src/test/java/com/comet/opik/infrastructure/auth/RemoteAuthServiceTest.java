@@ -82,7 +82,10 @@ class RemoteAuthServiceTest {
         var requestContext = new RequestContext();
         var service = getService(requestContext);
         service.authenticate(getHeadersMock(workspaceNameHeader, apiKey), null,
-                createMockUriInfo("/priv/something?%s=%s".formatted(WORKSPACE_QUERY_PARAM, workspaceNameQueryParam)));
+                new ContextInfoHolder(
+                        createMockUriInfo(
+                                "/priv/something?%s=%s".formatted(WORKSPACE_QUERY_PARAM, workspaceNameQueryParam)),
+                        "GET"));
 
         assertThat(requestContext.getWorkspaceId()).isEqualTo(workspaceId.toString());
         assertThat(requestContext.getUserName()).isEqualTo(user);
@@ -110,7 +113,8 @@ class RemoteAuthServiceTest {
                                         remoteAuthStatusCode)))));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
-                getHeadersMock(workspaceName, apiKey), null, createMockUriInfo("/priv/something")))
+                getHeadersMock(workspaceName, apiKey), null,
+                new ContextInfoHolder(createMockUriInfo("/priv/something"), "GET")))
                 .isInstanceOf(expected);
     }
 
@@ -127,7 +131,7 @@ class RemoteAuthServiceTest {
         WIRE_MOCK.server().stubFor(post("/auth").willReturn(ok()));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
-                getHeadersMock("", apiKey), null, createMockUriInfo("/priv/something")))
+                getHeadersMock("", apiKey), null, new ContextInfoHolder(createMockUriInfo("/priv/something"), "GET")))
                 .isInstanceOf(ClientErrorException.class)
                 .hasMessageContaining(MISSING_WORKSPACE);
     }
@@ -138,7 +142,8 @@ class RemoteAuthServiceTest {
         WIRE_MOCK.server().stubFor(post("/auth").willReturn(ok()));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
-                getHeadersMock(workspaceName, ""), null, createMockUriInfo("/priv/something")))
+                getHeadersMock(workspaceName, ""), null,
+                new ContextInfoHolder(createMockUriInfo("/priv/something"), "GET")))
                 .isInstanceOf(ClientErrorException.class)
                 .hasMessage(MISSING_API_KEY);
     }
