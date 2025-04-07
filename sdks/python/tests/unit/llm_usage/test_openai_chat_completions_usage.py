@@ -1,7 +1,7 @@
 import pydantic
 import pytest
 
-from opik.llm_usage.openai_usage import OpenAICompletionsUsage
+from opik.llm_usage.openai_chat_completions_usage import OpenAICompletionsUsage
 
 
 def test_openai_completions_usage_creation__happyflow():

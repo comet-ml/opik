@@ -1,23 +1,30 @@
-import React from "react";
-import usePluginsStore from "@/store/PluginsStore";
-import CreateExperimentCodeCore, {
-  CreateExperimentCodeCoreProps,
-} from "./CreateExperimentCodeCore";
+import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
+import { putConfigInCode } from "@/lib/formatCodeSnippets";
+import useAppStore, { useUserApiKey } from "@/store/AppStore";
 
-export type CreateExperimentCodeProps = Omit<
-  CreateExperimentCodeCoreProps,
-  "apiKey"
->;
-const CreateExperimentCode: React.FC<CreateExperimentCodeProps> = (props) => {
-  const CreateExperimentCode = usePluginsStore(
-    (state) => state.CreateExperimentCode,
+export type CreateExperimentCodeProps = {
+  code: string;
+};
+const CreateExperimentCode: React.FC<CreateExperimentCodeProps> = ({
+  code,
+}) => {
+  const apiKey = useUserApiKey();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { code: codeWithConfig } = putConfigInCode({
+    code,
+    workspaceName,
+    apiKey,
+    shouldMaskApiKey: true,
+  });
+  const { code: codeWithConfigToCopy } = putConfigInCode({
+    code,
+    workspaceName,
+    apiKey,
+  });
+
+  return (
+    <CodeHighlighter data={codeWithConfig} copyData={codeWithConfigToCopy} />
   );
-
-  if (CreateExperimentCode) {
-    return <CreateExperimentCode {...props} />;
-  }
-
-  return <CreateExperimentCodeCore {...props} />;
 };
 
 export default CreateExperimentCode;
