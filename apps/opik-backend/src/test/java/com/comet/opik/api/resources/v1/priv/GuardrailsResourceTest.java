@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.GuardrailsDAO;
@@ -75,6 +76,7 @@ public class GuardrailsResourceTest {
     @Inject
     private GuardrailsDAO guardrailsDAO;
     private TraceResourceClient traceResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -93,6 +95,7 @@ public class GuardrailsResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -124,7 +127,7 @@ public class GuardrailsResourceTest {
                         .build())
                 .toList();
 
-        traceResourceClient.guardrails(guardrails, API_KEY, TEST_WORKSPACE);
+        guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
         var actual = guardrailsDAO.getTraceGuardrails(workspaceId, EntityType.TRACE, traceId).collectList().block();
 
         assertThat(actual).hasSize(guardrails.size());
