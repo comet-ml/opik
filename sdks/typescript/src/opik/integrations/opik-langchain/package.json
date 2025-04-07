@@ -32,20 +32,18 @@
     "typescript-sdk",
     "comet"
   ],
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "type": "module",
   "exports": {
-    "require": {
+    "./package.json": "./package.json",
+    ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.cjs"
-    },
-    "import": {
-      "types": "./dist/index.d.mts",
-      "default": "./dist/index.mjs"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
   "scripts": {
     "build": "tsup",
     "watch": "tsup --watch",
@@ -58,11 +56,9 @@
     "dist/**/*",
     "README.md"
   ],
-  "dependencies": {
-    "opik": "^1.6.12"
-  },
   "peerDependencies": {
-    "@langchain/core": "^0.3.42"
+    "@langchain/core": "^0.3.42",
+    "opik": "^1.6.12"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
