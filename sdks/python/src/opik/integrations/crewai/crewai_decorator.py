@@ -10,6 +10,7 @@ from typing import (
     Tuple,
     Union,
 )
+from typing_extensions import override
 
 from opik import llm_usage
 from opik.decorator import arguments_helpers, base_track_decorator
@@ -78,6 +79,7 @@ TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT = [
 
 
 class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -143,6 +145,7 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return input_dict, name, span_type
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -209,6 +212,7 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return model, provider, output_dict, usage
 
+    @override
     def _streams_handler(
         self,
         output: Any,
