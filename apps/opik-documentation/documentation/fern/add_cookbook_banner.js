@@ -58,21 +58,26 @@ const injectGitHubLink = () => {
   content.appendChild(leftSection);
   content.appendChild(rightSection);
   container.appendChild(content);
-  heading.parentNode.insertBefore(container, heading.nextSibling);
+  heading.parentNode.parentNode.insertBefore(container, heading.nextSibling);
 };
 
 // Single function to handle both initial load and mutations
 const setupBannerInjection = () => {
   const observer = new MutationObserver(() => {
     const heading = document.querySelector(".fern-page-heading");
-    if (heading && !heading.nextSibling?.classList?.contains("callout-outlined-tip")) {
+    if (
+      heading &&
+      !heading.querySelector(".fern-page-actions") &&
+      !heading.parentElement?.nextSibling?.classList?.contains("callout-outlined-tip")
+    ) {
       injectGitHubLink();
+      console.log("test");
     }
   });
 
   if (document.body) {
     observer.observe(document.body, { childList: true, subtree: true });
-    injectGitHubLink(); // Initial injection attempt
+    //   injectGitHubLink(); // Initial injection attempt
   }
 };
 
