@@ -4,7 +4,7 @@ import {
 } from "@langchain/core/callbacks/base";
 import { Serialized } from "@langchain/core/load/serializable";
 import { ChainValues } from "@langchain/core/utils/types";
-import { Opik, Span, Trace, logger, SpanType } from "opik";
+import { Opik, Span, Trace, logger, SpanType, OpikSpanType } from "opik";
 import {
   extractCallArgs,
   inputFromChainValues,
@@ -124,7 +124,7 @@ export class OpikCallbackHandler
       });
     } else {
       span = this.rootTrace.span({
-        type: type || SpanType.General,
+        type: type || OpikSpanType.General,
         name,
         input: inputFromChainValues(input),
         tags,
@@ -177,6 +177,9 @@ export class OpikCallbackHandler
     this.spansMap.delete(runId);
 
     if (runId === this.rootTraceId) {
+      this.rootTrace?.update({
+        output,
+      });
       this.rootTraceId = undefined;
       this.rootTrace?.end();
       this.rootTrace = undefined;
@@ -205,7 +208,7 @@ export class OpikCallbackHandler
       runId,
       parentRunId,
       name: runName ?? llm.id.at(-1)?.toString() ?? "Chat Model",
-      type: SpanType.Llm,
+      type: OpikSpanType.Llm,
       input: inputFromMessages(messages),
       tags,
       metadata: {
@@ -236,7 +239,7 @@ export class OpikCallbackHandler
       runId,
       parentRunId,
       name: runName ?? llm.id.at(-1)?.toString() ?? "LLM",
-      type: SpanType.Llm,
+      type: OpikSpanType.Llm,
       input: { prompts },
       tags,
       metadata: {
@@ -373,7 +376,7 @@ export class OpikCallbackHandler
       name: runName ?? tool.id.at(-1)?.toString() ?? "Tool",
       input: safeParseSerializedJson(input),
       tags,
-      type: SpanType.Tool,
+      type: OpikSpanType.Tool,
       metadata: {
         ...metadata,
         ...extractCallArgs(tool, {}, metadata),
@@ -459,7 +462,7 @@ export class OpikCallbackHandler
       runId,
       parentRunId,
       name: name ?? retriever.id.at(-1)?.toString() ?? "Retriever",
-      type: SpanType.Tool,
+      type: OpikSpanType.Tool,
       input: { query },
       tags,
       metadata: {
