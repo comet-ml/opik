@@ -60,3 +60,8 @@ def validate_combined() -> tuple[flask.Response, int]:
             "validations": validation_results,
         }
     ), 200
+
+
+@guardrails_blueprint.route("/healthcheck", methods=["GET"])
+def health():
+    return "OK", 200
