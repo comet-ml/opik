@@ -8,7 +8,6 @@ import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -112,16 +111,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private Mono<Long> processScoreBatch(EntityType entityType, List<ProjectDto> projects, int actualBatchSize) {
         return Flux.fromIterable(projects)
                 .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores()))
-                .reduce(0L, Long::sum)
-                .flatMap(rowsUpdated -> {
-                    if (rowsUpdated == actualBatchSize) {
-                        return Mono.just(rowsUpdated);
-                    }
-
-                    log.error("Error while processing scores batch. actualBatchSize={}, rowsUpdated={}",
-                            actualBatchSize, rowsUpdated);
-                    return Mono.error(new InternalServerErrorException("Error while processing scores batch"));
-                });
+                .reduce(0L, Long::sum);
     }
 
     private List<ProjectDto> mergeProjectsAndScores(Map<String, Project> projectMap,
