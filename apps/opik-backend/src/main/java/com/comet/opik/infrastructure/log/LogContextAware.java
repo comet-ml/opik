@@ -71,7 +71,7 @@ public class LogContextAware {
         };
     }
 
-    public static Closable wrapWithClosableMdc(Map<String, String> contextMap) {
+    public static Closable wrapWithMdc(Map<String, String> contextMap) {
         List<MDC.MDCCloseable> context = contextMap.entrySet()
                 .stream()
                 .map(entry -> MDC.putCloseable(entry.getKey(), entry.getValue()))

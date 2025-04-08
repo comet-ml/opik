@@ -22,7 +22,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.List;
 import java.util.Map;
 
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithClosableMdc;
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 @EagerSingleton
 @Slf4j
@@ -61,7 +61,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
         log.info("Message received with traceId '{}', userName '{}'", trace.id(), message.userName());
 
         // This is crucial for logging purposes to identify the rule and trace
-        try (var logContext = wrapWithClosableMdc(Map.of(
+        try (var logContext = wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 "workspace_id", message.workspaceId(),
                 "trace_id", trace.id().toString(),

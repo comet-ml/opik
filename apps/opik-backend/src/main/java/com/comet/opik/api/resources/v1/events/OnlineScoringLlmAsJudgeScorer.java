@@ -19,7 +19,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Map;
 
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithClosableMdc;
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
  * This service listens a Redis stream for Traces to be scored in a LLM provider. It will prepare the LLM request
@@ -55,7 +55,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 trace.id(), message.userName(), message.llmAsJudgeCode().model().name());
 
         // This is crucial for logging purposes to identify the rule and trace
-        try (var logContext = wrapWithClosableMdc(Map.of(
+        try (var logContext = wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 "workspace_id", message.workspaceId(),
                 "trace_id", trace.id().toString(),

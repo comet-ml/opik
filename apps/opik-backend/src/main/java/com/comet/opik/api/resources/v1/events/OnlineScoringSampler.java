@@ -34,7 +34,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapFilterWithMdc;
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithClosableMdc;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -110,7 +109,7 @@ public class OnlineScoringSampler {
                     projectId, tracesBatch.workspaceId());
 
             // Important to set the workspaceId for logging purposes
-            try (var logContext = wrapWithClosableMdc(Map.of(
+            try (var logContext = wrapWithMdc(Map.of(
                     UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(), "workspace_id",
                     tracesBatch.workspaceId()))) {
 
@@ -151,7 +150,7 @@ public class OnlineScoringSampler {
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?> evaluator, Trace trace) {
         var shouldBeSampled = secureRandom.nextFloat() < evaluator.getSamplingRate();
         if (!shouldBeSampled) {
-            try (var logContext = wrapWithClosableMdc(Map.of("rule_id", evaluator.getId().toString(),
+            try (var logContext = wrapWithMdc(Map.of("rule_id", evaluator.getId().toString(),
                     "trace_id", trace.id().toString()))) {
 
                 userFacingLogger.info(
