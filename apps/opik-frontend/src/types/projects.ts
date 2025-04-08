@@ -23,6 +23,7 @@ export interface ProjectStatistic {
   feedback_scores?: AverageFeedbackScore[];
   total_estimated_cost?: number;
   duration?: ProjectDuration;
+  failed_guardrails?: number;
 }
 
 export type ProjectWithStatistic = Project & ProjectStatistic;

@@ -35,6 +35,7 @@ import {
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
+  CUSTOM_HEADER_ICON,
 } from "@/types/shared";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
@@ -45,6 +46,8 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -52,115 +55,6 @@ const SELECTED_COLUMNS_KEY = "projects-selected-columns";
 const COLUMNS_WIDTH_KEY = "projects-columns-width";
 const COLUMNS_ORDER_KEY = "projects-columns-order";
 const COLUMNS_SORT_KEY = "projects-columns-sort";
-
-export const DEFAULT_COLUMNS: ColumnData<ProjectWithStatistic>[] = [
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-    sortable: true,
-  },
-  {
-    id: "duration.p50",
-    label: "Duration (p50)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p50,
-    cell: DurationCell as never,
-  },
-  {
-    id: "duration.p90",
-    label: "Duration (p90)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p90,
-    cell: DurationCell as never,
-  },
-  {
-    id: "duration.p99",
-    label: "Duration (p99)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p99,
-    cell: DurationCell as never,
-  },
-  {
-    id: "total_estimated_cost",
-    label: "Total cost",
-    type: COLUMN_TYPE.cost,
-    cell: CostCell as never,
-  },
-  {
-    id: "trace_count",
-    label: "Trace count",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: "usage.total_tokens",
-    label: "Total tokens (average)",
-    type: COLUMN_TYPE.number,
-    accessorFn: (row) =>
-      row.usage && isNumber(row.usage.total_tokens)
-        ? formatNumericData(row.usage.total_tokens)
-        : "-",
-  },
-  {
-    id: "usage.prompt_tokens",
-    label: "Input tokens (average)",
-    type: COLUMN_TYPE.number,
-    accessorFn: (row) =>
-      row.usage && isNumber(row.usage.prompt_tokens)
-        ? formatNumericData(row.usage.prompt_tokens)
-        : "-",
-  },
-  {
-    id: "usage.completion_tokens",
-    label: "Output tokens (average)",
-    type: COLUMN_TYPE.number,
-    accessorFn: (row) =>
-      row.usage && isNumber(row.usage.completion_tokens)
-        ? formatNumericData(row.usage.completion_tokens)
-        : "-",
-  },
-  {
-    id: "feedback_scores",
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
-    cell: FeedbackScoreListCell as never,
-    customMeta: {
-      getHoverCardName: (row: ProjectWithStatistic) => row.name,
-      isAverageScores: true,
-    },
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) =>
-      formatDate(row.last_updated_trace_at ?? row.last_updated_at),
-    sortable: true,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-    sortable: true,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "description",
-    label: "Description",
-    type: COLUMN_TYPE.string,
-  },
-];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -185,6 +79,135 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
 const ProjectsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
+
+  const columnsDef: ColumnData<ProjectWithStatistic>[] = useMemo(() => {
+    return [
+      {
+        id: "id",
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+        sortable: true,
+      },
+      {
+        id: "duration.p50",
+        label: "Duration (p50)",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p50,
+        cell: DurationCell as never,
+      },
+      {
+        id: "duration.p90",
+        label: "Duration (p90)",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p90,
+        cell: DurationCell as never,
+      },
+      {
+        id: "duration.p99",
+        label: "Duration (p99)",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p99,
+        cell: DurationCell as never,
+      },
+      {
+        id: "total_estimated_cost",
+        label: "Total cost",
+        type: COLUMN_TYPE.cost,
+        cell: CostCell as never,
+      },
+      {
+        id: "trace_count",
+        label: "Trace count",
+        type: COLUMN_TYPE.number,
+      },
+      {
+        id: "usage.total_tokens",
+        label: "Total tokens (average)",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) =>
+          row.usage && isNumber(row.usage.total_tokens)
+            ? formatNumericData(row.usage.total_tokens)
+            : "-",
+      },
+      {
+        id: "usage.prompt_tokens",
+        label: "Input tokens (average)",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) =>
+          row.usage && isNumber(row.usage.prompt_tokens)
+            ? formatNumericData(row.usage.prompt_tokens)
+            : "-",
+      },
+      {
+        id: "usage.completion_tokens",
+        label: "Output tokens (average)",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) =>
+          row.usage && isNumber(row.usage.completion_tokens)
+            ? formatNumericData(row.usage.completion_tokens)
+            : "-",
+      },
+      {
+        id: "feedback_scores",
+        label: "Feedback scores",
+        type: COLUMN_TYPE.numberDictionary,
+        accessorFn: (row) =>
+          get(row, "feedback_scores", []).map((score) => ({
+            ...score,
+            value: formatNumericData(score.value),
+          })),
+        cell: FeedbackScoreListCell as never,
+        customMeta: {
+          getHoverCardName: (row: ProjectWithStatistic) => row.name,
+          isAverageScores: true,
+        },
+      },
+      ...(isGuardrailsEnabled
+        ? [
+            {
+              id: "guardrails",
+              label: "Guardrails",
+              type: COLUMN_TYPE.string,
+              iconType: CUSTOM_HEADER_ICON.GUARDRAILS,
+              /// TODO should be redefined once BE done
+              accessorFn: (row: ProjectWithStatistic) =>
+                row.failed_guardrails && isNumber(row.failed_guardrails)
+                  ? `${row.failed_guardrails} failed`
+                  : "-",
+            },
+          ]
+        : []),
+      {
+        id: "last_updated_at",
+        label: "Last updated",
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) =>
+          formatDate(row.last_updated_trace_at ?? row.last_updated_at),
+        sortable: true,
+      },
+      {
+        id: "created_at",
+        label: "Created",
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) => formatDate(row.created_at),
+        sortable: true,
+      },
+      {
+        id: "created_by",
+        label: "Created by",
+        type: COLUMN_TYPE.string,
+      },
+      {
+        id: "description",
+        label: "Description",
+        type: COLUMN_TYPE.string,
+      },
+    ];
+  }, [isGuardrailsEnabled]);
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -278,7 +301,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         },
       }),
       ...convertColumnDataToColumn<ProjectWithStatistic, ProjectWithStatistic>(
-        DEFAULT_COLUMNS,
+        columnsDef,
         {
           columnsOrder,
           selectedColumns,
@@ -288,7 +311,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: ProjectRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder]);
+  }, [selectedColumns, columnsOrder, columnsDef]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -338,7 +361,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           <ProjectsActionsPanel projects={selectedRows} />
           <Separator orientation="vertical" className="mx-1 h-4" />
           <ColumnsButton
-            columns={DEFAULT_COLUMNS}
+            columns={columnsDef}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
