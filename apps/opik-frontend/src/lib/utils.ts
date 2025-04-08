@@ -20,6 +20,21 @@ export const buildDocsUrl = (path: string = "", hash: string = "") => {
   return `${BASE_DOCUMENTATION_URL}${path}?from=llm${hash}`;
 };
 
+export const isSameDomainUrl = (url: string) => {
+  try {
+    const resolvedUrl = new URL(url, window.location.href);
+    const originUrl = window.location;
+
+    return (
+      resolvedUrl.protocol === originUrl.protocol &&
+      resolvedUrl.hostname === originUrl.hostname &&
+      resolvedUrl.port === originUrl.port
+    );
+  } catch (e) {
+    return false;
+  }
+};
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

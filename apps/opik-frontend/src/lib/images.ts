@@ -2,6 +2,8 @@ import isObject from "lodash/isObject";
 import get from "lodash/get";
 import isString from "lodash/isString";
 import uniq from "lodash/uniq";
+import last from "lodash/last";
+import { ParsedImageData } from "@/types/attachments";
 
 export type ImageContent = {
   type: "image_url";
@@ -149,23 +151,60 @@ export function isImageString(str?: unknown): boolean {
 }
 
 export const BASE_64_OVERRIDE_TEXT = "[image]";
-export function replaceBase64ImageValues<T>(v: T): T {
+
+function replaceBase64ImageValues<T>(
+  v: T,
+  nameResolver: (base64: string) => string,
+): T {
   if (isImageString(v)) {
-    return BASE_64_OVERRIDE_TEXT as T;
+    return nameResolver(v as string) as T;
   }
 
   if (Array.isArray(v)) {
-    return v.map(replaceBase64ImageValues) as T;
+    return v.map((v) => replaceBase64ImageValues(v, nameResolver)) as T;
   }
 
   if (isObject(v)) {
     return Object.fromEntries(
       Object.entries(v).map(([key, value]) => [
         key,
-        replaceBase64ImageValues(value),
+        replaceBase64ImageValues(value, nameResolver),
       ]),
     ) as T;
   }
 
   return v;
 }
+
+export type ProcessedInput = {
+  images: ParsedImageData[];
+  formattedData: object | undefined;
+};
+
+export const processInputData = (input?: object): ProcessedInput => {
+  const imagesUrls = extractImageUrls(input);
+  const nameMap: Record<string, string> = {};
+  const images = imagesUrls.map((url, index) => {
+    const isBase64 = isImageString(url);
+    const name = `[image_${index}]`;
+    if (isBase64) {
+      nameMap[url] = name;
+    }
+
+    return {
+      name: isBase64
+        ? `Base64: ${name}`
+        : (last(url.split("?")[0].split("/")) as string),
+      isBase64,
+      url: url,
+    };
+  });
+
+  return {
+    images,
+    formattedData: replaceBase64ImageValues(
+      input,
+      (base64) => nameMap[base64] ?? BASE_64_OVERRIDE_TEXT,
+    ),
+  };
+};

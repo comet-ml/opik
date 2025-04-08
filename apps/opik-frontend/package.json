@@ -89,6 +89,8 @@
     "react-hook-form": "^7.54.2",
     "react-hotkeys-hook": "^4.5.1",
     "react-markdown": "^9.0.1",
+    "react-pdf": "^9.2.1",
+    "react-player": "^2.16.0",
     "react-resizable-panels": "^2.0.20",
     "react-textarea-autosize": "^8.5.7",
     "react18-json-view": "^0.2.8",
