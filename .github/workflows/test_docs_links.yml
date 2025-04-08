@@ -26,6 +26,9 @@ jobs:
         run: |
           pip install pytest allure-pytest
 
+      - name: Install allurectl
+        uses: allure-framework/setup-allurectl@v1
+
       - name: Install Test Dependencies
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
