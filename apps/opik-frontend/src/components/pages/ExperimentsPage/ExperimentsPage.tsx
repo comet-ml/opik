@@ -32,9 +32,9 @@ import {
 } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import AddExperimentDialog from "@/components/pages/ExperimentsShared/AddExperimentDialog";
-import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
-import ExperimentsFiltersButton from "@/components/pages/ExperimentsShared/ExperimentsFiltersButton";
+import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
+import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
+import ExperimentsFiltersButton from "@/components/pages-shared/experiments/ExperimentsFiltersButton/ExperimentsFiltersButton";
 import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
 import ExperimentsChartsWrapper from "@/components/pages/ExperimentsPage/charts/ExperimentsChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -55,8 +55,8 @@ import {
   getSharedShiftCheckboxClickHandler,
   GROUPING_CONFIG,
   renderCustomRow,
-} from "@/components/pages/ExperimentsShared/table";
-import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpandingConfig";
+} from "@/components/pages-shared/experiments/table";
+import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";

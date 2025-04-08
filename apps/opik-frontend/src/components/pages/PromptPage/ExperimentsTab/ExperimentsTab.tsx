@@ -11,8 +11,8 @@ import get from "lodash/get";
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import ExperimentsFiltersButton from "@/components/pages/ExperimentsShared/ExperimentsFiltersButton";
-import ExperimentsActionsPanel from "@/components/pages/ExperimentsShared/ExperimentsActionsPanel";
+import ExperimentsFiltersButton from "@/components/pages-shared/experiments/ExperimentsFiltersButton/ExperimentsFiltersButton";
+import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -34,7 +34,7 @@ import {
   getSharedShiftCheckboxClickHandler,
   GROUPING_CONFIG,
   renderCustomRow,
-} from "@/components/pages/ExperimentsShared/table";
+} from "@/components/pages-shared/experiments/table";
 import {
   COLUMN_NAME_ID,
   COLUMN_TYPE,
@@ -43,7 +43,7 @@ import {
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { useExpandingConfig } from "@/components/pages/ExperimentsShared/useExpandingConfig";
+import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Separator } from "@/components/ui/separator";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";

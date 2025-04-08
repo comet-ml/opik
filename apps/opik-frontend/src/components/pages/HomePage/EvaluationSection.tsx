@@ -11,7 +11,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import Loader from "@/components/shared/Loader/Loader";
-import AddExperimentDialog from "@/components/pages/ExperimentsShared/AddExperimentDialog";
+import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import { COLUMN_NAME_ID, COLUMN_SELECT_ID, COLUMN_TYPE } from "@/types/shared";
