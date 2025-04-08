@@ -10,6 +10,7 @@ from opik.types import LLMProvider
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
 from ...testlib import (
     ANY_BUT_NONE,
+    ANY_STRING,
     TraceModel,
     assert_dict_has_keys,
     assert_equal,
@@ -147,7 +148,7 @@ def test_llama_index_chat__happyflow(
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
-    llm = OpenAI(model="gpt-3.5-turbo-0125")
+    llm = OpenAI(model="gpt-3.5-turbo")
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
@@ -189,7 +190,7 @@ def test_llama_index_chat__happyflow(
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
                     spans=[],
-                    model="gpt-3.5-turbo-0125",
+                    model=ANY_STRING(startswith="gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
                 )
             ],
@@ -229,7 +230,7 @@ def test_llama_index_stream_chat__happyflow(
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
-    llm = OpenAI(model="gpt-3.5-turbo-0125")
+    llm = OpenAI(model="gpt-3.5-turbo")
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
@@ -275,7 +276,7 @@ def test_llama_index_stream_chat__happyflow(
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
                     spans=[],
-                    model="gpt-3.5-turbo-0125",
+                    model=ANY_STRING(startswith="gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
                 )
             ],

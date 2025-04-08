@@ -171,17 +171,6 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
                 self._opik_client.span(**span_data.__dict__)
 
                 del self._map_event_id_to_span_data[event_id]
-            # # Orphaned events where the output was received after end_trace
-            # # was called, this can happen for streaming LLM calls. Recreate
-            # # the span with the inputs and outputs in that case
-            # elif event_id in self._events_without_output_span_ids:
-            #     span_data = self._events_without_output_span_ids[event_id]
-
-            #     span_data.update(output=span_output, error_info=error_info).init_end_time()
-
-            #     self._opik_client.span(**span_data.__dict__)
-
-            #     del self._events_without_output_span_ids[event_id]
 
     def flush(self) -> None:
         """Sends pending Opik data to the backend"""
