@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.mockito.Mockito.*;
@@ -21,11 +22,13 @@ class AuthServiceImplTest {
     @Mock
     private HttpHeaders headers;
 
-    @Mock
-    private UriInfo uriInfo;
+    private UriInfo uriInfo = Mockito.mock(UriInfo.class);;
 
     private AuthServiceImpl authService = new AuthServiceImpl(() -> requestContext);
-    private ContextInfoHolder infoHolder = new ContextInfoHolder(uriInfo, "GET");
+    private ContextInfoHolder infoHolder = ContextInfoHolder.builder()
+            .uriInfo(uriInfo)
+            .method("GET")
+            .build();
 
     @Test
     void testAuthenticate__whenCookieAndHeaderNotPresent__thenUseDefault() {

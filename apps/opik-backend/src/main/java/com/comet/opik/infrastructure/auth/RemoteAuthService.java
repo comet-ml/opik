@@ -9,7 +9,6 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Cookie;
@@ -46,8 +45,7 @@ class RemoteAuthService implements AuthService {
             Pattern.compile("^/v1/private/projects$"), Set.of("GET"));
 
     private final @NonNull Client client;
-    private final @NonNull AuthenticationConfig.UrlConfig apiKeyAuthUrl;
-    private final @NonNull AuthenticationConfig.UrlConfig uiAuthUrl;
+    private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
 
@@ -83,10 +81,12 @@ class RemoteAuthService implements AuthService {
                 authenticateUsingApiKey(headers, currentWorkspaceName, path);
             }
         } catch (ClientErrorException authException) {
-            if (isEndpointPublic(contextInfo)) {
+            if (!isDefaultWorkspace(currentWorkspaceName) && isNotAuthenticated(authException)
+                    && isEndpointPublic(contextInfo)) {
                 log.info("Using visibility PUBLIC for endpoint: {}", path);
                 String workspaceId = getWorkspaceId(currentWorkspaceName);
                 requestContext.get().setWorkspaceId(workspaceId);
+                requestContext.get().setWorkspaceName(currentWorkspaceName);
                 requestContext.get().setVisibility(ProjectVisibility.PUBLIC);
                 return;
             }
@@ -103,12 +103,14 @@ class RemoteAuthService implements AuthService {
     }
 
     private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path) {
-        if (ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName)) {
+        if (isDefaultWorkspace(workspaceName)) {
             log.warn("Default workspace name is not allowed for UI authentication");
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        try (var response = client.target(URI.create(uiAuthUrl.url()))
+        try (var response = client.target(URI.create(reactServiceUrl.url()))
+                .path("opik")
+                .path("auth-session")
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 .cookie(sessionToken)
@@ -141,7 +143,9 @@ class RemoteAuthService implements AuthService {
         var credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
-            try (var response = client.target(URI.create(apiKeyAuthUrl.url()))
+            try (var response = client.target(URI.create(reactServiceUrl.url()))
+                    .path("opik")
+                    .path("auth")
                     .request()
                     .accept(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION,
@@ -213,9 +217,18 @@ class RemoteAuthService implements AuthService {
         return false;
     }
 
+    private boolean isNotAuthenticated(ClientErrorException authException) {
+        int status = authException.getResponse().getStatus();
+        return status == Response.Status.UNAUTHORIZED.getStatusCode()
+                || status == Response.Status.FORBIDDEN.getStatusCode();
+    }
+
+    private boolean isDefaultWorkspace(String workspaceName) {
+        return ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName);
+    }
+
     private String getWorkspaceId(String workspaceName) {
-        String reactBaseUrl = apiKeyAuthUrl.url().replace("/opik/auth", "");
-        try (var response = client.target(URI.create(reactBaseUrl))
+        try (var response = client.target(URI.create(reactServiceUrl.url()))
                 .path("workspaces")
                 .path("workspace-id")
                 .queryParam("name", workspaceName)
@@ -232,7 +245,7 @@ class RemoteAuthService implements AuthService {
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
             var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
             log.error("Not found workspace by name : {}", errorResponse.msg());
-            throw new NotFoundException(errorResponse.msg());
+            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
         }
 
         log.error("Unexpected error while getting workspace name: {}", response.getStatus());

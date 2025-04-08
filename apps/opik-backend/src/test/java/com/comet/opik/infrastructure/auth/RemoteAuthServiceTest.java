@@ -71,7 +71,7 @@ class RemoteAuthServiceTest {
         var user = "user-" + RandomStringUtils.secure().nextAlphanumeric(20);
         var workspaceName = workspaceNameHeader != null ? workspaceNameHeader : workspaceNameQueryParam;
         var apiKey = "apiKey" + RandomStringUtils.secure().nextAlphanumeric(20);
-        WIRE_MOCK.server().stubFor(post("/auth")
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(okJson(new ObjectMapper()
                         .writeValueAsString(RemoteAuthService.AuthResponse.builder()
                                 .user(user)
@@ -82,10 +82,11 @@ class RemoteAuthServiceTest {
         var requestContext = new RequestContext();
         var service = getService(requestContext);
         service.authenticate(getHeadersMock(workspaceNameHeader, apiKey), null,
-                new ContextInfoHolder(
-                        createMockUriInfo(
-                                "/priv/something?%s=%s".formatted(WORKSPACE_QUERY_PARAM, workspaceNameQueryParam)),
-                        "GET"));
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo(
+                                "/priv/something?%s=%s".formatted(WORKSPACE_QUERY_PARAM, workspaceNameQueryParam)))
+                        .method("GET")
+                        .build());
 
         assertThat(requestContext.getWorkspaceId()).isEqualTo(workspaceId.toString());
         assertThat(requestContext.getUserName()).isEqualTo(user);
@@ -105,7 +106,7 @@ class RemoteAuthServiceTest {
     void testUnauthorized(int remoteAuthStatusCode, Class<? extends Exception> expected) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(20);
         var apiKey = "apiKey" + RandomStringUtils.secure().nextAlphanumeric(20);
-        WIRE_MOCK.server().stubFor(post("/auth")
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
                 .willReturn(aResponse().withStatus(remoteAuthStatusCode)
                         .withHeader("Content-Type", "application/json")
                         .withJsonBody(JsonUtils.readTree(
@@ -114,7 +115,10 @@ class RemoteAuthServiceTest {
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock(workspaceName, apiKey), null,
-                new ContextInfoHolder(createMockUriInfo("/priv/something"), "GET")))
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
                 .isInstanceOf(expected);
     }
 
@@ -131,7 +135,10 @@ class RemoteAuthServiceTest {
         WIRE_MOCK.server().stubFor(post("/auth").willReturn(ok()));
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
-                getHeadersMock("", apiKey), null, new ContextInfoHolder(createMockUriInfo("/priv/something"), "GET")))
+                getHeadersMock("", apiKey), null, ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
                 .isInstanceOf(ClientErrorException.class)
                 .hasMessageContaining(MISSING_WORKSPACE);
     }
@@ -150,8 +157,7 @@ class RemoteAuthServiceTest {
 
     private RemoteAuthService getService(RequestContext requestContext) {
         return new RemoteAuthService(client,
-                new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("/auth")),
-                new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("/")),
+                new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext, new NoopCacheService());
     }
 

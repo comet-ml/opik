@@ -1,7 +1,10 @@
 package com.comet.opik.infrastructure.auth;
 
 import jakarta.ws.rs.core.UriInfo;
+import lombok.Builder;
+import lombok.NonNull;
 
-public record ContextInfoHolder(UriInfo uriInfo,
-        String method) {
+@Builder(toBuilder = true)
+public record ContextInfoHolder(@NonNull UriInfo uriInfo,
+        @NonNull String method) {
 }
