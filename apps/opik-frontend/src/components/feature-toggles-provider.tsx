@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { FeatureToggles } from "@/types/feature-toggles";
+import { FeatureToggleKeys, FeatureToggles } from "@/types/feature-toggles";
 import { OnChangeFn } from "@/types/shared";
 import useFeatureToggle from "@/api/feature-toggle/useFeatureToggle";
 import useAppStore from "@/store/AppStore";
@@ -11,11 +11,12 @@ type FeatureTogglesProps = {
 type FeatureTogglesState = {
   features: FeatureToggles;
   setFeatures: OnChangeFn<FeatureToggles>;
-  isFeatureEnabled: (feature: keyof FeatureToggles) => boolean;
+  isFeatureEnabled: (feature: FeatureToggleKeys) => boolean;
 };
 
 const DEFAULT_STATE: FeatureToggles = {
-  python_evaluator_enabled: false,
+  [FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED]: false,
+  [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {
@@ -42,7 +43,7 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
     return {
       features,
       setFeatures,
-      isFeatureEnabled: (feature: keyof FeatureToggles) => features[feature],
+      isFeatureEnabled: (feature: FeatureToggleKeys) => features[feature],
     };
   }, [features]);
 
@@ -53,7 +54,7 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   );
 }
 
-export const useIsFeatureEnabled = (feature: keyof FeatureToggles) => {
+export const useIsFeatureEnabled = (feature: FeatureToggleKeys) => {
   const context = useContext(FeatureTogglesProviderContext);
 
   if (context === undefined)
