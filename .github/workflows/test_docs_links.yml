@@ -39,6 +39,7 @@ jobs:
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
           pip install opik
+          playwright install chromium
         
       - name: Install linkinator
         run: |
