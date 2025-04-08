@@ -4,16 +4,13 @@ Wrapper around dspy's MIPROv2 for Opik
 
 import uuid
 
-import opik
-from opik.integrations.dspy.callback import OpikCallback
-from opik.optimizer import BaseOptimizer
-from opik.evaluation.metrics import BaseMetric
-
 import dspy
-from dspy.datasets.dataset import Dataset
-from dspy.clients.base_lm import BaseLM
+import opik
+from opik import Dataset
+from opik.evaluation.metrics import BaseMetric
 from tqdm import tqdm
 
+from .base_optimizer import BaseOptimizer
 from .mipro_optimizer_v2 import MIPROv2
 from .utils import State
 

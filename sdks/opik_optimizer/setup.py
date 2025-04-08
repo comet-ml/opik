@@ -12,7 +12,7 @@ setup(
     python_requires=">=3.10",
     install_requires=[
         "opik",
-        "dspy-ai",
+        "dspy",
         "tqdm",
     ],
     classifiers=[
