@@ -84,7 +84,7 @@ public class AttachmentResource {
     @Path("/upload-complete")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    @Operation(operationId = "startMultiPartUpload", summary = "Start multipart attachment upload", description = "Start multipart attachment upload", responses = {
+    @Operation(operationId = "completeMultiPartUpload", summary = "Complete multipart attachment upload", description = "Complete multipart attachment upload", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
