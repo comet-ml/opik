@@ -1,17 +1,72 @@
-from typing import List, Optional
+from typing import (
+    List,
+    Optional,
+    Callable,
+    AsyncGenerator,
+    Generator,
+    Union,
+    Any,
+    Dict,
+    Tuple,
+)
 
 import httpx
 
 from opik import exceptions
 from opik.api_objects import opik_client
 from opik.decorator import (
-    span_creation_handler,
     arguments_helpers,
 )
-from opik.types import DistributedTraceHeadersDict
-from opik.decorator import error_info_collector
+from opik.decorator import base_track_decorator
+from opik.api_objects import span
 
 from . import guards, rest_api_client, schemas
+
+
+class GuardrailsTrackDecorator(base_track_decorator.BaseTrackDecorator):
+    """
+    An implementation of BaseTrackDecorator designed specifically for guardrails span.
+    """
+
+    def _start_span_inputs_preprocessor(
+        self,
+        func: Callable,
+        track_options: arguments_helpers.TrackOptions,
+        args: Optional[Tuple],
+        kwargs: Optional[Dict[str, Any]],
+    ) -> arguments_helpers.StartSpanParameters:
+        assert isinstance(kwargs, dict)
+
+        result = arguments_helpers.StartSpanParameters(
+            name="Guardrail",
+            input={"generation": kwargs["generation"]},
+            type="tool",  # TODO: Replace with type="guardrail"
+        )
+
+        return result
+
+    def _end_span_inputs_preprocessor(
+        self,
+        output: Any,
+        capture_output: bool,
+        current_span_data: span.SpanData,
+    ) -> arguments_helpers.EndSpanParameters:
+        result = arguments_helpers.EndSpanParameters(
+            output=output,
+        )
+
+        return result
+
+    def _streams_handler(
+        self,
+        output: Any,
+        capture_output: bool,
+        generations_aggregator: Optional[Callable[[List[Any]], str]],
+    ) -> Optional[Union[Generator, AsyncGenerator]]:
+        return super()._streams_handler(output, capture_output, generations_aggregator)
+
+
+GUARDRAIL_DECORATOR = GuardrailsTrackDecorator()
 
 
 class Guardrail:
@@ -85,68 +140,24 @@ class Guardrail:
             opik.exceptions.GuardrailValidationFailed: If validation fails
             httpx.HTTPStatusError: If the API returns an error status code
         """
-        # TODO: Support?
-        opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None
+        result = self._validate(generation=text)
 
-        start_span_arguments = arguments_helpers.StartSpanParameters(
-            name="Guardrail",
-            input={"generation": text},
-            type="tool",
-            # type="guardrail", # TODO: Set it back to guardrail
-        )
+        return self._parse_result(result)
 
-        created_trace_data, created_span_data = (
-            span_creation_handler.create_span_for_current_context(
-                start_span_arguments=start_span_arguments,
-                distributed_trace_headers=opik_distributed_trace_headers,
-            )
-        )
-        print("Creatred", created_trace_data, created_span_data)
-        # There shouldn't be any spans created while guardrail is running so no need to track span and trace
-
-        # if created_trace_data is not None:
-        #     context_storage.set_trace_data(created_trace_data)
-
-        # context_storage.add_span_data(created_span_data)
-        # END
-
-        try:
-            result = self._validate(text)
-        except exceptions.GuardrailValidationFailed as exception:
-            print("Guardrail failed:", exception)
-
-            error_info = error_info_collector.collect(exception)
-            created_span_data.update(error_info=error_info).init_end_time()
-
-            self._client.span(**created_span_data.__dict__)
-            print("HERE???")
-
-            if created_trace_data:
-                created_trace_data.init_end_time().update(error_info=error_info)
-                self._client.trace(**created_trace_data.__dict__)
-
-            raise
-
-        # END
-        created_span_data.update(output=result).init_end_time()
-
-        self._client.span(**created_span_data.__dict__)
-
-        if created_trace_data:
-            created_trace_data.init_end_time().update(output=result)
-            self._client.trace(**created_trace_data.__dict__)
-        # END END
-
-        return result
-
-    def _validate(self, text: str) -> schemas.ValidationResponse:
+    @GUARDRAIL_DECORATOR.track
+    def _validate(self, generation: str) -> schemas.ValidationResponse:
         validations = []
 
         for guard in self.guards:
             validations.extend(guard.get_validation_configs())
 
-        result = self._api_client.validate(text, validations)
+        result = self._api_client.validate(generation, validations)
 
+        return result
+
+    def _parse_result(
+        self, result: schemas.ValidationResponse
+    ) -> schemas.ValidationResponse:
         if not result.validation_passed:
             failed_validations = []
             for validation in result.validations:
