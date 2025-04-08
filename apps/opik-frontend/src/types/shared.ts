@@ -1,6 +1,4 @@
 import { Cell, Header } from "@tanstack/react-table";
-import { LucideProps } from "lucide-react";
-import { ForwardRefExoticComponent, RefAttributes } from "react";
 
 export type Updater<T> = T | ((old: T) => T);
 export type OnChangeFn<T> = (updaterOrValue: Updater<T>) => void;
@@ -42,6 +40,12 @@ export enum DYNAMIC_COLUMN_TYPE {
   null = "null",
 }
 
+export enum CUSTOM_HEADER_ICON {
+  GUARDRAILS = "guardrails",
+}
+
+export type HeaderIconType = COLUMN_TYPE | CUSTOM_HEADER_ICON;
+
 export type ColumnData<T> = {
   id: string;
   label: string;
@@ -50,8 +54,7 @@ export type ColumnData<T> = {
   size?: number;
   type?: COLUMN_TYPE;
   customMeta?: object;
-  iconType?: COLUMN_TYPE;
-  HeaderIcon?: HeaderIcon;
+  iconType?: HeaderIconType;
   header?: Header<T, unknown>;
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
@@ -137,7 +140,3 @@ export interface AverageFeedbackScore {
   name: string;
   value: number;
 }
-
-export type HeaderIcon = ForwardRefExoticComponent<
-  Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>
->;

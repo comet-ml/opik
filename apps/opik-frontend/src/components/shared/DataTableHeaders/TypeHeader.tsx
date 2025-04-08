@@ -1,6 +1,10 @@
-import React from "react";
+import React, { ForwardRefExoticComponent, RefAttributes } from "react";
 import { HeaderContext } from "@tanstack/react-table";
-import { COLUMN_TYPE, HeaderIcon } from "@/types/shared";
+import {
+  COLUMN_TYPE,
+  CUSTOM_HEADER_ICON,
+  HeaderIconType,
+} from "@/types/shared";
 import {
   Text,
   Hash,
@@ -11,11 +15,18 @@ import {
   ArrowDown,
   ArrowUp,
   Coins,
+  Construction,
+  LucideProps,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 
-const COLUMN_TYPE_MAP: Record<COLUMN_TYPE, HeaderIcon> = {
+const COLUMN_TYPE_MAP: Record<
+  HeaderIconType,
+  ForwardRefExoticComponent<
+    Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>
+  >
+> = {
   [COLUMN_TYPE.string]: Text,
   [COLUMN_TYPE.number]: Hash,
   [COLUMN_TYPE.list]: List,
@@ -24,20 +35,15 @@ const COLUMN_TYPE_MAP: Record<COLUMN_TYPE, HeaderIcon> = {
   [COLUMN_TYPE.dictionary]: Braces,
   [COLUMN_TYPE.numberDictionary]: PenLine,
   [COLUMN_TYPE.cost]: Coins,
+  [CUSTOM_HEADER_ICON.GUARDRAILS]: Construction,
 };
 
 const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
   const { column } = context;
-  const {
-    header,
-    type: columnType,
-    iconType,
-    HeaderIcon,
-  } = column.columnDef.meta ?? {};
+  const { header, type: columnType, iconType } = column.columnDef.meta ?? {};
 
   const type = iconType ?? columnType;
-  const CoreIcon = type ? COLUMN_TYPE_MAP[type] : "span";
-  const Icon = HeaderIcon || CoreIcon;
+  const Icon = type ? COLUMN_TYPE_MAP[type] : "span";
   const isSortable = column.getCanSort();
   const direction = column.getIsSorted();
 
