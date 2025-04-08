@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-dev \
     tini \
+    wget \
     && rm -rf /var/lib/apt/lists/* && apt-get clean
 
 # Set Python aliases

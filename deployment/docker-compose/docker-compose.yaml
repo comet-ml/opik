@@ -163,11 +163,11 @@ services:
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:500/healthcheck"]
+      test: ["CMD", "sh", "-c", "wget --spider http://127.0.0.1:5000/api/v1/guardrails/healthcheck"]
       interval: 2s
       timeout: 60s
       retries: 30
-      start_period: 2s
+      start_period: 10s
 
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
