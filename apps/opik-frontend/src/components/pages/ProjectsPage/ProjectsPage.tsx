@@ -45,6 +45,9 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import { Construction } from "lucide-react";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -136,6 +139,17 @@ export const DEFAULT_COLUMNS: ColumnData<ProjectWithStatistic>[] = [
     },
   },
   {
+    id: "guardrails",
+    label: "Guardrails",
+    HeaderIcon: Construction,
+    type: COLUMN_TYPE.string,
+    /// TODO should be redefined once BE done
+    accessorFn: (row) =>
+      row.failed_guardrails && isNumber(row.failed_guardrails)
+        ? `${row.failed_guardrails} failed`
+        : "-",
+  },
+  {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
@@ -185,6 +199,18 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
 const ProjectsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
+
+  const defaultColumns = useMemo(() => {
+    return DEFAULT_COLUMNS.filter((column) => {
+      if (column.id === "guardrails") {
+        return isGuardrailsEnabled;
+      }
+      return true;
+    });
+  }, [isGuardrailsEnabled]);
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -278,7 +304,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         },
       }),
       ...convertColumnDataToColumn<ProjectWithStatistic, ProjectWithStatistic>(
-        DEFAULT_COLUMNS,
+        defaultColumns,
         {
           columnsOrder,
           selectedColumns,
@@ -288,7 +314,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: ProjectRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder]);
+  }, [selectedColumns, columnsOrder, defaultColumns]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -338,7 +364,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           <ProjectsActionsPanel projects={selectedRows} />
           <Separator orientation="vertical" className="mx-1 h-4" />
           <ColumnsButton
-            columns={DEFAULT_COLUMNS}
+            columns={defaultColumns}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

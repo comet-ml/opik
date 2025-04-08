@@ -38,6 +38,7 @@ import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   ColumnsStatistic,
+  HeaderIcon,
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -69,6 +70,7 @@ declare module "@tanstack/react-table" {
     type?: COLUMN_TYPE;
     header?: string;
     iconType?: COLUMN_TYPE;
+    HeaderIcon?: HeaderIcon;
     verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
     overrideRowHeight?: ROW_HEIGHT;
     statisticKey?: string;
