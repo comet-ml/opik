@@ -4,5 +4,12 @@ from .project_metric_request_public_interval import ProjectMetricRequestPublicIn
 from .project_metric_request_public_metric_type import (
     ProjectMetricRequestPublicMetricType,
 )
+from .project_update_visibility import ProjectUpdateVisibility
+from .project_write_visibility import ProjectWriteVisibility
 
-__all__ = ["ProjectMetricRequestPublicInterval", "ProjectMetricRequestPublicMetricType"]
+__all__ = [
+    "ProjectMetricRequestPublicInterval",
+    "ProjectMetricRequestPublicMetricType",
+    "ProjectUpdateVisibility",
+    "ProjectWriteVisibility",
+]

@@ -12,7 +12,7 @@ import {
   Shield,
   UserPlus,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -35,7 +35,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useSetAppUser } from "@/store/AppStore";
 import api from "./api";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
@@ -51,6 +51,8 @@ const UserMenu = () => {
   const { toast } = useToast();
   const [openQuickstart, setOpenQuickstart] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const setAppUser = useSetAppUser();
+
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
     enabled: !!user?.loggedIn,
@@ -75,6 +77,15 @@ const UserMenu = () => {
     },
     { enabled: !!user?.loggedIn && !!workspace },
   );
+
+  useEffect(() => {
+    if (user && user.loggedIn) {
+      setAppUser({
+        apiKey: user.apiKeys[0],
+        userName: user.userName,
+      });
+    }
+  }, [user, setAppUser]);
 
   if (
     !user ||
