@@ -1,4 +1,10 @@
 name: Check Documentation Links
+env:
+  ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
+  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
+  ALLURE_ENDPOINT: https://comet.testops.cloud/
+  ALLURE_PROJECT_ID: 1
+  ALLURE_RESULTS: allure-results
 
 on:
   schedule:
@@ -26,9 +32,14 @@ jobs:
         run: |
           pip install pytest allure-pytest
 
+      - name: Install allurectl
+        uses: allure-framework/setup-allurectl@v1
+
       - name: Install Test Dependencies
         run: |
           pip install -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
+          pip install opik
+          playwright install chromium
         
       - name: Install linkinator
         run: |
