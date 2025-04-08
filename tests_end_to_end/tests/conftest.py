@@ -17,6 +17,7 @@ from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
 from tests.sdk_helpers import (
     create_project_via_api,
     delete_project_by_name_sdk,
+    get_random_string,
     wait_for_number_of_traces_to_be_visible,
     client_get_prompt_retries,
     find_project_by_name_sdk,
@@ -120,7 +121,7 @@ def video_dir():
             logging.warning(f"Failed to clean up video directory: {str(e)}")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
     """Create a browser context with required permissions and authentication"""
     # Enable video recording
@@ -175,7 +176,7 @@ def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
     context.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def env_config() -> EnvConfig:
     """
     Get the environment configuration from environment variables.
@@ -187,7 +188,7 @@ def env_config() -> EnvConfig:
 
     # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
-    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
+    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name = "project_" + get_random_string(5)
 
     return env_config
 
@@ -206,7 +207,7 @@ def configure_logging(request):
         logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def client(env_config: EnvConfig, browser_context) -> opik.Opik:
     """Create an Opik client configured for the current environment"""
     kwargs = {
@@ -340,7 +341,7 @@ def experiments_page(page):
 
 @pytest.fixture(scope="function")
 @allure.title("Create project via API call, handle cleanup after test")
-def create_project_api(page: Page):
+def create_project_api():
     """
     Create a project via SDK and handle cleanup.
     Checks if project exists before attempting deletion.
@@ -351,14 +352,7 @@ def create_project_api(page: Page):
     create_project_via_api(name=proj_name)
     yield proj_name
 
-    projects_page = ProjectsPage(page)
-    projects_page.go_to_page()
-    try:
-        projects_page.search_project(proj_name)
-        projects_page.check_project_not_exists_on_current_page(project_name=proj_name)
-    except AssertionError as _:
-        projects_page.delete_project_by_name(proj_name)
-    wait_for_project_to_not_be_visible(proj_name)
+    delete_project_by_name_sdk(proj_name)
 
 
 @pytest.fixture(scope="function")
