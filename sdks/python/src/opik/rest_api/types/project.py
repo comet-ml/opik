@@ -2,6 +2,7 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
+from .project_visibility import ProjectVisibility
 import datetime as dt
 from .feedback_score_average import FeedbackScoreAverage
 from .percentage_values import PercentageValues
@@ -12,6 +13,7 @@ import pydantic
 class Project(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
+    visibility: typing.Optional[ProjectVisibility] = None
     description: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

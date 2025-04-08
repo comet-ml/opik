@@ -43,6 +43,7 @@ jobs:
   test:
     needs: collect_test_paths
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       OPENAI_API_KEY: ${{ secrets.DOCS_OPENAI_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -1,20 +1,34 @@
 import React, { useState } from "react";
-import { FlaskConical, InspectionPanel, MousePointer } from "lucide-react";
+import {
+  Construction,
+  FlaskConical,
+  InspectionPanel,
+  MousePointer,
+} from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import AddExperimentDialog from "../ExperimentsShared/AddExperimentDialog";
 import { Link } from "@tanstack/react-router";
 import { SheetTitle } from "@/components/ui/sheet";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isNewExperimentDialogOpened, setIsNewExperimentDialogOpened] =
     useState<boolean>(false);
+  const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
+    useState<boolean>(false);
   const [isLogTraceDialogOpened, setIsLogTraceDialogOpened] = useState(false);
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
 
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
   const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);
+  const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
 
   return (
     <div>
@@ -44,6 +58,17 @@ const GetStartedSection = () => {
           </div>
           <div className="comet-body-s">Run an experiment</div>
         </div>
+        {isGuardrailsEnabled && (
+          <div
+            onClick={openGuardrailsDialog}
+            className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
+          >
+            <div className="flex size-[24px] items-center justify-center rounded bg-[#FEE3D7] ">
+              <Construction className="size-3.5 text-[#73422B]" />
+            </div>
+            <div className="comet-body-s">Set a guardrail</div>
+          </div>
+        )}
         <Link
           className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-white p-4 transition-shadow hover:shadow-md"
           to={"/$workspaceName/playground"}
@@ -76,6 +101,12 @@ const GetStartedSection = () => {
         open={isNewExperimentDialogOpened}
         setOpen={setIsNewExperimentDialogOpened}
       />
+      {isGuardrailsEnabled && (
+        <SetGuardrailDialog
+          open={isGuardrailsDialogOpened}
+          setOpen={setIsGuardrailsDialogOpened}
+        />
+      )}
     </div>
   );
 };

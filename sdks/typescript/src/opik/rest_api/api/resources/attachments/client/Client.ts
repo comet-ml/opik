@@ -153,7 +153,7 @@ export class Attachments {
     }
 
     /**
-     * Start multipart attachment upload
+     * Complete multipart attachment upload
      *
      * @param {OpikApi.CompleteMultipartUploadRequest} request
      * @param {Attachments.RequestOptions} requestOptions - Request-specific configuration.
@@ -162,7 +162,7 @@ export class Attachments {
      * @throws {@link OpikApi.ForbiddenError}
      *
      * @example
-     *     await client.attachments.startMultiPartUpload({
+     *     await client.attachments.completeMultiPartUpload({
      *         fileName: "file_name",
      *         entityType: "trace",
      *         entityId: "entity_id",
@@ -174,7 +174,7 @@ export class Attachments {
      *             }]
      *     })
      */
-    public async startMultiPartUpload(
+    public async completeMultiPartUpload(
         request: OpikApi.CompleteMultipartUploadRequest,
         requestOptions?: Attachments.RequestOptions,
     ): Promise<void> {
@@ -444,7 +444,7 @@ export class Attachments {
      * @throws {@link OpikApi.ForbiddenError}
      *
      * @example
-     *     await client.attachments.startMultiPartUpload1({
+     *     await client.attachments.startMultiPartUpload({
      *         fileName: "file_name",
      *         numOfFileParts: 1,
      *         entityType: "trace",
@@ -452,7 +452,7 @@ export class Attachments {
      *         path: "path"
      *     })
      */
-    public async startMultiPartUpload1(
+    public async startMultiPartUpload(
         request: OpikApi.StartMultipartUploadRequest,
         requestOptions?: Attachments.RequestOptions,
     ): Promise<OpikApi.StartMultipartUploadResponse> {
