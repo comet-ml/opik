@@ -6,7 +6,11 @@ import {
   useQueryParam,
 } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
-import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
@@ -30,7 +34,11 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { BaseTraceData, Span, Trace } from "@/types/traces";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  isColumnSortable,
+  mapColumnDataFields,
+} from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
@@ -68,6 +76,7 @@ import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -185,6 +194,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
 const COLUMNS_WIDTH_KEY = "traces-columns-width";
 const COLUMNS_ORDER_KEY = "traces-columns-order";
+const COLUMNS_SORT_KEY_SUFFIX = "-columns-sort";
 const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
 const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 
@@ -243,6 +253,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
+  const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
+    ColumnSort[]
+  >({
+    localStorageKey: `${type}${COLUMNS_SORT_KEY_SUFFIX}`,
+    queryKey: `${type}_sorting`,
+    defaultValue: [],
+    queryParamConfig: JsonParam,
+  });
+
   const filtersConfig = useMemo(
     () => ({
       rowsMap: {
@@ -275,6 +294,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
+      sorting: sortedColumns.map((column) => {
+        if (column.id.startsWith(COLUMN_FEEDBACK_SCORES_ID)) {
+          return {
+            ...column,
+            id: column.id.replace(
+              `${COLUMN_FEEDBACK_SCORES_ID}_`,
+              `${COLUMN_FEEDBACK_SCORES_ID}.`,
+            ),
+          };
+        }
+        return column;
+      }),
       filters,
       page: page as number,
       size: size as number,
@@ -317,7 +348,16 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       } yet`
     : "No search results";
 
-  const rows: Array<Span | Trace> = useMemo(() => data?.content ?? [], [data]);
+  const rows: Array<Span | Trace> = useMemo(
+    () => data?.content ?? [],
+    [data?.content],
+  );
+
+  const sortableBy: string[] = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
+  );
+
   const columnsStatistic: ColumnsStatistic = useMemo(
     () => statisticData?.stats ?? [],
     [statisticData],
@@ -353,7 +393,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return (feedbackScoresData?.scores ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: `feedback_scores.${c.name}`,
+        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
         label: c.name,
         columnType: COLUMN_TYPE.number,
       }));
@@ -382,7 +422,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             cell: FeedbackScoreCell as never,
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `feedback_scores.${label}`,
+            statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
           }) as ColumnData<BaseTraceData>,
       ),
     ];
@@ -508,21 +548,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           callback: handleRowClick,
           asId: true,
         },
+        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
       }),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(columnData, {
         columnsOrder,
         selectedColumns,
+        sortableColumns: sortableBy,
       }),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
         scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
           selectedColumns,
+          sortableColumns: sortableBy,
         },
       ),
     ];
   }, [
     handleRowClick,
+    sortableBy,
     columnData,
     columnsOrder,
     selectedColumns,
@@ -557,6 +601,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setTraceId("");
     setSpanId("");
   }, [setSpanId, setTraceId, setThreadId]);
+
+  const sortConfig = useMemo(
+    () => ({
+      enabled: true,
+      sorting: sortedColumns,
+      setSorting: setSortedColumns,
+    }),
+    [setSortedColumns, sortedColumns],
+  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -655,6 +708,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         data={rows}
         onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
+        sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,

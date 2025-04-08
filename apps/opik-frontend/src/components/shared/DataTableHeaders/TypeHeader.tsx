@@ -9,12 +9,10 @@ import {
   Clock,
   Braces,
   PenLine,
-  ArrowDown,
-  ArrowUp,
   Coins,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
+import useSortableHeader from "@/components/shared/DataTableHeaders/useSortableHeader";
 
 const COLUMN_TYPE_MAP: Record<
   COLUMN_TYPE,
@@ -37,41 +35,21 @@ const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
   const { header, type: columnType, iconType } = column.columnDef.meta ?? {};
   const type = iconType ?? columnType;
   const Icon = type ? COLUMN_TYPE_MAP[type] : "span";
-  const isSortable = column.getCanSort();
-  const direction = column.getIsSorted();
 
-  const renderSort = () => {
-    const nextDirection = column.getNextSortingOrder();
-
-    if (!direction && !nextDirection) return null;
-
-    const Icon = (direction || nextDirection) === "asc" ? ArrowUp : ArrowDown;
-    return (
-      <>
-        <Icon
-          className={cn(
-            "hidden size-3.5 group-hover:inline",
-            direction && "inline",
-          )}
-        />
-      </>
-    );
-  };
+  const { className, onClickHandler, renderSort } = useSortableHeader({
+    column,
+  });
 
   return (
     <HeaderWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className={cn(isSortable && "cursor-pointer group")}
-      onClick={
-        isSortable
-          ? column.getToggleSortingHandler()
-          : (e) => e.stopPropagation()
-      }
+      className={className}
+      onClick={onClickHandler}
     >
       {Boolean(Icon) && <Icon className="size-3.5 shrink-0 text-slate-300" />}
       <span className="truncate">{header}</span>
-      {isSortable && renderSort()}
+      {renderSort()}
     </HeaderWrapper>
   );
 };
