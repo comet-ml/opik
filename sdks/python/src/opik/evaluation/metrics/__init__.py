@@ -1,3 +1,4 @@
+from .aggregated_metric import AggregatedMetric
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
 from .heuristics.is_json import IsJson
@@ -18,6 +19,7 @@ from opik.exceptions import MetricComputationError
 # from .llm_judges.factuality.metric import Factuality
 
 __all__ = [
+    "AggregatedMetric",
     "AnswerRelevance",
     "Contains",
     "ContextPrecision",
