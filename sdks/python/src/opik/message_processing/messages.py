@@ -156,9 +156,10 @@ class CreateTraceBatchMessage(BaseMessage):
 
 @dataclasses.dataclass
 class CreateAttachmentMessage(BaseMessage):
+    file_path: str
     file_name: str
-    mime_type: str
-    type: Literal["trace", "span"]
+    mime_type: Optional[str]
+    entity_type: Literal["trace", "span"]
     entity_id: str
     project_name: str
-    path: str  # the encoded base URL
+    base_url_path: str  # the encoded base URL
