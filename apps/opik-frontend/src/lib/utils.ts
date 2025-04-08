@@ -20,13 +20,6 @@ export const buildDocsUrl = (path: string = "", hash: string = "") => {
   return `${BASE_DOCUMENTATION_URL}${path}?from=llm${hash}`;
 };
 
-export const getFullAPIURL = (url: string) => {
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url;
-  }
-  return `${location.origin}/${url}`;
-};
-
 export const isSameDomainUrl = (url: string) => {
   try {
     const resolvedUrl = new URL(url, window.location.href);

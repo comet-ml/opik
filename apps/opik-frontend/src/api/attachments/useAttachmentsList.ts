@@ -5,7 +5,6 @@ import api, {
   QueryConfig,
 } from "@/api/api";
 import { Attachment, AttachmentEntityType } from "@/types/attachments";
-import { getFullAPIURL } from "@/lib/utils";
 
 type UseAttachmentsListParams = {
   projectId: string;
@@ -44,7 +43,7 @@ export default function useAttachmentsList(
   params: UseAttachmentsListParams,
   options?: QueryConfig<UseAttachmentsListResponse>,
 ) {
-  const path = btoa(getFullAPIURL(BASE_API_URL));
+  const path = btoa(new URL(BASE_API_URL, location.origin).toString());
   return useQuery({
     queryKey: ["attachments", params],
     queryFn: (context) => getAttachmentsList(context, params, path),

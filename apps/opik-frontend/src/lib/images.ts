@@ -151,13 +151,10 @@ export function isImageString(str?: unknown): boolean {
 }
 
 export const BASE_64_OVERRIDE_TEXT = "[image]";
-function replaceBase64ImageNameResolver(base64: string) {
-  return base64 ?? BASE_64_OVERRIDE_TEXT;
-}
 
-export function replaceBase64ImageValues<T>(
+function replaceBase64ImageValues<T>(
   v: T,
-  nameResolver: (base64: string) => string = replaceBase64ImageNameResolver,
+  nameResolver: (base64: string) => string,
 ): T {
   if (isImageString(v)) {
     return nameResolver(v as string) as T;
