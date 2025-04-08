@@ -16,9 +16,8 @@ const injectGitHubLink = () => {
   const isValidCookbookPage = path.includes("docs/opik/cookbook/") && !path.endsWith("docs/opik/cookbook/overview");
   if (!isValidCookbookPage) return;
 
-  const heading = document.querySelector(".fern-page-heading");
-  if (!heading) return;
-  heading.style.marginBottom = "1rem";
+  const header = document.querySelector("header");
+  if (!header) return;
 
   const notebookPath =
     path.replace("/docs/opik/cookbook/", "/apps/opik-documentation/documentation/docs/cookbook/") + ".ipynb";
@@ -58,18 +57,14 @@ const injectGitHubLink = () => {
   content.appendChild(leftSection);
   content.appendChild(rightSection);
   container.appendChild(content);
-  heading.parentNode.parentNode.insertBefore(container, heading.nextSibling);
+  header.insertAdjacentElement("afterend", container);
 };
 
 // Single function to handle both initial load and mutations
 const setupBannerInjection = () => {
   const observer = new MutationObserver(() => {
-    const heading = document.querySelector(".fern-page-heading");
-    if (
-      heading &&
-      !heading.querySelector(".fern-page-actions") &&
-      !heading.parentElement?.nextSibling?.classList?.contains("callout-outlined-tip")
-    ) {
+    const header = document.querySelector("header");
+    if (header && !document.querySelector(".callout-outlined-tip")) {
       injectGitHubLink();
       console.log("test");
     }
