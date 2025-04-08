@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param (
-    [string]$option = ''
+    [string[]]$options = @()
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -21,6 +21,10 @@ $REQUIRED_CONTAINERS = @(
     "opik-minio-1"
 )
 
+$GUARDRAILS_CONTAINERS = @(
+    "opik-guardrails-backend-1"
+)
+
 function Show-Usage {
     Write-Host 'Usage: opik.ps1 [OPTION]'
     Write-Host ''
@@ -29,6 +33,7 @@ function Show-Usage {
     Write-Host '  --info      Display welcome system status, only if all containers are running'
     Write-Host '  --stop      Stop all containers and clean up'
     Write-Host '  --debug     Enable debug mode (verbose output)'
+    Write-Host '  --guardrails Enable guardrails profile (can be combined with other flags)'
     Write-Host '  --help      Show this help message'
     Write-Host ''
     Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
@@ -47,7 +52,6 @@ function Test-DockerStatus {
     }
 }
 
-
 function Test-ContainersStatus {
     [CmdletBinding()]
     param (
@@ -56,7 +60,12 @@ function Test-ContainersStatus {
     Test-DockerStatus
     $allOk = $true
 
-    foreach ($container in $REQUIRED_CONTAINERS) {
+    $containers = $REQUIRED_CONTAINERS
+    if ($GUARDRAILS_ENABLED) {
+        $containers += $GUARDRAILS_CONTAINERS
+    }
+
+    foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
         $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
 
@@ -153,7 +162,12 @@ function Start-MissingContainers {
     if ($DEBUG_MODE) { Write-Host '[DEBUG] Checking required containers...' }
     $allRunning = $true
 
-    foreach ($container in $REQUIRED_CONTAINERS) {
+    $containers = $REQUIRED_CONTAINERS
+    if ($GUARDRAILS_ENABLED) {
+        $containers += $GUARDRAILS_CONTAINERS
+    }
+
+    foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
         $resolvedStatus = if ($status) { $status } else { 'not found' }
 
@@ -167,7 +181,13 @@ function Start-MissingContainers {
 
     Write-Host '[INFO] Starting missing containers...'
     Set-Location -Path "$scriptDir\deployment\docker-compose"
-    $dockerArgs = @("compose", "up", "-d")
+    $dockerArgs = @("compose", "-f", "$scriptDir\deployment\docker-compose\docker-compose.yaml")
+    
+    if ($GUARDRAILS_ENABLED) {
+        $dockerArgs += "--profile", "guardrails"
+    }
+    
+    $dockerArgs += "up", "-d"
 
     if ($BUILD_MODE -eq "true") {
         $dockerArgs += "--build"
@@ -180,7 +200,7 @@ function Start-MissingContainers {
     $interval = 1
     $allRunning = $true
 
-    foreach ($container in $REQUIRED_CONTAINERS) {
+    foreach ($container in $containers) {
         $retries = 0
         if ($DEBUG_MODE) { Write-Host "[DEBUG] Waiting for $container..." }
 
@@ -228,7 +248,14 @@ function Stop-Containers {
     Test-DockerStatus
     Write-Host '[INFO] Stopping all required containers...'
     Set-Location -Path "$scriptDir\deployment\docker-compose"
-    docker compose stop
+    $dockerArgs = @("compose", "-f", "$scriptDir\deployment\docker-compose\docker-compose.yaml")
+    
+    if ($GUARDRAILS_ENABLED) {
+        $dockerArgs += "--profile", "guardrails"
+    }
+    
+    $dockerArgs += "down"
+    docker @dockerArgs
     Write-Host '[OK] All containers stopped and cleaned up!'
     Set-Location -Path $originalDir
 }
@@ -264,6 +291,18 @@ function Show-Banner {
 }
 
 $DEBUG_MODE = $false
+$GUARDRAILS_ENABLED = $false
+$env:OPIK_FRONTEND_FLAVOR = "default"
+
+# Check for guardrails in options
+if ($options -contains '--guardrails') {
+    $GUARDRAILS_ENABLED = $true
+    $env:OPIK_FRONTEND_FLAVOR = "guardrails"
+    $options = $options | Where-Object { $_ -ne '--guardrails' }
+}
+
+# Get the first remaining option
+$option = if ($options.Count -gt 0) { $options[0] } else { '' }
 
 switch ($option) {
     '--verify' {

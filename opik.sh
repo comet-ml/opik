@@ -3,6 +3,7 @@
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1")
+GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
 
 generate_uuid() {
   if command -v uuidgen >/dev/null 2>&1; then
@@ -20,6 +21,7 @@ print_usage() {
   echo "  --info      Display welcome system status, only if all containers are running"
   echo "  --stop      Stop all containers and clean up"
   echo "  --debug     Enable debug mode (verbose output)"
+  echo "  --guardrails Enable guardrails profile (can be combined with other flags)"
   echo "  --help      Show this help message"
   echo ""
   echo "If no option is passed, the script will start missing containers and then show the system status."
@@ -40,7 +42,12 @@ check_containers_status() {
 
   check_docker_status
 
-  for container in "${REQUIRED_CONTAINERS[@]}"; do
+  local containers=("${REQUIRED_CONTAINERS[@]}")
+  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
+    containers+=("${GUARDRAILS_CONTAINERS[@]}")
+  fi
+
+  for container in "${containers[@]}"; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
     health=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
 
@@ -80,20 +87,29 @@ start_missing_containers() {
   done
 
   echo "🔄 Starting missing containers..."
-  cd "$script_dir/deployment/docker-compose"
+  cd "$script_dir/deployment/docker-compose" || exit
 
   if [[ "${BUILD_MODE}" = "true" ]]; then
     export COMPOSE_BAKE=true
   fi
 
-  docker compose up -d ${BUILD_MODE:+--build}
+  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
+    cmd="$cmd --profile guardrails"
+  fi
+  $cmd up -d ${BUILD_MODE:+--build}
 
   echo "⏳ Waiting for all containers to be running and healthy..."
   max_retries=60
   interval=1
   all_running=true
 
-  for container in "${REQUIRED_CONTAINERS[@]}"; do
+  local containers=("${REQUIRED_CONTAINERS[@]}")
+  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
+    containers+=("${GUARDRAILS_CONTAINERS[@]}")
+  fi
+
+  for container in "${containers[@]}"; do
     retries=0
     [[ "$DEBUG_MODE" == true ]] && echo "⏳ Waiting for $container..."
 
@@ -134,8 +150,12 @@ start_missing_containers() {
 stop_containers() {
   check_docker_status
   echo "🛑 Stopping all required containers..."
-  cd "$script_dir/deployment/docker-compose"
-  docker compose stop
+  cd "$script_dir/deployment/docker-compose" || exit
+  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
+    cmd="$cmd --profile guardrails"
+  fi
+  $cmd down
   echo "✅ All containers stopped and cleaned up!"
 }
 
@@ -247,6 +267,17 @@ EOF
 
 # Default: no debug
 DEBUG_MODE=false
+# Default: no guardrails
+GUARDRAILS_ENABLED=false
+export OPIK_FRONTEND_FLAVOR=default
+
+# Check for guardrails flag first
+if [[ "$*" == *"--guardrails"* ]]; then
+  GUARDRAILS_ENABLED=true
+  export OPIK_FRONTEND_FLAVOR=guardrails
+  # Remove --guardrails from arguments
+  set -- ${@/--guardrails/}
+fi
 
 # Main logic
 case "$1" in
@@ -265,7 +296,7 @@ case "$1" in
       exit 1
     fi
     ;;
-    --stop)
+  --stop)
     stop_containers
     exit 0
     ;;
