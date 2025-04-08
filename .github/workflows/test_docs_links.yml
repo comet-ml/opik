@@ -1,4 +1,10 @@
 name: Check Documentation Links
+env:
+  ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
+  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
+  ALLURE_ENDPOINT: https://comet.testops.cloud/
+  ALLURE_PROJECT_ID: 1
+  ALLURE_RESULTS: allure-results
 
 on:
   schedule:
