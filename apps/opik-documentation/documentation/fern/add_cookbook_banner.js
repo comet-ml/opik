@@ -16,7 +16,7 @@ const injectGitHubLink = () => {
   const isValidCookbookPage = path.includes("docs/opik/cookbook/") && !path.endsWith("docs/opik/cookbook/overview");
   if (!isValidCookbookPage) return;
 
-  const header = document.querySelector("header");
+  const header = document.querySelector(".fern-layout-guide header");
   if (!header) return;
 
   const notebookPath =
@@ -63,7 +63,7 @@ const injectGitHubLink = () => {
 // Single function to handle both initial load and mutations
 const setupBannerInjection = () => {
   const observer = new MutationObserver(() => {
-    const header = document.querySelector("header");
+    const header = document.querySelector(".fern-layout-guide header");
     if (header && !document.querySelector(".callout-outlined-tip")) {
       injectGitHubLink();
       console.log("test");
