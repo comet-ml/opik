@@ -10,7 +10,7 @@ import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
-import CreateExperimentCode from "@/components/pages-shared/onboarding/CreateExperimentCode/CreateExperimentCode";
+import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -340,7 +340,7 @@ eval_results = evaluate(
             <div className="comet-body-s mt-4 text-foreground-secondary">
               3. Create an Experiment
             </div>
-            <CreateExperimentCode code={section3} />
+            <ConfiguredCodeHighlighter code={section3} />
           </div>
 
           <div className="flex w-[250px] shrink-0 flex-col gap-6 self-start">
