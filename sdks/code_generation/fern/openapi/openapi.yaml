@@ -207,9 +207,9 @@ paths:
     post:
       tags:
       - Attachments
-      summary: Start multipart attachment upload
-      description: Start multipart attachment upload
-      operationId: startMultiPartUpload
+      summary: Complete multipart attachment upload
+      description: Complete multipart attachment upload
+      operationId: completeMultiPartUpload
       requestBody:
         content:
           application/json:
@@ -325,7 +325,7 @@ paths:
       - Attachments
       summary: Start multipart attachment upload
       description: Start multipart attachment upload
-      operationId: startMultiPartUpload_1
+      operationId: startMultiPartUpload
       requestBody:
         content:
           application/json:
@@ -2257,6 +2257,7 @@ paths:
           - general
           - tool
           - llm
+          - guardrail
       - name: filters
         in: query
         schema:
@@ -2444,6 +2445,7 @@ paths:
           - general
           - tool
           - llm
+          - guardrail
       responses:
         "200":
           description: Feedback Scores resource
@@ -2516,6 +2518,7 @@ paths:
           - general
           - tool
           - llm
+          - guardrail
       - name: filters
         in: query
         schema:
@@ -5917,6 +5920,11 @@ components:
           readOnly: true
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           type: string
         created_at:
@@ -5966,6 +5974,11 @@ components:
       properties:
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           type: string
     ProjectPage_Public:
@@ -5999,6 +6012,11 @@ components:
           readOnly: true
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           type: string
         created_at:
@@ -6159,6 +6177,11 @@ components:
           readOnly: true
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           type: string
         created_at:
@@ -6223,6 +6246,11 @@ components:
           type: string
         description:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
     Prompt:
       required:
       - name
@@ -6605,6 +6633,7 @@ components:
           - general
           - tool
           - llm
+          - guardrail
         start_time:
           type: string
           format: date-time
@@ -6710,6 +6739,7 @@ components:
           - general
           - tool
           - llm
+          - guardrail
         start_time:
           type: string
           format: date-time
@@ -6858,6 +6888,7 @@ components:
           - general
           - tool
           - llm
+          - guardrail
         start_time:
           type: string
           format: date-time
@@ -7086,6 +7117,7 @@ components:
           - general
           - tool
           - llm
+          - guardrail
         filters:
           type: array
           items:
