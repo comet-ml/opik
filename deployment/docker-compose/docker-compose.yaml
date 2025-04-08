@@ -163,7 +163,7 @@ services:
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget --spider http://127.0.0.1:5000/api/v1/guardrails/healthcheck"]
+      test: ["CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/api/v1/guardrails/healthcheck"]
       interval: 2s
       timeout: 60s
       retries: 30
