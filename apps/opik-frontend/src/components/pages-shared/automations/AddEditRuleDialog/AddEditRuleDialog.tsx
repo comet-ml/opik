@@ -52,6 +52,7 @@ import {
 import { LLM_JUDGE } from "@/types/llm";
 import { LLM_PROMPT_CUSTOM_TEMPLATE } from "@/constants/llm";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export const DEFAULT_SAMPLING_RATE = 1;
 
@@ -102,7 +103,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   projectId,
   rule: defaultRule,
 }) => {
-  const isCodeMetricEnabled = useIsFeatureEnabled("python_evaluator_enabled");
+  const isCodeMetricEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
+  );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
