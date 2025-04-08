@@ -16,9 +16,8 @@ const injectGitHubLink = () => {
   const isValidCookbookPage = path.includes("docs/opik/cookbook/") && !path.endsWith("docs/opik/cookbook/overview");
   if (!isValidCookbookPage) return;
 
-  const heading = document.querySelector(".fern-page-heading");
-  if (!heading) return;
-  heading.style.marginBottom = "1rem";
+  const header = document.querySelector(".fern-layout-guide header");
+  if (!header) return;
 
   const notebookPath =
     path.replace("/docs/opik/cookbook/", "/apps/opik-documentation/documentation/docs/cookbook/") + ".ipynb";
@@ -58,21 +57,22 @@ const injectGitHubLink = () => {
   content.appendChild(leftSection);
   content.appendChild(rightSection);
   container.appendChild(content);
-  heading.parentNode.insertBefore(container, heading.nextSibling);
+  header.insertAdjacentElement("afterend", container);
 };
 
 // Single function to handle both initial load and mutations
 const setupBannerInjection = () => {
   const observer = new MutationObserver(() => {
-    const heading = document.querySelector(".fern-page-heading");
-    if (heading && !heading.nextSibling?.classList?.contains("callout-outlined-tip")) {
+    const header = document.querySelector(".fern-layout-guide header");
+    if (header && !document.querySelector(".callout-outlined-tip")) {
       injectGitHubLink();
+      console.log("test");
     }
   });
 
   if (document.body) {
     observer.observe(document.body, { childList: true, subtree: true });
-    injectGitHubLink(); // Initial injection attempt
+    //   injectGitHubLink(); // Initial injection attempt
   }
 };
 
