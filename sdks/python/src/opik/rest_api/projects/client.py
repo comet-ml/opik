@@ -7,11 +7,13 @@ from ..types.project_page_public import ProjectPagePublic
 from ..core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from .types.project_write_visibility import ProjectWriteVisibility
 from ..errors.bad_request_error import BadRequestError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.project_public import ProjectPublic
 from ..core.jsonable_encoder import jsonable_encoder
 from ..errors.conflict_error import ConflictError
+from .types.project_update_visibility import ProjectUpdateVisibility
 from ..types.feedback_score_names import FeedbackScoreNames
 from .types.project_metric_request_public_metric_type import (
     ProjectMetricRequestPublicMetricType,
@@ -103,6 +105,7 @@ class ProjectsClient:
         self,
         *,
         name: str,
+        visibility: typing.Optional[ProjectWriteVisibility] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -112,6 +115,8 @@ class ProjectsClient:
         Parameters
         ----------
         name : str
+
+        visibility : typing.Optional[ProjectWriteVisibility]
 
         description : typing.Optional[str]
 
@@ -139,6 +144,7 @@ class ProjectsClient:
             method="POST",
             json={
                 "name": name,
+                "visibility": visibility,
                 "description": description,
             },
             headers={
@@ -282,6 +288,7 @@ class ProjectsClient:
         *,
         name: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
+        visibility: typing.Optional[ProjectUpdateVisibility] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -294,6 +301,8 @@ class ProjectsClient:
         name : typing.Optional[str]
 
         description : typing.Optional[str]
+
+        visibility : typing.Optional[ProjectUpdateVisibility]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -320,6 +329,7 @@ class ProjectsClient:
             json={
                 "name": name,
                 "description": description,
+                "visibility": visibility,
             },
             headers={
                 "content-type": "application/json",
@@ -784,6 +794,7 @@ class AsyncProjectsClient:
         self,
         *,
         name: str,
+        visibility: typing.Optional[ProjectWriteVisibility] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -793,6 +804,8 @@ class AsyncProjectsClient:
         Parameters
         ----------
         name : str
+
+        visibility : typing.Optional[ProjectWriteVisibility]
 
         description : typing.Optional[str]
 
@@ -828,6 +841,7 @@ class AsyncProjectsClient:
             method="POST",
             json={
                 "name": name,
+                "visibility": visibility,
                 "description": description,
             },
             headers={
@@ -987,6 +1001,7 @@ class AsyncProjectsClient:
         *,
         name: typing.Optional[str] = OMIT,
         description: typing.Optional[str] = OMIT,
+        visibility: typing.Optional[ProjectUpdateVisibility] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -999,6 +1014,8 @@ class AsyncProjectsClient:
         name : typing.Optional[str]
 
         description : typing.Optional[str]
+
+        visibility : typing.Optional[ProjectUpdateVisibility]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1033,6 +1050,7 @@ class AsyncProjectsClient:
             json={
                 "name": name,
                 "description": description,
+                "visibility": visibility,
             },
             headers={
                 "content-type": "application/json",

@@ -7,6 +7,7 @@ import * as OpikApi from "../index";
 export interface ProjectDetailed {
     id?: string;
     name: string;
+    visibility?: OpikApi.ProjectDetailedVisibility;
     description?: string;
     createdAt?: Date;
     createdBy?: string;

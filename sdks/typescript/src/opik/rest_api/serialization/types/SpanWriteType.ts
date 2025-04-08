@@ -7,8 +7,8 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 
 export const SpanWriteType: core.serialization.Schema<serializers.SpanWriteType.Raw, OpikApi.SpanWriteType> =
-    core.serialization.enum_(["general", "tool", "llm"]);
+    core.serialization.enum_(["general", "tool", "llm", "guardrail"]);
 
 export declare namespace SpanWriteType {
-    export type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm" | "guardrail";
 }

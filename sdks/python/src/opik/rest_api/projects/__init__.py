@@ -3,6 +3,13 @@
 from .types import (
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
+    ProjectUpdateVisibility,
+    ProjectWriteVisibility,
 )
 
-__all__ = ["ProjectMetricRequestPublicInterval", "ProjectMetricRequestPublicMetricType"]
+__all__ = [
+    "ProjectMetricRequestPublicInterval",
+    "ProjectMetricRequestPublicMetricType",
+    "ProjectUpdateVisibility",
+    "ProjectWriteVisibility",
+]

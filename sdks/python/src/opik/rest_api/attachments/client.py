@@ -134,7 +134,7 @@ class AttachmentsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def start_multi_part_upload(
+    def complete_multi_part_upload(
         self,
         *,
         file_name: str,
@@ -149,7 +149,7 @@ class AttachmentsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Start multipart attachment upload
+        Complete multipart attachment upload
 
         Parameters
         ----------
@@ -187,7 +187,7 @@ class AttachmentsClient:
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
-        client.attachments.start_multi_part_upload(
+        client.attachments.complete_multi_part_upload(
             file_name="file_name",
             entity_type="trace",
             entity_id="entity_id",
@@ -451,7 +451,7 @@ class AttachmentsClient:
                 raise ApiError(status_code=_response.status_code, body=_response.text)
             raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def start_multi_part_upload_1(
+    def start_multi_part_upload(
         self,
         *,
         file_name: str,
@@ -499,7 +499,7 @@ class AttachmentsClient:
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
-        client.attachments.start_multi_part_upload_1(
+        client.attachments.start_multi_part_upload(
             file_name="file_name",
             num_of_file_parts=1,
             entity_type="trace",
@@ -762,7 +762,7 @@ class AsyncAttachmentsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def start_multi_part_upload(
+    async def complete_multi_part_upload(
         self,
         *,
         file_name: str,
@@ -777,7 +777,7 @@ class AsyncAttachmentsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Start multipart attachment upload
+        Complete multipart attachment upload
 
         Parameters
         ----------
@@ -820,7 +820,7 @@ class AsyncAttachmentsClient:
 
 
         async def main() -> None:
-            await client.attachments.start_multi_part_upload(
+            await client.attachments.complete_multi_part_upload(
                 file_name="file_name",
                 entity_type="trace",
                 entity_id="entity_id",
@@ -1095,7 +1095,7 @@ class AsyncAttachmentsClient:
                 raise ApiError(status_code=_response.status_code, body=_response.text)
             raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def start_multi_part_upload_1(
+    async def start_multi_part_upload(
         self,
         *,
         file_name: str,
@@ -1148,7 +1148,7 @@ class AsyncAttachmentsClient:
 
 
         async def main() -> None:
-            await client.attachments.start_multi_part_upload_1(
+            await client.attachments.start_multi_part_upload(
                 file_name="file_name",
                 num_of_file_parts=1,
                 entity_type="trace",

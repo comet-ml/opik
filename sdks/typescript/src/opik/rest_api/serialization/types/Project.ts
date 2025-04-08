@@ -5,6 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { ProjectVisibility } from "./ProjectVisibility";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 import { PercentageValues } from "./PercentageValues";
 
@@ -12,6 +13,7 @@ export const Project: core.serialization.ObjectSchema<serializers.Project.Raw, O
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        visibility: ProjectVisibility.optional(),
         description: core.serialization.string().optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -32,6 +34,7 @@ export declare namespace Project {
     export interface Raw {
         id?: string | null;
         name: string;
+        visibility?: ProjectVisibility.Raw | null;
         description?: string | null;
         created_at?: string | null;
         created_by?: string | null;

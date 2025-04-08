@@ -5,16 +5,19 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
+import { ProjectWriteVisibility } from "../../types/ProjectWriteVisibility";
 
 export const ProjectWrite: core.serialization.Schema<serializers.ProjectWrite.Raw, OpikApi.ProjectWrite> =
     core.serialization.object({
         name: core.serialization.string(),
+        visibility: ProjectWriteVisibility.optional(),
         description: core.serialization.string().optional(),
     });
 
 export declare namespace ProjectWrite {
     export interface Raw {
         name: string;
+        visibility?: ProjectWriteVisibility.Raw | null;
         description?: string | null;
     }
 }

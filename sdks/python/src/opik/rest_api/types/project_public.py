@@ -2,6 +2,7 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
+from .project_public_visibility import ProjectPublicVisibility
 import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
@@ -10,6 +11,7 @@ import pydantic
 class ProjectPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
+    visibility: typing.Optional[ProjectPublicVisibility] = None
     description: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

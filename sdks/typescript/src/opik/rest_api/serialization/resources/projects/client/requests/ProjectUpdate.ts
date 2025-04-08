@@ -5,16 +5,19 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
+import { ProjectUpdateVisibility } from "../../types/ProjectUpdateVisibility";
 
 export const ProjectUpdate: core.serialization.Schema<serializers.ProjectUpdate.Raw, OpikApi.ProjectUpdate> =
     core.serialization.object({
         name: core.serialization.string().optional(),
         description: core.serialization.string().optional(),
+        visibility: ProjectUpdateVisibility.optional(),
     });
 
 export declare namespace ProjectUpdate {
     export interface Raw {
         name?: string | null;
         description?: string | null;
+        visibility?: ProjectUpdateVisibility.Raw | null;
     }
 }
