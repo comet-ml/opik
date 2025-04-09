@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.domain.GuardrailResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -24,7 +25,7 @@ public record GuardrailBatchItem(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @JsonIgnore UUID projectId,
         @NotBlank String name,
-        boolean passed,
+        @NotNull GuardrailResult result,
         @NotNull JsonNode config,
         @NotNull JsonNode details) {
 }

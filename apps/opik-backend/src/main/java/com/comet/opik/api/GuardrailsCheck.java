@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.domain.GuardrailResult;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -15,7 +16,7 @@ import java.time.Instant;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailsCheck(
         @NotBlank String name,
-        boolean passed,
+        GuardrailResult result,
         JsonNode config,
         JsonNode details,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,

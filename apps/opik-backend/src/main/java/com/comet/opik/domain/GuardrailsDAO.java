@@ -50,7 +50,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
                 project_id,
                 workspace_id,
                 name,
-                passed,
+                result,
                 config,
                 details,
                 created_by,
@@ -65,7 +65,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
                          :project_id<item.index>,
                          :workspace_id,
                          :name<item.index>,
-                         :passed<item.index>,
+                         :result<item.index>,
                          :config<item.index>,
                          :details<item.index>,
                          :user_name,
@@ -134,7 +134,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
                     .bind("secondary_entity_id" + i, guardrailBatchItem.secondaryId())
                     .bind("project_id" + i, guardrailBatchItem.projectId())
                     .bind("name" + i, guardrailBatchItem.name())
-                    .bind("passed" + i, guardrailBatchItem.passed())
+                    .bind("result" + i, guardrailBatchItem.result().getResult())
                     .bind("config" + i, getOrDefault(guardrailBatchItem.config()))
                     .bind("details" + i, getOrDefault(guardrailBatchItem.details()));
         }
@@ -147,10 +147,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
     private GuardrailsCheck mapGuardrail(Row row) {
         return GuardrailsCheck.builder()
                 .name(row.get("name", String.class))
-                .passed(Optional.ofNullable(row.get("passed", String.class))
-                        .filter(it -> !it.isBlank())
-                        .map(Boolean::parseBoolean)
-                        .orElse(false))
+                .result(GuardrailResult.fromString(row.get("result", String.class)))
                 .config(Optional.ofNullable(row.get("config", String.class))
                         .filter(it -> !it.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)

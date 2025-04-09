@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails
     project_id          FixedString(36),
     workspace_id        String,
     name                String,
-    passed              Bool,
+    result              ENUM('passed' = 0 , 'failed' = 1),
     config              String,
     details             String,
     created_at          DateTime64(9, 'UTC') DEFAULT now64(9),
