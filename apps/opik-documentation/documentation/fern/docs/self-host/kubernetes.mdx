@@ -59,11 +59,6 @@ opik:
       env:
         ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://<YOUR CLICKHOUSE HOST>:8123"
         ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
-      initContainers:
-      - name: wait-for-clickhouse-service
-        image: curlimages/curl:8.12.1
-        command: ["/bin/sh", "-c"]
-        args: ['while [ $(curl -ksw "%{http_code}" "http://<YOUR CLICKHOUSE HOST>:8123" -o /dev/null) -ne 200 ]; do sleep 5; echo "Clickhouse is not available. Waiting for the Clickhouse..."; done']
 ...
   clickhouse:
     enabled: false
