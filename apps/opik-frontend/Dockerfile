@@ -24,7 +24,11 @@ ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
 # Production stage
-FROM nginx:1.27.4-alpine3.21
+FROM amazonlinux:2023
+
+# Install packages
+RUN yum update -y && yum install -y nginx \
+    && yum clean all
 
 # Add label for later inspection
 ARG BUILD_MODE=production
