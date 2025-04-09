@@ -46,6 +46,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
             INSERT INTO guardrails(
                 entity_type,
                 entity_id,
+                secondary_entity_id,
                 project_id,
                 workspace_id,
                 name,
@@ -60,6 +61,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
                     (
                          :entity_type<item.index>,
                          :entity_id<item.index>,
+                         :secondary_entity_id<item.index>,
                          :project_id<item.index>,
                          :workspace_id,
                          :name<item.index>,
@@ -129,6 +131,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
 
             statement.bind("entity_type" + i, entityType.getType())
                     .bind("entity_id" + i, guardrailBatchItem.id())
+                    .bind("secondary_entity_id" + i, guardrailBatchItem.secondaryId())
                     .bind("project_id" + i, guardrailBatchItem.projectId())
                     .bind("name" + i, guardrailBatchItem.name())
                     .bind("passed" + i, guardrailBatchItem.passed())

@@ -19,8 +19,8 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailBatchItem(
-        // entity (trace or span) id
-        @NotNull UUID id,
+        @NotNull UUID id, // entity (trace or span) id
+        @NotNull UUID secondaryId, // secondary id used for grouping
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @JsonIgnore UUID projectId,
         @NotBlank String name,
