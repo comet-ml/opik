@@ -163,7 +163,7 @@ services:
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/api/v1/guardrails/healthcheck"]
+      test: ["CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck"]
       interval: 2s
       timeout: 60s
       retries: 30
@@ -183,8 +183,6 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
-      python-backend:
-        condition: service_healthy
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
@@ -201,6 +199,8 @@ services:
       - ./nginx_default_local.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       backend:
+        condition: service_healthy
+      guardrails-backend:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]
