@@ -33,7 +33,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapFilterWithMdc;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -112,8 +111,7 @@ public class OnlineScoringSampler {
             evaluators.parallelStream().forEach(evaluator -> {
                 // samples traces for this rule
                 var samples = traces.stream()
-                        .filter(wrapFilterWithMdc(
-                                trace -> shouldSampleTrace(evaluator, tracesBatch.workspaceId(), trace)));
+                        .filter(trace -> shouldSampleTrace(evaluator, tracesBatch.workspaceId(), trace));
                 switch (evaluator.getType()) {
                     case LLM_AS_JUDGE -> {
                         var messages = samples

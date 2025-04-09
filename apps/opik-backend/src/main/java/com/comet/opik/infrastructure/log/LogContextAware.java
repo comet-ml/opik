@@ -8,7 +8,6 @@ import org.slf4j.MDC;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 
 @UtilityClass
 public class LogContextAware {
@@ -35,21 +34,6 @@ public class LogContextAware {
 
             try {
                 task.run();
-            } finally {
-                MDC.clear();
-            }
-        };
-    }
-
-    public static <T> Predicate<T> wrapFilterWithMdc(Predicate<T> task) {
-        var contextMap = MDC.getCopyOfContextMap();
-        return item -> {
-            if (contextMap != null) {
-                MDC.setContextMap(contextMap);
-            }
-
-            try {
-                return task.test(item);
             } finally {
                 MDC.clear();
             }
