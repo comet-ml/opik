@@ -1,6 +1,7 @@
+import os
 import pytest
 from opik import opik_context, track
-from Traces.traces_config import PREFIX, PROJECT_NAME
+from Traces.traces_config import PREFIX
 from sdk_helpers import wait_for_number_of_traces_to_be_visible
 
 
@@ -26,7 +27,7 @@ def log_x_traces_with_one_span_via_client(client, traces_number):
     for i in range(traces_number):
         client_trace = client.trace(
             name=PREFIX + str(i),
-            project_name=PROJECT_NAME,
+            project_name=os.environ["OPIK_PROJECT_NAME"],
             input={"input": "test input"},
             output={"output": "test output"},
         )
@@ -34,7 +35,7 @@ def log_x_traces_with_one_span_via_client(client, traces_number):
             name="span", input={"input": "test input"}, output={"output": "test output"}
         )
     wait_for_number_of_traces_to_be_visible(
-        project_name=PROJECT_NAME, number_of_traces=traces_number
+        project_name=os.environ["OPIK_PROJECT_NAME"], number_of_traces=traces_number
     )
     yield
 
