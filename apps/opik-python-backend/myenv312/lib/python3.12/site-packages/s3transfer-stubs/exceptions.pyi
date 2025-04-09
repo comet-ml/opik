@@ -1,0 +1,16 @@
+"""
+Type annotations for s3transfer.exceptions module.
+
+Copyright 2025 Vlad Emelianov
+"""
+
+from concurrent.futures import CancelledError as CancelledError
+
+class RetriesExceededError(Exception):
+    last_exception: BaseException
+    def __init__(self, last_exception: BaseException, msg: str = ...) -> None: ...
+
+class S3UploadFailedError(Exception): ...
+class InvalidSubscriberMethodError(Exception): ...
+class TransferNotDoneError(Exception): ...
+class FatalError(CancelledError): ...

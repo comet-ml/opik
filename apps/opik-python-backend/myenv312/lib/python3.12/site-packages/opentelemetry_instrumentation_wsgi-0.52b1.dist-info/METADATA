@@ -1,0 +1,54 @@
+Metadata-Version: 2.4
+Name: opentelemetry-instrumentation-wsgi
+Version: 0.52b1
+Summary: WSGI Middleware for OpenTelemetry
+Project-URL: Homepage, https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-wsgi
+Project-URL: Repository, https://github.com/open-telemetry/opentelemetry-python-contrib
+Author-email: OpenTelemetry Authors <cncf-opentelemetry-contributors@lists.cncf.io>
+License-Expression: Apache-2.0
+License-File: LICENSE
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.8
+Requires-Dist: opentelemetry-api~=1.12
+Requires-Dist: opentelemetry-instrumentation==0.52b1
+Requires-Dist: opentelemetry-semantic-conventions==0.52b1
+Requires-Dist: opentelemetry-util-http==0.52b1
+Provides-Extra: instruments
+Description-Content-Type: text/x-rst
+
+OpenTelemetry WSGI Middleware
+=============================
+
+|pypi|
+
+.. |pypi| image:: https://badge.fury.io/py/opentelemetry-instrumentation-wsgi.svg
+   :target: https://pypi.org/project/opentelemetry-instrumentation-wsgi/
+
+
+This library provides a WSGI middleware that can be used on any WSGI framework
+(such as Django / Flask) to track requests timing through OpenTelemetry.
+
+Installation
+------------
+
+::
+
+    pip install opentelemetry-instrumentation-wsgi
+
+References
+----------
+
+* `OpenTelemetry WSGI Middleware <https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/wsgi/wsgi.html>`_
+* `OpenTelemetry Project <https://opentelemetry.io/>`_
+* `WSGI <https://www.python.org/dev/peps/pep-3333>`_
+* `OpenTelemetry Python Examples <https://github.com/open-telemetry/opentelemetry-python/tree/main/docs/examples>`_

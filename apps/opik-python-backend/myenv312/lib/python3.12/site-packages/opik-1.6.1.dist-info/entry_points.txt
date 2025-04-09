@@ -1,0 +1,5 @@
+[console_scripts]
+opik = opik.cli:cli
+
+[pytest11]
+opik = opik.plugins.pytest.hooks
