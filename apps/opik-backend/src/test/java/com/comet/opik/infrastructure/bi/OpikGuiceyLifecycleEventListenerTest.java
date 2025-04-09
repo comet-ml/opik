@@ -21,6 +21,7 @@ import org.junit.jupiter.api.TestClassOrder;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
@@ -55,8 +56,9 @@ class OpikGuiceyLifecycleEventListenerTest {
 
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer();
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
     private static final Random RANDOM = new Random();
     private static final String VERSION = "%s.%s.%s".formatted(RANDOM.nextInt(10), RANDOM.nextInt(),
@@ -76,7 +78,7 @@ class OpikGuiceyLifecycleEventListenerTest {
         private final WireMockUtils.WireMockRuntime wireMock;
 
         {
-            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS).join();
+            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS, ZOOKEEPER_CONTAINER).join();
 
             wireMock = WireMockUtils.startWireMock();
 
@@ -138,7 +140,7 @@ class OpikGuiceyLifecycleEventListenerTest {
         private final WireMockUtils.WireMockRuntime wireMock;
 
         {
-            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS).join();
+            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS, ZOOKEEPER_CONTAINER).join();
 
             wireMock = WireMockUtils.startWireMock();
 
