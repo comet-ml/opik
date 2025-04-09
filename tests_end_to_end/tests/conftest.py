@@ -352,7 +352,8 @@ def create_project_api():
     create_project_via_api(name=proj_name)
     yield proj_name
 
-    delete_project_by_name_sdk(proj_name)
+    if find_project_by_name_sdk(proj_name):
+        delete_project_by_name_sdk(proj_name)
 
 
 @pytest.fixture(scope="function")
