@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:0000017_add_guardrails
+--changeset idoberko2:0000018_add_guardrails
 
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails
@@ -17,8 +17,10 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails
     last_updated_at     DateTime64(9, 'UTC') DEFAULT now64(9),
     created_by          String,
     last_updated_by     String
-    ) ENGINE = ReplacingMergeTree(last_updated_at)
-    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, name);
+    )
+    ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/guardrails', '{replica}')
+    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, name)
+    SETTINGS index_granularity = 8192;
 
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails;
