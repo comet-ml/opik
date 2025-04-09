@@ -39,8 +39,7 @@ class ThreadsPage:
             expect(self.thread_row.first).to_be_visible()
         except Exception as e:
             raise AssertionError(
-                f"No threads found in the project.\n"
-                f"Error: {str(e)}"
+                f"No threads found in the project.\n" f"Error: {str(e)}"
             ) from e
         finally:
             return self.thread_row.count()

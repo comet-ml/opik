@@ -188,7 +188,9 @@ def env_config() -> EnvConfig:
 
     # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
-    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name = "project_" + get_random_string(5)
+    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name = (
+        "project_" + get_random_string(5)
+    )
 
     return env_config
 

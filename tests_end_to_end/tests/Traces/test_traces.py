@@ -69,7 +69,7 @@ class TestTracesCrud:
         # Wait for traces to appear on UI
         traces_page = TracesPage(page)
         traces_page.wait_for_traces_to_be_visible()
-        
+
         # Verify traces in UI
         logger.info("Verifying traces in UI")
         try:
@@ -284,7 +284,7 @@ class TestTracesCrud:
 
         # Wait for traces to appear on UI
         traces_page.wait_for_traces_to_be_visible()
-        
+
         try:
             for trace_name in traces_to_delete:
                 traces_page.delete_single_trace_by_name(trace_name)
