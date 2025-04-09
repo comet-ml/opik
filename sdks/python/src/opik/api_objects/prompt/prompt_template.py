@@ -17,6 +17,10 @@ class PromptTemplate:
         self._type = type
         self._validate_placeholders = validate_placeholders
 
+    @property
+    def text(self) -> str:
+        return self._template
+
     def format(self, **kwargs: Any) -> str:
         if self._type == PromptType.MUSTACHE:
             template = self._template

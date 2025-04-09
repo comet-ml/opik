@@ -127,7 +127,7 @@ class FewShotLabelBayesianOptimizer(BaseOptimizer):
         )
         
         return {
-            "prompt": best_param.as_prompt_template(),
+            "prompt": best_param.as_prompt_template().text,
             "prompt_parameter": best_param,
             "metric_score": best_trial.user_attrs["score"]
         }
