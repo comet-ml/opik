@@ -1,6 +1,32 @@
+import os
 import pytest
+from opik_backend.executor_docker import DockerExecutor
+from opik_backend.executor_process import ProcessExecutor
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
+
+@pytest.fixture(params=[DockerExecutor, ProcessExecutor])
+def executor(request):
+    """Fixture that provides both Docker and Process executors."""
+    executor_instance = request.param()
+    try:
+        yield executor_instance
+    finally:
+        if hasattr(executor_instance, 'cleanup'):
+            executor_instance.cleanup()
+
+@pytest.fixture
+def app(executor):
+    """Create Flask app with the given executor."""
+    from opik_backend import create_app
+    app = create_app()
+    app.executor = executor  # Override the executor with our parametrized one
+    return app
+
+@pytest.fixture
+def client(app):
+    """Create test client for the app."""
+    return app.test_client()
 
 USER_DEFINED_METRIC = """
 from typing import Any
@@ -291,10 +317,14 @@ def test_missing_data_returns_bad_request(client):
                       ^
 SyntaxError: invalid syntax"""
     ),
-    (
+    pytest.param(
             FLASK_INJECTION_METRIC,
             """  File "<string>", line 4, in <module>
-ModuleNotFoundError: No module named 'flask'"""
+ModuleNotFoundError: No module named 'flask'""",
+            marks=pytest.mark.skipif(
+                lambda: isinstance(app.executor, ProcessExecutor),
+                reason="Flask injection test only makes sense for DockerExecutor"
+            )
     )
 ])
 def test_invalid_code_returns_bad_request(client, code, stacktrace):
@@ -346,5 +376,3 @@ def test_no_scores_returns_bad_request(client):
     assert response.status_code == 400
     assert response.json[
                "error"] == "400 Bad Request: The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'"
-
-# TODO: Add test cases: timeout, networking etc.
