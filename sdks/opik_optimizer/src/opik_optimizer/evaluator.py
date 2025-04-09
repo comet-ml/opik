@@ -4,6 +4,7 @@ from opik.evaluation import metrics
 import opik
 from opik.evaluation.metrics import score_result
 
+
 def evaluate_predictor(
     dataset: opik.Dataset,
     validation_items_ids: List[str],
@@ -22,7 +23,7 @@ def evaluate_predictor(
             prompt_parameter=predictor_parameter,
         )
         return {"output": output}
-    
+
     evaluation_result = opik.evaluate(
         dataset=dataset,
         task=task,
@@ -32,11 +33,12 @@ def evaluate_predictor(
         scoring_metrics=[metric],
         task_threads=num_threads,
     )
-    
+
     # We may allow score aggregation customization.
     score_results: List[score_result.ScoreResult] = [
-        test_result.score_results[0]
-        for test_result in evaluation_result.test_results
+        test_result.score_results[0] for test_result in evaluation_result.test_results
     ]
 
-    return sum([score_result_.value for score_result_ in score_results]) / len(score_results)
+    return sum([score_result_.value for score_result_ in score_results]) / len(
+        score_results
+    )

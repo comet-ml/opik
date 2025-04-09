@@ -14,7 +14,7 @@ from . import predictor, prompt_parameter, evaluator
 
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
-    
+
     def __init__(
         self,
         model: str,
@@ -22,16 +22,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         max_examples: int = 5,
         seed: int = 42,
         num_threads: int = 8,
-        **model_kwargs
+        **model_kwargs,
     ):
         super().__init__(model, project_name, **model_kwargs)
         self.max_examples = max_examples
         self.seed = seed
         self.num_threads = num_threads
 
-        self._openai_client = track_openai(openai.OpenAI(), project_name=self.project_name)
+        self._openai_client = track_openai(
+            openai.OpenAI(), project_name=self.project_name
+        )
         self._opik_client = opik.Opik()
-
 
     def optimize_prompt(
         self,
@@ -44,10 +45,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         num_threads: int = 4,
         scoring_key_mapping: Dict[str, str] = None,
         train_ratio: float = 0.2,
-        **kwargs
+        **kwargs,
     ) -> optimization_result.OptimizationResult:
         random.seed(self.seed)
-        
+
         opik_dataset: opik.Dataset
 
         # Load the dataset
@@ -59,32 +60,32 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset = dataset.get_items()
 
         train_set, validation_set = _split_dataset(dataset, train_ratio=train_ratio)
-        
+
         predictor_ = predictor.OpenAIPredictor(
-            model=self.model,
-            client=self._openai_client,
-            **self.model_kwargs
+            model=self.model, client=self._openai_client, **self.model_kwargs
         )
 
         all_train_examples = [
             {input_key: example[input_key], output_key: example[output_key]}
             for example in train_set
         ]
-        
+
         def optimization_objective(trial: optuna.Trial) -> float:
             n_examples = trial.suggest_int("n_examples", 1, self.max_examples)
-            
+
             example_indices = [
-                trial.suggest_categorical(f"example_{i}", list(range(len(all_train_examples))))
+                trial.suggest_categorical(
+                    f"example_{i}", list(range(len(all_train_examples)))
+                )
                 for i in range(n_examples)
             ]
-            
+
             param = prompt_parameter.PromptParameter(
                 name="few_shot_examples",
                 instruction=prompt,
-                demos=[all_train_examples[idx] for idx in example_indices]
+                demos=[all_train_examples[idx] for idx in example_indices],
             )
-            
+
             score = evaluator.evaluate_predictor(
                 dataset=opik_dataset,
                 validation_items_ids=[example["id"] for example in validation_set],
@@ -98,7 +99,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             trial.set_user_attr("score", score)
 
             return score
-        
+
         study = optuna.create_study(
             direction="maximize"
         )  # if we need to customize sampling, we can pass sampler here
@@ -107,15 +108,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization_objective,
             n_trials=n_trials,
         )
-        
+
         best_trial = study.best_trial
         best_n_examples = best_trial.params["n_examples"]
-        best_indices = [best_trial.params[f"example_{i}"] for i in range(best_n_examples)]
-        
+        best_indices = [
+            best_trial.params[f"example_{i}"] for i in range(best_n_examples)
+        ]
+
         best_param = prompt_parameter.PromptParameter(
             name="few_shot_examples",
             instruction=prompt,
-            demos=[all_train_examples[idx] for idx in best_indices]
+            demos=[all_train_examples[idx] for idx in best_indices],
         )
 
         return optimization_result.OptimizationResult(
@@ -126,16 +129,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "prompt_parameter": best_param,
                 "n_examples": best_n_examples,
                 "indices": best_indices,
-                "trial_number": best_trial.number
-            }
+                "trial_number": best_trial.number,
+            },
         )
 
 
-def _split_dataset(dataset: List[Dict[str, Any]], train_ratio: float) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def _split_dataset(
+    dataset: List[Dict[str, Any]], train_ratio: float
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     shuffled = random.sample(dataset, len(dataset))
-    train_set = shuffled[:int(train_ratio * len(dataset))]
-    validation_set = shuffled[int(train_ratio * len(dataset)):]
-    
+    train_set = shuffled[: int(train_ratio * len(dataset))]
+    validation_set = shuffled[int(train_ratio * len(dataset)) :]
+
     return train_set, validation_set
-
-

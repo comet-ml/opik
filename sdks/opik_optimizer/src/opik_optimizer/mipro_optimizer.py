@@ -2,26 +2,29 @@
 MIPRO algorithm for Opik
 """
 
+from typing import Any, Dict, List, Tuple, Union, Optional
+
 from .integrations.dspy import DspyOptimizer
-from opik.api_objects.dataset.dataset import Dataset
+from opik import Dataset
 from opik.evaluation.metrics import BaseMetric
+
 
 class MiproOptimizer(DspyOptimizer):
     def optimize_prompt(
-            self,
-            dataset: str | Dataset,
-            metric: BaseMetric,
-            prompt: str,
-            input: str,
-            output: str,
-            num_candidates: int = 10,
+        self,
+        dataset: Union[str, Dataset],
+        metric: BaseMetric,
+        prompt: str,
+        input_key: str,
+        output_key: str,
+        num_candidates: int = 10,
     ):
         super().optimize_prompt(
             dataset,
             metric,
             prompt,
-            input,
-            output,
+            input_key,
+            output_key,
             num_candidates,
         )
         # Do steps for MIPRO:
@@ -33,16 +36,8 @@ class MiproOptimizer(DspyOptimizer):
         )
         # Bootstrap the few-shot examples:
         self.optimizer.step_1(state)
-        print("Demonstration candidates:")
-        for key, value in state.demo_candidates.items():
-            print("    ", "Group:", key + 1, "number of examples:", len(value[1]))
         # Propose instruction candidates:
         self.optimizer.step_2(state)
-        print("Instruction candidates:")
-        for key, value in state.instruction_candidates.items():
-            print("    Group:", key + 1)
-            for i, instruction in enumerate(value):
-                print("        ", i + 1, ":", instruction)
         # # Step 3: Find optimal prompt parameters
         self.results = self.optimizer.step_3(state)
         # FIXME: add to history
@@ -53,4 +48,3 @@ class MiproOptimizer(DspyOptimizer):
         )
         self.state = state
         return self.best_programs[0]["program"].signature.instructions
-
