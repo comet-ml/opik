@@ -1,10 +1,3 @@
-"""
-Few Shot Label Optimizer for Opik
-
-This module provides functionality to optimize few-shot examples for improving
-prompt performance by selecting the most effective examples from a dataset.
-"""
-
 import random
 from typing import Any, Dict, List, Tuple, Union
 
@@ -15,13 +8,11 @@ from opik import Dataset
 from opik.evaluation.metrics import BaseMetric
 from opik.integrations.openai import track_openai
 
-from opik_optimizer.few_shot_label import evaluator
-
-from ..base_optimizer import BaseOptimizer
-from . import predictor, prompt_parameter
+from . import base_optimizer
+from . import predictor, prompt_parameter, evaluator
 
 
-class FewShotLabelBayesianOptimizer(BaseOptimizer):
+class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     
     def __init__(
         self,
