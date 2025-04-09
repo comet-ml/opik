@@ -1,0 +1,2 @@
+[opentelemetry_instrumentor]
+flask = opentelemetry.instrumentation.flask:FlaskInstrumentor

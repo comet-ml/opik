@@ -309,7 +309,7 @@ def test_missing_data_returns_bad_request(client):
     assert response.json["error"] == "400 Bad Request: Field 'data' is missing in the request"
 
 
-@pytest.mark.parametrize("code, expected_error", [
+@pytest.mark.parametrize("code, stacktrace", [
     (
             INVALID_METRIC,
             "Field 'code' contains invalid Python code:   File \"<string>\", line 2\n    from typing import\n                      ^\nSyntaxError: invalid syntax"
@@ -323,13 +323,13 @@ def test_missing_data_returns_bad_request(client):
             )
     )
 ])
-def test_invalid_code_returns_bad_request(client, code, expected_error):
+def test_invalid_code_returns_bad_request(client, code, stacktrace):
     response = client.post(EVALUATORS_URL, json={
         "data": DATA,
         "code": code
     })
     assert response.status_code == 400
-    assert response.json["error"] == f"400 Bad Request: {expected_error}"
+    assert response.json["error"] == f"400 Bad Request: {stacktrace}"
 
 
 def test_missing_metric_returns_bad_request(client):

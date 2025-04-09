@@ -1,0 +1,51 @@
+Metadata-Version: 2.4
+Name: opentelemetry-exporter-prometheus
+Version: 0.52b1
+Summary: Prometheus Metric Exporter for OpenTelemetry
+Project-URL: Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-prometheus
+Project-URL: Repository, https://github.com/open-telemetry/opentelemetry-python
+Author-email: OpenTelemetry Authors <cncf-opentelemetry-contributors@lists.cncf.io>
+License: Apache-2.0
+License-File: LICENSE
+Classifier: Development Status :: 4 - Beta
+Classifier: Framework :: OpenTelemetry
+Classifier: Framework :: OpenTelemetry :: Exporters
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.8
+Requires-Dist: opentelemetry-api~=1.12
+Requires-Dist: opentelemetry-sdk~=1.31.1
+Requires-Dist: prometheus-client<1.0.0,>=0.5.0
+Description-Content-Type: text/x-rst
+
+OpenTelemetry Prometheus Exporter
+=================================
+
+|pypi|
+
+.. |pypi| image:: https://badge.fury.io/py/opentelemetry-exporter-prometheus.svg
+   :target: https://pypi.org/project/opentelemetry-exporter-prometheus/
+
+This library allows to export metrics data to `Prometheus <https://prometheus.io/>`_.
+
+Installation
+------------
+
+::
+
+     pip install opentelemetry-exporter-prometheus
+
+References
+----------
+
+* `OpenTelemetry Prometheus Exporter <https://opentelemetry-python.readthedocs.io/en/latest/exporter/prometheus/prometheus.html>`_
+* `Prometheus <https://prometheus.io/>`_
+* `OpenTelemetry Project <https://opentelemetry.io/>`_

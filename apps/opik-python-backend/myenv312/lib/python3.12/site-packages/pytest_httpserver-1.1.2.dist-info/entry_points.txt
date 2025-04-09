@@ -1,0 +1,3 @@
+[pytest11]
+pytest_httpserver=pytest_httpserver.pytest_plugin
+
