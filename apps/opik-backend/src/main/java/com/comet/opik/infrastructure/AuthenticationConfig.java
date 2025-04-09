@@ -18,9 +18,5 @@ public class AuthenticationConfig {
     private int apiKeyResolutionCacheTTLInSec;
 
     @Valid @JsonProperty
-    private UrlConfig ui;
-
-    @Valid @JsonProperty
-    private UrlConfig sdk;
-
+    private UrlConfig reactService;
 }

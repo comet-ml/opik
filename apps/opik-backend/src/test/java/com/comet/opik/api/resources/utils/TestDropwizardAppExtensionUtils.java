@@ -120,10 +120,8 @@ public class TestDropwizardAppExtensionUtils {
 
         if (appContextConfig.runtimeInfo() != null) {
             configs.add("authentication.enabled: true");
-            configs.add("authentication.sdk.url: "
-                    + "%s/opik/auth".formatted(appContextConfig.runtimeInfo().getHttpsBaseUrl()));
-            configs.add("authentication.ui.url: "
-                    + "%s/opik/auth-session".formatted(appContextConfig.runtimeInfo().getHttpsBaseUrl()));
+            configs.add("authentication.reactService.url: "
+                    + appContextConfig.runtimeInfo().getHttpsBaseUrl());
 
             if (appContextConfig.authCacheTtlInSeconds() != null) {
                 configs.add(

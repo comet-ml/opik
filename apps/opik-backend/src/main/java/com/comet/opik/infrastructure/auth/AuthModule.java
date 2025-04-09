@@ -29,21 +29,17 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
             return new AuthServiceImpl(requestContext);
         }
 
-        Objects.requireNonNull(config.getUi(),
-                "The property authentication.ui.url is required when authentication is enabled");
-        Objects.requireNonNull(config.getSdk(),
-                "The property authentication.sdk.url is required when authentication is enabled");
+        Objects.requireNonNull(config.getReactService(),
+                "The property authentication.reactService.url is required when authentication is enabled");
 
-        Preconditions.checkArgument(StringUtils.isNotBlank(config.getUi().url()),
-                "The property authentication.ui.url must not be blank when authentication is enabled");
-        Preconditions.checkArgument(StringUtils.isNotBlank(config.getSdk().url()),
-                "The property authentication.sdk.url must not be blank when authentication is enabled");
+        Preconditions.checkArgument(StringUtils.isNotBlank(config.getReactService().url()),
+                "The property authentication.reactService.url must not be blank when authentication is enabled");
 
         var cacheService = config.getApiKeyResolutionCacheTTLInSec() > 0
                 ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
                 : new NoopCacheService();
 
-        return new RemoteAuthService(client(), config.getSdk(), config.getUi(), requestContext, cacheService);
+        return new RemoteAuthService(client(), config.getReactService(), requestContext, cacheService);
     }
 
     public Client client() {

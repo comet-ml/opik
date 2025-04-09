@@ -51,6 +51,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -98,9 +99,11 @@ class PromptResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -108,7 +111,7 @@ class PromptResourceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     {
-        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
+        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
