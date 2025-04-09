@@ -1,37 +1,40 @@
 """
 FewShot algorithm for Opik
 """
+
 from collections import defaultdict
+from typing import Any, Dict, List, Tuple, Union, Optional
 
 import dspy
 from tqdm import tqdm
-from opik.api_objects.dataset.dataset import Dataset
+from opik import Dataset
 from opik.evaluation.metrics import BaseMetric
 
 from .integrations.dspy.utils import create_dspy_signature, State
 from .integrations.dspy import DspyOptimizer
 
+
 class FewShotOptimizer(DspyOptimizer):
     def optimize_prompt(
         self,
-        dataset: str | Dataset,
+        dataset: Union[str, Dataset],
         metric: BaseMetric,
         prompt: str,
-        input: str,
-        output: str,
+        input_key: str,
+        output_key: str,
         num_candidates: int = 10,
-        num_test: int = 30,
+        n_trials: int = 10,
     ):
         super().optimize_prompt(
             dataset,
             metric,
             prompt,
-            input,
-            output,
+            input_key,
+            output_key,
             num_candidates,
         )
         # Do steps for Few-shot:
-        self.num_test = num_test
+        self.n_trials = n_trials
         # Get the initial state:
         state = self.optimizer.step_0(
             student=self.module,
@@ -49,18 +52,18 @@ class FewShotOptimizer(DspyOptimizer):
             for i, instruction in enumerate(value):
                 if instruction not in results:
                     signature = create_dspy_signature(
-                        self.input, self.output, instruction
+                        self.input_key, self.output_key, instruction
                     )
                     program = dspy.Predict(signature)
                     total_score = 0
-                    for row in tqdm(self.dataset[: self.num_test]):
-                        output = program(**{self.input: row[self.input]})
+                    for row in tqdm(self.dataset[: self.n_trials]):
+                        output = program(**{self.input_key: row[self.input_key]})
                         score = self.metric_function(
-                            State({self.output: getattr(output, self.output)}),
-                            State({self.output: row[self.output]}),
+                            State({self.output_key: getattr(output, self.output_key)}),
+                            State({self.output_key: row[self.output_key]}),
                         )
                         total_score += score
-                    results[instruction] = total_score / self.num_test
+                    results[instruction] = total_score / self.n_trials
 
         self.history = [
             sorted(

@@ -18,10 +18,14 @@ class BaseOptimizer:
         self.project_name = project_name
 
     def optimize_prompt(
-        self, dataset: str | opik.Dataset, metric: metrics.BaseMetric, prompt: str, **kwargs
+        self,
+        dataset: str | opik.Dataset,
+        metric: metrics.BaseMetric,
+        prompt: str,
+        **kwargs
     ):
         """
-        Optimizer a prompt.
+        Optimize a prompt.
 
         Args:
            dataset: Opik dataset name, or Opik dataset
