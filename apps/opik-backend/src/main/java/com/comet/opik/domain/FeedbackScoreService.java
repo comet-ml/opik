@@ -111,9 +111,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private Mono<Long> processScoreBatch(EntityType entityType, List<ProjectDto> projects, int actualBatchSize) {
         return Flux.fromIterable(projects)
                 .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores()))
-                .reduce(0L, Long::sum)
-                .flatMap(rowsUpdated -> rowsUpdated == actualBatchSize ? Mono.just(rowsUpdated) : Mono.empty())
-                .switchIfEmpty(Mono.error(failWithNotFound("Error while processing scores batch")));
+                .reduce(0L, Long::sum);
     }
 
     private List<ProjectDto> mergeProjectsAndScores(Map<String, Project> projectMap,
