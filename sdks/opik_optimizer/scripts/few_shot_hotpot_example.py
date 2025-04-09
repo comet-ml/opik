@@ -1,3 +1,5 @@
+# run the dataset generation script first
+
 from opik_optimizer.few_shot_label.few_shot_label_bayesian_optimizer import FewShotLabelBayesianOptimizer
 from opik.evaluation.metrics import AnswerRelevance
 
