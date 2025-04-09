@@ -2,8 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.api.GuardrailType;
-import com.comet.opik.api.GuardrailsCheck;
+import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
@@ -20,6 +21,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -387,13 +389,11 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     entity_id,
                     groupArray(tuple(
+                         entity_id,
+                         secondary_entity_id,
+                         project_id,
                          name,
-                         result,
-                         details,
-                         created_at,
-                         last_updated_at,
-                         created_by,
-                         last_updated_by
+                         result
                     )) as guardrails
                 FROM (
                     SELECT
@@ -455,13 +455,11 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     entity_id,
                     groupArray(tuple(
+                         entity_id,
+                         secondary_entity_id,
+                         project_id,
                          name,
-                         result,
-                         details,
-                         created_at,
-                         last_updated_at,
-                         created_by,
-                         last_updated_by
+                         result
                     )) as guardrails_list
                 FROM (
                     SELECT
@@ -470,7 +468,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, name) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, name
                 )
                 GROUP BY workspace_id, project_id, entity_id
@@ -1379,7 +1377,7 @@ class TraceDAOImpl implements TraceDAO {
                         .map(this::mapFeedbackScores)
                         .filter(not(List::isEmpty))
                         .orElse(null))
-                .guardrailsChecks(Optional.ofNullable(row.get("guardrails_list", List.class))
+                .guardrailsValidations(Optional.ofNullable(row.get("guardrails_list", List.class))
                         .map(this::mapGuardrails)
                         .filter(not(List::isEmpty))
                         .orElse(null))
@@ -1421,23 +1419,22 @@ class TraceDAOImpl implements TraceDAO {
                 .toList();
     }
 
-    private List<GuardrailsCheck> mapGuardrails(List<List<Object>> guardrails) {
-        return Optional.ofNullable(guardrails)
+    private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
+        return GuardrailsMapper.INSTANCE.mapToValidations(Optional.ofNullable(guardrails)
                 .orElse(List.of())
                 .stream()
                 .map(guardrail -> {
-                    GuardrailType name = GuardrailType.fromString((String) guardrail.get(0));
-                    return GuardrailsCheck.builder()
-                            .name(name)
-                            .result(GuardrailResult.fromString((String) guardrail.get(1)))
-                            .items(Optional.ofNullable((String) guardrail.get(2))
-                                    .filter(it -> !it.isBlank())
-                                    .map(JsonUtils::getJsonNodeFromString)
-                                    .map(node -> GuardrailsMapper.INSTANCE.mapToItems(name, node))
-                                    .orElse(List.of()))
+                    return GuardrailBatchItem.builder()
+                            .id(UUID.fromString((String) guardrail.get(0)))
+                            .secondaryId(UUID.fromString((String) guardrail.get(1)))
+                            .projectId(UUID.fromString((String) guardrail.get(2)))
+                            .name(GuardrailType.fromString((String) guardrail.get(3)))
+                            .result(GuardrailResult.fromString((String) guardrail.get(4)))
+                            .config(JsonNodeFactory.instance.objectNode())
+                            .details(JsonNodeFactory.instance.objectNode())
                             .build();
                 })
-                .toList();
+                .toList());
     }
 
     private String getIfNotEmpty(Object value) {

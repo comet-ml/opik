@@ -48,7 +48,7 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<Comment> comments,
         @JsonView({
-                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<GuardrailsCheck> guardrailsChecks,
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<GuardrailsValidation> guardrailsValidations,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal totalEstimatedCost,
         @JsonView({
