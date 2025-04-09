@@ -1,2 +1,0 @@
-[opentelemetry_metrics_exporter]
-prometheus = opentelemetry.exporter.prometheus:_AutoPrometheusMetricReader
