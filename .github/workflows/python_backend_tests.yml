@@ -41,11 +41,11 @@ jobs:
           PYTHON_CODE_EXECUTOR_STRATEGY: process
           PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 10
         run: |
-          pytest tests/ -v --junitxml=test-results.xml
+          cd tests && pytest -v --junitxml=../test-results.xml
       
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
         with:
           action_fail: true
-          files: test-results.xml
+          files: apps/opik-python-backend/test-results.xml
