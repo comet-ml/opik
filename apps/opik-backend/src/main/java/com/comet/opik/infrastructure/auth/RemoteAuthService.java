@@ -42,7 +42,13 @@ class RemoteAuthService implements AuthService {
     private static final String NOT_LOGGED_USER = "Please login first";
 
     private static final Map<Pattern, Set<String>> PUBLIC_ENDPOINTS = Map.of(
-            Pattern.compile("^/v1/private/projects$"), Set.of("GET"));
+            Pattern.compile("^/v1/private/projects/?$"), Set.of("GET"),
+            Pattern.compile(
+                    "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$"),
+            Set.of("GET"),
+            Pattern.compile(
+                    "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/metrics/?$"),
+            Set.of("POST"));
 
     private final @NonNull Client client;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
@@ -88,6 +94,7 @@ class RemoteAuthService implements AuthService {
                 requestContext.get().setWorkspaceId(workspaceId);
                 requestContext.get().setWorkspaceName(currentWorkspaceName);
                 requestContext.get().setVisibility(ProjectVisibility.PUBLIC);
+                requestContext.get().setUserName("Public");
                 return;
             }
             throw authException;
