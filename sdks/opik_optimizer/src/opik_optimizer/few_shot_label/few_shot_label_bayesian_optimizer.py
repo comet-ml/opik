@@ -109,7 +109,7 @@ class FewShotLabelBayesianOptimizer(BaseOptimizer):
         
         study = optuna.create_study(
             direction="maximize"
-        )
+        )  # if we need to customize sampling, we can pass sampler here
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study.optimize(
             optimization_objective,
