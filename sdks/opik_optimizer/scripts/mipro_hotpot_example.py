@@ -1,10 +1,10 @@
-from opik_optimizer import MiproOptimizer
+# run the dataset generation script first
+
 from opik.evaluation.metrics import LevenshteinRatio
-import os
+from opik_optimizer import MiproOptimizer
 
 optimizer = MiproOptimizer(
     model="openai/gpt-4o-mini",  # LiteLLM name
-    api_key=os.environ["OPENAI_API_KEY"],
     temperature=0.0,
     max_tokens=5000,
 )

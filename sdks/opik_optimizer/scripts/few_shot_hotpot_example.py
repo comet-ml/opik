@@ -1,30 +1,21 @@
 # run the dataset generation script first
 
-from opik_optimizer.few_shot_label.few_shot_label_bayesian_optimizer import FewShotLabelBayesianOptimizer
-from opik.evaluation.metrics import AnswerRelevance
+from opik.evaluation.metrics import LevenshteinRatio
+from opik_optimizer.few_shot_optimizer import FewShotOptimizer
 
-
-optimizer = FewShotLabelBayesianOptimizer(
-    model="gpt-4o",
-    project_name="few-shot-optimizers",
-    max_examples=7,
+optimizer = FewShotOptimizer(
+    model="openai/gpt-4o-mini",  # LiteLLM name
+    temperature=0.0,
+    max_tokens=5000,
 )
 
-metric = AnswerRelevance(model="gpt-4o")
-
-result = optimizer.optimize_prompt(
+results = optimizer.optimize_prompt(
     dataset="hotpot-300",
-    metric=metric,
-    prompt="You are an expert in answering questions. Answer the question with a short phrase. The question: \n{{question}}",
-    input_key="question",
-    output_key="answer",
-    num_threads=8,
-    n_trials=20,
-    scoring_key_mapping={
-        "output": "output",  # hard-coded predictor output key
-        "context": lambda dataset_item: [dataset_item["answer"]],
-        "input": "question",
-    }
+    metric=LevenshteinRatio(),
+    prompt="Answer the question with a short, 1 to 5 word phrase",
+    # kwargs:
+    input="question",
+    output="answer",
 )
 
-print(result)
+print(results)
