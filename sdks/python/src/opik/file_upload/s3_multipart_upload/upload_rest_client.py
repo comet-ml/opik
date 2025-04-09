@@ -1,9 +1,9 @@
 import dataclasses
 from typing import List, Optional
 
-from ... import messages
-from ....rest_api import client as rest_api_client
-from ....rest_api import types as rest_api_types
+from ...message_processing import messages
+from ...rest_api import client as rest_api_client
+from ...rest_api import types as rest_api_types
 
 
 @dataclasses.dataclass
@@ -16,9 +16,9 @@ class MultipartUploadMetadata:
         return self.upload_id is not None and self.upload_id != "BEMinIO"
 
 
-class UploadStrategy:
-    """Defines the file upload strategy that is used for communication with backend in order to start and complete
-    S3 file upload operation as well as multipart upload against local backend.
+class UploadRestClient:
+    """Defines the file upload REST API client wrapper that is used for communication with backend in order
+    to start and complete S3 file upload operation as well as multipart upload against local backend.
     Args:
         rest_client: The REST API client to communicate with the backend.
     """
@@ -56,6 +56,17 @@ class UploadStrategy:
             file_size=file_size,
             upload_id=upload_metadata.upload_id,
             uploaded_file_parts=file_parts,
+            project_name=message.project_name,
+            mime_type=message.mime_type,
+        )
+
+    def upload_attachment_local(
+        self, message: messages.CreateAttachmentMessage
+    ) -> None:
+        self.rest_client.attachments.upload_attachment(
+            file_name=message.file_name,
+            entity_type=message.entity_type,
+            entity_id=message.entity_id,
             project_name=message.project_name,
             mime_type=message.mime_type,
         )

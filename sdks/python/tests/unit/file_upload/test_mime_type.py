@@ -1,6 +1,6 @@
 import pytest
 
-from opik.message_processing.file_uploading import mime_type
+from opik.file_upload import mime_type
 
 
 @pytest.mark.parametrize(

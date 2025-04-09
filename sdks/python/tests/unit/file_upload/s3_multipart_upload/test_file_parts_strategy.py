@@ -1,10 +1,8 @@
 import math
 import pytest
 
-from opik.message_processing.file_uploading.s3_multipart_upload import (
-    file_parts_strategy,
-)
-from opik.message_processing.file_uploading.s3_multipart_upload import upload_error
+from opik.file_upload.s3_multipart_upload import file_parts_strategy
+from opik.file_upload.s3_multipart_upload import upload_error
 
 
 def test_base_strategy__top_max_file_parts_limits():
