@@ -1,8 +1,9 @@
 import random
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union, Optional
 
 import openai
 import opik
+from opik_optimizer import optimization_result
 import optuna
 from opik import Dataset
 from opik.evaluation.metrics import BaseMetric
@@ -17,10 +18,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def __init__(
         self,
         model: str,
-        project_name: str = None,
+        project_name: Optional[str] = None,
         max_examples: int = 5,
         seed: int = 42,
-        num_threads: int = 4,
+        num_threads: int = 8,
         **model_kwargs
     ):
         super().__init__(model, project_name, **model_kwargs)
@@ -44,7 +45,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         scoring_key_mapping: Dict[str, str] = None,
         train_ratio: float = 0.2,
         **kwargs
-    ) -> prompt_parameter.PromptParameter:
+    ) -> optimization_result.OptimizationResult:
         random.seed(self.seed)
         
         opik_dataset: opik.Dataset
@@ -116,12 +117,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             instruction=prompt,
             demos=[all_train_examples[idx] for idx in best_indices]
         )
-        
-        return {
-            "prompt": best_param.as_prompt_template().text,
-            "prompt_parameter": best_param,
-            "metric_score": best_trial.user_attrs["score"]
-        }
+
+        return optimization_result.OptimizationResult(
+            prompt=best_param.as_prompt_template().text,
+            score=best_trial.user_attrs["score"],
+            metric_name=metric.name,
+            details={
+                "prompt_parameter": best_param,
+                "n_examples": best_n_examples,
+                "indices": best_indices,
+                "trial_number": best_trial.number
+            }
+        )
 
 
 def _split_dataset(dataset: List[Dict[str, Any]], train_ratio: float) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
