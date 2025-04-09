@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
-from typing import Optional, Any, Dict, List, Union, Literal
-from ..types import SpanType, ErrorInfoDict, LLMProvider
+from typing import Optional, Any, Dict, List, Union
+from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 
 @dataclasses.dataclass
@@ -159,7 +159,7 @@ class CreateAttachmentMessage(BaseMessage):
     file_path: str
     file_name: str
     mime_type: Optional[str]
-    entity_type: Literal["trace", "span"]
+    entity_type: AttachmentEntityType
     entity_id: str
     project_name: str
     base_url_path: str  # the encoded base URL

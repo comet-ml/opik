@@ -1,21 +1,14 @@
-import dataclasses
 from concurrent.futures import Future, CancelledError
-from typing import Optional
 
 import httpx
 
-
-@dataclasses.dataclass
-class UploadSizeMonitor:
-    total_size: Optional[int] = None
-    bytes_sent: int = 0
-
-    def reset(self) -> None:
-        self.bytes_sent = 0
+from . import upload_monitor
 
 
 class UploadResult:
-    def __init__(self, future: Future, monitor: UploadSizeMonitor) -> None:
+    def __init__(
+        self, future: Future, monitor: upload_monitor.FileUploadMonitor
+    ) -> None:
         self.future = future
         self.monitor = monitor
 

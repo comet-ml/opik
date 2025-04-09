@@ -2,7 +2,7 @@ import math
 import os
 from typing import IO, Optional
 
-from .upload_error import S3UploadErrorFileIsEmpty, S3UploadErrorFileIsTooLarge
+from .s3_upload_error import S3UploadErrorFileIsEmpty, S3UploadErrorFileIsTooLarge
 
 # Constants defining existing AWS S3 limits (https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html)
 MAX_SUPPORTED_PARTS_NUMBER = 10000

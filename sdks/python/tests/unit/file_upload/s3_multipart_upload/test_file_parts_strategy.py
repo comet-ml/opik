@@ -2,7 +2,7 @@ import math
 import pytest
 
 from opik.file_upload.s3_multipart_upload import file_parts_strategy
-from opik.file_upload.s3_multipart_upload import upload_error
+from opik.file_upload.s3_multipart_upload import s3_upload_error
 
 
 def test_base_strategy__top_max_file_parts_limits():
@@ -40,7 +40,7 @@ def test_base_strategy__file_is_too_large():
         max_file_part_size=file_parts_strategy.MAX_FILE_PART_SIZE,
     )
 
-    with pytest.raises(upload_error.S3UploadErrorFileIsTooLarge):
+    with pytest.raises(s3_upload_error.S3UploadErrorFileIsTooLarge):
         strategy.calculate()
 
 

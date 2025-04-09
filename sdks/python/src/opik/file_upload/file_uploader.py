@@ -1,3 +1,3 @@
-class S3MultipartUploader:
+class FileUploader:
     def __init__(self) -> None:
         pass
