@@ -19,6 +19,8 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -37,6 +39,7 @@ import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
 import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
@@ -44,7 +47,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -52,6 +54,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
@@ -77,14 +80,16 @@ import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
+@Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("LlmAsJudge Message Render")
 @ExtendWith(MockitoExtension.class)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class OnlineScoringEngineTest {
 
-    private static final ChatCompletionService AI_PROXY_SERVICE;
-    private static final FeedbackScoreService FEEDBACK_SCORE_SERVICE;
-    private static final EventBus EVENT_BUS;
+    private final ChatCompletionService aiProxyService;
+    private final FeedbackScoreService feedbackScoreService;
+    private final EventBus eventBus;
 
     private static final String API_KEY = "apiKey" + UUID.randomUUID();
     private static final String PROJECT_NAME = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -95,8 +100,8 @@ class OnlineScoringEngineTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
-    private static final String MESSAGE_TO_TEST = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
-    private static final String TEST_EVALUATOR = """
+    private final String MESSAGE_TO_TEST = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
+    private final String TEST_EVALUATOR = """
             {
               "model": { "name": "gpt-4o", "temperature": 0.3 },
               "messages": [
@@ -119,9 +124,9 @@ class OnlineScoringEngineTest {
             }
             """
             .formatted(MESSAGE_TO_TEST).trim();
-    private static final String SUMMARY_STR = "What was the approach to experimenting with different data mixtures?";
-    private static final String OUTPUT_STR = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
-    private static final String INPUT = """
+    private final String SUMMARY_STR = "What was the approach to experimenting with different data mixtures?";
+    private final String OUTPUT_STR = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
+    private final String INPUT = """
             {
                 "questions": {
                     "question1": "%s",
@@ -131,14 +136,14 @@ class OnlineScoringEngineTest {
                 "title": "CRAG -- Comprehensive RAG Benchmark"
             }
             """.formatted(SUMMARY_STR).trim();
-    private static final String OUTPUT = """
+    private final String OUTPUT = """
             {
                 "output": "%s"
             }
             """.formatted(OUTPUT_STR).trim();
 
-    private static final String EDGE_CASE_TEMPLATE = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
-    private static final String TEST_EVALUATOR_EDGE_CASE = """
+    private final String EDGE_CASE_TEMPLATE = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
+    private final String TEST_EVALUATOR_EDGE_CASE = """
             {
               "model": { "name": "gpt-4o", "temperature": 0.3 },
               "messages": [
@@ -150,7 +155,7 @@ class OnlineScoringEngineTest {
                   "instruction": "output.output",
                   "nonUsed": "input.questions.question2",
                   "toFail1": "metadata.nonexistent.path",
-                    "nonexistent": "some.nonexistent.path",
+                   "nonexistent": "some.nonexistent.path",
                   "literal": "some literal value"
               },
               "schema": [
@@ -162,40 +167,41 @@ class OnlineScoringEngineTest {
             """
             .formatted(EDGE_CASE_TEMPLATE).trim();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final WireMockUtils.WireMockRuntime WIRE_MOCK;
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    static {
-        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
+    {
+        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE, ZOOKEEPER).join();
 
-        WIRE_MOCK = WireMockUtils.startWireMock();
+        wireMock = WireMockUtils.startWireMock();
 
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE, ClickHouseContainerUtils.DATABASE_NAME);
 
-        AI_PROXY_SERVICE = Mockito.mock(ChatCompletionService.class);
-        FEEDBACK_SCORE_SERVICE = Mockito.mock(FeedbackScoreService.class);
-        EVENT_BUS = Mockito.mock(EventBus.class);
+        aiProxyService = Mockito.mock(ChatCompletionService.class);
+        feedbackScoreService = Mockito.mock(FeedbackScoreService.class);
+        eventBus = Mockito.mock(EventBus.class);
 
         APP = newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(REDIS.getRedisURI())
-                        .runtimeInfo(WIRE_MOCK.runtimeInfo())
-                        .mockEventBus(EVENT_BUS)
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .mockEventBus(eventBus)
                         .modules(List.of(
                                 new AbstractModule() {
                                     @Override
                                     protected void configure() {
-                                        bind(ChatCompletionService.class).toInstance(AI_PROXY_SERVICE);
-                                        bind(FeedbackScoreService.class).toInstance(FEEDBACK_SCORE_SERVICE);
+                                        bind(ChatCompletionService.class).toInstance(aiProxyService);
+                                        bind(FeedbackScoreService.class).toInstance(feedbackScoreService);
                                     }
                                 }))
                         .customConfigs(List.of(
@@ -223,12 +229,12 @@ class OnlineScoringEngineTest {
 
         ClientSupportUtils.config(client);
 
-        AuthTestUtils.mockTargetWorkspace(WIRE_MOCK.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER_NAME);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER_NAME);
 
-        projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
-        evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
+        this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
 
-        Mockito.reset(AI_PROXY_SERVICE, FEEDBACK_SCORE_SERVICE, EVENT_BUS);
+        Mockito.reset(aiProxyService, feedbackScoreService, eventBus);
     }
 
     @Test
@@ -246,7 +252,7 @@ class OnlineScoringEngineTest {
         var trace = createTrace(traceId, projectId);
         var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
 
-        Mockito.doNothing().when(EVENT_BUS).register(Mockito.any());
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
 
         var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"The summary addresses the instruction by covering the main points and themes. However, it could have included a few more specific details to fully align with the instruction.\"},"
                 +
@@ -257,15 +263,15 @@ class OnlineScoringEngineTest {
         // mocked response from AI, reused from dev tests
         var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
 
-        var captor = ArgumentCaptor.forClass(List.class);
-        Mockito.doReturn(Mono.empty()).when(FEEDBACK_SCORE_SERVICE).scoreBatchOfTraces(Mockito.any());
-        Mockito.doReturn(aiResponse).when(AI_PROXY_SERVICE).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
         onlineScoringSampler.onTracesCreated(event);
 
         Mono.delay(Duration.ofMillis(300)).block();
 
-        Mockito.verify(FEEDBACK_SCORE_SERVICE, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
+        Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
 
         // check which feedback scores would be stored in Clickhouse by our process
         List<FeedbackScoreBatchItem> processed = captor.getValue();
@@ -282,7 +288,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("test User Facing log error when AI provider fails")
     void testUserFacingLogErrorWhenAIProviderFails(OnlineScoringSampler onlineScoringSampler) throws Exception {
-        Mockito.reset(FEEDBACK_SCORE_SERVICE, AI_PROXY_SERVICE, EVENT_BUS);
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
 
         var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
 
@@ -299,22 +305,22 @@ class OnlineScoringEngineTest {
 
         var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
 
-        Mockito.doNothing().when(EVENT_BUS).register(Mockito.any());
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
 
         var captor = ArgumentCaptor.forClass(List.class);
-        Mockito.doReturn(Mono.empty()).when(FEEDBACK_SCORE_SERVICE).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
         var providerErrorMessage = "LLM provider XXXXX";
 
         Mockito.doThrow(
                 new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER,
                         new RuntimeException(providerErrorMessage)))
-                .when(AI_PROXY_SERVICE).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+                .when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
         onlineScoringSampler.onTracesCreated(event);
 
         Mono.delay(Duration.ofMillis(600)).block();
 
-        Mockito.verify(FEEDBACK_SCORE_SERVICE, Mockito.never()).scoreBatchOfTraces(captor.capture());
+        Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(captor.capture());
 
         //Check user facing logs
         var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);

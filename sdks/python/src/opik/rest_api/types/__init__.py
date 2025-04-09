@@ -203,6 +203,7 @@ from .percentage_values_detailed import PercentageValuesDetailed
 from .percentage_values_public import PercentageValuesPublic
 from .project import Project
 from .project_detailed import ProjectDetailed
+from .project_detailed_visibility import ProjectDetailedVisibility
 from .project_metric_response_public import ProjectMetricResponsePublic
 from .project_metric_response_public_interval import ProjectMetricResponsePublicInterval
 from .project_metric_response_public_metric_type import (
@@ -210,6 +211,7 @@ from .project_metric_response_public_metric_type import (
 )
 from .project_page_public import ProjectPagePublic
 from .project_public import ProjectPublic
+from .project_public_visibility import ProjectPublicVisibility
 from .project_stat_item_object_public import (
     ProjectStatItemObjectPublic,
     ProjectStatItemObjectPublic_Avg,
@@ -219,6 +221,7 @@ from .project_stat_item_object_public import (
 from .project_stats_public import ProjectStatsPublic
 from .project_stats_summary import ProjectStatsSummary
 from .project_stats_summary_item import ProjectStatsSummaryItem
+from .project_visibility import ProjectVisibility
 from .prompt import Prompt
 from .prompt_detail import PromptDetail
 from .prompt_page_public import PromptPagePublic
@@ -449,11 +452,13 @@ __all__ = [
     "PercentageValuesPublic",
     "Project",
     "ProjectDetailed",
+    "ProjectDetailedVisibility",
     "ProjectMetricResponsePublic",
     "ProjectMetricResponsePublicInterval",
     "ProjectMetricResponsePublicMetricType",
     "ProjectPagePublic",
     "ProjectPublic",
+    "ProjectPublicVisibility",
     "ProjectStatItemObjectPublic",
     "ProjectStatItemObjectPublic_Avg",
     "ProjectStatItemObjectPublic_Count",
@@ -461,6 +466,7 @@ __all__ = [
     "ProjectStatsPublic",
     "ProjectStatsSummary",
     "ProjectStatsSummaryItem",
+    "ProjectVisibility",
     "Prompt",
     "PromptDetail",
     "PromptPagePublic",
