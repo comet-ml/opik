@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from opik_optimizer.few_shot_label import predictor, prompt_parameter
+from opik_optimizer import predictor, prompt_parameter
 from opik.evaluation import metrics
 import opik
 from opik.evaluation.metrics import score_result
@@ -12,7 +12,7 @@ def evaluate_predictor(
     metric: metrics.BaseMetric,
     num_threads: int,
     scoring_key_mapping: Optional[Dict[str, str]],
-    project_name: str,
+    project_name: Optional[str],
 ) -> float:
     score_results: List[score_result.ScoreResult] = []
 
