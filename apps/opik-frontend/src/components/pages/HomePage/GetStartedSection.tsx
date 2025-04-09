@@ -8,7 +8,7 @@ import {
 import useAppStore from "@/store/AppStore";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
-import AddExperimentDialog from "../ExperimentsShared/AddExperimentDialog";
+import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import { Link } from "@tanstack/react-router";
 import { SheetTitle } from "@/components/ui/sheet";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";

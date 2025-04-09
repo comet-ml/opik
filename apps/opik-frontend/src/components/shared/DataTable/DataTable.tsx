@@ -69,6 +69,7 @@ declare module "@tanstack/react-table" {
   export interface ColumnMeta<TData extends RowData, TValue> {
     type?: COLUMN_TYPE;
     header?: string;
+    headerCheckbox?: boolean;
     iconType?: HeaderIconType;
     verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
     overrideRowHeight?: ROW_HEIGHT;
