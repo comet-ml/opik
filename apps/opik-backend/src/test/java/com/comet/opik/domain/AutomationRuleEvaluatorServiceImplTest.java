@@ -29,6 +29,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.apache.commons.lang3.RandomStringUtils;
@@ -63,14 +64,15 @@ class AutomationRuleEvaluatorServiceImplTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
     private final WireMockUtils.WireMockRuntime WIRE_MOCK;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER).join();
 
         WIRE_MOCK = WireMockUtils.startWireMock();
 

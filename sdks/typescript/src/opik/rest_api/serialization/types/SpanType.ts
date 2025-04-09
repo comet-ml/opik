@@ -7,9 +7,9 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 
 export const SpanType: core.serialization.Schema<serializers.SpanType.Raw, OpikApi.SpanType> = core.serialization.enum_(
-    ["general", "tool", "llm"],
+    ["general", "tool", "llm", "guardrail"],
 );
 
 export declare namespace SpanType {
-    export type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm" | "guardrail";
 }

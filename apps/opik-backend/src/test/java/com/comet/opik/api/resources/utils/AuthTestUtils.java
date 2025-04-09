@@ -9,7 +9,9 @@ import lombok.experimental.UtilityClass;
 import java.util.List;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -53,6 +55,16 @@ public class AuthTestUtils {
                         .withRequestBody(matchingJsonPath("$.path", matching("/v1/private/.*")))
                         .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(user, workspaceId, workspaceName,
                                 quotas))));
+    }
+
+    public static void mockGetWorkspaceIdByName(
+            WireMockServer server, String workspaceName, String workspaceId) {
+        server.stubFor(
+                get(urlPathEqualTo("/workspaces/workspace-id"))
+                        .withQueryParam("name", equalTo(workspaceName))
+                        .willReturn(aResponse()
+                                .withStatus(200)
+                                .withBody(workspaceId)));
     }
 
     public static void mockSessionCookieTargetWorkspace(WireMockServer server, String sessionToken,

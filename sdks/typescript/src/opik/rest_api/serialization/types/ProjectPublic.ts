@@ -5,11 +5,13 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { ProjectPublicVisibility } from "./ProjectPublicVisibility";
 
 export const ProjectPublic: core.serialization.ObjectSchema<serializers.ProjectPublic.Raw, OpikApi.ProjectPublic> =
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        visibility: ProjectPublicVisibility.optional(),
         description: core.serialization.string().optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -22,6 +24,7 @@ export declare namespace ProjectPublic {
     export interface Raw {
         id?: string | null;
         name: string;
+        visibility?: ProjectPublicVisibility.Raw | null;
         description?: string | null;
         created_at?: string | null;
         created_by?: string | null;
