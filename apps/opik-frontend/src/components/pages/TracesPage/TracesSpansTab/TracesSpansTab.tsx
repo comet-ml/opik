@@ -294,18 +294,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
-      sorting: sortedColumns.map((column) => {
-        if (column.id.startsWith(COLUMN_FEEDBACK_SCORES_ID)) {
-          return {
-            ...column,
-            id: column.id.replace(
-              `${COLUMN_FEEDBACK_SCORES_ID}_`,
-              `${COLUMN_FEEDBACK_SCORES_ID}.`,
-            ),
-          };
-        }
-        return column;
-      }),
+      sorting: sortedColumns,
       filters,
       page: page as number,
       size: size as number,

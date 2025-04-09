@@ -1,8 +1,10 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Info, RotateCw } from "lucide-react";
+import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
+  ColumnSort,
   Row,
   RowSelectionState,
 } from "@tanstack/react-table";
@@ -18,19 +20,25 @@ import get from "lodash/get";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
+  DynamicColumn,
 } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
@@ -41,6 +49,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import useGroupedExperimentsList, {
   checkIsMoreRowId,
   DEFAULT_GROUPS_PER_PAGE,
@@ -61,15 +70,16 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
-import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
 const COLUMNS_ORDER_KEY = "experiments-columns-order";
+const COLUMNS_SORT_KEY = "experiments-columns-sort";
+const COLUMNS_SCORES_ORDER_KEY = "experiments-scores-columns-order";
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
-    id: "id",
+    id: COLUMN_ID_ID,
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
@@ -106,7 +116,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.number,
   },
   {
-    id: "feedback_scores",
+    id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
@@ -135,7 +145,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
-  "feedback_scores",
+  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -166,6 +176,14 @@ const ExperimentsPage: React.FunctionComponent = () => {
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
+    COLUMNS_SORT_KEY,
+    {
+      defaultValue: [],
+    },
+  );
+
   const { checkboxClickHandler } = useMemo(() => {
     return {
       checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
@@ -176,13 +194,29 @@ const ExperimentsPage: React.FunctionComponent = () => {
     workspaceName,
     groupLimit,
     datasetId: datasetId!,
+    sorting: sortedColumns,
     search: search!,
     page: page!,
     size: DEFAULT_GROUPS_PER_PAGE,
     polling: true,
   });
 
+  const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
+    useExperimentsFeedbackScoresNames(
+      {},
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
+
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
+
+  const sortableBy: string[] = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
+  );
+
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
   const noData = !search && !datasetId;
@@ -204,11 +238,44 @@ const ExperimentsPage: React.FunctionComponent = () => {
     },
   );
 
+  const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_SCORES_ORDER_KEY, {
+    defaultValue: [],
+  });
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
+
+  const dynamicScoresColumns = useMemo(() => {
+    return (feedbackScoresData?.scores ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
+        label: c.name,
+        columnType: COLUMN_TYPE.number,
+      }));
+  }, [feedbackScoresData?.scores]);
+
+  const scoresColumnsData = useMemo(() => {
+    return [
+      ...dynamicScoresColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            accessorFn: (row) =>
+              row.feedback_scores?.find((f) => f.name === label),
+          }) as ColumnData<GroupedExperiment>,
+      ),
+    ];
+  }, [dynamicScoresColumns]);
 
   const selectedRows: Array<GroupedExperiment> = useMemo(() => {
     return experiments.filter(
@@ -218,7 +285,10 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>(checkboxClickHandler),
+      generateExperimentNameColumDef<GroupedExperiment>(
+        checkboxClickHandler,
+        isColumnSortable(COLUMN_NAME_ID, sortableBy),
+      ),
       generateGroupedCellDef<GroupedExperiment, unknown>(
         {
           id: GROUPING_COLUMN,
@@ -238,13 +308,38 @@ const ExperimentsPage: React.FunctionComponent = () => {
         {
           columnsOrder,
           selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
+      ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
+        scoresColumnsData,
+        {
+          columnsOrder: scoresColumnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
         },
       ),
       generateActionsColumDef({
         cell: ExperimentRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder, checkboxClickHandler]);
+  }, [
+    checkboxClickHandler,
+    sortableBy,
+    columnsOrder,
+    selectedColumns,
+    scoresColumnsData,
+    scoresColumnsOrder,
+  ]);
+
+  const sortConfig = useMemo(
+    () => ({
+      enabled: true,
+      sorting: sortedColumns,
+      setSorting: setSortedColumns,
+    }),
+    [setSortedColumns, sortedColumns],
+  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -287,7 +382,18 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [setGroupLimit],
   );
 
-  if (isPending) {
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+
+  if (isPending || isFeedbackScoresPending) {
     return <Loader />;
   }
 
@@ -329,6 +435,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
+            sections={columnSections}
           ></ColumnsButton>
           <Button
             variant="outline"
@@ -350,6 +457,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
         getIsCustomRow={getIsCustomRow}
+        sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,

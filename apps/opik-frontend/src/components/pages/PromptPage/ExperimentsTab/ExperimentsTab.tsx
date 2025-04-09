@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ColumnPinningState,
+  ColumnSort,
   Row,
   RowSelectionState,
 } from "@tanstack/react-table";
@@ -36,6 +37,7 @@ import {
   renderCustomRow,
 } from "@/components/pages-shared/experiments/table";
 import {
+  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
@@ -44,7 +46,7 @@ import {
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import { Separator } from "@/components/ui/separator";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -53,6 +55,7 @@ import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceC
 const SELECTED_COLUMNS_KEY = "prompt-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompt-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "prompt-experiments-columns-order";
+const COLUMNS_SORT_KEY = "prompt-experiments-columns-sort";
 const COLUMNS_SCORES_ORDER_KEY = "prompt-experiments-scores-columns-order";
 const DYNAMIC_COLUMNS_KEY = "prompt-experiments-dynamic-columns";
 
@@ -103,6 +106,14 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const [datasetId, setDatasetId] = useState("");
   const [groupLimit, setGroupLimit] = useState<Record<string, number>>({});
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
+    COLUMNS_SORT_KEY,
+    {
+      defaultValue: [],
+    },
+  );
+
   const { checkboxClickHandler } = useMemo(() => {
     return {
       checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
@@ -114,6 +125,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     groupLimit,
     datasetId,
     promptId,
+    sorting: sortedColumns,
     search,
     page,
     size: DEFAULT_GROUPS_PER_PAGE,
@@ -129,6 +141,12 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     );
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
+
+  const sortableBy: string[] = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
+  );
+
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
   const noData = !search && !datasetId;
@@ -166,7 +184,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     return (feedbackScoresData?.scores ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: `feedback_scores.${c.name}`,
+        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
         label: c.name,
         columnType: COLUMN_TYPE.number,
       }));
@@ -208,7 +226,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>(checkboxClickHandler),
+      generateExperimentNameColumDef<GroupedExperiment>(
+        checkboxClickHandler,
+        isColumnSortable(COLUMN_NAME_ID, sortableBy),
+      ),
       generateGroupedCellDef<GroupedExperiment, unknown>(
         {
           id: GROUPING_COLUMN,
@@ -228,6 +249,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         {
           columnsOrder,
           selectedColumns,
+          sortableColumns: sortableBy,
         },
       ),
       ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
@@ -235,16 +257,27 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         {
           columnsOrder: scoresColumnsOrder,
           selectedColumns,
+          sortableColumns: sortableBy,
         },
       ),
     ];
   }, [
-    selectedColumns,
-    columnsOrder,
     checkboxClickHandler,
-    scoresColumnsOrder,
+    sortableBy,
+    columnsOrder,
+    selectedColumns,
     scoresColumnsData,
+    scoresColumnsOrder,
   ]);
+
+  const sortConfig = useMemo(
+    () => ({
+      enabled: true,
+      sorting: sortedColumns,
+      setSorting: setSortedColumns,
+    }),
+    [setSortedColumns, sortedColumns],
+  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -318,6 +351,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         data={experiments}
         renderCustomRow={renderCustomRowCallback}
         getIsCustomRow={getIsCustomRow}
+        sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,

@@ -7,12 +7,17 @@ import {
   GroupingState,
   Row,
 } from "@tanstack/react-table";
-import { COLUMN_NAME_ID, ColumnData, OnChangeFn } from "@/types/shared";
+import {
+  COLUMN_NAME_ID,
+  COLUMN_TYPE,
+  ColumnData,
+  OnChangeFn,
+} from "@/types/shared";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Text } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { mapColumnDataFields } from "@/lib/table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
+import TypeHeader from "@/components/shared/DataTableHeaders/TypeHeader";
 import {
   checkIsMoreRowId,
   DEFAULT_EXPERIMENTS_PER_GROUP,
@@ -59,28 +64,11 @@ export const generateExperimentNameColumDef = <TData,>(
     event: React.MouseEvent<HTMLButtonElement>,
     context: CellContext<TData, unknown>,
   ) => void,
+  sortable: boolean = false,
 ) => {
   return {
     accessorKey: COLUMN_NAME_ID,
-    header: (context) => (
-      <HeaderWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-      >
-        <Checkbox
-          checked={
-            context.table.getIsAllPageRowsSelected() ||
-            (context.table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) =>
-            context.table.toggleAllPageRowsSelected(!!value)
-          }
-          aria-label="Select all"
-        />
-        <Text className="ml-3 size-3.5 shrink-0 text-slate-300" />
-        <span className="truncate">Name</span>
-      </HeaderWrapper>
-    ),
+    header: TypeHeader,
     cell: (context) => {
       const data = context.row.original as GroupedExperiment;
       return (
@@ -113,8 +101,13 @@ export const generateExperimentNameColumDef = <TData,>(
     },
     size: 180,
     minSize: 100,
-    enableSorting: false,
+    enableSorting: sortable,
     enableHiding: false,
+    meta: {
+      header: "Name",
+      headerCheckbox: true,
+      type: COLUMN_TYPE.string,
+    },
   } as ColumnDef<TData>;
 };
 
