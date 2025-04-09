@@ -156,10 +156,13 @@ For most SDK contributions, you should run the e2e tests which validate the core
 
 ```bash
 cd sdks/python
+
 # Install the test requirements
 pip install -r tests/test_requirements.txt
+
 # Install pre-commit for linting
 pip install pre-commit
+
 # Run the e2e tests
 pytest tests/e2e
 ```
