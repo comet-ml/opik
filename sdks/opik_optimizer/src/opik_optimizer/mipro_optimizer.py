@@ -3,7 +3,7 @@ MIPRO algorithm for Opik
 """
 
 from .integrations.dspy import DspyOptimizer
-from dspy.datasets.dataset import Dataset
+from opik.api_objects.dataset.dataset import Dataset
 from opik.evaluation.metrics import BaseMetric
 
 class MiproOptimizer(DspyOptimizer):
