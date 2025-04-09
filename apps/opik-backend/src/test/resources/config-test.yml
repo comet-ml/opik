@@ -127,12 +127,8 @@ authentication:
   # Description: API key resolution cache TTL (seconds). Setting this value to 0 means no caching.
   apiKeyResolutionCacheTTLInSec: 0
   # Default:
-  # Description: Configures how to authenticate requests which originates from the sdk
-  sdk:
-    url: ''
-  # Default:
-  # Description: Configures how to authenticate requests which originates from the ui
-  ui:
+  # Description: Configures base url for React service, used for user management and authentication
+  reactService:
     url: ''
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers

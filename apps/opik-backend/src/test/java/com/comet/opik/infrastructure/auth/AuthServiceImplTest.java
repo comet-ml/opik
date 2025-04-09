@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.mockito.Mockito.*;
@@ -21,10 +22,13 @@ class AuthServiceImplTest {
     @Mock
     private HttpHeaders headers;
 
-    @Mock
-    private UriInfo uriInfo;
+    private UriInfo uriInfo = Mockito.mock(UriInfo.class);;
 
     private AuthServiceImpl authService = new AuthServiceImpl(() -> requestContext);
+    private ContextInfoHolder infoHolder = ContextInfoHolder.builder()
+            .uriInfo(uriInfo)
+            .method("GET")
+            .build();
 
     @Test
     void testAuthenticate__whenCookieAndHeaderNotPresent__thenUseDefault() {
@@ -32,7 +36,7 @@ class AuthServiceImplTest {
         Cookie sessionToken = null;
 
         // When
-        authService.authenticate(headers, sessionToken, uriInfo);
+        authService.authenticate(headers, sessionToken, infoHolder);
 
         // Then
         verify(requestContext).setUserName(ProjectService.DEFAULT_USER);
@@ -44,7 +48,7 @@ class AuthServiceImplTest {
         Cookie sessionToken = new Cookie("sessionToken", "token");
 
         // When
-        authService.authenticate(headers, sessionToken, uriInfo);
+        authService.authenticate(headers, sessionToken, infoHolder);
 
         // Then
         verify(requestContext).setUserName(ProjectService.DEFAULT_USER);
@@ -61,6 +65,6 @@ class AuthServiceImplTest {
 
         Assertions.assertThrows(
                 jakarta.ws.rs.ClientErrorException.class,
-                () -> authService.authenticate(headers, sessionToken, uriInfo));
+                () -> authService.authenticate(headers, sessionToken, infoHolder));
     }
 }
