@@ -1,58 +1,49 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.GuardrailBatchItem;
-import com.comet.opik.api.GuardrailPiiDetails;
-import com.comet.opik.api.GuardrailTopicDetails;
-import com.comet.opik.api.GuardrailType;
-import com.comet.opik.api.GuardrailsCheck;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.comet.opik.api.GuardrailsValidation;
 import lombok.NonNull;
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
 
 import java.util.List;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
 
 @Mapper
 public interface GuardrailsMapper {
 
     GuardrailsMapper INSTANCE = Mappers.getMapper(GuardrailsMapper.class);
 
-    @Mapping(source = "guardrailBatchItem", target = "items", qualifiedByName = "mapToItems")
-    GuardrailsCheck toGuardrailCheck(GuardrailBatchItem guardrailBatchItem);
+    default List<GuardrailsValidation> mapToValidations(@NonNull List<GuardrailBatchItem> guardrailBatchItems) {
+        if (guardrailBatchItems.isEmpty()) {
+            return List.of();
+        }
 
-    @Named("mapToItems")
-    default List<GuardrailsCheck.Item> mapToItems(@NonNull GuardrailBatchItem guardrailBatchItem) {
-        return mapToItems(guardrailBatchItem.name(), guardrailBatchItem.details());
-    }
-
-    @Named("mapToItems")
-    default List<GuardrailsCheck.Item> mapToItems(@NonNull GuardrailType name, @NonNull JsonNode details) {
-        return switch (name) {
-            case TOPIC -> mapToTopicItems(details);
-            case PII -> mapToPiiItems(details);
-        };
-    }
-
-    default List<GuardrailsCheck.Item> mapToTopicItems(@NonNull JsonNode details) {
-        var topicDetails = JsonUtils.readValue(JsonUtils.writeValueAsString(details), GuardrailTopicDetails.class);
-        return topicDetails.scores().entrySet().stream()
-                .map(entry -> GuardrailsCheck.Item.builder()
-                        .name(entry.getKey())
-                        .score(entry.getValue())
-                        .build())
+        return guardrailBatchItems.stream()
+                // group by span ids
+                .collect(groupingBy(GuardrailBatchItem::secondaryId, mapping(Function.identity(), Collectors.toList())))
+                .entrySet().stream()
+                .map(entry -> mapToValidation(entry.getKey(), entry.getValue()))
                 .toList();
     }
 
-    default List<GuardrailsCheck.Item> mapToPiiItems(@NonNull JsonNode details) {
-        var piiDetails = JsonUtils.readValue(JsonUtils.writeValueAsString(details), GuardrailPiiDetails.class);
-        return piiDetails.detectedEntities().entrySet().stream()
-                .map(entry -> GuardrailsCheck.Item.builder()
-                        .name(entry.getKey())
-                        .score(entry.getValue().getFirst().score())
-                        .build())
-                .toList();
+    default GuardrailsValidation mapToValidation(
+            @NonNull UUID spanId, @NonNull List<GuardrailBatchItem> guardrailBatchItems) {
+        return GuardrailsValidation.builder()
+                .spanId(spanId)
+                .checks(guardrailBatchItems.stream().map(this::mapToGuardrailValidationCheck).toList())
+                .build();
+    }
+
+    default GuardrailsValidation.Check mapToGuardrailValidationCheck(@NonNull GuardrailBatchItem guardrailBatchItems) {
+        return GuardrailsValidation.Check.builder()
+                .name(guardrailBatchItems.name())
+                .result(guardrailBatchItems.result())
+                .build();
     }
 }

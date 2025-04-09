@@ -8,18 +8,18 @@ import lombok.Builder;
 import lombok.NonNull;
 
 import java.util.List;
+import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record GuardrailsCheck(
-        @NonNull GuardrailType name,
-        @NonNull GuardrailResult result,
-        @NonNull List<Item> items) {
+public record GuardrailsValidation(
+        @NonNull UUID spanId,
+        @NonNull List<Check> checks) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record Item(@NonNull String name, double score) {
+    public record Check(@NonNull GuardrailType name, GuardrailResult result) {
     }
 }

@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.GuardrailBatchItem;
-import com.comet.opik.api.GuardrailsCheck;
+import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -131,9 +131,9 @@ public class GuardrailsResourceTest {
         Trace actual = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
 
         assertThat(actual).isNotNull();
-        assertThat(actual.guardrailsChecks()).hasSize(guardrails.size());
-        assertThat(actual.guardrailsChecks()).containsExactlyInAnyOrder(
-                guardrails.stream().map(GuardrailsMapper.INSTANCE::toGuardrailCheck).toArray(GuardrailsCheck[]::new));
+        assertThat(actual.guardrailsValidations()).hasSize(guardrails.size());
+        assertThat(actual.guardrailsValidations()).containsExactlyInAnyOrder(
+                GuardrailsMapper.INSTANCE.mapToValidations(guardrails).toArray(GuardrailsValidation[]::new));
     }
 
     @Test
@@ -162,13 +162,11 @@ public class GuardrailsResourceTest {
         assertThat(actual).isNotNull();
         assertThat(actual.content()).hasSize(traces.size());
         actual.content().forEach(actualTrace -> {
-            assertThat(actualTrace.guardrailsChecks()).hasSize(guardrailsByTraceId.get(actualTrace.id()).size());
-            assertThat(actualTrace.guardrailsChecks()).containsExactlyInAnyOrder(
-                    guardrailsByTraceId.get(actualTrace.id()).stream()
-                            .map(GuardrailsMapper.INSTANCE::toGuardrailCheck)
-                            .toArray(GuardrailsCheck[]::new));
+            assertThat(actualTrace.guardrailsValidations()).hasSize(guardrailsByTraceId.get(actualTrace.id()).size());
+            assertThat(actualTrace.guardrailsValidations()).containsExactlyInAnyOrder(
+                    GuardrailsMapper.INSTANCE.mapToValidations(guardrailsByTraceId.get(actualTrace.id()))
+                            .toArray(GuardrailsValidation[]::new));
         });
-
     }
 
     private List<GuardrailBatchItem> createGuardrails(UUID traceId, String projectName) {
