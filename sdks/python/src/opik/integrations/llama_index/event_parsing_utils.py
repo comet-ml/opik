@@ -6,7 +6,8 @@ from llama_index.core.base.llms.types import ChatResponse
 from llama_index.core.callbacks import schema as llama_index_schema
 
 from opik import llm_usage
-from opik.types import LLMProvider
+from opik.types import LLMProvider, ErrorInfoDict
+from opik.decorator import error_info_collector
 
 LOGGER = logging.getLogger(__name__)
 
@@ -120,6 +121,21 @@ def get_span_output_from_event(
         return None
 
 
+def get_span_error_info(payload: Optional[Dict[str, Any]]) -> Optional[ErrorInfoDict]:
+    """Retrieves error information from LlamaIndex if the event failed"""
+    if payload is None:
+        return None
+
+    payload_copy = payload.copy()
+
+    if llama_index_schema.EventPayload.EXCEPTION in payload_copy:
+        return error_info_collector.collect(
+            payload_copy[llama_index_schema.EventPayload.EXCEPTION]
+        )
+
+    return None
+
+
 def get_usage_data(
     payload: Optional[Dict[str, Any]],
 ) -> llm_usage.LLMUsageInfo:
@@ -145,12 +161,16 @@ def get_usage_data(
             llm_usage_info.model = response.raw.model
             llm_usage_info.provider = LLMProvider.OPENAI
         if hasattr(response.raw, "usage"):
-            usage_info = response.raw.usage.model_dump()
-            llm_usage_info.usage = llm_usage.try_build_opik_usage_or_log_error(
-                provider=LLMProvider.OPENAI,  # TODO: check if other options are possible, this is just old behavior
-                usage=usage_info,
-                logger=LOGGER,
-                error_message="Failed to log token usage from llama_index run",
-            )
+            usage = response.raw.usage
+
+            # Usage can be None for LLM event end payload
+            if usage is not None:
+                usage_info = response.raw.usage.model_dump()
+                llm_usage_info.usage = llm_usage.try_build_opik_usage_or_log_error(
+                    provider=LLMProvider.OPENAI,  # TODO: check if other options are possible, this is just old behavior
+                    usage=usage_info,
+                    logger=LOGGER,
+                    error_message="Failed to log token usage from llama_index run",
+                )
 
     return llm_usage_info
