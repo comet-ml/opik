@@ -7,11 +7,11 @@ from sdk_helpers import wait_for_number_of_traces_to_be_visible
 
 @pytest.fixture(scope="function")
 def log_x_traces_with_one_span_via_decorator(traces_number):
-    @track
+    @track(project_name=os.environ["OPIK_PROJECT_NAME"])
     def f2(input: str):
         return "test output"
 
-    @track
+    @track(project_name=os.environ["OPIK_PROJECT_NAME"])
     def f1(input: str):
         opik_context.update_current_trace(name=PREFIX + str(i))
         return f2(input)
