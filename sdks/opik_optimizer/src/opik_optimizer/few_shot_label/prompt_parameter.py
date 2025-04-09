@@ -30,7 +30,7 @@ class PromptParameter(pydantic.BaseModel):
         rendered_demos: List[str] = []
         
         for i, demo in enumerate(self.demos, 1):
-            example_lines = [f"\n**Example {i}:**"]
+            example_lines = [f"\n**Example {i}**"]
             for key, value in demo.items():
                 example_lines.append(f"  {key}: {value}")
             
