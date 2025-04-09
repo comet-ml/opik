@@ -175,10 +175,12 @@ def browser_context(browser: Browser, get_url_from_config: str, video_dir):
     yield context
     context.close()
 
+
 @pytest.fixture(scope="session")
 def get_url_from_config():
     env_config = get_environment_config()
     return env_config.base_url
+
 
 @pytest.fixture(scope="function")
 def env_config() -> EnvConfig:
