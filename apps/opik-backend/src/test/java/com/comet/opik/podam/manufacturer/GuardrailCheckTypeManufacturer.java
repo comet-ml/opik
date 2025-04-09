@@ -4,6 +4,7 @@ import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.api.GuardrailPiiDetails;
 import com.comet.opik.api.GuardrailTopicDetails;
 import com.comet.opik.api.GuardrailType;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -26,13 +27,16 @@ public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<Gua
             AttributeMetadata attributeMetadata,
             ManufacturingContext manufacturingContext) {
         GuardrailType name = GuardrailType.values()[RANDOM.nextInt(GuardrailType.values().length)];
+        GuardrailResult result = GuardrailResult.values()[RANDOM.nextInt(GuardrailResult.values().length)];
 
         return GuardrailBatchItem.builder()
                 .id(UUIDTypeManufacturer.INSTANCE.getType(dataProviderStrategy, attributeMetadata,
                         manufacturingContext))
+                .secondaryId(UUIDTypeManufacturer.INSTANCE.getType(dataProviderStrategy, attributeMetadata,
+                        manufacturingContext))
                 .projectName(RandomStringUtils.randomAlphanumeric(10))
                 .name(name)
-                .passed(RANDOM.nextBoolean())
+                .result(result)
                 .config(JsonNodeTypeManufacturer.INSTANCE.getType(dataProviderStrategy, attributeMetadata,
                         manufacturingContext))
                 .details(generateDetails(name))

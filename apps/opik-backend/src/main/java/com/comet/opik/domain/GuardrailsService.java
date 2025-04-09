@@ -3,8 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.utils.WorkspaceUtils;
-import com.comet.opik.api.Project;
-import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;

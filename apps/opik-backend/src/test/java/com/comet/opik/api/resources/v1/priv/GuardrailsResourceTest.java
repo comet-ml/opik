@@ -155,7 +155,7 @@ public class GuardrailsResourceTest {
                 .collect(Collectors.toMap(Trace::id, trace -> createGuardrails(trace.id(), trace.projectName())));
 
         guardrailsByTraceId.values()
-                .forEach(guardrail -> traceResourceClient.guardrails(guardrail, API_KEY, TEST_WORKSPACE));
+                .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY, TEST_WORKSPACE));
         Trace.TracePage actual = traceResourceClient.getTraces(DEFAULT_PROJECT, null, API_KEY, TEST_WORKSPACE,
                 null, null, traces.size(), Map.of());
 

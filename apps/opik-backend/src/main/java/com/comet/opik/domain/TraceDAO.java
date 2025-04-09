@@ -388,7 +388,7 @@ class TraceDAOImpl implements TraceDAO {
                     entity_id,
                     groupArray(tuple(
                          name,
-                         passed,
+                         result,
                          details,
                          created_at,
                          last_updated_at,
@@ -456,7 +456,7 @@ class TraceDAOImpl implements TraceDAO {
                     entity_id,
                     groupArray(tuple(
                          name,
-                         passed,
+                         result,
                          details,
                          created_at,
                          last_updated_at,
@@ -1429,7 +1429,7 @@ class TraceDAOImpl implements TraceDAO {
                     GuardrailType name = GuardrailType.fromString((String) guardrail.get(0));
                     return GuardrailsCheck.builder()
                             .name(name)
-                            .passed((Boolean) guardrail.get(1))
+                            .result(GuardrailResult.fromString((String) guardrail.get(1)))
                             .items(Optional.ofNullable((String) guardrail.get(2))
                                     .filter(it -> !it.isBlank())
                                     .map(JsonUtils::getJsonNodeFromString)
