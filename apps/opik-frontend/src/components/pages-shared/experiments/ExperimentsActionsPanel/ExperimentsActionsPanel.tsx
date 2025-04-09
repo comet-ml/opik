@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Experiment } from "@/types/datasets";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
-import FilterExperimentsToCompareDialog from "@/components/pages/ExperimentsShared/FilterExperimentsToCompareDialog";
+import FilterExperimentsToCompareDialog from "@/components/pages-shared/experiments/ExperimentsActionsPanel/FilterExperimentsToCompareDialog";
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";

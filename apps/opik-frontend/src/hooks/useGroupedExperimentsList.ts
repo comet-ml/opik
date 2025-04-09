@@ -14,6 +14,7 @@ import useExperimentsList, {
   UseExperimentsListResponse,
 } from "@/api/datasets/useExperimentsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
+import { Sorting } from "@/types/sorting";
 
 export const DELETED_DATASET_ID = "deleted_dataset_id";
 export const DEFAULT_GROUPS_PER_PAGE = 5;
@@ -29,6 +30,7 @@ export type GroupedExperiment = {
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
+  sorting?: Sorting;
   datasetId?: string;
   promptId?: string;
   search?: string;
@@ -42,6 +44,7 @@ type UseGroupedExperimentsListResponse = {
   data: {
     content: Array<GroupedExperiment>;
     groupIds: string[];
+    sortable_by: string[];
     total: number;
   };
   datasetsData: Dataset[];
@@ -98,6 +101,7 @@ export default function useGroupedExperimentsList(
   } = useExperimentsList(
     {
       workspaceName: params.workspaceName,
+      sorting: params.sorting,
       search: params.search,
       datasetDeleted: true,
       promptId: params.promptId,
@@ -173,6 +177,7 @@ export default function useGroupedExperimentsList(
     queries: datasetsIds.map((datasetId) => {
       const p: UseExperimentsListParams = {
         workspaceName: params.workspaceName,
+        sorting: params.sorting,
         search: params.search,
         datasetId,
         promptId: params.promptId,
@@ -223,6 +228,7 @@ export default function useGroupedExperimentsList(
   ]);
 
   const data = useMemo(() => {
+    let sortableBy: string[] | undefined;
     const content = datasetsData.reduce<GroupedExperiment[]>(
       (acc, dataset, index) => {
         let experimentsData = experimentsResponse[index].data;
@@ -233,6 +239,11 @@ export default function useGroupedExperimentsList(
           };
         } else {
           experimentsCache.current[dataset.id] = experimentsData;
+        }
+
+        // we are taking sortable data from any experiments that have it defined
+        if (!sortableBy && Boolean(experimentsData.sortable_by?.length)) {
+          sortableBy = experimentsData.sortable_by;
         }
 
         const hasMoreData =
@@ -265,6 +276,7 @@ export default function useGroupedExperimentsList(
     return {
       content,
       groupIds,
+      sortable_by: sortableBy ?? [],
       total,
     };
   }, [

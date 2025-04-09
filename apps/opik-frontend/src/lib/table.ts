@@ -80,6 +80,7 @@ export const mapColumnDataFields = <TColumnData, TData>(
     meta: {
       type: columnData.type,
       header: columnData.label,
+      headerCheckbox: columnData.headerCheckbox,
       iconType: columnData.iconType,
       statisticKey: columnData.statisticKey || columnData.id,
       ...(columnData.statisticDataFormater && {
