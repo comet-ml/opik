@@ -1,9 +1,10 @@
-from opik.api_objects.dataset import Dataset
-from opik.evaluation.metrics import BaseMetric
+from typing import Optional
+import opik
+from opik.evaluation import metrics
 
 
 class BaseOptimizer:
-    def __init__(self, model: str, project_name: str = None, **model_kwargs):
+    def __init__(self, model: str, project_name: Optional[str] = None, **model_kwargs):
         """
         Base class for optimizers.
 
@@ -17,7 +18,7 @@ class BaseOptimizer:
         self.project_name = project_name
 
     def optimize_prompt(
-        self, dataset: str | Dataset, metric: BaseMetric, prompt: str, **kwargs
+        self, dataset: str | opik.Dataset, metric: metrics.BaseMetric, prompt: str, **kwargs
     ):
         """
         Optimizer a prompt.
