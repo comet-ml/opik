@@ -22,7 +22,6 @@ import java.util.List;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 
-
 @ImplementedBy(GuardrailsDAOImpl.class)
 public interface GuardrailsDAO {
     Mono<Long> addGuardrails(EntityType entityType, List<GuardrailBatchItem> guardrails);
@@ -101,7 +100,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
                     .bind("secondary_entity_id" + i, guardrailBatchItem.secondaryId())
                     .bind("project_id" + i, guardrailBatchItem.projectId())
                     .bind("name" + i, guardrailBatchItem.name().toString())
-                    .bind("passed" + i, guardrailBatchItem.result().getResult())
+                    .bind("result" + i, guardrailBatchItem.result().getResult())
                     .bind("config" + i, getOrDefault(guardrailBatchItem.config()))
                     .bind("details" + i, getOrDefault(guardrailBatchItem.details()));
         }
