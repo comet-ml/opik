@@ -12,12 +12,11 @@ class PromptParameter(pydantic.BaseModel):
         # We're just adding examples to the end, but we might want to use special
         # prompt template placeholder for demos, provided by user.
 
-        template_string = f"""
-        {self.instruction}.
-        
-        Examples demonstrating the inputs and expected outputs:
-        {self._render_demos()}
-        """
+        template_string = (
+            f"{self.instruction}."
+            f"\n\nExamples demonstrating the inputs and expected outputs:"
+            f"\n\n{self._render_demos()}"
+        )
 
         template = prompt_template.PromptTemplate(
             template=template_string,
@@ -30,7 +29,7 @@ class PromptParameter(pydantic.BaseModel):
         rendered_demos: List[str] = []
         
         for i, demo in enumerate(self.demos, 1):
-            example_lines = [f"\n**Example {i}**"]
+            example_lines = [f"**Example {i}**"]
             for key, value in demo.items():
                 example_lines.append(f"  {key}: {value}")
             
