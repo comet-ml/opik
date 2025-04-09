@@ -56,6 +56,7 @@ export type ColumnData<T> = {
   customMeta?: object;
   iconType?: HeaderIconType;
   header?: Header<T, unknown>;
+  headerCheckbox?: boolean;
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
