@@ -39,6 +39,7 @@ jobs:
       - name: Run Tests
         env:
           PYTHON_CODE_EXECUTOR_STRATEGY: process
+          PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 10
         run: |
           pytest tests/ -v --junitxml=test-results.xml
       
