@@ -138,6 +138,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 WHERE trace_id IN :trace_ids
             )
             AND workspace_id = :workspace_id
+            SETTINGS allow_nondeterministic_mutations = 1
             ;
             """;
 

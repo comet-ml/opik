@@ -62,6 +62,7 @@ This will expose the following services to the host machine:
 
 - Redis: Available on port 6379.
 - ClickHouse: Available on ports 8123 (HTTP) and 9000 (Native Protocol).
+- Zookeeper:  Available on port 2181.
 - MySQL: Available on port 3306.
 - Backend: Available on ports 8080 (HTTP) and 3003 (OpenAPI specification).
 - Python backend: Available on port 8000 (HTTP).
