@@ -9,8 +9,8 @@ import * as core from "../../../../core";
 export const GetSpansByProjectRequestType: core.serialization.Schema<
     serializers.GetSpansByProjectRequestType.Raw,
     OpikApi.GetSpansByProjectRequestType
-> = core.serialization.enum_(["general", "tool", "llm"]);
+> = core.serialization.enum_(["general", "tool", "llm", "guardrail"]);
 
 export declare namespace GetSpansByProjectRequestType {
-    export type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm" | "guardrail";
 }

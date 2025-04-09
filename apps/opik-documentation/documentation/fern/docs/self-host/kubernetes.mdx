@@ -68,3 +68,11 @@ opik:
   clickhouse:
     enabled: false
 ```
+
+## Troubleshooting
+
+If you get this error when running helm
+```bash
+ERROR: Exception Primary Reason:  Code: 225. DB::Exception: Can't create replicated table without ZooKeeper. (NO_ZOOKEEPER) (version 24.3.5.47.altinitystable (altinity build))
+```
+Please make sure you use the latest Opik helm chart version that runs zookeeper by default
