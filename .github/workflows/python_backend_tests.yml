@@ -37,6 +37,8 @@ jobs:
           pip install pytest pytest-cov
       
       - name: Run Tests
+        env:
+          PYTHON_CODE_EXECUTOR_STRATEGY: process
         run: |
           pytest tests/ -v --junitxml=test-results.xml
       
