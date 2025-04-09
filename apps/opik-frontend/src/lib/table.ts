@@ -24,14 +24,24 @@ export const hasAnyVisibleColumns = <TColumnData>(
   selectedColumns: string[],
 ) => columns.some(({ id }) => selectedColumns.includes(id));
 
+export const isColumnSortable = (id: string, sortableColumns: string[]) => {
+  if (sortableColumns.includes(id)) return true;
+
+  const keys = id.split(".");
+
+  return keys.length > 1 ? sortableColumns.includes(`${keys[0]}.*`) : false;
+};
+
 export const convertColumnDataToColumn = <TColumnData, TData>(
   columns: ColumnData<TColumnData>[],
   {
     columnsOrder = [],
     selectedColumns,
+    sortableColumns = [],
   }: {
     columnsOrder?: string[];
     selectedColumns?: string[];
+    sortableColumns?: string[];
   },
 ) => {
   const retVal: ColumnDef<TData>[] = [];
@@ -41,7 +51,19 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
       ? selectedColumns.includes(column.id)
       : true;
     if (isSelected) {
-      retVal.push(mapColumnDataFields(column));
+      if (
+        Boolean(sortableColumns?.length) &&
+        isColumnSortable(column.id, sortableColumns)
+      ) {
+        retVal.push(
+          mapColumnDataFields({
+            ...column,
+            sortable: true,
+          }),
+        );
+      } else {
+        retVal.push(mapColumnDataFields(column));
+      }
     }
   });
 
