@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
@@ -131,7 +132,9 @@ public class GuardrailsResourceTest {
         Trace actual = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
 
         assertThat(actual).isNotNull();
-        assertThat(actual.guardrailsValidations()).hasSize(guardrails.size());
+        assertThat(actual.guardrailsValidations())
+                .withFailMessage("guardrails are expected to be grouped")
+                .hasSize(1);
         assertThat(actual.guardrailsValidations()).containsExactlyInAnyOrder(
                 GuardrailsMapper.INSTANCE.mapToValidations(guardrails).toArray(GuardrailsValidation[]::new));
     }
@@ -152,7 +155,10 @@ public class GuardrailsResourceTest {
         traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
         var guardrailsByTraceId = traces.stream()
-                .collect(Collectors.toMap(Trace::id, trace -> createGuardrails(trace.id(), trace.projectName())));
+                .collect(Collectors.toMap(Trace::id, trace -> Stream.concat(
+                        // mimic two separate guardrails validation groups
+                        createGuardrails(trace.id(), trace.projectName()).stream(),
+                        createGuardrails(trace.id(), trace.projectName()).stream()).toList()));
 
         guardrailsByTraceId.values()
                 .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY, TEST_WORKSPACE));
@@ -162,7 +168,9 @@ public class GuardrailsResourceTest {
         assertThat(actual).isNotNull();
         assertThat(actual.content()).hasSize(traces.size());
         actual.content().forEach(actualTrace -> {
-            assertThat(actualTrace.guardrailsValidations()).hasSize(guardrailsByTraceId.get(actualTrace.id()).size());
+            var validationGroupCount = (int) guardrailsByTraceId.get(actualTrace.id())
+                    .stream().map(GuardrailBatchItem::secondaryId).distinct().count();
+            assertThat(actualTrace.guardrailsValidations()).hasSize(validationGroupCount);
             assertThat(actualTrace.guardrailsValidations()).containsExactlyInAnyOrder(
                     GuardrailsMapper.INSTANCE.mapToValidations(guardrailsByTraceId.get(actualTrace.id()))
                             .toArray(GuardrailsValidation[]::new));
@@ -170,9 +178,11 @@ public class GuardrailsResourceTest {
     }
 
     private List<GuardrailBatchItem> createGuardrails(UUID traceId, String projectName) {
+        var spanId = UUID.randomUUID();
         return PodamFactoryUtils.manufacturePojoList(factory, GuardrailBatchItem.class).stream()
                 .map(guardrail -> guardrail.toBuilder()
                         .entityId(traceId)
+                        .secondaryId(spanId)
                         .projectName(projectName)
                         .build())
                 // deduplicate by guardrail name
