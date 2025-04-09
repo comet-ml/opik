@@ -312,14 +312,18 @@ def test_missing_data_returns_bad_request(client):
 @pytest.mark.parametrize("code, stacktrace", [
     (
             INVALID_METRIC,
-            "Field 'code' contains invalid Python code:   File \"<string>\", line 2\n    from typing import\n                      ^\nSyntaxError: invalid syntax"
+            """  File "<string>", line 2
+    from typing import
+                      ^
+SyntaxError: invalid syntax"""
     ),
     pytest.param(
             FLASK_INJECTION_METRIC,
-            "Field 'code' contains invalid Python code:   File \"<string>\", line 4, in <module>\nModuleNotFoundError: No module named 'flask'",
+            """  File "<string>", line 4, in <module>
+ModuleNotFoundError: No module named 'flask'""",
             marks=pytest.mark.skipif(
                 lambda: isinstance(app.executor, ProcessExecutor),
-                reason="Flask injection test only works with DockerExecutor"
+                reason="Flask injection test only makes sense for DockerExecutor"
             )
     )
 ])
@@ -329,7 +333,7 @@ def test_invalid_code_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert response.json["error"] == f"400 Bad Request: {stacktrace}"
+    assert response.json["error"] == f"400 Bad Request: Field 'code' contains invalid Python code: {stacktrace}"
 
 
 def test_missing_metric_returns_bad_request(client):
