@@ -68,6 +68,9 @@ import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -241,6 +244,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     {
       updateType: "replaceIn",
     },
+  );
+
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
 
   const filtersConfig = useMemo(
@@ -468,8 +475,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: COLUMN_TYPE.string,
         cell: CommentsCell as never,
       },
+      ...(isGuardrailsEnabled
+        ? [
+            {
+              id: "guardrails",
+              label: "Guardrails",
+              type: COLUMN_TYPE.string,
+              accessorFn: (row: BaseTraceData) =>
+                row.guardrail_validations || [],
+              cell: GuardrailsCell as never,
+            },
+          ]
+        : []),
     ];
-  }, [type, handleThreadIdClick]);
+  }, [type, handleThreadIdClick, isGuardrailsEnabled]);
 
   const filtersColumnData = useMemo(() => {
     return [
