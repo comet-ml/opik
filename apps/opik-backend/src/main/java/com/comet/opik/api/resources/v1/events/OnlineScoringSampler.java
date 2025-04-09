@@ -112,7 +112,8 @@ public class OnlineScoringSampler {
             evaluators.parallelStream().forEach(evaluator -> {
                 // samples traces for this rule
                 var samples = traces.stream()
-                        .filter(wrapFilterWithMdc(trace -> shouldSampleTrace(evaluator, tracesBatch.workspaceId(), trace)));
+                        .filter(wrapFilterWithMdc(
+                                trace -> shouldSampleTrace(evaluator, tracesBatch.workspaceId(), trace)));
                 switch (evaluator.getType()) {
                     case LLM_AS_JUDGE -> {
                         var messages = samples
