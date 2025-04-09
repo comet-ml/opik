@@ -1,9 +1,0 @@
-"""
-Type annotations for awscrt.checksums module.
-
-Copyright 2024 Vlad Emelianov
-"""
-
-def crc32(input: bytes, previous_crc32: int = ...) -> int: ...
-def crc32c(input: bytes, previous_crc32c: int = ...) -> int: ...
-def crc64nvme(input: bytes, previous_crc64nvme: int = 0) -> int: ...
