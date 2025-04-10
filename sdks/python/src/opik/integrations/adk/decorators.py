@@ -35,7 +35,7 @@ class ADKLLMTrackDecorator(base_track_decorator.BaseTrackDecorator):
             raise ValueError("args cannot be None")
 
         result = arguments_helpers.StartSpanParameters(
-            name=track_options.name,
+            name=track_options.name or "llm",
             input=convert_adk_base_models(args[0]),
             type="llm",
         )
@@ -79,7 +79,7 @@ class ADKToolTrackDecorator(base_track_decorator.BaseTrackDecorator):
             raise ValueError("args cannot be None")
 
         result = arguments_helpers.StartSpanParameters(
-            name=track_options.name,
+            name=track_options.name or "tool",
             input=args[0],
             type="tool",
         )
