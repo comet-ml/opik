@@ -4,7 +4,7 @@ import isFunction from "lodash/isFunction";
 import { FlaskConical, ListTree } from "lucide-react";
 
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
-import FeedbackScoresEditor from "@/components/shared/FeedbackScoresEditor/FeedbackScoresEditor";
+import ExperimentFeedbackScoresViewer from "@/components/shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import NoData from "@/components/shared/NoData/NoData";
 import useExperimentById from "@/api/datasets/useExperimentById";
@@ -109,11 +109,12 @@ const CompareExperimentsViewer: React.FunctionComponent<
       {renderOutput()}
 
       {isTraceExist && (
-        <div className="sticky bottom-0 right-0 mt-auto flex max-h-[40vh] shrink-0 flex-col bg-white contain-content">
-          <div className="box-border min-h-[58px] shrink grow overflow-auto border-y px-1 py-4">
-            <FeedbackScoresEditor
+        <div className="sticky bottom-0 right-0 mt-auto flex max-h-[50vh] shrink-0 flex-col bg-white contain-content">
+          <div className="box-border flex min-h-0 shrink grow flex-col border-y">
+            <ExperimentFeedbackScoresViewer
               feedbackScores={feedbackScores}
               traceId={experimentItem.trace_id as string}
+              sectionIdx={sectionIdx}
             />
           </div>
 
