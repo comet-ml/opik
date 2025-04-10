@@ -65,7 +65,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         all_train_examples = [
-            {demo_examples_keys_mapping[key]: example[value] for key, value in demo_examples_keys_mapping.items()}
+            {
+                demo_examples_keys_mapping[key]: example[value]
+                for key, value in demo_examples_keys_mapping.items()
+            }
             for example in train_set
         ]
 
