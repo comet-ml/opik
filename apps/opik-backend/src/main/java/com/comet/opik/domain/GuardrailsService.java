@@ -20,7 +20,6 @@ import java.util.UUID;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
 
-
 @ImplementedBy(GuardrailsServiceImpl.class)
 public interface GuardrailsService {
     Mono<Void> addTraceGuardrails(List<GuardrailBatchItem> guardrails);
