@@ -3,10 +3,10 @@
 # make_hotpot_qa()
 
 from opik.evaluation.metrics import AnswerRelevance
-from opik_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
 
 optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o",
+    model="gpt-4o-mini",
     project_name="optimize-few-shot-bayesian-hotpot",
     max_examples=7,
 )
@@ -22,8 +22,10 @@ best_prompt = optimizer.optimize_prompt(
     dataset="hotpot-300",
     metric=metric,
     prompt=prompt,
-    input_key="question",
-    output_key="answer",
+    demo_examples_keys_mapping={
+        "Question": "question",
+        "Answer": "answer",
+    },
     num_threads=8,
     n_trials=10,
     scoring_key_mapping={
