@@ -3,7 +3,6 @@
 The Opik Opitmizer can refine your prompts to get better performance
 from your LLMs. You can use a variety of algorithms, including:
 
-* FewShotBayesianOptimizer
 * FewShotOptimizer
 * MiproOptimizer
 * MetaPromptOptimizer
