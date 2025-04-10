@@ -12,6 +12,7 @@ from opik.evaluation.metrics import BaseMetric
 
 from .integrations.dspy.utils import create_dspy_signature, State
 from .integrations.dspy import DspyOptimizer
+from .optimization_result import OptimizationResult
 
 
 class FewShotOptimizer(DspyOptimizer):
@@ -74,6 +75,10 @@ class FewShotOptimizer(DspyOptimizer):
         ]
 
         if self.history:
-            return self.history[0][0]["prompt"]
+            return OptimizationResult(
+                prompt=self.history[0][0]["prompt"],
+                score=self.history[0][0]["score"],
+                metric_name=self.opik_metric.name,
+            )
         else:
             return None

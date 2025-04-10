@@ -4,9 +4,11 @@ MIPRO algorithm for Opik
 
 from typing import Any, Dict, List, Tuple, Union, Optional
 
-from .integrations.dspy import DspyOptimizer
 from opik import Dataset
 from opik.evaluation.metrics import BaseMetric
+
+from .integrations.dspy import DspyOptimizer
+from .optimization_result import OptimizationResult
 
 
 class MiproOptimizer(DspyOptimizer):
@@ -47,4 +49,8 @@ class MiproOptimizer(DspyOptimizer):
             reverse=True,
         )
         self.state = state
-        return self.best_programs[0]["program"].signature.instructions
+        return OptimizationResult(
+            prompt=self.best_programs[0]["program"].signature.instructions,
+            score=self.best_programs[0]["score"],
+            metric_name=self.opik_metric.name,
+        )

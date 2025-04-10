@@ -72,6 +72,7 @@ class DspyOptimizer(BaseOptimizer):
             self.module = getattr(dspy, self.strategy)(self.data_signature)
 
         self.metric_function = opik_metric_to_dspy(metric, self.output_key)
+        self.opik_metric = metric
 
         # Initialize the optimizer:
         self.optimizer = MIPROv2(
