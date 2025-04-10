@@ -1,6 +1,7 @@
+from opik_optimizer.demo import get_or_create_dataset
+
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import MiproOptimizer
-from opik_optimizer.demo import get_or_create_dataset
 
 optimizer = MiproOptimizer(
     model="openai/gpt-4o-mini",  # LiteLLM or OpenAI name
@@ -9,10 +10,10 @@ optimizer = MiproOptimizer(
     max_tokens=5000,
 )
 
-hotpot_dataset = get_or_create_dataset("hotpot-300")
+opik_dataset = get_or_create_dataset("hotpot-300")
 
 best_prompt = optimizer.optimize_prompt(
-    dataset=hotpot_dataset,
+    dataset=opik_dataset,
     metric=LevenshteinRatio(),
     prompt="Answer the question with a short, 1 to 5 word phrase",
     # Algorithm-specific kwargs:
