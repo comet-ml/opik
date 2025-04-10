@@ -33,6 +33,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -86,11 +87,10 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.ProjectVisibility.PRIVATE;
 import static com.comet.opik.api.ProjectVisibility.PUBLIC;
-import static com.comet.opik.api.resources.utils.AuthTestUtils.mockGetWorkspaceIdByName;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -241,8 +241,8 @@ class ProjectMetricsResourceTest {
                     var actualEntity = actualResponse.readEntity(ProjectMetricResponse.class);
                     assertThat(actualEntity.projectId()).isEqualTo(projectId);
                 } else {
-                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
-                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
                 }
             }
         }
@@ -255,12 +255,6 @@ class ProjectMetricsResourceTest {
 
         private final String sessionToken = UUID.randomUUID().toString();
         private final String fakeSessionToken = UUID.randomUUID().toString();
-
-        Stream<Arguments> credentials() {
-            return Stream.of(
-                    arguments(sessionToken, true, "OK_" + UUID.randomUUID()),
-                    arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
-        }
 
         Stream<Arguments> publicCredentials() {
             return Stream.of(
@@ -318,8 +312,8 @@ class ProjectMetricsResourceTest {
                     var actualEntity = actualResponse.readEntity(ProjectMetricResponse.class);
                     assertThat(actualEntity.projectId()).isEqualTo(projectId);
                 } else {
-                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
-                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
                 }
             }
         }

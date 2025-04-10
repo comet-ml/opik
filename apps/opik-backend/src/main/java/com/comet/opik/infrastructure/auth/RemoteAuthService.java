@@ -48,7 +48,10 @@ class RemoteAuthService implements AuthService {
             Set.of("GET"),
             Pattern.compile(
                     "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/metrics/?$"),
-            Set.of("POST"));
+            Set.of("POST"),
+            Pattern.compile("^/v1/private/spans/?$"), Set.of("GET"),
+            Pattern.compile("^/v1/private/spans/stats/?$"), Set.of("GET"),
+            Pattern.compile("^/v1/private/spans/feedback-scores/names/?$"), Set.of("GET"));
 
     private final @NonNull Client client;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
