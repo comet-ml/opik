@@ -207,8 +207,13 @@ class ProjectServiceImpl implements ProjectService {
     @Override
     public Project get(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
+                .map(v -> v == ProjectVisibility.PUBLIC)
+                .orElse(false);
 
-        return get(id, workspaceId);
+        return Optional.of(get(id, workspaceId))
+                .filter(project -> !publicOnly || project.visibility() == ProjectVisibility.PUBLIC)
+                .orElseThrow(this::createNotFoundError);
     }
 
     @Override
