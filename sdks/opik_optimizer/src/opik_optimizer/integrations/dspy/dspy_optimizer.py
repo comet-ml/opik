@@ -50,7 +50,7 @@ class DspyOptimizer(BaseOptimizer):
             opik_client = opik.Opik(project_name=self.project_name)
             self.dataset = opik_client.get_dataset(dataset).get_items()
         else:
-            self.dataset = dataset
+            self.dataset = dataset.get_items()
 
         # Validate dataset:
         for row in self.dataset:

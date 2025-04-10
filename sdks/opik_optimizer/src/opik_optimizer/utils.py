@@ -3,7 +3,7 @@
 import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.dataset.dataset_item import DatasetItem
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 
 # Test dataset name for optimizer examples
 TEST_DATASET_NAME = "tiny-test-optimizer"
@@ -15,8 +15,8 @@ DEFAULT_MODEL = "o3-mini"
 def get_or_create_dataset(
     dataset_name: str,
     description: str,
-    data: Optional[List[Dict[str, Any]]] = None,
-    project_name: Optional[str] = None,
+    data_loader: Callable[[], List[Dict[str, Any]]],
+    project_name: Optional[str] = None
 ) -> opik.Dataset:
     """
     Get an existing dataset or create a new one if it doesn't exist.
@@ -48,24 +48,16 @@ def get_or_create_dataset(
     except Exception:
         # Create new dataset
         print("Creating new dataset...")
-        dataset = client.create_dataset(name=dataset_name, description=description)
+        dataset = client.create_dataset(
+            name=dataset_name,
+            description=description
+        )
+        
+        dataset_items = data_loader()
+        dataset.insert(dataset_items)
 
-        if data:
-            # Convert data to DatasetItem objects
-            dataset_items = [
-                DatasetItem(
-                    text=item["text"],
-                    label=item["label"],
-                    metadata=item.get("metadata", {}),
-                )
-                for item in data
-            ]
-
-            # Insert the data
-            dataset.__internal_api__insert_items_as_dataclasses__(dataset_items)
-
-            # Verify data was added
-            if not dataset.get_items():
-                raise Exception("Failed to add data to dataset")
+        # Verify data was added
+        if not dataset.get_items():
+            raise Exception("Failed to add data to dataset")
 
     return dataset

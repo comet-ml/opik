@@ -1,40 +1,7 @@
-import opik
-import pandas as pd
 from opik.evaluation import metrics
 from opik.evaluation.metrics import score_result
 from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
-
-
-def ensure_halueval_dataset_created() -> None:
-    client = opik.Opik()
-    try:
-        client.get_dataset("halu_eval")
-        return
-    except Exception:
-        pass
-
-    df = pd.read_parquet(
-        "hf://datasets/pminervini/HaluEval/general/data-00000-of-00001.parquet"
-    )
-    df = df.sample(n=300, random_state=42)
-
-    dataset_records = [
-        {
-            "input": x["user_query"],
-            "llm_output": x["chatgpt_response"],
-            "expected_hallucination_label": x["hallucination"],
-        }
-        for x in df.to_dict(orient="records")
-    ]
-
-    
-    dataset = client.create_dataset(
-        name="halu_eval",
-        description="Dataset for hallucination detection",
-    )
-
-    dataset.insert(dataset_records)
-
+from opik_optimizer.demo import get_or_create_dataset
 
 class HaluEvalObjective(metrics.BaseMetric):
     def __init__(self, name: str = "halu_eval_objective", track: bool = True):
@@ -59,7 +26,7 @@ class HaluEvalObjective(metrics.BaseMetric):
         )
 
 halu_eval_accuracy = HaluEvalObjective()
-ensure_halueval_dataset_created()
+halu_eval_dataset = get_or_create_dataset("halu-eval")
 
 prompt = """
 You are an expert in LLM hallucination detection. You will be given a user input, an llm output,
@@ -81,7 +48,7 @@ optimizer = FewShotBayesianOptimizer(
 )
 
 result = optimizer.optimize_prompt(
-    dataset="halu_eval",
+    dataset=halu_eval_dataset,
     metric=halu_eval_accuracy,
     prompt=prompt,
     demo_examples_keys_mapping={
