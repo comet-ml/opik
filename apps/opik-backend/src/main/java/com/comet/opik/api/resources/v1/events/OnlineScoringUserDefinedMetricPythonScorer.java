@@ -16,12 +16,13 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
-import org.slf4j.MDC;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
+
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 @EagerSingleton
 @Slf4j
@@ -60,10 +61,11 @@ public class OnlineScoringUserDefinedMetricPythonScorer
         log.info("Message received with traceId '{}', userName '{}'", trace.id(), message.userName());
 
         // This is crucial for logging purposes to identify the rule and trace
-        try (var logScope = MDC.putCloseable(UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name());
-                var workspaceScope = MDC.putCloseable("workspace_id", message.workspaceId());
-                var traceScope = MDC.putCloseable("trace_id", trace.id().toString());
-                var ruleScope = MDC.putCloseable("rule_id", message.ruleId().toString())) {
+        try (var logContext = wrapWithMdc(Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                "workspace_id", message.workspaceId(),
+                "trace_id", trace.id().toString(),
+                "rule_id", message.ruleId().toString()))) {
 
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 

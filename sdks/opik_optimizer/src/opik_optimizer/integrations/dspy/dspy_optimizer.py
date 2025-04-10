@@ -1,13 +1,16 @@
+from typing import Any, Dict, List, Tuple, Union, Optional
+
 import opik
 from opik.integrations.dspy.callback import OpikCallback
-from opik_optimizer.base_optimizer import BaseOptimizer
 from opik.evaluation.metrics import BaseMetric
-from opik.api_objects.dataset.dataset import Dataset
+from opik import Dataset
 
 import dspy
 from dspy.clients.base_lm import BaseLM
+
 from tqdm import tqdm
 
+from ...base_optimizer import BaseOptimizer
 from .mipro_optimizer_v2 import MIPROv2
 from .utils import (
     State,
@@ -15,6 +18,7 @@ from .utils import (
     opik_metric_to_dspy,
     create_dspy_training_set,
 )
+
 
 class DspyOptimizer(BaseOptimizer):
     def __init__(self, model, **model_kwargs):
@@ -28,17 +32,17 @@ class DspyOptimizer(BaseOptimizer):
 
     def optimize_prompt(
         self,
-        dataset: str | Dataset,
+        dataset: Union[str, Dataset],
         metric: BaseMetric,
         prompt: str,
-        input: str,
-        output: str,
+        input_key: str,
+        output_key: str,
         num_candidates: int = 10,
     ):
         self.num_candidates = num_candidates
         self.seed = 9
-        self.input = input
-        self.output = output
+        self.input_key = input_key
+        self.output_key = output_key
         self.prompt = prompt
 
         # Convert to values for MIPRO:
@@ -50,14 +54,14 @@ class DspyOptimizer(BaseOptimizer):
 
         # Validate dataset:
         for row in self.dataset:
-            if self.input not in row:
-                raise Exception("row does not contain input field: %r" % self.input)
-            if self.output not in row:
-                raise Exception("row does not contain output field: %r" % self.output)
+            if self.input_key not in row:
+                raise Exception("row does not contain input_key: %r" % self.input_key)
+            if self.output_key not in row:
+                raise Exception("row does not contain output_key: %r" % self.output_key)
 
-        self.trainset = create_dspy_training_set(self.dataset, self.input)
+        self.trainset = create_dspy_training_set(self.dataset, self.input_key)
         self.data_signature = create_dspy_signature(
-            self.input, self.output, self.prompt
+            self.input_key, self.output_key, self.prompt
         )
 
         if self.tools:
@@ -67,7 +71,7 @@ class DspyOptimizer(BaseOptimizer):
         else:
             self.module = getattr(dspy, self.strategy)(self.data_signature)
 
-        self.metric_function = opik_metric_to_dspy(metric, self.output)
+        self.metric_function = opik_metric_to_dspy(metric, self.output_key)
 
         # Initialize the optimizer:
         self.optimizer = MIPROv2(
