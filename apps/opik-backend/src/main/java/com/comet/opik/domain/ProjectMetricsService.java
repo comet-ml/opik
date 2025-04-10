@@ -38,7 +38,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
                 MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
                 MetricType.COST, projectMetricsDAO::getCost,
-                MetricType.DURATION, projectMetricsDAO::getDuration);
+                MetricType.DURATION, projectMetricsDAO::getDuration,
+                MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount);
         this.projectService = projectService;
     }
 

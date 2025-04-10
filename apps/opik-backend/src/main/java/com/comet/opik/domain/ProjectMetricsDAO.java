@@ -50,6 +50,7 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -313,6 +314,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         row -> NAME_COST,
                         row -> row.get("value", BigDecimal.class)))
                 .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return Mono.just(List.of());
     }
 
     private Mono<? extends Result> getMetric(
