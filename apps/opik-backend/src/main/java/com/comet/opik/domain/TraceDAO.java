@@ -403,7 +403,7 @@ class TraceDAOImpl implements TraceDAO {
                     AND workspace_id = :workspace_id
                     AND entity_id = :id
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
+                    LIMIT 1 BY entity_id, secondary_entity_id, name
                 )
                 GROUP BY workspace_id, project_id, entity_id
             ) AS gr ON t.id = gr.entity_id
@@ -469,7 +469,7 @@ class TraceDAOImpl implements TraceDAO {
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
+                    LIMIT 1 BY entity_id, secondary_entity_id, name
                 )
                 GROUP BY workspace_id, project_id, entity_id
             ), spans_agg AS (
