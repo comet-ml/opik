@@ -590,7 +590,7 @@ class ProjectsResourceTest {
             var projects = prepareProjectsListWithOnePublic();
             projects.forEach(project -> createProject(project, apiKey, workspaceName));
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/")
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
