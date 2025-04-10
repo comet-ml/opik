@@ -100,6 +100,7 @@ import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.ass
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -247,6 +248,16 @@ class ProjectsResourceTest {
                     arguments("", PUBLIC));
         }
 
+        Stream<Arguments> getProjectPublicCredentials() {
+            return Stream.of(
+                    arguments(okApikey, PRIVATE, 200),
+                    arguments(okApikey, PUBLIC, 200),
+                    arguments("", PRIVATE, 404),
+                    arguments("", PUBLIC, 200),
+                    arguments(fakeApikey, PRIVATE, 404),
+                    arguments(fakeApikey, PUBLIC, 200));
+        }
+
         @BeforeEach
         void setUp() {
 
@@ -291,16 +302,17 @@ class ProjectsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getProjectPublicCredentials")
         @DisplayName("get project by id: when api key is present, then return proper response")
-        void getProjectById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void getProjectById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, ProjectVisibility visibility,
+                int expectedCode) {
 
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
-            var id = createProject(factory.manufacturePojo(Project.class));
+            var id = createProject(factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build());
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
@@ -309,13 +321,11 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
                     assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
+                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
                 }
             }
         }
@@ -429,6 +439,14 @@ class ProjectsResourceTest {
                     arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
         }
 
+        Stream<Arguments> getProjectPublicCredentials() {
+            return Stream.of(
+                    arguments(sessionToken, PRIVATE, "OK_" + UUID.randomUUID(), 200),
+                    arguments(sessionToken, PUBLIC, "OK_" + UUID.randomUUID(), 200),
+                    arguments(fakeSessionToken, PRIVATE, UUID.randomUUID().toString(), 404),
+                    arguments(fakeSessionToken, PUBLIC, UUID.randomUUID().toString(), 200));
+        }
+
         Stream<Arguments> publicCredentials() {
             return Stream.of(
                     arguments(sessionToken, PRIVATE, "OK_" + UUID.randomUUID()),
@@ -479,11 +497,13 @@ class ProjectsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getProjectPublicCredentials")
         @DisplayName("get project by id: when session token is present, then return proper response")
-        void getProjectById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
-                String workspaceName) {
-            var id = createProject(factory.manufacturePojo(Project.class));
+        void getProjectById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                ProjectVisibility visibility,
+                String workspaceName, int expectedCode) {
+            var id = createProject(factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build());
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
@@ -492,13 +512,11 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
                     assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
+                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
                 }
             }
         }

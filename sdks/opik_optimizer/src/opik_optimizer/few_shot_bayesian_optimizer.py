@@ -39,8 +39,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         dataset: Union[str, Dataset],
         metric: BaseMetric,
         prompt: str,  # TODO: should we enforce prompt parameter for demos?
-        input_key: str,
-        output_key: str,
+        demo_examples_keys_mapping: Dict[str, str],
         n_trials: int = 10,
         num_threads: int = 4,
         scoring_key_mapping: Dict[str, str] = None,
@@ -66,7 +65,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         all_train_examples = [
-            {input_key: example[input_key], output_key: example[output_key]}
+            {
+                demo_examples_keys_mapping[key]: example[value]
+                for key, value in demo_examples_keys_mapping.items()
+            }
             for example in train_set
         ]
 
