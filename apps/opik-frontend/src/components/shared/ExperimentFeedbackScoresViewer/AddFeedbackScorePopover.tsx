@@ -26,16 +26,14 @@ const AddFeedbackScorePopover: React.FunctionComponent<
           <Plus /> Add score
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className="max-w-[400px] px-0 py-4"
-        side="top"
-        align="end"
-      >
-        <FeedbackScoresEditor
-          feedbackScores={feedbackScores}
-          traceId={traceId}
-          spanId={spanId}
-        />
+      <PopoverContent side="top" align="end" className="p-0">
+        <div className="max-h-[70vh] max-w-[400px] overflow-auto px-0 py-4">
+          <FeedbackScoresEditor
+            feedbackScores={feedbackScores}
+            traceId={traceId}
+            spanId={spanId}
+          />
+        </div>
       </PopoverContent>
     </Popover>
   );

@@ -110,7 +110,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
 
       {isTraceExist && (
         <div className="sticky bottom-0 right-0 mt-auto flex max-h-[50vh] shrink-0 flex-col bg-white contain-content">
-          <div className="box-border flex min-h-0 shrink grow flex-col border-y">
+          <div className="box-border flex min-h-14 shrink grow flex-col border-y">
             <ExperimentFeedbackScoresViewer
               feedbackScores={feedbackScores}
               traceId={experimentItem.trace_id as string}
@@ -118,7 +118,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
             />
           </div>
 
-          <div className="flex min-h-0 shrink grow flex-col">
+          <div className="flex max-h-[35vh] min-h-14 shrink grow flex-col">
             <ExperimentCommentsViewer
               comments={comments}
               traceId={experimentItem.trace_id as string}
