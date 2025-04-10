@@ -3,7 +3,7 @@
 # make_hotpot_qa()
 
 from opik.evaluation.metrics import AnswerRelevance
-from opik_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
 
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",

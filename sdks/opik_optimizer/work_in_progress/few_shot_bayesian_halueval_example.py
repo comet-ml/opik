@@ -2,7 +2,7 @@ import opik
 import pandas as pd
 from opik.evaluation import metrics
 from opik.evaluation.metrics import score_result
-from opik_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
 
 
 def ensure_halueval_dataset_created() -> None:
@@ -89,6 +89,8 @@ result = optimizer.optimize_prompt(
         "LLM output": "llm_output",
         "Expected hallucination label": "expected_hallucination_label",
     },
+    input_key={},
+    
     num_threads=12,
     n_trials=10,
     scoring_key_mapping={
