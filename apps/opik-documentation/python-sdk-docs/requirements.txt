@@ -7,9 +7,10 @@ sphinx-click
 anthropic
 botocore
 cloudpickle
-crewai
+crewai!=0.114.0 # https://github.com/crewAIInc/crewAI/issues/2575
 crewai-tools
 dspy-ai
+google-adk
 guardrails-ai
 haystack-ai
 langchain

@@ -1,5 +1,5 @@
 DistributedTraceHeadersDict
-==========================
+===========================
 
 .. autoclass:: opik.types.DistributedTraceHeadersDict
    :members:

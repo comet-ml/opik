@@ -174,6 +174,7 @@ You can learn more about the `opik` python SDK in the following sections:
    integrations/langchain/index
    integrations/llama_index/index
    integrations/openai/index
+   integrations/adk/index
 
 .. toctree::
    :caption: Evaluation
@@ -208,7 +209,6 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/SpanData.rst
    Objects/SpanPublic.rst
    Objects/FeedbackScoreDict.rst
-   Objects/UsageDict.rst
    Objects/Experiment.rst
    Objects/ExperimentItemContent.rst
    Objects/ExperimentItemReferences.rst
