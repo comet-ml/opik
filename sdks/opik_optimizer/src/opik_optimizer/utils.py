@@ -11,6 +11,7 @@ TEST_DATASET_NAME = "tiny-test-optimizer"
 # Default model for optimizers
 DEFAULT_MODEL = "o3-mini"
 
+
 def get_or_create_dataset(
     dataset_name: str,
     description: str,
@@ -19,18 +20,18 @@ def get_or_create_dataset(
 ) -> opik.Dataset:
     """
     Get an existing dataset or create a new one if it doesn't exist.
-    
+
     Args:
         dataset_name: Name of the dataset
         description: Description of the dataset
         data: Optional data to insert into the dataset
         project_name: Optional project name
-        
+
     Returns:
         opik.Dataset: The dataset object
     """
     client = Opik(project_name=project_name)
-    
+
     try:
         # Try to get existing dataset
         dataset = client.get_dataset(dataset_name)
