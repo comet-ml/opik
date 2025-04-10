@@ -2,12 +2,14 @@ package com.comet.opik.infrastructure.log;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.UtilityClass;
 import org.slf4j.MDC;
 
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+@UtilityClass
 public class LogContextAware {
 
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
@@ -39,21 +41,21 @@ public class LogContextAware {
     }
 
     public static <T> Consumer<T> wrapWithMdc(Consumer<T> task) {
-        var contextMap = MDC.getCopyOfContextMap(); // capture from current thread
+        var contextMap = MDC.getCopyOfContextMap();
         return item -> {
             if (contextMap != null) {
-                MDC.setContextMap(contextMap); // set in worker thread
+                MDC.setContextMap(contextMap);
             }
 
             try {
                 task.accept(item);
             } finally {
-                MDC.clear(); // always clear to prevent leakage
+                MDC.clear();
             }
         };
     }
 
-    public static Closable wrapWithClosableMdc(Map<String, String> contextMap) {
+    public static Closable wrapWithMdc(Map<String, String> contextMap) {
         List<MDC.MDCCloseable> context = contextMap.entrySet()
                 .stream()
                 .map(entry -> MDC.putCloseable(entry.getKey(), entry.getValue()))
