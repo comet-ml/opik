@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 import opik
 from opik.evaluation import metrics
 
@@ -19,7 +19,7 @@ class BaseOptimizer:
 
     def optimize_prompt(
         self,
-        dataset: str | opik.Dataset,
+        dataset: Union[str, opik.Dataset],
         metric: metrics.BaseMetric,
         prompt: str,
         **kwargs
