@@ -23,6 +23,7 @@ jobs:
         run: |
             echo "Build sdk documentation"
             cd apps/opik-documentation/python-sdk-docs
+            pip -V
             pip install -r requirements.txt
             pip install ../../../sdks/python
             make build
