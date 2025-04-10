@@ -1,5 +1,5 @@
 import pydantic
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 
 class OptimizationResult(pydantic.BaseModel):

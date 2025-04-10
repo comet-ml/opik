@@ -8,6 +8,32 @@ from your LLMs. You can use a variety of algorithms, including:
 * MiproOptimizer
 * MetaPromptOptimizer
 
+## Setup
+
+1. Configure Comet ML:
+   ```bash
+   # Install Comet ML CLI
+   pip install opik
+   
+   # Configure your API key
+   opik configure
+   # When prompted, enter your Comet ML API key
+   ```
+
+2. Set up your environment variables:
+   ```bash
+   # OpenAI API key for LLM access
+   export OPENAI_API_KEY=your_openai_api_key
+   
+   # Comet ML API key for logging
+   export COMET_API_KEY=your_comet_api_key
+   ```
+
+3. Install the package:
+   ```bash
+   pip install git+https://github.com/comet-ml/opik#subdirectory=sdks/opik_optimizer
+   ```
+
 You'll need:
 
 1. An LLM model name
@@ -58,3 +84,9 @@ git clone git clone git@github.com:comet-ml/opik
 cd sdks/opik_optimizer
 pip install -e .
 ```
+
+## Requirements
+
+- Python 3.10+
+- Comet ML account and API key
+- OpenAI API key (or other LLM provider)
