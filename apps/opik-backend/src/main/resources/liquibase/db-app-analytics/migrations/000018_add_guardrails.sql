@@ -4,6 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails
 (
+    id                  FixedString(36),
     entity_id           FixedString(36),
     entity_type         ENUM('unknown' = 0 , 'span' = 1, 'trace' = 2),
     secondary_entity_id FixedString(36),
@@ -19,7 +20,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails
     last_updated_by     String
     )
     ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/guardrails', '{replica}')
-    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, name)
+    ORDER BY (workspace_id, project_id, entity_type, entity_id, id)
     SETTINGS index_granularity = 8192;
 
 

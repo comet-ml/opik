@@ -44,6 +44,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
 
     private static final String BULK_INSERT_GUARDRAILS = """
             INSERT INTO guardrails(
+                id,
                 entity_type,
                 entity_id,
                 secondary_entity_id,
@@ -59,6 +60,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
             VALUES
                 <items:{item |
                     (
+                         :id<item.index>,
                          :entity_type<item.index>,
                          :entity_id<item.index>,
                          :secondary_entity_id<item.index>,
@@ -126,11 +128,11 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
 
     private void bindParameters(EntityType entityType, List<GuardrailBatchItem> guardrails, Statement statement) {
         for (var i = 0; i < guardrails.size(); i++) {
-
             var guardrailBatchItem = guardrails.get(i);
 
-            statement.bind("entity_type" + i, entityType.getType())
-                    .bind("entity_id" + i, guardrailBatchItem.id())
+            statement.bind("id" + i, guardrailBatchItem.id())
+                    .bind("entity_type" + i, entityType.getType())
+                    .bind("entity_id" + i, guardrailBatchItem.entityId())
                     .bind("secondary_entity_id" + i, guardrailBatchItem.secondaryId())
                     .bind("project_id" + i, guardrailBatchItem.projectId())
                     .bind("name" + i, guardrailBatchItem.name())

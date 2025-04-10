@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
@@ -30,6 +31,7 @@ public interface GuardrailsService {
 class GuardrailsServiceImpl implements GuardrailsService {
     private final @NonNull ProjectService projectService;
     private final @NonNull GuardrailsDAO guardrailsDAO;
+    private final @NonNull IdGenerator idGenerator;
 
     @Override
     public Mono<Void> addTraceGuardrails(List<GuardrailBatchItem> guardrails) {
@@ -43,9 +45,11 @@ class GuardrailsServiceImpl implements GuardrailsService {
         Map<String, List<GuardrailBatchItem>> guardrailsPerProject = guardrails
                 .stream()
                 .map(guardrail -> {
-                    IdGenerator.validateVersion(guardrail.id(), entityType.getType()); // validate trace id
+                    UUID id = guardrail.id() == null ? idGenerator.generateId() : guardrail.id();
+                    IdGenerator.validateVersion(guardrail.entityId(), entityType.getType()); // validate trace id
 
                     return guardrail.toBuilder()
+                            .id(id)
                             .projectName(WorkspaceUtils.getProjectName(guardrail.projectName()))
                             .build();
                 })

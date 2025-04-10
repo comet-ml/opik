@@ -126,7 +126,7 @@ public class GuardrailsResourceTest {
 
         var guardrails = PodamFactoryUtils.manufacturePojoList(factory, GuardrailBatchItem.class).stream()
                 .map(guardrail -> guardrail.toBuilder()
-                        .id(traceId)
+                        .entityId(traceId)
                         .projectName(trace.projectName())
                         .build())
                 .toList();
