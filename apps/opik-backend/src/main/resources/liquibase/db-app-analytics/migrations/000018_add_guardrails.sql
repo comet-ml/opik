@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails
     created_by          String,
     last_updated_by     String
     )
-    ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/guardrails', '{replica}')
+    ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/guardrails', '{replica}')
     ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, name)
     SETTINGS index_granularity = 8192;
 
