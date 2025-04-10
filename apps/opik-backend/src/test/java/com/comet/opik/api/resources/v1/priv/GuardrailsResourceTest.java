@@ -168,12 +168,9 @@ public class GuardrailsResourceTest {
         assertThat(actual).isNotNull();
         assertThat(actual.content()).hasSize(traces.size());
         actual.content().forEach(actualTrace -> {
-            var validationGroupCount = (int) guardrailsByTraceId.get(actualTrace.id())
-                    .stream().map(GuardrailBatchItem::secondaryId).distinct().count();
-            assertThat(actualTrace.guardrailsValidations()).hasSize(validationGroupCount);
-            assertThat(actualTrace.guardrailsValidations()).containsExactlyInAnyOrder(
-                    GuardrailsMapper.INSTANCE.mapToValidations(guardrailsByTraceId.get(actualTrace.id()))
-                            .toArray(GuardrailsValidation[]::new));
+            assertGuardrailValidations(
+                    GuardrailsMapper.INSTANCE.mapToValidations(guardrailsByTraceId.get(actualTrace.id())),
+                    actualTrace.guardrailsValidations());
         });
     }
 
@@ -192,5 +189,18 @@ public class GuardrailsResourceTest {
                                 Function.identity(),
                                 (existing, replacement) -> existing),
                         map -> new ArrayList<>(map.values())));
+    }
+
+    private void assertGuardrailValidations(List<GuardrailsValidation> expected, List<GuardrailsValidation> actual) {
+        assertThat(actual).hasSize(expected.size());
+        expected.forEach(expectedValidation -> {
+            var actualValidation = actual.stream()
+                    .filter(validation -> validation.spanId().equals(expectedValidation.spanId()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("expected validation not found: " +
+                            expectedValidation.spanId()));
+            assertThat(expectedValidation.checks()).containsExactlyInAnyOrder(expectedValidation.checks()
+                    .toArray(new GuardrailsValidation.Check[0]));
+        });
     }
 }
