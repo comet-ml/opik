@@ -3,6 +3,7 @@ import opik
 from opik.evaluation.metrics import BaseMetric
 from .base_optimizer import BaseOptimizer, OptimizationRound
 from .optimization_result import OptimizationResult
+from .utils import DEFAULT_MODEL
 import openai
 import os
 import json
@@ -11,8 +12,8 @@ import json
 class MetaPromptOptimizer(BaseOptimizer):
     def __init__(
         self,
-        model: str = "o3-mini",
-        reasoning_model: str = "o3-mini",
+        model: str = DEFAULT_MODEL,
+        reasoning_model: str = DEFAULT_MODEL,
         max_rounds: int = 3,
         num_prompts_per_round: int = 4,
         improvement_threshold: float = 0.05,
@@ -121,7 +122,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 print(f"New best prompt found with score: {best_score:.4f}")
 
             # Record round results
-            rounds.append(OptimizationRound(
+            round_data = OptimizationRound(
                 round_number=round_num + 1,
                 current_prompt=current_prompt,
                 current_score=current_score,
@@ -133,11 +134,13 @@ class MetaPromptOptimizer(BaseOptimizer):
                 best_prompt=best_round_prompt["prompt"],
                 best_score=best_round_prompt["score"],
                 improvement=improvement
-            ))
+            )
+            rounds.append(round_data)
+            self._add_to_history(round_data.dict())
 
         # If no rounds were completed, add the initial round
         if not rounds:
-            rounds.append(OptimizationRound(
+            round_data = OptimizationRound(
                 round_number=1,
                 current_prompt=current_prompt,
                 current_score=current_score,
@@ -149,7 +152,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 best_prompt=best_prompt,
                 best_score=best_score,
                 improvement=0.0
-            ))
+            )
+            rounds.append(round_data)
+            self._add_to_history(round_data.dict())
 
         # Create the result object with additional details
         result = OptimizationResult(
