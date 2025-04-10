@@ -92,7 +92,21 @@ class DspyOptimizer(BaseOptimizer):
         input_key: str,
         output_key: str,
         num_test: int = 10,
-    ):
+    ) -> float:
+        """
+        Compute the score of a prompt on dataset (or part thereof)
+
+        Args:
+            dataset: Opik dataset name or dataset
+            metric: Instance of an Opik metric
+            prompt: The prompt to evaluate
+            input_key: input field of dataset
+            output_key: output field of dataset
+            num_test: number of items to test in the dataset
+
+        Returns:
+            Evaluation score
+        """
         if isinstance(dataset, str):
             opik_client = opik.Opik(project_name=self.project_name)
             dataset = opik_client.get_dataset(dataset).get_items()
