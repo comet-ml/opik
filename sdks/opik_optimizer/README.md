@@ -19,7 +19,7 @@ from your LLMs. You can use a variety of algorithms, including:
    ```bash
    # Install Comet ML CLI
    pip install opik
-   
+
    # Configure your API key
    opik configure
    # When prompted, enter your Opik API key
@@ -44,6 +44,14 @@ You'll need:
 4. A starting prompt (string)
 
 ## Example
+
+We have prepared some sample datasets for testing:
+
+* "tiny-test"
+* "halu-eval-300"
+* "hotpot-300"
+
+You can see how to use those below:
 
 ```python
 from opik_optimizer.demo import get_or_create_dataset
