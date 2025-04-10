@@ -27,6 +27,7 @@ class BaseOptimizer:
         self.model = model
         self.model_kwargs = model_kwargs
         self.project_name = project_name
+        self._history = []
 
     def optimize_prompt(
         self,
@@ -76,3 +77,21 @@ class BaseOptimizer:
                     print(f"    - Score: {prompt['score']:.4f}")
                     print(f"      Prompt: {prompt['prompt']}")
                     print(f"      Improvement: {prompt['improvement']:.2%}")
+
+    def get_history(self) -> List[Dict[str, Any]]:
+        """
+        Get the optimization history.
+
+        Returns:
+            List[Dict[str, Any]]: List of optimization rounds with their details
+        """
+        return self._history
+
+    def _add_to_history(self, round_data: Dict[str, Any]):
+        """
+        Add a round to the optimization history.
+
+        Args:
+            round_data: Dictionary containing round details
+        """
+        self._history.append(round_data)
