@@ -221,6 +221,8 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
+      python-backend:
+        condition: service_healthy
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
@@ -239,7 +241,7 @@ services:
       backend:
         condition: service_healthy
       guardrails-backend:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]
       interval: 1s
