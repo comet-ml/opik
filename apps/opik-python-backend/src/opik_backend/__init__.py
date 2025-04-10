@@ -55,10 +55,7 @@ def setup_telemetry(app):
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     if otlp_endpoint:
         app.logger.info(f"Configured OTLP endpoint: {otlp_endpoint}. Will push metrics to this endpoint.")
-        otlp_reader = PeriodicExportingMetricReader(
-            OTLPMetricExporter(),
-            export_interval_millis=5000
-        )
+        otlp_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
         metric_readers.append(otlp_reader)
     else:
         app.logger.info("No OTLP endpoint configured. Will not push metrics.")
