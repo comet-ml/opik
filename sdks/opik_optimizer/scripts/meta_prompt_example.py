@@ -4,15 +4,16 @@ import os
 import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.dataset.dataset_item import DatasetItem
+from opik_optimizer.utils import TEST_DATASET_NAME
+from opik_optimizer.datasets.test_data import TEST_DATA
 
 # Initialize opik client
 client = Opik()
 
 # Create a tiny test dataset
-dataset_name = "tiny-test-optimizer"
 try:
     # Try to get existing dataset
-    opik_dataset = client.get_dataset(dataset_name)
+    opik_dataset = client.get_dataset(TEST_DATASET_NAME)
     # If dataset exists but has no data, delete it
     if not opik_dataset.get_items():
         print("Dataset exists but is empty - deleting it...")
@@ -21,54 +22,15 @@ try:
         if items:
             opik_dataset.delete(items_ids=[item.id for item in items])
         # Delete the dataset itself
-        client.delete_dataset(dataset_name)
+        client.delete_dataset(TEST_DATASET_NAME)
         raise Exception("Dataset deleted, will create new one")
 except Exception:
     # Create new dataset
     print("Creating new dataset...")
     opik_dataset = client.create_dataset(
-        name=dataset_name,
+        name=TEST_DATASET_NAME,
         description="Tiny test dataset for prompt optimization"
     )
-    
-    # Add more complex examples that require better prompting
-    test_data = [
-        {
-            "text": "What is the capital of France?",
-            "label": "Paris",
-            "metadata": {
-                "context": "France is a country in Europe. Its capital is Paris."
-            }
-        },
-        {
-            "text": "Who wrote Romeo and Juliet?",
-            "label": "William Shakespeare",
-            "metadata": {
-                "context": "Romeo and Juliet is a famous play written by William Shakespeare."
-            }
-        },
-        {
-            "text": "What is 2 + 2?",
-            "label": "4",
-            "metadata": {
-                "context": "Basic arithmetic: 2 + 2 equals 4."
-            }
-        },
-        {
-            "text": "What is the largest planet in our solar system?",
-            "label": "Jupiter",
-            "metadata": {
-                "context": "Jupiter is the largest planet in our solar system."
-            }
-        },
-        {
-            "text": "Who painted the Mona Lisa?",
-            "label": "Leonardo da Vinci",
-            "metadata": {
-                "context": "The Mona Lisa was painted by Leonardo da Vinci."
-            }
-        }
-    ]
     
     # Convert test data to DatasetItem objects
     dataset_items = [
@@ -76,7 +38,7 @@ except Exception:
             text=item["text"],
             label=item["label"],
             metadata=item["metadata"]
-        ) for item in test_data
+        ) for item in TEST_DATA
     ]
     
     # Insert the test data

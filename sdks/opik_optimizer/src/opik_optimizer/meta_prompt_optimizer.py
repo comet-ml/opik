@@ -1,31 +1,11 @@
 from typing import List, Dict, Any, Optional, Union
 import opik
 from opik.evaluation.metrics import BaseMetric
-from .base_optimizer import BaseOptimizer
+from .base_optimizer import BaseOptimizer, OptimizationRound
+from .optimization_result import OptimizationResult
 import openai
 import os
 import json
-from pydantic import BaseModel
-
-
-class OptimizationRound(BaseModel):
-    round_number: int
-    current_prompt: str
-    current_score: float
-    generated_prompts: List[Dict[str, Any]]
-    best_prompt: str
-    best_score: float
-    improvement: float
-
-
-class OptimizationResult(BaseModel):
-    initial_prompt: str
-    initial_score: float
-    final_prompt: str
-    final_score: float
-    rounds: List[OptimizationRound]
-    total_rounds: int
-    stopped_early: bool
 
 
 class MetaPromptOptimizer(BaseOptimizer):
@@ -171,15 +151,25 @@ class MetaPromptOptimizer(BaseOptimizer):
                 improvement=0.0
             ))
 
-        return OptimizationResult(
-            initial_prompt=prompt,
-            initial_score=self._evaluate_prompt(prompt, **kwargs),
-            final_prompt=best_prompt,
-            final_score=best_score,
-            rounds=rounds,
-            total_rounds=len(rounds),
-            stopped_early=stopped_early
+        # Create the result object with additional details
+        result = OptimizationResult(
+            prompt=best_prompt,
+            score=best_score,
+            metric_name=metric.name,
+            details={
+                "initial_prompt": prompt,
+                "initial_score": self._evaluate_prompt(prompt, **kwargs),
+                "final_prompt": best_prompt,
+                "final_score": best_score,
+                "rounds": rounds,
+                "total_rounds": len(rounds),
+                "stopped_early": stopped_early
+            }
         )
+
+        # Print results using the base class method
+        self.print_results(result)
+        return result
 
     def _evaluate_prompt(self, prompt: str, **kwargs) -> float:
         """Evaluate a prompt using the dataset and metric."""
