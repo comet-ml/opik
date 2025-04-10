@@ -27,8 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
@@ -41,8 +39,12 @@ class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
     private static final String NOT_LOGGED_USER = "Please login first";
 
-    private static final Map<Pattern, Set<String>> PUBLIC_ENDPOINTS = Map.of(
-            Pattern.compile("^/v1/private/projects$"), Set.of("GET"));
+    private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = Map.of(
+            "^/v1/private/projects/?$", Set.of("GET"),
+            "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
+            Set.of("GET"),
+            "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/metrics/?$",
+            Set.of("POST"));
 
     private final @NonNull Client client;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
@@ -88,6 +90,7 @@ class RemoteAuthService implements AuthService {
                 requestContext.get().setWorkspaceId(workspaceId);
                 requestContext.get().setWorkspaceName(currentWorkspaceName);
                 requestContext.get().setVisibility(ProjectVisibility.PUBLIC);
+                requestContext.get().setUserName("Public");
                 return;
             }
             throw authException;
@@ -205,9 +208,8 @@ class RemoteAuthService implements AuthService {
     }
 
     private boolean isEndpointPublic(ContextInfoHolder contextInfo) {
-        for (Pattern pattern : PUBLIC_ENDPOINTS.keySet()) {
-            Matcher matcher = pattern.matcher(contextInfo.uriInfo().getRequestUri().getPath());
-            if (matcher.find()) {
+        for (String pattern : PUBLIC_ENDPOINTS.keySet()) {
+            if (contextInfo.uriInfo().getRequestUri().getPath().matches(pattern)) {
                 Set<String> allowedMethods = PUBLIC_ENDPOINTS.get(pattern);
                 if (allowedMethods.contains(contextInfo.method())) {
                     return true;

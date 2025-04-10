@@ -200,8 +200,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OPIK_REVERSE_PROXY_URL | string | `"http://opik-frontend:5173/api"` |  |
 | component.python-backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION | string | `"BASE2_EXPONENTIAL_BUCKET_HISTOGRAM"` |  |
-| component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE | string | `"delta"` |  |
-| component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext"` |  |
+| component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE | string | `"cumulative"` |  |
+| component.python-backend.env.OTEL_METRIC_EXPORT_INTERVAL | string | `"60000"` |  |
+| component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage"` |  |
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
