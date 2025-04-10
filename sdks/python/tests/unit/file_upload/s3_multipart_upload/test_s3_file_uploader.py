@@ -34,7 +34,7 @@ def test_upload_file_parts_to_s3(data_file, respx_mock):
         "https://s3.amazonaws.com/bucket/2",
         "https://s3.amazonaws.com/bucket/3",
     ]
-    rx_url = re.compile("https://s3\.amazonaws\.com/bucket/*")
+    rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
     respx_mock.put(rx_url).respond(200, headers={"ETag": "e-tag"})
 
     httpx_client = s3_httpx_client.get()
@@ -78,7 +78,7 @@ def test_upload_file_parts_to_s3__retry_on_500(data_file, respx_mock):
         "https://s3.amazonaws.com/bucket/2",
         "https://s3.amazonaws.com/bucket/3",
     ]
-    rx_url = re.compile("https://s3\.amazonaws\.com/bucket/*")
+    rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
 
     def retry_side_effect(request, route):
         if route.call_count < 1:
@@ -117,7 +117,7 @@ def test_upload_file_parts_to_s3__error_status(data_file, respx_mock):
         "https://s3.amazonaws.com/bucket/2",
         "https://s3.amazonaws.com/bucket/3",
     ]
-    rx_url = re.compile("https://s3\.amazonaws\.com/bucket/*")
+    rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
     respx_mock.put(rx_url).respond(403, headers={"ETag": "e-tag"})
 
     httpx_client = s3_httpx_client.get()

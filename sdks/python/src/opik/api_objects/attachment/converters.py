@@ -2,9 +2,9 @@ import base64
 import os
 from typing import Literal, Optional
 
+from ...file_upload import mime_type
 from ...message_processing import messages
 from . import attachment
-from ...message_processing.file_uploading import mime_type
 
 
 def attachment_to_message(
