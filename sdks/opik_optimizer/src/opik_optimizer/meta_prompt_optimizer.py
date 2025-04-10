@@ -184,6 +184,43 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         return result
 
+    def evaluate_prompt(
+        self,
+        dataset: Union[str, opik.Dataset],
+        metric: BaseMetric,
+        prompt: str,
+        num_test: int = 10,
+        **kwargs,
+    ) -> float:
+        """
+        Compute the score of a prompt on dataset (or part thereof)
+
+        Args:
+            dataset: Opik dataset name or dataset
+            metric: Instance of an Opik metric
+            prompt: The prompt to evaluate
+            **kwargs: Additional arguments for evaluation
+            num_test: number of items to test in the dataset
+
+        Returns:
+            Evaluation score
+        """
+        # Load the dataset if it's a string
+        if isinstance(dataset, str):
+            opik_client = opik.Opik(project_name=self.project_name)
+            self.dataset = opik_client.get_dataset(dataset)
+        else:
+            self.dataset = dataset
+
+        # Get the dataset items
+        self.dataset_items = self.dataset.get_items()[:num_test]
+        if not self.dataset_items:
+            raise ValueError("No data found in dataset")
+
+        self.metric = metric
+
+        return self._evaluate_prompt(prompt, **kwargs)
+
     def _evaluate_prompt(self, prompt: str, **kwargs) -> float:
         """Evaluate a prompt using the dataset and metric."""
         # Get a sample from the dataset
@@ -248,7 +285,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         3. Potential biases or limitations
         4. Opportunities for better instruction
         Generate diverse variations that explore different aspects of improvement.
-        
+
         Return a JSON array of prompts with the following structure:
         {
             "prompts": [
@@ -262,7 +299,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         user_prompt = f"""Current prompt: {current_prompt}
         Current performance score: {current_score}
-        
+
         Generate {self.num_prompts_per_round} improved versions of this prompt.
         Each version should explore a different aspect of improvement.
         Return a valid JSON array as specified."""
