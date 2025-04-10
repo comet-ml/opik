@@ -27,4 +27,5 @@ result = optimizer.optimize_prompt(
     input_key="text",
     output_key="label",
 )
+
 print(result)
