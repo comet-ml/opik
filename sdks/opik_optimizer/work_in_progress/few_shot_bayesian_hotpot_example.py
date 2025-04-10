@@ -1,12 +1,9 @@
-# Run the dataset generation script first. In this folder:
-# from hotpot_dataset_generation import make_hotpot_qa
-# make_hotpot_qa()
-
 from opik.evaluation.metrics import AnswerRelevance
-from opik_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.demo import get_or_create_dataset
 
 optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o",
+    model="gpt-4o-mini",
     project_name="optimize-few-shot-bayesian-hotpot",
     max_examples=7,
 )
@@ -18,13 +15,17 @@ Answer the question with a short phrase.
 The question: 
 {{question}}
 """
+
+hot_pot_dataset = get_or_create_dataset("hotpot-300")
 best_prompt = optimizer.optimize_prompt(
-    dataset="hotpot-300",
+    dataset=hot_pot_dataset,
     metric=metric,
     prompt=prompt,
-    input_key="question",
-    output_key="answer",
-    num_threads=8,
+    demo_examples_keys_mapping={
+        "Question": "question",
+        "Answer": "answer",
+    },
+    num_threads=12,
     n_trials=10,
     scoring_key_mapping={
         "output": "output",  # hard-coded predictor output key

@@ -50,7 +50,7 @@ class DspyOptimizer(BaseOptimizer):
             opik_client = opik.Opik(project_name=self.project_name)
             self.dataset = opik_client.get_dataset(dataset).get_items()
         else:
-            self.dataset = dataset
+            self.dataset = dataset.get_items()
 
         # Validate dataset:
         for row in self.dataset:
@@ -72,6 +72,7 @@ class DspyOptimizer(BaseOptimizer):
             self.module = getattr(dspy, self.strategy)(self.data_signature)
 
         self.metric_function = opik_metric_to_dspy(metric, self.output_key)
+        self.opik_metric = metric
 
         # Initialize the optimizer:
         self.optimizer = MIPROv2(
