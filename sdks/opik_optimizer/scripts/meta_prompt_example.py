@@ -31,7 +31,7 @@ except Exception:
         description="Tiny test dataset for prompt optimization"
     )
     
-    # Add just 3 simple examples
+    # Add more complex examples that require better prompting
     test_data = [
         {
             "text": "What is the capital of France?",
@@ -42,7 +42,7 @@ except Exception:
         },
         {
             "text": "Who wrote Romeo and Juliet?",
-            "label": "Shakespeare",
+            "label": "William Shakespeare",
             "metadata": {
                 "context": "Romeo and Juliet is a famous play written by William Shakespeare."
             }
@@ -52,6 +52,20 @@ except Exception:
             "label": "4",
             "metadata": {
                 "context": "Basic arithmetic: 2 + 2 equals 4."
+            }
+        },
+        {
+            "text": "What is the largest planet in our solar system?",
+            "label": "Jupiter",
+            "metadata": {
+                "context": "Jupiter is the largest planet in our solar system."
+            }
+        },
+        {
+            "text": "Who painted the Mona Lisa?",
+            "label": "Leonardo da Vinci",
+            "metadata": {
+                "context": "The Mona Lisa was painted by Leonardo da Vinci."
             }
         }
     ]
@@ -76,16 +90,13 @@ except Exception:
 optimizer = MetaPromptOptimizer(
     model="o3-mini",  # Using o3-mini for evaluation
     reasoning_model="o3-mini",  # Using o3-mini for prompt generation
-    max_rounds=2,  # Reduced rounds for testing
-    num_prompts_per_round=3,  # Fewer prompts per round
-    improvement_threshold=0.05,
-    temperature=0.1,
-    max_completion_tokens=5000,  # Changed from max_tokens to max_completion_tokens
+    max_rounds=3,  # Increased rounds for more optimization
+    num_prompts_per_round=4,  # More prompts per round
+    improvement_threshold=0.01,  # Lower threshold to allow more improvements
 )
 
-# Initial prompt to optimize
-initial_prompt = """Answer the question with a short, 1 to 5 word phrase.
-Focus on providing the most relevant and concise answer possible."""
+# Initial prompt to optimize - intentionally vague to allow for improvement
+initial_prompt = """Answer the question."""
 
 # Optimize the prompt
 result = optimizer.optimize_prompt(

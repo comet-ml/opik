@@ -114,10 +114,11 @@ class MetaPromptOptimizer(BaseOptimizer):
             prompt_scores = []
             for new_prompt in new_prompts:
                 score = self._evaluate_prompt(new_prompt, **kwargs)
+                improvement = (score - current_score) / current_score if current_score > 0 else 0
                 prompt_scores.append({
                     "prompt": new_prompt,
                     "score": score,
-                    "improvement": (score - current_score) / current_score if current_score > 0 else 0
+                    "improvement": improvement
                 })
                 print(f"Generated prompt score: {score:.4f}")
 
@@ -125,7 +126,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             best_round_prompt = max(prompt_scores, key=lambda x: x["score"])
             
             # Check if we've improved enough
-            improvement = (best_round_prompt["score"] - best_score) / best_score
+            improvement = (best_round_prompt["score"] - best_score) / best_score if best_score > 0 else 0
             if improvement < self.improvement_threshold:
                 print(f"Improvement ({improvement:.2%}) below threshold ({self.improvement_threshold:.2%}). Stopping.")
                 stopped_early = True
@@ -144,10 +145,30 @@ class MetaPromptOptimizer(BaseOptimizer):
                 round_number=round_num + 1,
                 current_prompt=current_prompt,
                 current_score=current_score,
-                generated_prompts=prompt_scores,
+                generated_prompts=[{
+                    "prompt": p["prompt"],
+                    "score": p["score"],
+                    "improvement": p["improvement"]
+                } for p in prompt_scores],
                 best_prompt=best_round_prompt["prompt"],
                 best_score=best_round_prompt["score"],
                 improvement=improvement
+            ))
+
+        # If no rounds were completed, add the initial round
+        if not rounds:
+            rounds.append(OptimizationRound(
+                round_number=1,
+                current_prompt=current_prompt,
+                current_score=current_score,
+                generated_prompts=[{
+                    "prompt": current_prompt,
+                    "score": current_score,
+                    "improvement": 0.0
+                }],
+                best_prompt=best_prompt,
+                best_score=best_score,
+                improvement=0.0
             ))
 
         return OptimizationResult(
@@ -175,14 +196,24 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Create the prompt with the sample
         full_prompt = f"{prompt}\n\n{input_field}: {sample[input_field]}\n{output_field}:"
         
-        # Get the model's response
-        response = self._openai_client.chat.completions.create(
-            model=self.model,
-            messages=[
+        # Prepare API parameters based on model type
+        api_params = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
             ]
-        )
+        }
+        
+        # Add model-specific parameters if not using o3-mini
+        if not self.model.startswith("o3-"):
+            api_params.update({
+                "temperature": self.temperature,
+                "max_completion_tokens": self.max_completion_tokens
+            })
+        
+        # Get the model's response
+        response = self._openai_client.chat.completions.create(**api_params)
         
         # Get the model's response
         model_output = response.choices[0].message.content.strip()
@@ -191,9 +222,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         expected_output = sample[output_field]
         
         # Compute the score using the metric
-        score = self.metric.compute(model_output, expected_output)
+        score_result = self.metric.score(model_output, expected_output)
         
-        return score
+        # Extract the score value from the ScoreResult object
+        return score_result.value
 
     def _generate_prompts(self, current_prompt: str, current_score: float) -> List[str]:
         """Generate new prompts using the reasoning model."""
@@ -224,16 +256,24 @@ class MetaPromptOptimizer(BaseOptimizer):
         Each version should explore a different aspect of improvement.
         Return a valid JSON array as specified."""
 
-        response = self._openai_client.chat.completions.create(
-            model=self.reasoning_model,
-            messages=[
+        # Prepare API parameters based on model type
+        api_params = {
+            "model": self.reasoning_model,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.7,
-            max_tokens=1000,
-            response_format={"type": "json_object"}
-        )
+            "response_format": {"type": "json_object"}
+        }
+        
+        # Add model-specific parameters if not using o3-mini
+        if not self.reasoning_model.startswith("o3-"):
+            api_params.update({
+                "temperature": 0.7,
+                "max_completion_tokens": 1000
+            })
+
+        response = self._openai_client.chat.completions.create(**api_params)
 
         # Parse the JSON response
         try:
