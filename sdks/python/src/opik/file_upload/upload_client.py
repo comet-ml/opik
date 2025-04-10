@@ -3,11 +3,11 @@ from typing import List, Optional, Iterable
 
 import httpx
 
-from ..message_processing import messages
 from ..rest_api import client as rest_api_client
 from ..rest_api import types as rest_api_types
 from ..rest_client_configurator import retry_decorator
 from . import upload_monitor
+from . import file_upload_options
 
 
 @dataclasses.dataclass
@@ -34,20 +34,23 @@ class RestFileUploadClient:
         self.httpx_client = httpx_client
 
     def start_upload(
-        self, message: messages.CreateAttachmentMessage, num_of_file_parts: int
+        self,
+        upload_options: file_upload_options.FileUploadOptions,
+        num_of_file_parts: int,
+        base_url_path: str,
     ) -> MultipartUploadMetadata:
         """Starts upload by sending request to the backend and receiving upload metadata. The upload metadata
         will include the list of pre-signed URLs for direct S3 upload and upload ID assigned to this file
         upload operation. If backend decides to force upload to then local endpoint then list of URLs will
         include only one URL and upload ID will have magic value 'BEMinIO'."""
         response = self.rest_client.attachments.start_multi_part_upload(
-            file_name=message.file_name,
+            file_name=upload_options.file_name,
             num_of_file_parts=num_of_file_parts,
-            entity_type=message.entity_type,
-            entity_id=message.entity_id,
-            path=message.base_url_path,
-            mime_type=message.mime_type,
-            project_name=message.project_name,
+            entity_type=upload_options.entity_type,
+            entity_id=upload_options.entity_id,
+            path=base_url_path,
+            mime_type=upload_options.mime_type,
+            project_name=upload_options.project_name,
         )
         return MultipartUploadMetadata(
             upload_id=response.upload_id, urls=response.pre_sign_urls
@@ -56,21 +59,21 @@ class RestFileUploadClient:
     def s3_upload_completed(
         self,
         file_size: int,
-        message: messages.CreateAttachmentMessage,
+        upload_options: file_upload_options.FileUploadOptions,
         upload_metadata: MultipartUploadMetadata,
         file_parts: List[rest_api_types.MultipartUploadPart],
     ) -> None:
         """Invoked to finalize direct S3 file upload operation on the backend. It is invoked after all file parts
         was successfully uploaded to S3."""
         self.rest_client.attachments.complete_multi_part_upload(
-            file_name=message.file_name,
-            entity_type=message.entity_type,
-            entity_id=message.entity_id,
+            file_name=upload_options.file_name,
+            entity_type=upload_options.entity_type,
+            entity_id=upload_options.entity_id,
             file_size=file_size,
             upload_id=upload_metadata.upload_id,
             uploaded_file_parts=file_parts,
-            project_name=message.project_name,
-            mime_type=message.mime_type,
+            project_name=upload_options.project_name,
+            mime_type=upload_options.mime_type,
         )
 
     @retry_decorator.opik_rest_retry
