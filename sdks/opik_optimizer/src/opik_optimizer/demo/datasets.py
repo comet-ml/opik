@@ -2,18 +2,18 @@ import opik
 from typing import Literal, List, Dict, Any
 from .. import utils
 
-def get_or_create_dataset(name: Literal["hotpot-300", "halu-eval", "tiny-test"]) -> opik.Dataset:
+def get_or_create_dataset(name: Literal["hotpot-300", "halu-eval-300", "tiny-test"]) -> opik.Dataset:
     if name == "hotpot-300":
         return utils.get_or_create_dataset(
             dataset_name=name,
             description="HotpotQA dataset with 300 examples",
             data_loader=_load_hotpot_300
         )
-    elif name == "halu-eval":
+    elif name == "halu-eval-300":
         return utils.get_or_create_dataset(
             dataset_name=name,
             description="HaluEval dataset with 300 examples",
-            data_loader=_load_halu_eval
+            data_loader=_load_halu_eval_300   
         )
     elif name == "tiny-test":
         return utils.get_or_create_dataset(
@@ -46,7 +46,7 @@ def _load_hotpot_300() -> List[Dict[str, Any]]:
     return data
 
 
-def _load_halu_eval() -> List[Dict[str, Any]]:
+def _load_halu_eval_300() -> List[Dict[str, Any]]:
     import pandas as pd
 
     df = pd.read_parquet(

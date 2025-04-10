@@ -26,7 +26,7 @@ class HaluEvalObjective(metrics.BaseMetric):
         )
 
 halu_eval_accuracy = HaluEvalObjective()
-halu_eval_dataset = get_or_create_dataset("halu-eval")
+halu_eval_dataset = get_or_create_dataset("halu-eval-300")
 
 prompt = """
 You are an expert in LLM hallucination detection. You will be given a user input, an llm output,
