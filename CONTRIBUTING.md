@@ -105,16 +105,21 @@ The Python SDK reference documentation will be built and available at `http://12
 
 **Setting up your development environment:**
 
-In order to develop features in the Python SDK, you will need to have Opik running locally. You can follow the instructions in the [Configuring your development environment](#configuring-your-development-environment) section or by running Opik locally with Docker Compose:
+In order to develop features in the Python SDK, you will need to have Opik running locally. You can follow the instructions in the [Docker Compose README](deployment/docker-compose/README.md) or use the provided script to start Opik:
 
+On Linux or Mac:
 ```bash
-cd deployment/docker-compose
+# From the root of the repository
+./opik.sh
 
-# Optionally, you can force a pull of the latest images
-docker compose pull
+# Configure the Python SDK to point to the local Opik deployment
+opik configure --use_local
+```
 
-# Starting the Opik platform
-docker compose up -d
+On Windows:
+```powershell
+# From the root of the repository
+powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
 
 # Configure the Python SDK to point to the local Opik deployment
 opik configure --use_local
@@ -122,25 +127,63 @@ opik configure --use_local
 
 The Opik server will be running on `http://localhost:5173`.
 
+**Note for Windows users:**
+- If Python is installed at system level, make sure `C:\Users\<name>\AppData\Local\Programs\Python<version>\Scripts\` is added to your PATH for the `opik` command to work after installation, and restart your terminal.
+- It's recommended to use a virtual environment:
+  ```powershell
+  # Create a virtual environment
+  py -m venv <environment_name>
+  
+  # Activate the virtual environment
+  cd <environment_name>\Scripts && .\activate.bat
+  
+  # Install the SDK
+  pip install -e sdks/python
+  
+  # Configure the SDK
+  opik configure --use_local
+  ```
+
 **Submitting a PR:**
 
-First, please read the [coding guidelines](sdks/python/README.md) for our Python SDK
+First, please read the [coding guidelines](sdks/python/README.md) for our Python SDK.
 
 The Python SDK is available under `sdks/python` and can be installed locally using `pip install -e sdks/python`.
 
-Before submitting a PR, please ensure that your code passes the test suite:
+**Testing your changes:**
+
+For most SDK contributions, you should run the e2e tests which validate the core functionality:
 
 ```bash
 cd sdks/python
 
-pytest tests/
+# Install the test requirements
+pip install -r tests/test_requirements.txt
+
+# Install pre-commit for linting
+pip install pre-commit
+
+# Run the e2e tests
+pytest tests/e2e
 ```
 
-and the linter:
+If you're making changes to specific integrations (openai, anthropic, etc.):
+1. Install the integration-specific requirements:
+   ```bash
+   # Example for OpenAI integration
+   pip install -r tests/integrations/openai/requirements.txt
+   ```
+2. Configure any necessary API keys for the integration
+3. Run the specific integration tests:
+   ```bash
+   # Example for OpenAI integration
+   pytest tests/integrations/openai
+   ```
+
+Before submitting a PR, please ensure that your code passes the linter:
 
 ```bash
 cd sdks/python
-
 pre-commit run --all-files
 ```
 
