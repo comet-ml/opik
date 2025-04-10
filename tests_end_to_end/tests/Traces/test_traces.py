@@ -27,7 +27,7 @@ class TestTracesCrud:
     )
     @allure.title("Trace creation - {create_traces}")
     def test_traces_visibility(
-        self, page: Page, traces_number, create_project_api, create_traces
+        self, page: Page, create_project_api, traces_number, create_traces
     ):
         """Test basic trace creation via both decorator and low-level client, check visibility in both UI and SDK.
 
@@ -66,9 +66,12 @@ class TestTracesCrud:
         # Create traces
         _ = create_traces
 
+        # Wait for traces to appear on UI
+        traces_page = TracesPage(page)
+        traces_page.wait_for_traces_to_be_visible()
+
         # Verify traces in UI
         logger.info("Verifying traces in UI")
-        traces_page = TracesPage(page)
         try:
             traces_ui = traces_page.get_all_trace_names_in_project()
             assert Counter(traces_ui) == created_trace_names, (
@@ -117,7 +120,7 @@ class TestTracesCrud:
     )
     @allure.title("Trace deletion in SDK - {create_traces}")
     def test_delete_traces_sdk(
-        self, page: Page, traces_number, create_project_api, create_traces
+        self, page: Page, create_project_api, traces_number, create_traces
     ):
         """Test trace deletion via SDK.
 
@@ -223,7 +226,7 @@ class TestTracesCrud:
     )
     @allure.title("Trace deletion in UI - {create_traces}")
     def test_delete_traces_ui(
-        self, page: Page, traces_number, create_project_api, create_traces
+        self, page: Page, create_project_api, traces_number, create_traces
     ):
         """Testing trace deletion via UI interface.
 
@@ -261,6 +264,7 @@ class TestTracesCrud:
         # Get initial traces list
         logger.info("Getting initial traces list")
         try:
+            wait_for_traces_to_be_visible(project_name=project_name, size=traces_number)
             traces_sdk = get_traces_of_project_sdk(
                 project_name=project_name, size=traces_number
             )
@@ -277,6 +281,10 @@ class TestTracesCrud:
         # Delete traces via UI
         logger.info("Deleting traces via UI")
         traces_page = TracesPage(page)
+
+        # Wait for traces to appear on UI
+        traces_page.wait_for_traces_to_be_visible()
+
         try:
             for trace_name in traces_to_delete:
                 traces_page.delete_single_trace_by_name(trace_name)

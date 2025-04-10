@@ -17,6 +17,7 @@ from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
 from tests.sdk_helpers import (
     create_project_via_api,
     delete_project_by_name_sdk,
+    get_random_string,
     wait_for_number_of_traces_to_be_visible,
     client_get_prompt_retries,
     find_project_by_name_sdk,
@@ -121,7 +122,7 @@ def video_dir():
 
 
 @pytest.fixture(scope="session")
-def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
+def browser_context(browser: Browser, get_url_from_config: str, video_dir):
     """Create a browser context with required permissions and authentication"""
     # Enable video recording
     context = browser.new_context(
@@ -135,7 +136,7 @@ def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
     # Handle cloud environment authentication
-    if not env_config.base_url.startswith("http://localhost"):
+    if not get_url_from_config.startswith("http://localhost"):
         page = context.new_page()
         # Extract base URL for authentication (remove /opik from the end)
         base_url = re.sub(r"/opik$", "", env_config.base_url)
@@ -176,6 +177,12 @@ def browser_context(browser: Browser, env_config: EnvConfig, video_dir):
 
 
 @pytest.fixture(scope="session")
+def get_url_from_config():
+    env_config = get_environment_config()
+    return env_config.base_url
+
+
+@pytest.fixture(scope="function")
 def env_config() -> EnvConfig:
     """
     Get the environment configuration from environment variables.
@@ -187,7 +194,9 @@ def env_config() -> EnvConfig:
 
     # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
-    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name
+    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name = (
+        "project_" + get_random_string(5)
+    )
 
     return env_config
 
@@ -206,8 +215,8 @@ def configure_logging(request):
         logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def client(env_config: EnvConfig, browser_context) -> opik.Opik:
+@pytest.fixture(scope="function", autouse=True)
+def client(env_config: EnvConfig) -> opik.Opik:
     """Create an Opik client configured for the current environment"""
     kwargs = {
         "workspace": env_config.workspace,
@@ -340,7 +349,7 @@ def experiments_page(page):
 
 @pytest.fixture(scope="function")
 @allure.title("Create project via API call, handle cleanup after test")
-def create_project_api(page: Page):
+def create_project_api():
     """
     Create a project via SDK and handle cleanup.
     Checks if project exists before attempting deletion.
@@ -351,14 +360,8 @@ def create_project_api(page: Page):
     create_project_via_api(name=proj_name)
     yield proj_name
 
-    projects_page = ProjectsPage(page)
-    projects_page.go_to_page()
-    try:
-        projects_page.search_project(proj_name)
-        projects_page.check_project_not_exists_on_current_page(project_name=proj_name)
-    except AssertionError as _:
-        projects_page.delete_project_by_name(proj_name)
-    wait_for_project_to_not_be_visible(proj_name)
+    if find_project_by_name_sdk(proj_name):
+        delete_project_by_name_sdk(proj_name)
 
 
 @pytest.fixture(scope="function")
