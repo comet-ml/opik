@@ -402,7 +402,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND entity_id = :id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, secondary_entity_id, name
                 )
                 GROUP BY workspace_id, project_id, entity_id
@@ -468,7 +468,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, name) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, secondary_entity_id, name
                 )
                 GROUP BY workspace_id, project_id, entity_id
@@ -1425,7 +1425,7 @@ class TraceDAOImpl implements TraceDAO {
                 .stream()
                 .map(guardrail -> {
                     return GuardrailBatchItem.builder()
-                            .id(UUID.fromString((String) guardrail.get(0)))
+                            .entityId(UUID.fromString((String) guardrail.get(0)))
                             .secondaryId(UUID.fromString((String) guardrail.get(1)))
                             .projectId(UUID.fromString((String) guardrail.get(2)))
                             .name(GuardrailType.fromString((String) guardrail.get(3)))
