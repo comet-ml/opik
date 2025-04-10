@@ -28,19 +28,24 @@ public interface ProjectMetricsService {
 @Singleton
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> metricHandler;
+    private final @NonNull ProjectService projectService;
 
     @Inject
-    public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO) {
+    public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
+            @NonNull ProjectService projectService) {
         metricHandler = Map.of(
                 MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
                 MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
                 MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
                 MetricType.COST, projectMetricsDAO::getCost,
                 MetricType.DURATION, projectMetricsDAO::getDuration);
+        this.projectService = projectService;
     }
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
+        // Will throw an error in case we try to get private project with public visibility
+        projectService.get(projectId);
         return getMetricHandler(request.metricType())
                 .apply(projectId, request)
                 .map(dataPoints -> ProjectMetricResponse.builder()
