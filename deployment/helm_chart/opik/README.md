@@ -106,6 +106,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
+| clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
@@ -200,7 +201,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION | string | `"BASE2_EXPONENTIAL_BUCKET_HISTOGRAM"` |  |
 | component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE | string | `"delta"` |  |
-| component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage,b3"` |  |
+| component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext"` |  |
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
@@ -276,7 +277,7 @@ Call opik api on http://localhost:5173/api
 | redis.ssl | bool | `false` |  |
 | registry | string | `"ghcr.io/comet-ml/opik"` |  |
 | standalone | bool | `true` |  |
-| zookeeper.enabled | bool | `false` |  |
+| zookeeper.enabled | bool | `true` |  |
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
 | zookeeper.headless.publishNotReadyAddresses | bool | `true` |  |

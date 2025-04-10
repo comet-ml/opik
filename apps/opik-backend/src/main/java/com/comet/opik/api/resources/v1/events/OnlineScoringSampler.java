@@ -22,7 +22,6 @@ import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import org.slf4j.Logger;
-import org.slf4j.MDC;
 import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -34,7 +33,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithClosableMdc;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -109,54 +107,56 @@ public class OnlineScoringSampler {
             List<? extends AutomationRuleEvaluator<?>> evaluators = ruleEvaluatorService.findAll(
                     projectId, tracesBatch.workspaceId());
 
-            // Important to set the workspaceId for logging purposes
-            try (var logContext = wrapWithClosableMdc(Map.of(
-                    UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(), "workspace_id",
-                    tracesBatch.workspaceId()))) {
-
-                //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
-                evaluators.parallelStream().forEach(wrapWithMdc(evaluator -> {
-                    // samples traces for this rule
-                    var samples = traces.stream().filter(trace -> shouldSampleTrace(evaluator, trace));
-                    switch (evaluator.getType()) {
-                        case LLM_AS_JUDGE -> {
+            //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
+            evaluators.parallelStream().forEach(evaluator -> {
+                // samples traces for this rule
+                var samples = traces.stream()
+                        .filter(trace -> shouldSampleTrace(evaluator, tracesBatch.workspaceId(), trace));
+                switch (evaluator.getType()) {
+                    case LLM_AS_JUDGE -> {
+                        var messages = samples
+                                .map(trace -> toLlmAsJudgeMessage(tracesBatch,
+                                        (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
+                                .toList();
+                        logSampledTrace(tracesBatch, evaluator, messages);
+                        enqueueInRedis(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                    }
+                    case USER_DEFINED_METRIC_PYTHON -> {
+                        if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
                             var messages = samples
-                                    .map(trace -> toLlmAsJudgeMessage(tracesBatch,
-                                            (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
+                                    .map(trace -> toScoreUserDefinedMetricPython(tracesBatch,
+                                            (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
                             logSampledTrace(tracesBatch, evaluator, messages);
-                            enqueueInRedis(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                            enqueueInRedis(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                        } else {
+                            log.warn("Python evaluator is disabled. Skipping sampling for evaluator type '{}'",
+                                    evaluator.getType());
                         }
-                        case USER_DEFINED_METRIC_PYTHON -> {
-                            if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
-                                var messages = samples
-                                        .map(trace -> toScoreUserDefinedMetricPython(tracesBatch,
-                                                (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
-                                        .toList();
-                                logSampledTrace(tracesBatch, evaluator, messages);
-                                enqueueInRedis(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
-                            } else {
-                                log.warn("Python evaluator is disabled. Skipping sampling for evaluator type '{}'",
-                                        evaluator.getType());
-                            }
-                        }
-                        default -> log.warn("No process defined for evaluator type '{}'", evaluator.getType());
                     }
-                }));
-            }
+                    default -> log.warn("No process defined for evaluator type '{}'", evaluator.getType());
+                }
+            });
         });
     }
 
-    private boolean shouldSampleTrace(AutomationRuleEvaluator<?> evaluator, Trace trace) {
+    private boolean shouldSampleTrace(AutomationRuleEvaluator<?> evaluator, String workspaceId, Trace trace) {
         var shouldBeSampled = secureRandom.nextFloat() < evaluator.getSamplingRate();
+
         if (!shouldBeSampled) {
-            try (var ruleScope = MDC.putCloseable("rule_id", evaluator.getId().toString());
-                    var traceScope = MDC.putCloseable("trace_id", trace.id().toString())) {
+            // Important to set the workspaceId for logging purposes
+            try (var logContext = wrapWithMdc(Map.of(
+                    UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                    "workspace_id", workspaceId,
+                    "rule_id", evaluator.getId().toString(),
+                    "trace_id", trace.id().toString()))) {
+
                 userFacingLogger.info(
                         "The traceId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
                         trace.id(), evaluator.getName(), evaluator.getSamplingRate());
             }
         }
+
         return shouldBeSampled;
     }
 
