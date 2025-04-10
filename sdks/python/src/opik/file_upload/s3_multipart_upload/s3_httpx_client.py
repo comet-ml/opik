@@ -1,3 +1,5 @@
+import functools
+
 import httpx
 import tenacity
 
@@ -8,6 +10,11 @@ WRITE_TIMEOUT_SECONDS = 100
 POOL_TIMEOUT_SECONDS = 20
 
 RETRYABLE_STATUS_CODES = [500]
+
+
+@functools.lru_cache
+def get_cached() -> httpx.Client:
+    return get()
 
 
 def get() -> httpx.Client:

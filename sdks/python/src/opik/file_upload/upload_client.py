@@ -58,7 +58,6 @@ class RestFileUploadClient:
 
     def s3_upload_completed(
         self,
-        file_size: int,
         upload_options: file_upload_options.FileUploadOptions,
         upload_metadata: MultipartUploadMetadata,
         file_parts: List[rest_api_types.MultipartUploadPart],
@@ -69,7 +68,7 @@ class RestFileUploadClient:
             file_name=upload_options.file_name,
             entity_type=upload_options.entity_type,
             entity_id=upload_options.entity_id,
-            file_size=file_size,
+            file_size=upload_options.file_size,
             upload_id=upload_metadata.upload_id,
             uploaded_file_parts=file_parts,
             project_name=upload_options.project_name,

@@ -37,7 +37,7 @@ class S3FileDataUploader:
         self.uploaded_parts: List[PartMetadata] = []
         self.bytes_sent = 0
 
-    def upload(self) -> None:
+    def upload(self) -> List[PartMetadata]:
         self._file_parts.calculate()
         file_to_upload = pathlib.Path(self._file_parts.file)
         try:
@@ -47,6 +47,8 @@ class S3FileDataUploader:
             raise s3_upload_error.S3UploadFileError(
                 file=self._file_parts.file, reason=str(e)
             ) from e
+
+        return self.uploaded_parts
 
     def _upload(self, fp: IO) -> None:
         max_file_part_size = self._file_parts.max_file_part_size
