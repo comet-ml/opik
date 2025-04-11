@@ -28,7 +28,8 @@ class DspyOptimizer(BaseOptimizer):
         self.num_threads = 6
         self.model_kwargs["model"] = self.model
         lm = dspy.LM(**self.model_kwargs)
-        dspy.configure(lm=lm)  # , callbacks=[opik_callback])
+        opik_callback = OpikCallback(project_name=self.project_name)
+        dspy.configure(lm=lm, callbacks=[opik_callback])
 
     def optimize_prompt(
         self,
