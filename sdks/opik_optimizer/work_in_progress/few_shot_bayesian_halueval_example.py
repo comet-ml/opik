@@ -11,8 +11,11 @@ class HaluEvalObjective(metrics.BaseMetric):
         ground_truth = ground_truth.lower()
         output = output.lower()
 
-        true_negative_weight = 1
-        true_positive_weight = 2.5
+        true_negative_weight = 1.0
+        true_positive_weight = 6.0
+
+        # The dataset is imbalanced (<20% hallucinations), higher true-positive weight will make the prompt more sensitive,
+        # leading to more hallucinations detected, but also to more false-positive classifications.
 
         if ground_truth == "no":
             return score_result.ScoreResult(
@@ -29,8 +32,7 @@ halu_eval_accuracy = HaluEvalObjective()
 halu_eval_dataset = get_or_create_dataset("halu-eval-300")
 
 prompt = """
-You are an expert in LLM hallucination detection. You will be given a user input, an llm output,
-and a couple of examples to help you make a decision.
+Detect hallucinations in the given user inputs and llm_output pairs.
 
 Answer with just one word: 'yes' if there is a hallucination and 'no' if there is not.
 
@@ -41,30 +43,56 @@ The llm output:
 {{llm_output}}
 """
 
+
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
     project_name="optimize-few-shot-bayesian-halueval",
+    min_examples=2,
     max_examples=8,
 )
+
+metric_inputs_from_dataset_columns_mapping = {
+    "ground_truth": "expected_hallucination_label",
+}
+metric_inputs_from_predictor_output_mapping = {
+    "output": "evaluated_output"  # evaluated_output is the reserved name for predictor output string
+}
+
+initial_score = optimizer.evaluate_prompt(
+    dataset=halu_eval_dataset,
+    metric=halu_eval_accuracy,
+    prompt=prompt,
+    metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
+    metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
+    num_threads=16,
+)
+
+print("Initial score:", initial_score)
 
 result = optimizer.optimize_prompt(
     dataset=halu_eval_dataset,
     metric=halu_eval_accuracy,
     prompt=prompt,
-    demo_examples_keys_mapping={
+    few_shot_examples_inputs_from_dataset_columns_mapping={
         "User input": "input",
         "LLM output": "llm_output",
-        "Expected hallucination label": "expected_hallucination_label",
+        "Hallucination verdict": "expected_hallucination_label",
     },
-    input_key={},
-    
-    num_threads=12,
+    metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
+    metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
     n_trials=10,
-    scoring_key_mapping={
-        "output": "output",
-        "ground_truth": "expected_hallucination_label",
-    },
-    train_ratio=0.3,
+    train_ratio=0.4,
+    num_threads=16,
 )
 
 print(result.prompt)
+final_score = optimizer.evaluate_prompt(
+    dataset=halu_eval_dataset,
+    metric=halu_eval_accuracy,
+    prompt=result.prompt,
+    metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
+    metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
+    num_threads=16,
+)
+
+print("Final score:", final_score)
