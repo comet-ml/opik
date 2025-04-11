@@ -47,7 +47,12 @@ class RemoteAuthService implements AuthService {
             Set.of("POST"),
             "^/v1/private/spans/?$", Set.of("GET"),
             "^/v1/private/spans/stats/?$", Set.of("GET"),
-            "^/v1/private/spans/feedback-scores/names/?$", Set.of("GET"));
+            "^/v1/private/spans/feedback-scores/names/?$", Set.of("GET"),
+            "^/v1/private/traces/?$", Set.of("GET"),
+            "^/v1/private/traces/stats/?$", Set.of("GET"),
+            "^/v1/private/traces/feedback-scores/names/?$", Set.of("GET"),
+            "^/v1/private/traces/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
+            Set.of("GET"));
 
     private final @NonNull Client client;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;

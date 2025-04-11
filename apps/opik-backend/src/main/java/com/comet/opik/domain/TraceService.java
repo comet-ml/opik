@@ -310,6 +310,13 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
+    private TraceSearchCriteria findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
+        return criteria.toBuilder()
+                .projectId(projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(),
+                        criteria.projectName()))
+                .build();
+    }
+
     private <T> Mono<T> failWithConflict(String error) {
         log.info(error);
         return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(error))));
@@ -355,15 +362,9 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
+        TraceSearchCriteria resolvedCriteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return template.nonTransaction(connection -> dao.find(size, page, criteria, connection));
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> template.nonTransaction(connection -> dao.find(
-                        size, page, criteria.toBuilder().projectId(project.id()).build(), connection)))
-                .switchIfEmpty(Mono.just(TracePage.empty(page, sortingFactory.getSortableFields())));
+        return template.nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection));
     }
 
     @Override
@@ -407,14 +408,9 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return dao.getStats(criteria)
-                    .switchIfEmpty(Mono.just(ProjectStats.empty()));
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> dao.getStats(criteria.toBuilder().projectId(project.id()).build()))
+        return dao.getStats(criteria)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 
