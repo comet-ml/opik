@@ -95,6 +95,7 @@ import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -2617,7 +2618,7 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().experimentId()).isEqualTo(actualId);
             assertThat(experimentCaptor.getValue().datasetId()).isEqualTo(actualExperiment.datasetId());
             assertThat(experimentCaptor.getValue().createdAt())
-                    .isCloseTo(actualExperiment.createdAt(), within(Duration.ofSeconds(2)));
+                    .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
 
             return actualId;
         }
