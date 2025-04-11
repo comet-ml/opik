@@ -1,23 +1,4 @@
-export const GuardrailTypes = {
-  TOPIC: "TOPIC",
-  PII: "PII",
-} as const;
-export type GuardrailType = keyof typeof GuardrailTypes;
-
-export const PiiSupportedEntities = {
-  CREDIT_CARD: "CREDIT_CARD",
-  CRYPTO: "CRYPTO",
-  EMAIL_ADDRESS: "EMAIL_ADDRESS",
-  IBAN_CODE: "IBAN_CODE",
-  IP_ADDRESS: "IP_ADDRESS",
-  NRP: "NRP",
-  LOCATION: "LOCATION",
-  PERSON: "PERSON",
-  PHONE_NUMBER: "PHONE_NUMBER",
-  MEDICAL_LICENSE: "MEDICAL_LICENSE",
-  URL: "URL",
-} as const;
-export type PiiSupportedEntity = keyof typeof PiiSupportedEntities;
+import { GuardrailTypes, PiiSupportedEntities } from "@/types/guardrails";
 
 export interface GuardrailConfig {
   id: string;
@@ -30,7 +11,7 @@ export interface GuardrailConfig {
   codeBuilder: (entities: string[], threshold: number) => string;
 }
 
-export const guardrailsMap: Record<GuardrailType, GuardrailConfig> = {
+export const guardrailsMap: Record<GuardrailTypes, GuardrailConfig> = {
   [GuardrailTypes.TOPIC]: {
     id: "topic-guardrail",
     title: "Topic guardrail",
@@ -67,11 +48,11 @@ export const guardrailsMap: Record<GuardrailType, GuardrailConfig> = {
 };
 
 export type GuardrailsState = Record<
-  GuardrailType,
+  GuardrailTypes,
   Pick<GuardrailConfig, "threshold" | "entities" | "enabled">
 >;
 export const guardrailsDefaultState: GuardrailsState = (
-  Object.keys(guardrailsMap) as GuardrailType[]
+  Object.keys(guardrailsMap) as GuardrailTypes[]
 ).reduce<GuardrailsState>((acc, key) => {
   acc[key] = {
     threshold: guardrailsMap[key].threshold,
