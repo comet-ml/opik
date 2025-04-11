@@ -8,6 +8,7 @@ from ..types import AttachmentEntityType
 class FileUploadOptions:
     file_path: str
     file_name: str
+    file_size: int
     mime_type: Optional[str]
     entity_type: AttachmentEntityType
     entity_id: str

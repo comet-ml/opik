@@ -1,32 +1,20 @@
-import numpy as np
 import re
-import tempfile
 
 import httpx
 import pytest
 import respx
 
+from opik.file_upload import upload_monitor
 from opik.file_upload.s3_multipart_upload import file_parts_strategy, s3_upload_error
 from opik.file_upload.s3_multipart_upload import s3_file_uploader, s3_httpx_client
-from opik.file_upload import upload_monitor
-
-FILE_SIZE = 12 * 1024 * 1024
-
-
-@pytest.fixture
-def data_file():
-    with tempfile.NamedTemporaryFile(delete=True) as file:
-        file.write(np.random.bytes(FILE_SIZE))
-        file.seek(0)
-
-        yield file
+from .. import conftest
 
 
 def test_upload_file_parts_to_s3(data_file, respx_mock):
     max_file_part_size = 5 * 1024 * 1024
     file_parts = file_parts_strategy.FilePartsStrategy(
         file_path=data_file.name,
-        file_size=FILE_SIZE,
+        file_size=conftest.FILE_SIZE,
         max_file_part_size=max_file_part_size,
     )
     pre_sign_urls = [
@@ -50,7 +38,7 @@ def test_upload_file_parts_to_s3(data_file, respx_mock):
     # do upload and check results
     uploader.upload()
 
-    assert monitor.bytes_sent == FILE_SIZE
+    assert monitor.bytes_sent == conftest.FILE_SIZE
 
     route = respx.put(rx_url)
     assert route.call_count == 3
@@ -63,14 +51,14 @@ def test_upload_file_parts_to_s3(data_file, respx_mock):
         if i < 2:
             assert part.size == max_file_part_size
         else:
-            assert part.size == FILE_SIZE - 2 * max_file_part_size
+            assert part.size == conftest.FILE_SIZE - 2 * max_file_part_size
 
 
 def test_upload_file_parts_to_s3__retry_on_500(data_file, respx_mock):
     max_file_part_size = 5 * 1024 * 1024
     file_parts = file_parts_strategy.FilePartsStrategy(
         file_path=data_file.name,
-        file_size=FILE_SIZE,
+        file_size=conftest.FILE_SIZE,
         max_file_part_size=max_file_part_size,
     )
     pre_sign_urls = [
@@ -101,7 +89,7 @@ def test_upload_file_parts_to_s3__retry_on_500(data_file, respx_mock):
     # do upload and check results
     uploader.upload()
 
-    assert monitor.bytes_sent == FILE_SIZE
+    assert monitor.bytes_sent == conftest.FILE_SIZE
 
     route = respx.put(rx_url)
     assert route.call_count == 3 + 1  # we have one retry due to 500
@@ -110,7 +98,7 @@ def test_upload_file_parts_to_s3__retry_on_500(data_file, respx_mock):
 def test_upload_file_parts_to_s3__error_status(data_file, respx_mock):
     file_parts = file_parts_strategy.FilePartsStrategy(
         file_path=data_file.name,
-        file_size=FILE_SIZE,
+        file_size=conftest.FILE_SIZE,
     )
     pre_sign_urls = [
         "https://s3.amazonaws.com/bucket/1",
