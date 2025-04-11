@@ -6,13 +6,15 @@ import React, {
   useState,
 } from "react";
 import debounce from "lodash/debounce";
+import isFunction from "lodash/isFunction";
 import { Input, InputProps } from "@/components/ui/input";
 
 type InputValue = string | number | readonly string[] | undefined;
+type OnValueChangeCallback = (value: InputValue) => void;
 
 export interface DebounceInputProps extends Omit<InputProps, "onChange"> {
   delay?: number;
-  onValueChange: (value: InputValue) => void;
+  onValueChange: OnValueChangeCallback;
 }
 
 const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
@@ -22,13 +24,21 @@ const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
 
     const isFocusedRef = useRef(false);
     const pendingValueRef = useRef<InputValue>(undefined);
+    const valueChangeCallbackRef = useRef<OnValueChangeCallback | undefined>(
+      onValueChange,
+    );
+
+    useEffect(() => {
+      valueChangeCallbackRef.current = onValueChange;
+    }, [onValueChange]);
 
     const handleDebouncedValueChange = useMemo(
       () =>
         debounce((val: InputValue) => {
-          onValueChange(val);
+          isFunction(valueChangeCallbackRef.current) &&
+            valueChangeCallbackRef.current(val);
         }, delay),
-      [delay, onValueChange],
+      [delay],
     );
 
     useEffect(() => {
