@@ -32,6 +32,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -277,50 +278,42 @@ public class ExperimentService {
         return Set.of();
     }
 
-    public Mono<Experiment> create(@NonNull Experiment experiment) {
-        return Mono.deferContextual(ctx -> {
-            var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
-            IdGenerator.validateVersion(id, "Experiment");
-            var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
-            return getOrCreateDataset(experiment.datasetName())
-                    .onErrorResume(throwable -> handleDatasetCreationError(throwable, experiment.datasetName())
-                            .map(Dataset::id))
-                    .flatMap(datasetId -> {
-                        if (hasPromptVersionLinks(experiment)) {
-                            return validatePromptVersion(experiment).flatMap(promptVersionMap -> {
-                                var builder = experiment.toBuilder();
-                                // add prompt versions to new prompt version map field
-                                builder.promptVersions(promptVersionMap.values().stream()
-                                        .map(promptVersion -> PromptVersionLink.builder()
-                                                .id(promptVersion.id())
-                                                .commit(promptVersion.commit())
-                                                .promptId(promptVersion.promptId())
-                                                .build())
-                                        .toList());
-                                // add prompt version to old prompt version field (to be deprecated soon)
-                                if (experiment.promptVersion() != null) {
-                                    var promptVersion = promptVersionMap.get(experiment.promptVersion().id());
-                                    builder.promptVersion(PromptVersionLink.builder()
+    public Mono<UUID> create(@NonNull Experiment experiment) {
+        var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
+        IdGenerator.validateVersion(id, "Experiment");
+        var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
+        return getOrCreateDataset(experiment.datasetName())
+                .onErrorResume(throwable -> handleDatasetCreationError(throwable, experiment.datasetName())
+                        .map(Dataset::id))
+                .flatMap(datasetId -> {
+                    if (hasPromptVersionLinks(experiment)) {
+                        return validatePromptVersion(experiment).flatMap(promptVersionMap -> {
+                            var builder = experiment.toBuilder();
+                            // add prompt versions to new prompt version map field
+                            builder.promptVersions(promptVersionMap.values().stream()
+                                    .map(promptVersion -> PromptVersionLink.builder()
                                             .id(promptVersion.id())
                                             .commit(promptVersion.commit())
                                             .promptId(promptVersion.promptId())
-                                            .build());
-                                }
-                                return create(builder.build(), id, name, datasetId);
-                            });
-                        }
-                        return create(experiment, id, name, datasetId);
-                    })
-                    // Returning the newly created experiment, so we can post the event with the complete data.
-                    .flatMap(builtExperiment -> getById(id))
-                    // The event is posted only when the experiment is successfully created.
-                    .doOnSuccess(newExperiment -> postExperimentCreatedEvent(newExperiment, workspaceId, userName))
-                    // If a conflict occurs, we return the existing experiment. If any other error occurs, we throw it.
-                    // The event is not posted in these cases.
-                    .onErrorResume(throwable -> handleCreateError(throwable, id));
-        }).subscribeOn(Schedulers.boundedElastic());
+                                            .build())
+                                    .toList());
+                            // add prompt version to old prompt version field (to be deprecated soon)
+                            if (experiment.promptVersion() != null) {
+                                var promptVersion = promptVersionMap.get(experiment.promptVersion().id());
+                                builder.promptVersion(PromptVersionLink.builder()
+                                        .id(promptVersion.id())
+                                        .commit(promptVersion.commit())
+                                        .promptId(promptVersion.promptId())
+                                        .build());
+                            }
+                            return create(builder.build(), id, name, datasetId);
+                        });
+                    }
+                    return create(experiment, id, name, datasetId);
+                })
+                // If a conflict occurs, we just return the id of the existing experiment.
+                // If any other error occurs, we throw it. The event is not posted for both cases.
+                .onErrorResume(throwable -> handleCreateError(throwable, id));
     }
 
     private boolean hasPromptVersionLinks(Experiment experiment) {
@@ -352,11 +345,22 @@ public class ExperimentService {
         });
     }
 
-    private Mono<Experiment> create(Experiment experiment, UUID id, String name, UUID datasetId) {
-        experiment = experiment.toBuilder().id(id).name(name).datasetId(datasetId).build();
+    private Mono<UUID> create(Experiment experiment, UUID id, String name, UUID datasetId) {
+        var newExperiment = experiment.toBuilder()
+                .id(id)
+                .name(name)
+                .datasetId(datasetId)
+                // The createdAt field is set to later post the ExperimentCreated event, but it is not persisted in the
+                // database as the default now64(9) is used instead.
+                .createdAt(Instant.now())
+                .build();
         log.info("Inserting experiment with id '{}', name '{}', datasetId '{}', datasetName '{}'",
-                experiment.id(), experiment.name(), experiment.datasetId(), experiment.datasetName());
-        return experimentDAO.insert(experiment).thenReturn(experiment);
+                newExperiment.id(), newExperiment.name(), newExperiment.datasetId(), newExperiment.datasetName());
+        return makeMonoContextAware((userName, workspaceId) -> experimentDAO.insert(newExperiment)
+                .thenReturn(newExperiment.id())
+                // The event is posted only when the experiment is successfully created.
+                .doOnSuccess(experimentId -> postExperimentCreatedEvent(newExperiment, workspaceId, userName)))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<Dataset> handleDatasetCreationError(Throwable throwable, String datasetName) {
@@ -371,25 +375,32 @@ public class ExperimentService {
         return Mono.error(throwable);
     }
 
-    private void postExperimentCreatedEvent(Experiment newExperiment, String workspaceId, String userName) {
+    private void postExperimentCreatedEvent(Experiment partialExperiment, String workspaceId, String userName) {
         log.info("Posting experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
-                newExperiment.id(), newExperiment.datasetId(), workspaceId);
+                partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
         eventBus.post(new ExperimentCreated(
-                newExperiment.id(),
-                newExperiment.datasetId(),
-                newExperiment.createdAt(),
+                partialExperiment.id(),
+                partialExperiment.datasetId(),
+                // The createdAt field is not exactly the one persisted in the DB, but it doesn't matter:
+                // - The experiment.createdAt field in ClickHouse has precision 9,
+                // whereas for dataset.lastCreatedExperimentAt in MySQL has precision 6.
+                // - It's approximated enough for the event.
+                // - At the moment of writing this comment, the dataset.lastCreatedExperimentAt field is only used
+                // to optionally sort the datasets returned by the find datasets endpoint. There are no other usages
+                // in the UI or elsewhere.
+                partialExperiment.createdAt(),
                 workspaceId,
                 userName));
         log.info("Posted experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
-                newExperiment.id(), newExperiment.datasetId(), workspaceId);
+                partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
     }
 
-    private Mono<Experiment> handleCreateError(Throwable throwable, UUID id) {
+    private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {
         if (throwable instanceof ClickHouseException
                 && throwable.getMessage().contains("TOO_LARGE_STRING_SIZE")
                 && throwable.getMessage().contains("_CAST(id, FixedString(36))")) {
             log.warn("Already exists experiment with id '{}'", id);
-            return getById(id);
+            return Mono.just(id);
         }
         log.error("Unexpected exception creating experiment with id '{}'", id);
         return Mono.error(throwable);

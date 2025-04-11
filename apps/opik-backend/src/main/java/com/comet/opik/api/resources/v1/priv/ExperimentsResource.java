@@ -164,13 +164,12 @@ public class ExperimentsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);
-        var newExperiment = experimentService.create(experiment)
+        var id = experimentService.create(experiment)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(newExperiment.id())).build();
-        log.info("Created experiment with id '{}', name '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
-                newExperiment.id(), newExperiment.name(), newExperiment.datasetId(), newExperiment.datasetName(),
-                workspaceId);
+        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
+        log.info("Created experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                id, experiment.name(), experiment.datasetName(), workspaceId);
         return Response.created(uri).build();
     }
 

@@ -215,7 +215,7 @@ class DatasetEventListenerTest {
 
             Awaitility.await().untilAsserted(() -> {
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
             });
         }
     }
@@ -261,12 +261,12 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment3.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment3.createdAt(), within(2, ChronoUnit.SECONDS));
 
                 var actualDataset2 = getDataset(datasetId2, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset2.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment4.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment4.createdAt(), within(2, ChronoUnit.SECONDS));
             });
 
             deleteAndAssert(
@@ -279,12 +279,12 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
 
                 var actualDataset2 = getDataset(datasetId2, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset2.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment2.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment2.createdAt(), within(2, ChronoUnit.SECONDS));
             });
         }
 
@@ -304,7 +304,7 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
             });
 
             deleteAndAssert(Set.of(actualExperiment.id()), TEST_WORKSPACE, API_KEY);
