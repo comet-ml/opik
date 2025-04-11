@@ -1,5 +1,3 @@
-import os
-
 from opik_optimizer import MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer.demo import get_or_create_dataset
@@ -18,6 +16,17 @@ optimizer = MetaPromptOptimizer(
 
 # Initial prompt to optimize - intentionally vague to allow for improvement
 initial_prompt = """Answer the question."""
+
+score = optimizer.evaluate_prompt(
+    dataset=opik_dataset,
+    metric=LevenshteinRatio(),
+    prompt=initial_prompt,
+    input_key="text",
+    output_key="label",
+)
+
+print("Initial prompt:", initial_prompt)
+print("Score:", score)
 
 # Optimize the prompt
 result = optimizer.optimize_prompt(
