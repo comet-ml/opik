@@ -149,6 +149,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type) {
+        // Will throw an error in case we try to get private project with public visibility
+        projectService.get(projectId);
         return dao.getSpanFeedbackScoreNames(projectId, type)
                 .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
                 .map(FeedbackScoreNames::new);
