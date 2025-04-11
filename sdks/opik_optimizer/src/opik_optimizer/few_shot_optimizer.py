@@ -2,22 +2,22 @@
 FewShot algorithm for Opik
 """
 
-from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Union, Optional
+from typing import Union
 
 import dspy
+import opik
 from tqdm import tqdm
-from opik import Dataset
 from opik.evaluation.metrics import BaseMetric
 
 from .integrations.dspy.utils import create_dspy_signature, State
 from .integrations.dspy import DspyOptimizer
+from .optimization_result import OptimizationResult
 
 
 class FewShotOptimizer(DspyOptimizer):
     def optimize_prompt(
         self,
-        dataset: Union[str, Dataset],
+        dataset: Union[str, opik.Dataset],
         metric: BaseMetric,
         prompt: str,
         input_key: str,
@@ -74,6 +74,10 @@ class FewShotOptimizer(DspyOptimizer):
         ]
 
         if self.history:
-            return self.history[0][0]["prompt"]
+            return OptimizationResult(
+                prompt=self.history[0][0]["prompt"],
+                score=self.history[0][0]["score"],
+                metric_name=self.opik_metric.name,
+            )
         else:
             return None

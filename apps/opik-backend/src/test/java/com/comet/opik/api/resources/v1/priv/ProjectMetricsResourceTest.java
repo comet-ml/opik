@@ -2,6 +2,8 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TimeInterval;
@@ -82,11 +84,13 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.ProjectVisibility.PRIVATE;
+import static com.comet.opik.api.ProjectVisibility.PUBLIC;
+import static com.comet.opik.api.resources.utils.AuthTestUtils.mockGetWorkspaceIdByName;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -169,6 +173,10 @@ class ProjectMetricsResourceTest {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
     }
 
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+    }
+
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
@@ -181,11 +189,14 @@ class ProjectMetricsResourceTest {
 
         private final String fakeApikey = UUID.randomUUID().toString();
 
-        Stream<Arguments> credentials() {
+        Stream<Arguments> publicCredentials() {
             return Stream.of(
-                    arguments(API_KEY, true, null),
-                    arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
-                    arguments("", false, NO_API_KEY_RESPONSE));
+                    arguments(API_KEY, PRIVATE, 200),
+                    arguments(API_KEY, PUBLIC, 200),
+                    arguments("", PRIVATE, 404),
+                    arguments("", PUBLIC, 200),
+                    arguments(fakeApikey, PRIVATE, 404),
+                    arguments(fakeApikey, PUBLIC, 200));
         }
 
         @BeforeEach
@@ -202,13 +213,16 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("publicCredentials")
         @DisplayName("get project metrics: when api key is present, then return proper response")
-        void getProjectMetrics__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean isAuthorized,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void getProjectMetrics__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                ProjectVisibility visibility, int expectedCode) {
             mockTargetWorkspace();
 
-            var projectId = UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build(), API_KEY,
+                    WORKSPACE_NAME);
+            mockGetWorkspaceIdByName(WORKSPACE_NAME, WORKSPACE_ID);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                     .request()
@@ -221,16 +235,14 @@ class ProjectMetricsResourceTest {
                             .metricType(MetricType.TRACE_COUNT)
                             .interval(TimeInterval.HOURLY).build()))) {
 
-                if (isAuthorized) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var actualEntity = actualResponse.readEntity(ProjectMetricResponse.class);
                     assertThat(actualEntity.projectId()).isEqualTo(projectId);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
+                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
                 }
             }
         }
@@ -248,6 +260,14 @@ class ProjectMetricsResourceTest {
             return Stream.of(
                     arguments(sessionToken, true, "OK_" + UUID.randomUUID()),
                     arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
+        }
+
+        Stream<Arguments> publicCredentials() {
+            return Stream.of(
+                    arguments(sessionToken, PRIVATE, "OK_" + UUID.randomUUID(), 200),
+                    arguments(sessionToken, PUBLIC, "OK_" + UUID.randomUUID(), 200),
+                    arguments(fakeSessionToken, PRIVATE, UUID.randomUUID().toString(), 404),
+                    arguments(fakeSessionToken, PUBLIC, UUID.randomUUID().toString(), 200));
         }
 
         @BeforeAll
@@ -269,13 +289,17 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("publicCredentials")
         @DisplayName("get project metrics: when session token is present, then return proper response")
-        void getProjectMetrics__whenSessionTokenIsPresent__thenReturnProperResponse(
-                String sessionToken, boolean success, String workspaceName) {
-            mockTargetWorkspace();
+        void getProjectMetrics__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                ProjectVisibility visibility,
+                String workspaceName, int expectedCode) {
+            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var projectId = UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build(), API_KEY,
+                    workspaceName);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
                     .request()
@@ -288,16 +312,14 @@ class ProjectMetricsResourceTest {
                             .metricType(MetricType.TRACE_COUNT)
                             .interval(TimeInterval.HOURLY).build()))) {
 
-                if (success) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var actualEntity = actualResponse.readEntity(ProjectMetricResponse.class);
                     assertThat(actualEntity.projectId()).isEqualTo(projectId);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
+                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
                 }
             }
         }
@@ -916,5 +938,9 @@ class ProjectMetricsResourceTest {
         }
 
         return today.minusDays(today.getDayOfWeek().getValue() - DayOfWeek.MONDAY.getValue());
+    }
+
+    private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
+        AuthTestUtils.mockGetWorkspaceIdByName(wireMock.server(), workspaceName, workspaceId);
     }
 }
