@@ -28,7 +28,7 @@ const ImagesListWrapper: React.FC<ImagesListWrapperProps> = ({ images }) => {
     <div className="flex flex-wrap gap-2">
       {previewDataArray.map((data) => (
         <AttachmentThumbnail
-          key={data.name}
+          key={data.url}
           previewData={data}
           onExpand={setPreviewData}
         />
