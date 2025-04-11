@@ -560,18 +560,33 @@ class SpanDAO {
     private static final String SELECT_BY_PROJECT_ID = """
             WITH comments_final AS (
               SELECT
-                   id AS comment_id,
-                   text,
-                   created_at AS comment_created_at,
-                   last_updated_at AS comment_last_updated_at,
-                   created_by AS comment_created_by,
-                   last_updated_by AS comment_last_updated_by,
-                   entity_id
-              FROM comments
-              WHERE workspace_id = :workspace_id
-              AND project_id = :project_id
-              ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-              LIMIT 1 BY id
+                   entity_id,
+                   groupArray(tuple(
+                       id AS comment_id,
+                       text,
+                       created_at AS comment_created_at,
+                       last_updated_at AS comment_last_updated_at,
+                       created_by AS comment_created_by,
+                       last_updated_by AS comment_last_updated_by
+                   )) as comments
+              FROM (
+                SELECT
+                    id,
+                    text,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    entity_id,
+                    workspace_id,
+                    project_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+              )
+              GROUP BY workspace_id, project_id, entity_id
             ), feedback_scores_agg AS (
                 SELECT
                     entity_id,
@@ -617,6 +632,54 @@ class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
+            , spans_final AS (
+                SELECT
+                      s.*,
+                      if(end_time IS NOT NULL AND start_time IS NOT NULL
+                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                           NULL) AS duration
+                FROM spans s
+                <if(sort_has_feedback_scores)>
+                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = s.id
+                <endif>
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(feedback_scores_filters)>
+                AND id in (
+                  SELECT
+                      entity_id
+                  FROM (
+                      SELECT *
+                      FROM feedback_scores
+                      WHERE entity_type = 'span'
+                      AND project_id = :project_id
+                      ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                      LIMIT 1 BY entity_id, name
+                  )
+                  GROUP BY entity_id
+                  HAVING <feedback_scores_filters>
+                )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                 AND (
+                    id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
+                        OR
+                    id NOT IN (SELECT entity_id FROM fsc)
+                 )
+                <endif>
+                <if(stream)>
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                <else>
+                ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
+                <endif>
+                LIMIT 1 BY id
+                LIMIT :limit <if(offset)>OFFSET :offset <endif>
+            )
             SELECT
                 s.id as id,
                 s.workspace_id as workspace_id,
@@ -641,65 +704,17 @@ class SpanDAO {
                 s.created_by as created_by,
                 s.last_updated_by as last_updated_by,
                 s.duration as duration,
-                s.feedback_scores_list as feedback_scores_list,
-                s.feedback_scores as feedback_scores,
-                groupArray(tuple(c.*)) AS comments
-            FROM (
-                SELECT
-                      spans.*,
-                      if(end_time IS NOT NULL AND start_time IS NOT NULL
-                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                           NULL) AS duration,
-                      fsa.feedback_scores_list as feedback_scores_list,
-                      fsa.feedback_scores as feedback_scores
-                FROM spans
-                <if(feedback_scores_empty_filters)>
-                    LEFT JOIN fsc ON fsc.entity_id = spans.id
-                <endif>
-                LEFT JOIN feedback_scores_agg AS fsa ON fsa.entity_id = spans.id
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
-                <if(trace_id)> AND trace_id = :trace_id <endif>
-                <if(type)> AND type = :type <endif>
-                <if(filters)> AND <filters> <endif>
-                <if(feedback_scores_filters)>
-                AND id in (
-                  SELECT
-                      entity_id
-                  FROM (
-                      SELECT *
-                      FROM feedback_scores
-                      WHERE entity_type = 'span'
-                      AND project_id = :project_id
-                      ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                      LIMIT 1 BY entity_id, name
-                  )
-                  GROUP BY entity_id
-                  HAVING <feedback_scores_filters>
-                )
-                <endif>
-                <if(feedback_scores_empty_filters)>
-                AND fsc.feedback_scores_count = 0
-                <endif>
-                <if(stream)>
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                <else>
-                ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
-                <endif>
-                LIMIT 1 BY id
-                LIMIT :limit <if(offset)>OFFSET :offset <endif>
-            ) AS s
-            LEFT JOIN comments_final AS c ON s.id = c.entity_id
-            GROUP BY
-              s.*
+                fsa.feedback_scores_list as feedback_scores_list,
+                fsa.feedback_scores as feedback_scores,
+                c.comments AS comments
+            FROM spans_final s
+            LEFT JOIN comments_final c ON s.id = c.entity_id
+            LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id
             <if(stream)>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>
             ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
             <endif>
-            SETTINGS join_algorithm='full_sorting_merge'
             ;
             """;
 
@@ -1451,7 +1466,14 @@ class SpanDAO {
 
         var finalTemplate = template;
         Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
-                .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
+                .ifPresent(sortFields -> {
+
+                    if (sortFields.contains("feedback_scores")) {
+                        finalTemplate.add("sort_has_feedback_scores", true);
+                    }
+
+                    finalTemplate.add("sort_fields", sortFields);
+                });
 
         var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(spanSearchCriteria.sortingFields());
 
