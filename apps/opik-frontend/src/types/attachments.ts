@@ -23,7 +23,6 @@ export interface AttachmentWithType extends Attachment {
 export type ParsedImageData = {
   url: string;
   name: string;
-  isBase64: boolean;
 };
 
 export type AttachmentPreviewData = {
