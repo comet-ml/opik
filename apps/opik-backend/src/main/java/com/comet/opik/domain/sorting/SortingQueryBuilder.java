@@ -18,7 +18,16 @@ public class SortingQueryBuilder {
         }
 
         return sorting.stream()
-                .map(sortingField -> "%s %s".formatted(sortingField.dbField(), getDirection(sortingField)))
+                .map(sortingField -> {
+
+                    // Handle null direction for dynamic fields
+                    if (sortingField.handleNullDirection().isEmpty()) {
+                        return "%s %s".formatted(sortingField.dbField(), getDirection(sortingField));
+                    } else {
+                        return "(%s, %s) %s".formatted(sortingField.dbField(), sortingField.handleNullDirection(),
+                                getDirection(sortingField));
+                    }
+                })
                 .collect(Collectors.joining(", "));
     }
 

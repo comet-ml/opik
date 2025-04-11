@@ -22,10 +22,22 @@ public record SortingField(
 
     public String dbField() {
         if (isDynamic()) {
-            return "%s[:%s]".formatted(field.substring(0, field.indexOf('.')), bindKey());
+            return "%s[:%s]".formatted(fieldNamespace(), bindKey());
         }
 
         return field;
+    }
+
+    private String fieldNamespace() {
+        return field.substring(0, field.indexOf('.'));
+    }
+
+    public String handleNullDirection() {
+        if (isDynamic()) {
+            return "mapContains(%s, :%s)".formatted(fieldNamespace(), bindKey());
+        } else {
+            return "";
+        }
     }
 
     public String bindKey() {
