@@ -90,7 +90,7 @@ const AttachmentsList: React.FC<AttachmentsListProps> = ({
         <div className="flex flex-wrap gap-2">
           {previewDataArray.map((data) => (
             <AttachmentThumbnail
-              key={data.name}
+              key={data.url}
               previewData={data}
               onExpand={setPreviewData}
             />

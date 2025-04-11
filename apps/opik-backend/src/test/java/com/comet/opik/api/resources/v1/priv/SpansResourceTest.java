@@ -4218,15 +4218,21 @@ class SpansResourceTest {
             List<FeedbackScoreBatchItem> scoreForSpan = PodamFactoryUtils.manufacturePojoList(podamFactory,
                     FeedbackScoreBatchItem.class);
 
-            List<FeedbackScoreBatchItem> allScores = spans
-                    .stream()
-                    .flatMap(span -> scoreForSpan.stream()
-                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                                    .id(span.id())
-                                    .projectName(span.projectName())
-                                    .value(podamFactory.manufacturePojo(BigDecimal.class))
-                                    .build()))
-                    .toList();
+            List<FeedbackScoreBatchItem> allScores = new ArrayList<>();
+            for (Span span : spans) {
+                for (FeedbackScoreBatchItem item : scoreForSpan) {
+
+                    if (spans.getLast().equals(span) && scoreForSpan.getFirst().equals(item)) {
+                        continue;
+                    }
+
+                    allScores.add(item.toBuilder()
+                            .id(span.id())
+                            .projectName(span.projectName())
+                            .value(podamFactory.manufacturePojo(BigDecimal.class).abs())
+                            .build());
+                }
+            }
 
             spanResourceClient.feedbackScores(allScores, apiKey, workspaceName);
 
@@ -4234,30 +4240,34 @@ class SpansResourceTest {
                     "feedback_scores.%s".formatted(scoreForSpan.getFirst().name()),
                     direction);
 
-            Comparator<Span> comparing = Comparator.comparing(trace -> trace.feedbackScores()
+            Comparator<Span> comparing = Comparator.comparing((Span span) -> Optional.ofNullable(span.feedbackScores())
+                    .orElse(List.of())
                     .stream()
                     .filter(score -> score.name().equals(scoreForSpan.getFirst().name()))
                     .findFirst()
-                    .orElseThrow()
-                    .value());
+                    .map(FeedbackScore::value)
+                    .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Span::id).reversed());
 
             var expectedSpans = spans.stream()
                     .map(span -> span.toBuilder()
-                            .feedbackScores(allScores
-                                    .stream()
-                                    .filter(score -> score.id().equals(span.id()))
-                                    .map(scores -> FeedbackScore.builder()
-                                            .name(scores.name())
-                                            .value(scores.value())
-                                            .categoryName(scores.categoryName())
-                                            .source(scores.source())
-                                            .reason(scores.reason())
-                                            .build())
-                                    .toList())
+                            .feedbackScores(
+                                    allScores
+                                            .stream()
+                                            .filter(score -> score.id().equals(span.id()))
+                                            .map(scores -> FeedbackScore.builder()
+                                                    .name(scores.name())
+                                                    .value(scores.value())
+                                                    .categoryName(scores.categoryName())
+                                                    .source(scores.source())
+                                                    .reason(scores.reason())
+                                                    .build())
+                                            .toList())
                             .build())
-                    .sorted(direction == Direction.ASC
-                            ? comparing
-                            : comparing.reversed())
+                    .sorted(comparing)
                     .toList();
 
             List<SortingField> sortingFields = List.of(sortingField);
