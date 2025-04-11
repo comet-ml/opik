@@ -10,7 +10,7 @@ from opik import httpx_client
 from opik.file_upload import file_uploader, upload_client, upload_monitor
 from opik.message_processing import messages
 from opik.rest_api import types as rest_api_types
-from unit.file_upload import conftest
+from . import conftest
 
 
 @pytest.fixture
