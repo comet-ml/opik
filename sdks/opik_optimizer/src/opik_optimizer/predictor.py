@@ -21,6 +21,7 @@ class OpenAIPredictor:
         response = self._openai_client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
+            seed=42,  # for reproducibility
             **self.model_kwargs
         )
 
