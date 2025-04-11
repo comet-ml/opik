@@ -7,7 +7,7 @@ import respx
 from opik.file_upload import upload_monitor
 from opik.file_upload.s3_multipart_upload import file_parts_strategy, s3_upload_error
 from opik.file_upload.s3_multipart_upload import s3_file_uploader, s3_httpx_client
-from unit.file_upload import conftest
+from .. import conftest
 
 
 def test_upload_file_parts_to_s3(data_file, respx_mock):
