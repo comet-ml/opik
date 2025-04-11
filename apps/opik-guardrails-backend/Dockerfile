@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-dev \
     tini \
-    && rm -rf /var/lib/apt/lists/*
+    wget \
+    && rm -rf /var/lib/apt/lists/* && apt-get clean
 
 # Set Python aliases
 RUN ln -sf /usr/bin/python3.10 /usr/bin/python && \
@@ -21,7 +22,8 @@ RUN ln -sf /usr/bin/python3.10 /usr/bin/python && \
 WORKDIR /opt/opik-guardrails-backend
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -U pip
+RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
 # Download spaCy model for PII detection
 RUN python -m spacy download en_core_web_lg

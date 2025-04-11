@@ -60,3 +60,10 @@ def validate_combined() -> tuple[flask.Response, int]:
             "validations": validation_results,
         }
     ), 200
+
+
+healthcheck = flask.Blueprint("healthcheck", __name__)
+
+@healthcheck.route("/healthcheck", methods=["GET"])
+def health():
+    return "OK", 200
