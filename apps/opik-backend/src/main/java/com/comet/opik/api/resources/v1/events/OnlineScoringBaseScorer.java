@@ -7,6 +7,9 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.dropwizard.lifecycle.Managed;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import lombok.NonNull;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
@@ -24,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -50,6 +54,10 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription; // Store the subscription reference
 
+    protected static final Meter meter = GlobalOpenTelemetry.getMeter("online-scoring");
+    protected LongHistogram messageProcessingTime;
+    protected LongHistogram messageQueueDelay;
+
     protected OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
@@ -60,6 +68,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
         this.type = type;
         this.redisReadConfig = StreamReadGroupArgs.neverDelivered().count(config.getConsumerBatchSize());
         this.consumerId = "consumer-" + config.getConsumerGroupName() + "-" + UUID.randomUUID();
+        initializeCounters(getMetricsBaseName());
     }
 
     @Override
@@ -162,9 +171,21 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
             RStreamReactive<String, M> stream, Map.Entry<StreamMessageId, Map<String, M>> entry) {
         var messageId = entry.getKey();
         try {
+            // Record queue delay
+            var messageTimestamp = extractTimeFromMessageId(messageId);
+            messageTimestamp.ifPresent(msgTime -> {
+                var queueDelay = System.currentTimeMillis() - msgTime;
+                messageQueueDelay.record(queueDelay);
+            });
+
             var message = entry.getValue().get(OnlineScoringConfig.PAYLOAD_FIELD);
             log.info("Message received with id '{}'", messageId);
+
+            long startProcessingTime = System.currentTimeMillis();
             score(message);
+            long processingTime = System.currentTimeMillis() - startProcessingTime;
+            messageProcessingTime.record(processingTime);
+
             // Remove messages from Redis pending list
             stream.ack(config.getConsumerGroupName(), messageId).subscribe();
             stream.remove(messageId).subscribe();
@@ -190,5 +211,41 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
         return scores.stream()
                 .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name,
                         Collectors.mapping(FeedbackScoreBatchItem::value, Collectors.toList())));
+    }
+
+    private void initializeCounters(String baseName) {
+        messageProcessingTime = meter
+                .histogramBuilder(baseName + "_processing_time")
+                .setDescription("Time taken to process a message")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+
+        messageQueueDelay = meter
+                .histogramBuilder(baseName + "_queue_delay")
+                .setDescription("Delay between message insertion in Redis and processing start")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+    }
+
+    abstract String getMetricsBaseName();
+
+    /**
+     * Redis Streams messageId are in the format <millisecondsTime>-<sequenceNumber>
+     * @param messageId a Redis Stream messageId
+     * @return a timestamp extracted from the messageId
+     */
+    private Optional<Long> extractTimeFromMessageId(StreamMessageId messageId) {
+        String idString = messageId.toString();
+        String[] parts = idString.split("-");
+        if (parts.length > 0) {
+            try {
+                return Optional.of(Long.parseLong(parts[0]));
+            } catch (NumberFormatException e) {
+                log.warn("Failed to parse timestamp from message ID: {}", idString, e);
+            }
+        }
+        return Optional.empty();
     }
 }

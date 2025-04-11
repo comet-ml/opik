@@ -42,6 +42,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
     }
 
+    @Override
+    String getMetricsBaseName() {
+        return "llm_as_judge";
+    }
+
     /**
      * Use AI Proxy to score the trace and store it as a FeedbackScore.
      * If the evaluator has multiple score definitions, it calls the LLM once per score definition.
