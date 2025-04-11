@@ -47,6 +47,11 @@ public class OnlineScoringUserDefinedMetricPythonScorer
     }
 
     @Override
+    String getMetricsBaseName() {
+        return "python_user_defined_metric";
+    }
+
+    @Override
     public void start() {
         if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
             super.start();
