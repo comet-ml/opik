@@ -54,7 +54,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription; // Store the subscription reference
 
-    protected static final Meter meter = GlobalOpenTelemetry.getMeter("online-scoring");
+    protected static final Meter METER = GlobalOpenTelemetry.getMeter("online-scoring");
     protected LongHistogram messageProcessingTime;
     protected LongHistogram messageQueueDelay;
 
@@ -151,19 +151,16 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     }
 
     private void setupStreamListener(RStreamReactive<String, M> stream) {
-        // Listen for messages
         this.streamSubscription = Flux.interval(config.getPoolingInterval().toJavaDuration())
-                // The next interval is dropped if slow consumers
                 .onBackpressureDrop()
                 .flatMap(i -> stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig))
-                // Skipping the interval and reporting an error if reading from Redis fails
                 .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
                 .flatMapIterable(Map::entrySet)
-                .publishOn(Schedulers.boundedElastic())
-                .doOnNext(entry -> processReceivedMessages(stream, entry))
-                // The processReceivedMessages method is wrapped in a try-catch, but handling the error just in case
-                // The error is logged and the interval is skipped
-                .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
+                .flatMap(entry -> Mono.fromRunnable(() -> processReceivedMessages(stream, entry))
+                        .subscribeOn(Schedulers.boundedElastic()),
+                        10) // Concurrency hint
+                .onErrorContinue(
+                        (throwable, object) -> log.error("Error processing message from Redis stream", throwable))
                 .subscribe();
     }
 
@@ -214,15 +211,15 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     }
 
     private void initializeCounters(String baseName) {
-        messageProcessingTime = meter
-                .histogramBuilder(baseName + "_processing_time")
+        messageProcessingTime = METER
+                .histogramBuilder("online_scoring_" + baseName + "_processing_time")
                 .setDescription("Time taken to process a message")
                 .setUnit("ms")
                 .ofLongs()
                 .build();
 
-        messageQueueDelay = meter
-                .histogramBuilder(baseName + "_queue_delay")
+        messageQueueDelay = METER
+                .histogramBuilder("online_scoring_" + baseName + "_queue_delay")
                 .setDescription("Delay between message insertion in Redis and processing start")
                 .setUnit("ms")
                 .ofLongs()
