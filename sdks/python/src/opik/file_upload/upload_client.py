@@ -5,9 +5,12 @@ import httpx
 
 from ..rest_api import client as rest_api_client
 from ..rest_api import types as rest_api_types
+from ..rest_api.core import api_error as rest_api_error
 from ..rest_client_configurator import retry_decorator
 from . import upload_monitor
 from . import file_upload_options
+
+LOCAL_UPLOAD_MAGIC_ID = "BEMinIO"
 
 
 @dataclasses.dataclass
@@ -17,7 +20,7 @@ class MultipartUploadMetadata:
 
     def should_use_s3_uploader(self) -> bool:
         """Allows to check if upload should go directly to S3 or use local backend endpoint."""
-        return self.upload_id is not None and self.upload_id != "BEMinIO"
+        return self.upload_id is not None and self.upload_id != LOCAL_UPLOAD_MAGIC_ID
 
 
 class RestFileUploadClient:
@@ -90,6 +93,14 @@ class RestFileUploadClient:
             content=_data_generator(file_path, chunk_size=chunk_size, monitor=monitor),
         )
         response.raise_for_status()
+        if response.status_code >= 400:
+            # reset monitor to avoid multiplication of sent bytes count on retries
+            if monitor is not None:
+                monitor.reset()
+            # raise rest_api_error.ApiError to trigger retry by our REST retry logic (see: retry_decorator.py)
+            raise rest_api_error.ApiError(
+                status_code=response.status_code, body=response.content
+            )
 
 
 def _data_generator(
