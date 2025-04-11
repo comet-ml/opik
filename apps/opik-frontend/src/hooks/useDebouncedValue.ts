@@ -32,12 +32,17 @@ export const useDebouncedValue = ({
     [debouncedCallback, onChange],
   );
 
-  const onReset = useCallback(() => {
+  const resetValue = useCallback(() => {
     setInputValue("");
+  }, []);
+
+  const onReset = useCallback(() => {
+    resetValue();
     debouncedCallback("");
-  }, [debouncedCallback]);
+  }, [debouncedCallback, resetValue]);
 
   return {
+    resetValue,
     value: inputValue,
     onChange: handleInputChange,
     onReset,
