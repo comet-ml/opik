@@ -92,7 +92,6 @@ class RestFileUploadClient:
             url=upload_url,
             content=_data_generator(file_path, chunk_size=chunk_size, monitor=monitor),
         )
-        response.raise_for_status()
         if response.status_code >= 400:
             # reset monitor to avoid multiplication of sent bytes count on retries
             if monitor is not None:
