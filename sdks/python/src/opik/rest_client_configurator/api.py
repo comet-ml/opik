@@ -8,6 +8,7 @@ def configure(rest_client: rest_api.OpikApi) -> None:
 
 def _configure_retries(rest_client: rest_api.OpikApi) -> None:
     domain_client_names = [
+        "attachments",
         "datasets",
         "experiments",
         "traces",
