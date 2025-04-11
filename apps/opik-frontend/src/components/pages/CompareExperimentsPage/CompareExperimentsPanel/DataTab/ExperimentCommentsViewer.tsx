@@ -62,11 +62,9 @@ const ExperimentCommentsViewer: React.FC<ExperimentCommentsViewerProps> = ({
         onSubmit={(data) => onSubmit(data.commentText)}
         className="px-3"
         actions={
-          <>
-            <TooltipWrapper content="Submit" hotkeys={["⌘", "⏎"]}>
-              <UserCommentForm.SubmitButton />
-            </TooltipWrapper>
-          </>
+          <TooltipWrapper content="Submit" hotkeys={["⌘", "⏎"]}>
+            <UserCommentForm.SubmitButton />
+          </TooltipWrapper>
         }
       >
         <UserCommentForm.TextareaField placeholder="Add a comment..." />

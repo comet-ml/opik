@@ -6,6 +6,7 @@ import AddFeedbackScorePopover from "@/components/shared/ExperimentFeedbackScore
 import ExpandableSection from "../ExpandableSection/ExpandableSection";
 import { PenLine } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { sortBy } from "lodash";
 
 type ExperimentFeedbackScoresViewerProps = {
   feedbackScores: TraceFeedbackScore[];
@@ -44,7 +45,7 @@ const ExperimentFeedbackScoresViewer: React.FunctionComponent<
         {feedbackScores.length !== 0 && (
           <Separator orientation="vertical" className="h-4" />
         )}
-        {feedbackScores.sort().map((feedbackScore) => (
+        {sortBy(feedbackScores, "name").map((feedbackScore) => (
           <FeedbackScoreTag
             key={feedbackScore.name + feedbackScore.value}
             label={feedbackScore.name}
