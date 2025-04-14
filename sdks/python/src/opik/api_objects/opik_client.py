@@ -970,9 +970,16 @@ class Opik:
             str: URL
         """
 
+        dereferenced_workspace = self._workspace
+        if dereferenced_workspace == config.OPIK_WORKSPACE_DEFAULT_NAME:
+            dereferenced_workspace = (
+                self._rest_client.check.get_workspace_name().workspace_name
+            )
+
         project_name = project_name or self._project_name
+
         return url_helpers.get_project_url_by_workspace(
-            workspace=self._workspace, project_name=project_name
+            workspace=dereferenced_workspace, project_name=project_name
         )
 
     def create_prompt(
