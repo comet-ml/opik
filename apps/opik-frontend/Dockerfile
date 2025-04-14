@@ -3,9 +3,13 @@ FROM node:20.19.0-alpine3.20 AS builder
 
 WORKDIR /opt/frontend
 
+
+
 COPY package*.json ./
 COPY patches ./patches
 RUN npm install
+
+
 
 # Copy and build the application
 COPY . .
@@ -37,9 +41,18 @@ LABEL build.mode="${BUILD_MODE}"
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
+
+
 RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
 
+# Ensure nginx user owns necessary directories before switching user
+RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
+    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /usr/share/nginx/html /var/run /run
+
 EXPOSE 5173
+
+# Switch to the non-root user
+USER nginx:nginx
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
