@@ -1,6 +1,8 @@
 name: SDKs Generate OpenAPI spec and Fern code
 
 on:
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
   workflow_dispatch: # Allows manual trigger
 
 jobs:
@@ -10,3 +12,43 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Install Fern
+        run: npm install -g fern-api
+
+      - name: Set branch name
+        run: |
+          echo "BRANCH_NAME=update-openapi-spec-and-fern-code-$(date +%Y-%m-%d)" >> $GITHUB_ENV
+
+      - name: Create branch
+        uses: JosiahSiegel/remote-branch-action@v1.2.0
+        with:
+          branch: ${{ env.BRANCH_NAME }}
+
+      - name: Run Generate OpenAPI spec and Fern code
+        env:
+          FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
+        run: |
+          set -e
+          ./scripts/generate_openapi.sh
+
+      - name: Create git tag
+        run: |
+          set -ex
+          git add --local user.email "github-actions@comet.com"
+          git config --local user.name "github-actions"
+          git add sdks/python/src/opik/rest_api/
+          git add sdks/typescript/src/opik/rest_api/
+          git add sdks/code_generation/fern/openapi/openapi.yaml
+          git add apps/opik-documentation/documentation/fern/openapi/opik.yaml
+          git commit -m "Update OpenAPI spec and Fern code"
+          git push origin ${{env.BRANCH_NAME}}                    
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ env.BRANCH_NAME }}
+          title: "Update OpenAPI spec and Fern code"
+          body: "Automated update of Open API spec and Fern Code after running `./scripts/generate_openapi.sh`"
+          base: main
