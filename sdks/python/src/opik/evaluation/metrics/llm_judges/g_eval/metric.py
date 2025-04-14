@@ -27,6 +27,7 @@ class GEval(base_metric.BaseMetric):
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
         name: str = "g_eval_metric",
         track: bool = True,
+        use_logprobs: bool = True,
     ):
         """
         A metric that evaluates an LLM output based on chain-of-thought built with the evaluation criteria provided
@@ -41,11 +42,13 @@ class GEval(base_metric.BaseMetric):
             model: The LLM to use for evaluation. Can be a string (model name) or an `opik.evaluation.models.OpikBaseModel` subclass instance.
             name: The name of the metric.
             track: Whether to track the metric. Defaults to True.
+            use_logprobs: Whether to use logprobs. Defaults to True
         """
         super().__init__(
             name=name,
             track=track,
         )
+        self.use_logprobs = use_logprobs
         self._init_model(model)
 
         self.task_introduction = task_introduction
@@ -65,9 +68,10 @@ class GEval(base_metric.BaseMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
+            supported_arguments_kwargs = {"must_support_arguments": ["logprobs", "top_logprobs"]} if self.use_logprobs else {}
             self._model = models_factory.get(
                 model_name=model,
-                must_support_arguments=["logprobs", "top_logprobs"],
+                **supported_arguments_kwargs
             )
 
     def score(
@@ -100,11 +104,11 @@ class GEval(base_metric.BaseMetric):
             },
         ]
 
+        supported_model_kwargs = { "logprobs" : True , "top_logprobs": 20, } if self.use_logprobs else {}
         model_output = self._model.generate_provider_response(
             messages=request,
-            logprobs=True,
-            top_logprobs=20,
             response_format=GEvalScoreFormat,
+            **supported_model_kwargs
         )
 
         return self._parse_model_output(model_output)
@@ -158,51 +162,54 @@ class GEval(base_metric.BaseMetric):
         """
         try:
             # Compute score using top logprobs
-            score_token_position = 3
-            log_probs_content = content.choices[0].model_extra["logprobs"]["content"][
-                score_token_position
-            ]
-
-            top_score_logprobs = log_probs_content["top_logprobs"]
-            log_probs_token = log_probs_content["token"]
-
-            linear_probs_sum = 0.0
-            weighted_score_sum = 0.0
-
-            for token_info in top_score_logprobs:
-                # litellm in v1.60.2 (or earlier) started provide logprobes
-                # as pydantic model, not just dict
-                # we will convert model to dict to provide backward compatability
-                if not isinstance(token_info, dict):
-                    token_info = token_info.model_dump()
-
-                # if not a number
-                if not token_info["token"].isdecimal():
-                    continue
-
-                score = int(token_info["token"])
-
-                # if score value not in scale
-                if not 0 <= score <= 10:
-                    continue
-
-                log_prob = token_info["logprob"]
-                linear_prob = math.exp(log_prob)
-
-                linear_probs_sum += linear_prob
-                weighted_score_sum += linear_prob * score
-
-            if linear_probs_sum != 0.0:
-                final_score: float = weighted_score_sum / linear_probs_sum / 10
+            if not self.use_logprobs:
+                final_score = json.loads(content.choices[0].message.content)["score"]
             else:
-                # Handle cases where we can't find any matching tokens in the top_log_probs
-                if not log_probs_token.isdecimal():
-                    raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)
+                score_token_position = 3
+                log_probs_content = content.choices[0].model_extra["logprobs"]["content"][
+                    score_token_position
+                ]
 
-                final_score = int(log_probs_token) / 10
+                top_score_logprobs = log_probs_content["top_logprobs"]
+                log_probs_token = log_probs_content["token"]
 
-            if not (0.0 <= final_score <= 1.0):
-                raise ValueError
+                linear_probs_sum = 0.0
+                weighted_score_sum = 0.0
+
+                for token_info in top_score_logprobs:
+                    # litellm in v1.60.2 (or earlier) started provide logprobes
+                    # as pydantic model, not just dict
+                    # we will convert model to dict to provide backward compatability
+                    if not isinstance(token_info, dict):
+                        token_info = token_info.model_dump()
+
+                    # if not a number
+                    if not token_info["token"].isdecimal():
+                        continue
+
+                    score = int(token_info["token"])
+
+                    # if score value not in scale
+                    if not 0 <= score <= 10:
+                        continue
+
+                    log_prob = token_info["logprob"]
+                    linear_prob = math.exp(log_prob)
+
+                    linear_probs_sum += linear_prob
+                    weighted_score_sum += linear_prob * score
+
+                if linear_probs_sum != 0.0:
+                    final_score: float = weighted_score_sum / linear_probs_sum / 10
+                else:
+                    # Handle cases where we can't find any matching tokens in the top_log_probs
+                    if not log_probs_token.isdecimal():
+                        raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)
+
+                    final_score = int(log_probs_token) / 10
+
+                if not (0.0 <= final_score <= 1.0):
+                    raise ValueError
 
             # Get the reason
             reason = json.loads(content.choices[0].message.content)["reason"]
