@@ -58,6 +58,7 @@ export enum SPAN_TYPE {
   llm = "llm",
   general = "general",
   tool = "tool",
+  guardrail = "guardrail",
 }
 
 export interface Span extends BaseTraceData {
