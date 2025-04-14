@@ -7,7 +7,12 @@ import respx
 import uuid6
 
 from opik import httpx_client
-from opik.file_upload import file_uploader, upload_client, upload_monitor
+from opik.file_upload import (
+    file_uploader,
+    file_upload_options,
+    upload_client,
+    upload_monitor,
+)
 from opik.message_processing import messages
 from opik.rest_api import types as rest_api_types
 from . import conftest
@@ -24,7 +29,8 @@ def attachment(data_file):
         project_name="project_name",
         base_url_path="base_url_path",
     )
-    yield attachment
+    upload_options = file_upload_options.upload_options_from_attachment(attachment)
+    yield upload_options
 
 
 @pytest.fixture
@@ -64,7 +70,7 @@ def test_upload_attachment__s3(attachment, rest_client_s3, respx_mock):
 
     monitor = upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
-        attachment=attachment,
+        upload_options=attachment,
         rest_client=rest_client_s3,
         httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,
@@ -83,7 +89,7 @@ def test_upload_attachment__s3__no_monitor(attachment, rest_client_s3, respx_moc
     respx_mock.put(rx_url).respond(200, headers={"ETag": "e-tag"})
 
     file_uploader.upload_attachment(
-        attachment=attachment,
+        upload_options=attachment,
         rest_client=rest_client_s3,
         httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
     )
@@ -100,7 +106,7 @@ def test_upload_attachment__local(attachment, rest_client_local, respx_mock):
 
     monitor = upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
-        attachment=attachment,
+        upload_options=attachment,
         rest_client=rest_client_local,
         httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,
@@ -119,7 +125,7 @@ def test_upload_attachment__local__no_monitor(
     respx_mock.put(rx_url).respond(200)
 
     file_uploader.upload_attachment(
-        attachment=attachment,
+        upload_options=attachment,
         rest_client=rest_client_local,
         httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
     )
@@ -141,7 +147,7 @@ def test_upload_attachment__local__retry_500(attachment, rest_client_local, resp
 
     monitor = upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
-        attachment=attachment,
+        upload_options=attachment,
         rest_client=rest_client_local,
         httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,

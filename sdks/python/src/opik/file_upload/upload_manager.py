@@ -3,6 +3,7 @@ from concurrent.futures import Future, CancelledError
 import httpx
 
 from . import upload_monitor
+from ..rest_api import client as rest_api_client
 
 
 class UploadResult:
@@ -27,5 +28,7 @@ class UploadResult:
 class FileUploadManager:
     """Manages file uploads in parallel."""
 
-    def __init__(self, httpx_client: httpx.Client) -> None:
+    def __init__(
+        self, rest_client: rest_api_client.OpikApi, httpx_client: httpx.Client
+    ) -> None:
         self._httpx_client = httpx_client
