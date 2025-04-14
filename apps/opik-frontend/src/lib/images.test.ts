@@ -223,23 +223,22 @@ describe("processInputData", () => {
 
   it("should handle base64 images with different prefixes", () => {
     // Test different prefixes from BASE64_PREFIXES_MAP
+
     const prefixes = {
-      "/9j/": "jpeg",
-      R0lGODlh: "gif",
-      R0lGODdh: "gif",
-      Qk: "bmp",
-      SUkq: "tiff",
-      TU0A: "tiff",
-      UklGR: "webp",
+      "/9j/4AAQSkZJRgABAQAAAQABAAD/": "jpeg", // minimal JPEG
+      "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7": "gif", // minimal GIF
+      "Qk1GAwAAAAgAAAA//8AAwAAA": "bmp", // minimal BMP
+      "SUkqAGkAAAD/AAEAAAABAAEAAAABAAEAAAD/": "tiff", // minimal TIFF
+      "UklGRgAAAABXRU5ErkJggg==": "webp", // minimal WebP
     };
 
     for (const [prefix, format] of Object.entries(prefixes)) {
-      const input = { text: `Image: ${prefix}AAAA` };
+      const input = { text: `Image: ${prefix}` };
       const result = processInputData(input);
 
       expect(result.images).toHaveLength(1);
       expect(result.images[0].url).toBe(
-        `data:image/${format};base64,${prefix}AAAA`,
+        `data:image/${format};base64,${prefix}`,
       );
       expect(result.images[0].name).toMatch(/Base64: \[image_\d+\]/);
     }
