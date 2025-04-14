@@ -17,4 +17,6 @@
 
 /deployment/ @comet-ml/comet-devops @comet-ml/deployment-team @comet-ml/comet-opik-devs
 
+/sdks/opik_optimizer @vincentkoc @dsblank @comet-ml/comet-opik-devs
+
 /tests_end_to_end/ @comet-ml/comet-qa @comet-ml/comet-opik-devs
