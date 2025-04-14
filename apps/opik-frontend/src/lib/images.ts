@@ -50,7 +50,7 @@ const IMAGE_URL_EXTENSIONS = [
   "webp",
 ] as const;
 
-const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
+const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]{100,}={0,2}";
 const DATA_IMAGE_REGEX = new RegExp(
   `data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}`,
   "g",
