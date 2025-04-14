@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Optional
 
 import httpx
@@ -8,7 +7,6 @@ from . import file_upload_options, upload_client, upload_monitor
 from .s3_multipart_upload import file_parts_strategy, s3_file_uploader, s3_httpx_client
 from ..rest_api import client as rest_api_client
 from ..rest_api import types as rest_api_types
-from ..message_processing import messages
 
 LOGGER = logging.getLogger(__name__)
 
@@ -16,12 +14,11 @@ UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 
 
 def upload_attachment(
-    attachment: messages.CreateAttachmentMessage,
+    upload_options: file_upload_options.FileUploadOptions,
     rest_client: rest_api_client.OpikApi,
     httpx_client: httpx.Client,
     monitor: Optional[upload_monitor.FileUploadMonitor] = None,
 ) -> None:
-    upload_options = _upload_options_from_attachment(attachment)
     file_parts = file_parts_strategy.FilePartsStrategy(
         file_path=upload_options.file_path,
         file_size=upload_options.file_size,
@@ -30,7 +27,7 @@ def upload_attachment(
     parts_number = file_parts.calculate()
 
     LOGGER.debug(
-        f"Initiating multipart upload for {parts_number} parts of: '{attachment.file_name}' file"
+        f"Initiating multipart upload for {parts_number} parts of: '{upload_options.file_name}' file"
     )
 
     upload_rest_client = upload_client.RestFileUploadClient(
@@ -39,13 +36,13 @@ def upload_attachment(
     upload_metadata = upload_rest_client.start_upload(
         upload_options=upload_options,
         num_of_file_parts=parts_number,
-        base_url_path=attachment.base_url_path,
+        base_url_path=upload_options.base_url_path,
     )
     assert len(upload_metadata.urls) > 0, "At least one URL must be returned by backend"
 
     if upload_metadata.should_use_s3_uploader():
         LOGGER.debug(
-            f"Starting attachment upload `{attachment.file_name}` to S3 directly."
+            f"Starting attachment upload `{upload_options.file_name}` to S3 directly."
         )
         upload_to_s3_directly(
             upload_rest_client=upload_rest_client,
@@ -55,10 +52,12 @@ def upload_attachment(
             monitor=monitor,
         )
         LOGGER.debug(
-            f"Attachment '{attachment.file_name}' [{upload_options.file_size} bytes] is uploaded to S3."
+            f"Attachment '{upload_options.file_name}' [{upload_options.file_size} bytes] is uploaded to S3."
         )
     else:
-        LOGGER.debug(f"Starting attachment upload `{attachment.file_name}` to backend.")
+        LOGGER.debug(
+            f"Starting attachment upload `{upload_options.file_name}` to backend."
+        )
         upload_rest_client.upload_file_local(
             upload_url=upload_metadata.urls[0],
             file_path=upload_options.file_path,
@@ -66,7 +65,7 @@ def upload_attachment(
             monitor=monitor,
         )
         LOGGER.debug(
-            f"Attachment '{attachment.file_name}' [{upload_options.file_size} bytes] is uploaded to backend."
+            f"Attachment '{upload_options.file_name}' [{upload_options.file_size} bytes] is uploaded to backend."
         )
 
 
@@ -99,20 +98,4 @@ def upload_to_s3_directly(
         upload_options=upload_options,
         upload_metadata=upload_metadata,
         file_parts=sent_file_parts,
-    )
-
-
-def _upload_options_from_attachment(
-    attachment: messages.CreateAttachmentMessage,
-) -> file_upload_options.FileUploadOptions:
-    file_size = os.path.getsize(attachment.file_path)
-
-    return file_upload_options.FileUploadOptions(
-        file_path=attachment.file_path,
-        file_name=attachment.file_name,
-        file_size=file_size,
-        mime_type=attachment.mime_type,
-        entity_type=attachment.entity_type,
-        entity_id=attachment.entity_id,
-        project_name=attachment.project_name,
     )
