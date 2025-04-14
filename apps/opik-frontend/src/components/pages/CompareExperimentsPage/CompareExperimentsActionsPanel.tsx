@@ -1,10 +1,9 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Split } from "lucide-react";
-import last from "lodash/last";
-import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
 import uniq from "lodash/uniq";
+import first from "lodash/first";
 
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -24,28 +23,42 @@ import {
 export const EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX = "feedback_scores";
 export const EXPERIMENT_ITEM_OUTPUT_PREFIX = "output";
 
-const processExperimentItems = (
+const EVALUATION_EXPORT_COLUMNS = [
+  EXPERIMENT_ITEM_OUTPUT_PREFIX,
+  COLUMN_COMMENTS_ID,
+];
+const FLAT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
+
+const processNestedExportColumn = (
   item: ExperimentItem,
-  key: string,
-  keys: string[],
-  keyPrefix: string,
+  column: string,
   accumulator: Record<string, unknown>,
   prefix: string = "",
 ) => {
-  if (keyPrefix === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
-    const scoreObject = item.feedback_scores?.find((f) => f.name === key);
-    accumulator[`${prefix}feedback_scores.${key}`] = get(
-      scoreObject,
-      "value",
+  const keys = column.split(".");
+  const prefixColumnKey = first(keys) as string;
+
+  if (prefixColumnKey === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
+    const scoreName = column.replace(`${prefixColumnKey}.`, "");
+    const scoreObject = item.feedback_scores?.find((f) => f.name === scoreName);
+    accumulator[`${prefix}${column}`] = get(scoreObject, "value", "-");
+
+    if (scoreObject?.reason) {
+      accumulator[`${prefix}${column}_reason`] = scoreObject.reason;
+    }
+
+    return;
+  }
+
+  if (EVALUATION_EXPORT_COLUMNS.includes(prefixColumnKey)) {
+    const evaluationName = column.replace(`${prefixColumnKey}.`, "");
+    accumulator[`${prefix}evaluation_task.${evaluationName}`] = get(
+      item ?? {},
+      keys,
       "-",
     );
 
-    if (scoreObject && scoreObject.reason) {
-      accumulator[`${prefix}feedback_scores.${key}_reason`] =
-        scoreObject.reason;
-    }
-  } else {
-    accumulator[`${prefix}dataset.${key}`] = get(item ?? {}, keys, "-");
+    return;
   }
 };
 
@@ -82,38 +95,32 @@ const CompareExperimentsActionsPanel: React.FC<
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>(
         (accumulator, column) => {
-          const keys = column.split(".");
-          const key = last(keys) as string;
-          const keyPrefix = first(keys) as string;
+          if (FLAT_COLUMNS.includes(column)) {
+            accumulator[column] = get(row, column, "");
 
-          if (
-            keyPrefix === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX ||
-            keyPrefix === EXPERIMENT_ITEM_OUTPUT_PREFIX ||
-            keyPrefix === COLUMN_COMMENTS_ID
-          ) {
-            if (isCompare) {
-              (row.experiment_items ?? []).forEach((item) => {
-                const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
-                processExperimentItems(
-                  item,
-                  key,
-                  keys,
-                  keyPrefix,
-                  accumulator,
-                  prefix,
-                );
-              });
-            } else {
-              const item = row.experiment_items?.[0];
-              processExperimentItems(item, key, keys, keyPrefix, accumulator);
-            }
-          } else if (
-            keyPrefix === COLUMN_CREATED_AT_ID ||
-            keyPrefix === COLUMN_ID_ID
-          ) {
-            accumulator[key] = get(row, keys, "");
+            return accumulator;
+          }
+
+          const prefix = first(column.split(".")) as string;
+          const isDatasetColumn = !(
+            EVALUATION_EXPORT_COLUMNS.includes(prefix) ||
+            prefix === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX
+          );
+
+          if (isDatasetColumn) {
+            accumulator[`dataset.${column}`] = get(row.data, column, "-");
+
+            return accumulator;
+          }
+
+          if (isCompare) {
+            (row.experiment_items ?? []).forEach((item) => {
+              const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
+              processNestedExportColumn(item, column, accumulator, prefix);
+            });
           } else {
-            accumulator[`evaluation_task.${key}`] = get(row.data, keys, "");
+            const item = row.experiment_items?.[0];
+            processNestedExportColumn(item, column, accumulator);
           }
 
           return accumulator;

@@ -40,7 +40,7 @@ def _assert_usage_validity(usage: Dict[str, Any]):
         ),
         (
             langchain_google_vertexai.ChatVertexAI,
-            "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
         ),
     ],
 )
@@ -51,7 +51,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
 ):
     llm = llm_model(
         max_tokens=10,
-        model_name="gemini-1.5-flash",
+        model_name="gemini-2.0-flash",
         name="custom-google-vertexai-llm-name",
     )
 
@@ -66,6 +66,25 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
     synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
     callback.flush()
+
+    if llm_model == langchain_google_vertexai.VertexAI:
+        expected_llm_span_input = {"prompts": [expected_input_prompt]}
+    else:
+        expected_llm_span_input = {
+            "messages": [
+                [
+                    {
+                        "content": expected_input_prompt,
+                        "additional_kwargs": {},
+                        "response_metadata": {},
+                        "type": "human",
+                        "name": None,
+                        "id": None,
+                        "example": False,
+                    }
+                ]
+            ]
+        }
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -110,7 +129,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                         id=ANY_BUT_NONE,
                         type="llm",
                         name="custom-google-vertexai-llm-name",
-                        input={"prompts": [expected_input_prompt]},
+                        input=expected_llm_span_input,
                         output=ANY_BUT_NONE,
                         metadata={
                             "batch_size": ANY_BUT_NONE,
@@ -125,7 +144,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                         usage=ANY_DICT,
                         spans=[],
                         provider="google_vertexai",
-                        model=ANY_STRING(startswith="gemini-1.5-flash"),
+                        model=ANY_STRING(startswith="gemini-2.0-flash"),
                     ),
                 ],
             )

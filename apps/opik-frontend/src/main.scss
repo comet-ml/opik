@@ -335,3 +335,23 @@
   --json-boolean: white;
   --json-null: white;
 }
+
+div.cm-theme div.cm-search.cm-panel {
+  @apply px-2 py-1;
+
+  input {
+    @apply h-8 px-3 pb-1.5 pt-1 rounded-md bg-background text-sm placeholder:text-light-slate focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray;
+  }
+
+  .cm-button {
+    @apply leading-none text-foreground h-8 px-3 comet-body-s border border-border bg-background hover:text-foreground active:bg-primary-100 active:text-foreground disabled:border-muted-disabled disabled:text-muted-gray disabled:opacity-100 whitespace-nowrap rounded-md transition-colors focus-visible:outline-none disabled:pointer-events-none bg-none disabled:bg-muted-gray;
+  }
+
+  label {
+    @apply hidden;
+  }
+
+  button[name="close"] {
+    @apply top-0 bottom-px my-auto leading-none size-6 opacity-50 hover:opacity-100;
+  }
+}

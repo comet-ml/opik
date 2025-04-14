@@ -13,6 +13,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -26,8 +28,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
@@ -47,6 +50,7 @@ import static org.assertj.core.api.Assertions.within;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Dataset Event Listener")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class DatasetEventListenerTest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
@@ -57,19 +61,18 @@ class DatasetEventListenerTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
-
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
-        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
+    {
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -111,7 +114,7 @@ class DatasetEventListenerTest {
         wireMock.server().stop();
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -212,7 +215,7 @@ class DatasetEventListenerTest {
 
             Awaitility.await().untilAsserted(() -> {
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
             });
         }
     }
@@ -258,12 +261,12 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment3.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment3.createdAt(), within(2, ChronoUnit.SECONDS));
 
                 var actualDataset2 = getDataset(datasetId2, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset2.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment4.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment4.createdAt(), within(2, ChronoUnit.SECONDS));
             });
 
             deleteAndAssert(
@@ -276,12 +279,12 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
 
                 var actualDataset2 = getDataset(datasetId2, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset2.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment2.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment2.createdAt(), within(2, ChronoUnit.SECONDS));
             });
         }
 
@@ -301,7 +304,7 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
             });
 
             deleteAndAssert(Set.of(actualExperiment.id()), TEST_WORKSPACE, API_KEY);

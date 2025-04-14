@@ -50,6 +50,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.runner.RunWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -95,14 +96,16 @@ class OpenTelemetryResourceTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
+        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -325,6 +328,10 @@ class OpenTelemetryResourceTest {
 
         @Test
         void testRuleMapping() {
+            String randomKeyArray = UUID.randomUUID().toString();
+            String randomKeyJson = UUID.randomUUID().toString();
+            String randomKeyInt = UUID.randomUUID().toString();
+
             var attributes = List.of(
                     KeyValue.newBuilder().setKey("model_name").setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
                             .build(),
@@ -343,9 +350,14 @@ class OpenTelemetryResourceTest {
                     KeyValue.newBuilder().setKey("smolagents.node")
                             .setValue(AnyValue.newBuilder().setStringValue("{\"key\": \"value\"}")).build(),
                     KeyValue.newBuilder().setKey("smolagents.array")
-                            .setValue(AnyValue.newBuilder().setStringValue("[\"key\", \"value\"]")).build()
+                            .setValue(AnyValue.newBuilder().setStringValue("[\"key\", \"value\"]")).build(),
 
-            );
+                    KeyValue.newBuilder().setKey(randomKeyArray)
+                            .setValue(AnyValue.newBuilder().setStringValue("[\"key\", \"value\"]")).build(),
+                    KeyValue.newBuilder().setKey(randomKeyJson)
+                            .setValue(AnyValue.newBuilder().setStringValue("{\"key\": \"value\"}")).build(),
+                    KeyValue.newBuilder().setKey(randomKeyInt)
+                            .setValue(AnyValue.newBuilder().setIntValue(3)).build());
 
             var spanBuilder = com.comet.opik.api.Span.builder()
                     .id(UUID.randomUUID())
@@ -357,13 +369,19 @@ class OpenTelemetryResourceTest {
 
             var span = spanBuilder.build();
 
+            // checks key-values we know there are not rule associated with
+            assertThat(span.input().get(randomKeyArray)).size().isEqualTo(2);
+            assertThat(span.input().get(randomKeyJson).get("key").asText()).isEqualTo("value");
+            assertThat(span.input().get(randomKeyInt).asInt()).isEqualTo(3);
+
+            // checks key-values with rules
             assertThat(span.model()).isEqualTo("gpt-4o");
             assertThat(span.type()).isEqualTo(SpanType.llm);
 
             assertThat(span.metadata().get("code.line").asInt()).isEqualTo(11);
             assertThat(span.metadata().get("smolagents.single").asText()).isEqualTo("value");
             assertThat(span.metadata().get("smolagents.node").get("key").asText()).isEqualTo("value");
-            assertThat(span.metadata().get("smolagents.array").isArray()).isEqualTo(Boolean.TRUE);
+            assertThat(span.metadata().get("smolagents.array").isArray()).isTrue();
 
             assertThat(span.input().get("input").get("key").asText()).isEqualTo("value");
             assertThat(span.input().get("tools").isArray()).isEqualTo(Boolean.TRUE);

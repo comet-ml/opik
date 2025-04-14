@@ -1,5 +1,6 @@
 import { UsageData } from "@/types/shared";
 import { CommentItems } from "./comment";
+import { GuardrailValidation } from "./guardrails";
 
 export enum USER_FEEDBACK_SCORE {
   dislike,
@@ -45,9 +46,11 @@ export interface BaseTraceData {
   usage?: UsageData;
   total_estimated_cost?: number;
   error_info?: BaseTraceDataErrorInfo;
+  guardrail_validations?: GuardrailValidation[];
 }
 
 export interface Trace extends BaseTraceData {
+  span_count?: number;
   thread_id?: string;
   project_id: string;
   workspace_name?: string;

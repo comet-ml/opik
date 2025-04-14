@@ -1,6 +1,6 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
-import mock
+from unittest import mock
 import pytest
 
 import opik
@@ -8,6 +8,7 @@ from opik import evaluation, exceptions, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
+from opik.evaluation.metrics import score_result
 from opik.evaluation.models import models_factory
 from ...testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
@@ -777,6 +778,315 @@ def test_evaluate_prompt_happyflow(
                     id=ANY_BUT_NONE,
                     name="equals_metric",
                     value=0.0,
+                )
+            ],
+        ),
+    ]
+    for expected_trace, actual_trace in zip(
+        EXPECTED_TRACE_TREES, fake_backend.trace_trees
+    ):
+        assert_equal(expected_trace, actual_trace)
+
+
+def test_evaluate__aggregated_metric__happy_flow(
+    fake_backend,
+    configure_opik_local_env_vars,
+):
+    mock_dataset = mock.MagicMock(
+        spec=["__internal_api__get_items_as_dataclasses__", "id"]
+    )
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
+        dataset_item.DatasetItem(
+            id="dataset-item-id-1",
+            input={"message": "say hello"},
+            reference="hello",
+        ),
+        dataset_item.DatasetItem(
+            id="dataset-item-id-2",
+            input={"message": "say bye"},
+            reference="bye",
+        ),
+    ]
+
+    def say_task(dataset_item: Dict[str, Any]):
+        if dataset_item["input"]["message"] == "say hello":
+            return {"output": "hello"}
+
+        if dataset_item["input"]["message"] == "say bye":
+            return {"output": "not bye"}
+
+        raise Exception
+
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    def aggregator(results: List[score_result.ScoreResult]) -> score_result.ScoreResult:
+        value = sum([result.value for result in results])
+        return score_result.ScoreResult(name="aggregated_metric_result", value=value)
+
+    metrics_list = [metrics.Equals(), metrics.Contains()]
+    aggregated_metric = metrics.AggregatedMetric(
+        name="aggregated_metric",
+        metrics=metrics_list,
+        aggregator=aggregator,
+    )
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            evaluation.evaluate(
+                dataset=mock_dataset,
+                task=say_task,
+                experiment_name="the-experiment-name",
+                scoring_metrics=[aggregated_metric],
+                task_threads=1,
+            )
+
+    mock_dataset.__internal_api__get_items_as_dataclasses__.assert_called_once()
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="the-experiment-name",
+        experiment_config=None,
+        prompts=None,
+    )
+
+    mock_experiment.insert.assert_has_calls(
+        [
+            mock.call(experiment_items_references=mock.ANY),
+            mock.call(experiment_items_references=mock.ANY),
+        ]
+    )
+    EXPECTED_TRACE_TREES = [
+        TraceModel(
+            id=ANY_BUT_NONE,
+            name="evaluation_task",
+            input={
+                "input": {"message": "say hello"},
+                "reference": "hello",
+            },
+            output={
+                "output": "hello",
+            },
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="say_task",
+                    input={
+                        "dataset_item": {
+                            "input": {"message": "say hello"},
+                            "reference": "hello",
+                        },
+                    },
+                    output={
+                        "output": "hello",
+                    },
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[],
+                ),
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="metrics_calculation",
+                    input={
+                        "test_case_": ANY_BUT_NONE,
+                    },
+                    output={
+                        "output": ANY_BUT_NONE,
+                    },
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="aggregated_metric",
+                            input={
+                                "kwargs": {
+                                    "input": {"message": "say hello"},
+                                    "reference": "hello",
+                                    "output": "hello",
+                                }
+                            },
+                            output={
+                                "output": ANY_BUT_NONE,
+                            },
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[
+                                SpanModel(
+                                    id=ANY_BUT_NONE,
+                                    type="general",
+                                    name="equals_metric",
+                                    input={
+                                        "ignored_kwargs": {
+                                            "input": {"message": "say hello"}
+                                        },
+                                        "output": "hello",
+                                        "reference": "hello",
+                                    },
+                                    output={
+                                        "output": score_result.ScoreResult(
+                                            name="equals_metric",
+                                            value=1.0,
+                                        ),
+                                    },
+                                    start_time=ANY_BUT_NONE,
+                                    end_time=ANY_BUT_NONE,
+                                ),
+                                SpanModel(
+                                    id=ANY_BUT_NONE,
+                                    type="general",
+                                    name="contains_metric",
+                                    input={
+                                        "ignored_kwargs": {
+                                            "input": {"message": "say hello"}
+                                        },
+                                        "output": "hello",
+                                        "reference": "hello",
+                                    },
+                                    output={
+                                        "output": score_result.ScoreResult(
+                                            name="contains_metric",
+                                            value=1.0,
+                                        ),
+                                    },
+                                    start_time=ANY_BUT_NONE,
+                                    end_time=ANY_BUT_NONE,
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+            feedback_scores=[
+                # both contains and equals metrics will add to aggregated result
+                FeedbackScoreModel(
+                    id=ANY_BUT_NONE,
+                    name="aggregated_metric_result",
+                    value=2.0,
+                )
+            ],
+        ),
+        TraceModel(
+            id=ANY_BUT_NONE,
+            name="evaluation_task",
+            input={
+                "input": {"message": "say bye"},
+                "reference": "bye",
+            },
+            output={
+                "output": "not bye",
+            },
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="say_task",
+                    input={
+                        "dataset_item": {
+                            "input": {"message": "say bye"},
+                            "reference": "bye",
+                        }
+                    },
+                    output={"output": "not bye"},
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[],
+                ),
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    type="general",
+                    name="metrics_calculation",
+                    input={
+                        "test_case_": ANY_BUT_NONE,
+                    },
+                    output={"output": ANY_BUT_NONE},
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="aggregated_metric",
+                            input={
+                                "kwargs": {
+                                    "input": {"message": "say bye"},
+                                    "reference": "bye",
+                                    "output": "not bye",
+                                }
+                            },
+                            output={
+                                "output": ANY_BUT_NONE,
+                            },
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[
+                                SpanModel(
+                                    id=ANY_BUT_NONE,
+                                    type="general",
+                                    name="equals_metric",
+                                    input={
+                                        "ignored_kwargs": {
+                                            "input": {"message": "say bye"}
+                                        },
+                                        "reference": "bye",
+                                        "output": "not bye",
+                                    },
+                                    output={
+                                        "output": score_result.ScoreResult(
+                                            name="equals_metric",
+                                            value=0.0,
+                                        ),
+                                    },
+                                    start_time=ANY_BUT_NONE,
+                                    end_time=ANY_BUT_NONE,
+                                ),
+                                SpanModel(
+                                    id=ANY_BUT_NONE,
+                                    type="general",
+                                    name="contains_metric",
+                                    input={
+                                        "ignored_kwargs": {
+                                            "input": {"message": "say bye"}
+                                        },
+                                        "reference": "bye",
+                                        "output": "not bye",
+                                    },
+                                    output={
+                                        "output": score_result.ScoreResult(
+                                            name="contains_metric",
+                                            value=1.0,
+                                        ),
+                                    },
+                                    start_time=ANY_BUT_NONE,
+                                    end_time=ANY_BUT_NONE,
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+            ],
+            feedback_scores=[
+                # only contains metric will add to aggregated result
+                FeedbackScoreModel(
+                    id=ANY_BUT_NONE,
+                    name="aggregated_metric_result",
+                    value=1.0,
                 )
             ],
         ),

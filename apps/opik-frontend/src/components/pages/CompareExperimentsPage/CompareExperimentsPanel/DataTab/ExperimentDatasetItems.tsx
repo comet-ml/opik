@@ -5,11 +5,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
+import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import NoData from "@/components/shared/NoData/NoData";
 import React, { useMemo } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { pick } from "lodash";
-import { extractImageUrls } from "@/lib/images";
+import { processInputData } from "@/lib/images";
 
 interface ExperimentDatasetItemsProps {
   data: DatasetItem["data"] | undefined;
@@ -28,14 +29,23 @@ const ExperimentDatasetItems = ({
     return pick(data, selectedKeys);
   }, [selectedKeys, data]);
 
-  const imagesUrls = useMemo(
-    () => extractImageUrls(selectedData),
+  const { images, formattedData } = useMemo(
+    () => processInputData(selectedData),
     [selectedData],
   );
-  const showImages = imagesUrls?.length > 0;
+
+  const showImages = images?.length > 0;
 
   if (!showImages) {
-    return data ? <SyntaxHighlighter data={selectedData} /> : <NoData />;
+    return data ? (
+      <SyntaxHighlighter
+        data={selectedData}
+        prettifyConfig={{ fieldType: "input" }}
+        preserveKey="syntax-highlighter-compare-experiment-input"
+      />
+    ) : (
+      <NoData />
+    );
   }
 
   return (
@@ -48,23 +58,7 @@ const ExperimentDatasetItems = ({
         <AccordionItem value="images" className="border-t">
           <AccordionTrigger>Images</AccordionTrigger>
           <AccordionContent>
-            <div className="flex flex-wrap gap-2">
-              {imagesUrls.map((imageUrl, index) => {
-                return (
-                  <div
-                    key={index + imageUrl.substring(0, 10)}
-                    className="h-[200px] max-w-[300px] rounded-md border p-4"
-                  >
-                    <img
-                      src={imageUrl}
-                      loading="lazy"
-                      alt={`image-${index}`}
-                      className="size-full object-contain"
-                    />
-                  </div>
-                );
-              })}
-            </div>
+            <ImagesListWrapper images={images} />
           </AccordionContent>
         </AccordionItem>
       ) : null}
@@ -72,7 +66,15 @@ const ExperimentDatasetItems = ({
       <AccordionItem value="data">
         <AccordionTrigger>Selected data</AccordionTrigger>
         <AccordionContent>
-          {data ? <SyntaxHighlighter data={selectedData || {}} /> : <NoData />}
+          {formattedData ? (
+            <SyntaxHighlighter
+              data={formattedData ?? {}}
+              prettifyConfig={{ fieldType: "input" }}
+              preserveKey="syntax-highlighter-compare-experiment-input"
+            />
+          ) : (
+            <NoData />
+          )}
         </AccordionContent>
       </AccordionItem>
     </Accordion>

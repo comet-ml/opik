@@ -6,16 +6,24 @@ from unittest.mock import patch
 
 from opik_backend.demo_data_generator import create_demo_data
 
-def test_create_experiment_items_structure(httpserver):
+def test_create_demo_data_structure(httpserver):
 
     ## Mocking the HTTP server to simulate the API calls to Opik Backend
     baseUrl = httpserver.url_for("/")
+
+    httpserver.expect_request("/v1/private/projects/retrieve", method="POST").respond_with_data(status=404)
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/spans/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/traces/feedback-scores", method="PUT").respond_with_data(status=204)
 
+    httpserver.expect_request("/v1/private/feedback-definitions", method="GET", query_string="name=User+feedback").respond_with_json({
+        "content": [],
+        "page": 1,
+        "size": 0,
+        "total": 0
+    })
     httpserver.expect_request("/v1/private/feedback-definitions", method="POST").respond_with_data(status=201)
-    
+
     httpserver.expect_request("/v1/private/prompts", method="POST").respond_with_data(status=201)
     httpserver.expect_request("/v1/private/datasets", method="POST").respond_with_data(status=201)
     httpserver.expect_request("/v1/private/datasets/retrieve", method="POST").respond_with_json({
@@ -65,7 +73,54 @@ def test_create_experiment_items_structure(httpserver):
     httpserver.expect_request("/v1/private/prompts/versions", method="POST").respond_with_json(prompt)
 
     # Call the function to create the demo data
-    create_demo_data(baseUrl, "workspace_name", "comet_api_key")
+    create_demo_data(baseUrl, "default", "comet_api_key")
 
     # Check that all expected requests were made
     httpserver.check_assertions()
+
+def fail_on_request(_request):
+    raise AssertionError("Request should not have been made!")
+
+def test_create_demo_data_idempotence(httpserver):
+
+    ## Mocking the HTTP server to simulate the API calls to Opik Backend
+    baseUrl = httpserver.url_for("/")
+
+    httpserver.expect_request("/v1/private/projects/retrieve", method="POST").respond_with_json({ "id": str(uuid6.uuid7()) })
+
+    httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/spans/batch", method="POST").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/traces/feedback-scores", method="PUT").respond_with_handler(fail_on_request)
+
+    httpserver.expect_request("/v1/private/feedback-definitions", method="GET", query_string="name=User+feedback").respond_with_json({
+        "content": [
+            { "name": "User feedback" }
+        ],
+        "page": 1,
+        "size": 1,
+        "total": 1
+    })
+    httpserver.expect_request("/v1/private/feedback-definitions", method="POST").respond_with_data(status=409)
+
+    httpserver.expect_request("/v1/private/prompts", method="POST").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/datasets", method="POST").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/datasets/retrieve", method="POST").respond_with_handler(fail_on_request)
+
+    httpserver.expect_request("/v1/private/datasets/items", method="POST").respond_with_handler(fail_on_request)
+    
+    httpserver.expect_request("v1/private/datasets/items/stream", method="POST").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/datasets/items", method="PUT").respond_with_handler(fail_on_request)
+
+    httpserver.expect_request("/v1/private/experiments", method="POST").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/experiments/items", method="POST").respond_with_handler(fail_on_request)
+
+    httpserver.expect_request("/v1/private/prompts/versions/retrieve", method="POST").respond_with_handler(fail_on_request)
+    httpserver.expect_request("/v1/private/prompts/versions", method="POST").respond_with_handler(fail_on_request)
+
+    # Call the function to create the demo data
+    create_demo_data(baseUrl, "default", "comet_api_key")
+
+    # Check that all expected requests were made
+    httpserver.check_assertions()
+
+    

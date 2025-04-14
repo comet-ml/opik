@@ -30,6 +30,16 @@ services:
       retries: 20
       start_period: 30s
 
+  clickhouse-init:
+    image: alpine:latest
+    volumes:
+      - ./clickhouse_config:/clickhouse_config_files
+      - clickhouse-config:/config
+    command: |
+      sh -c "
+        cp -r /clickhouse_config_files/* /config/ && 
+        chown -R 1000:1000 /config
+      "
   clickhouse:
     image: clickhouse/clickhouse-server:24.3.6.48-alpine
     pull_policy: always
@@ -44,11 +54,64 @@ services:
     volumes:
       - clickhouse:/var/lib/clickhouse/:type=volume,source=~/opik/clickhouse/data
       - clickhouse-server:/var/log/clickhouse-server/:type=volume,source=~/opik/clickhouse/logs
+      - clickhouse-config:/etc/clickhouse-server/config.d
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping" ]
       interval: 1s
       timeout: 1s
       retries: 300
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
+
+  zookeeper:
+    image: docker.io/bitnami/zookeeper:3.9.2-debian-12-r0
+    hostname: zookeeper
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: zookeeper=zookeeper:2888:3888
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    healthcheck:
+      test: [ "CMD", "/bin/bash", "-ec", "ZOO_HC_TIMEOUT=2", "/opt/bitnami/scripts/zookeeper/healthcheck.sh" ]
+      interval: 1s
+      timeout: 1s
+      retries: 300
+    volumes:
+      - zookeeper-data:/data
+      - zookeeper-datalog:/datalog
+
+
+
+  minio:
+    image: minio/minio:RELEASE.2025-03-12T18-04-18Z
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
+    command: server --console-address ":9090" /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 1s
+      timeout: 10s
+      retries: 30
+      start_period: 5s  
+
+  mc:
+    image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10s;
+      /usr/bin/mc alias set s3 http://minio:9000 ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE} ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} --api S3v4 ;
+      /usr/bin/mc mb --ignore-existing s3/public;
+      /usr/bin/mc anonymous set download s3/public/;       
+      "
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
@@ -74,11 +137,11 @@ services:
       ANALYTICS_DB_PROTOCOL: "HTTP"
       ANALYTICS_DB_HOST: "clickhouse"
       ANALYTICS_DB_PORT: 8123
-      ANALYTICS_DB_USERNAME: opik
       ANALYTICS_DB_DATABASE_NAME: opik
+      ANALYTICS_DB_USERNAME: opik
+      ANALYTICS_DB_PASS: opik
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
-      ANALYTICS_DB_PASS: opik
       OPIK_OTEL_SDK_ENABLED: false
       OTEL_VERSION: 2.12.0
       OTEL_PROPAGATORS: "tracecontext,baggage,b3"
@@ -87,12 +150,23 @@ services:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
+      PYTHON_EVALUATOR_URL: http://python-backend:8000
     ports:
       - "3003" # OpenAPI specification port
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health-check"]
+      interval: 1s
+      timeout: 30s
+      retries: 30
+      start_period: 1s
     depends_on:
       mysql:
         condition: service_healthy
       clickhouse:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   python-backend:
@@ -105,8 +179,34 @@ services:
     privileged: true # Required for Docker-in-Docker, so it can launch containers
     environment:
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
+      PYTHON_CODE_EXECUTOR_STRATEGY: ${PYTHON_CODE_EXECUTOR_STRATEGY:-process}
+      PYTHON_CODE_EXECUTOR_CONTAINERS_NUM: 5
+      PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 3
       OPIK_VERSION: ${OPIK_VERSION:-latest}
-      OPIK_REVERSE_PROXY_URL: "http://frontend:5173/api"
+      OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
+    healthcheck:
+      test: ["CMD", "sh", "-c", "if [ -f /opt/opik-python-backend/src/opik_backend/healthcheck.py ]; then wget --spider --quiet http://127.0.0.1:8000/healthcheck; else exit 0; fi"]
+      interval: 2s
+      timeout: 60s
+      retries: 30
+      start_period: 2s
+
+  demo-data-generator:
+    image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
+    build:
+      context: ../../apps/opik-python-backend
+      dockerfile: Dockerfile
+    hostname: demo-data-generator
+    environment:
+      CREATE_DEMO_DATA: ${CREATE_DEMO_DATA:-true}
+      PYTHON_BACKEND_URL: ${PYTHON_BACKEND_URL:-http://python-backend:8000}
+    command: [ "sh", "-c", "./demo_data_entrypoint.sh" ]
+    depends_on:
+      frontend:
+        condition: service_healthy
+      python-backend:
+        condition: service_healthy
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
@@ -123,7 +223,13 @@ services:
       - ./nginx_default_local.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 1s
+      timeout: 30s
+      retries: 10
+      start_period: 1s
     environment: 
       OPIK_VERSION: ${OPIK_VERSION:-latest}
 
@@ -132,7 +238,8 @@ networks:
 
 volumes:
   clickhouse:
-
   clickhouse-server:
-
+  clickhouse-config:
   mysql:
+  zookeeper-data:
+  zookeeper-datalog:

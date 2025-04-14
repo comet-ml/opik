@@ -6,6 +6,8 @@ import * as OpikApi from "../index";
 
 export interface SpanPublic {
     id?: string;
+    /** If null, the default project is used */
+    projectName?: string;
     projectId?: string;
     traceId: string;
     parentSpanId?: string;

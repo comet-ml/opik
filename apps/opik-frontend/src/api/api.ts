@@ -10,6 +10,7 @@ axiosInstance.defaults.withCredentials = true;
 
 export const CODE_EXECUTOR_SERVICE_URL = import.meta.env
   .VITE_GET_STARTED_API_URL;
+export const FEATURE_TOGGLES_REST_ENDPOINT = "/v1/private/toggles/";
 export const PROJECTS_REST_ENDPOINT = "/v1/private/projects/";
 export const DATASETS_REST_ENDPOINT = "/v1/private/datasets/";
 export const EXPERIMENTS_REST_ENDPOINT = "/v1/private/experiments/";
@@ -20,6 +21,7 @@ export const SPANS_REST_ENDPOINT = "/v1/private/spans/";
 export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
 export const PROVIDER_KEYS_REST_ENDPOINT = "/v1/private/llm-provider-key/";
 export const AUTOMATIONS_REST_ENDPOINT = "/v1/private/automations/";
+export const ATTACHMENTS_REST_ENDPOINT = "/v1/private/attachment/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";

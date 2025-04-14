@@ -10,6 +10,7 @@ from typing import (
     Tuple,
     Union,
 )
+from typing_extensions import override
 
 from google.genai import types as genai_types
 
@@ -41,6 +42,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         super().__init__()
         self.provider = provider
 
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -80,6 +82,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -116,6 +119,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _streams_handler(
         self,
         output: Any,

@@ -22,7 +22,6 @@ import isBoolean from "lodash/isBoolean";
 
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -32,10 +31,14 @@ import DataTableColumnResizer from "@/components/shared/DataTable/DataTableColum
 import DataTableWrapper, {
   DataTableWrapperProps,
 } from "@/components/shared/DataTable/DataTableWrapper";
+import DataTableBody, {
+  DataTableBodyProps,
+} from "@/components/shared/DataTable/DataTableBody";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   ColumnsStatistic,
+  HeaderIconType,
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -66,7 +69,8 @@ declare module "@tanstack/react-table" {
   export interface ColumnMeta<TData extends RowData, TValue> {
     type?: COLUMN_TYPE;
     header?: string;
-    iconType?: COLUMN_TYPE;
+    headerCheckbox?: boolean;
+    iconType?: HeaderIconType;
     verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
     overrideRowHeight?: ROW_HEIGHT;
     statisticKey?: string;
@@ -129,6 +133,7 @@ interface DataTableProps<TData, TValue> {
   autoWidth?: boolean;
   stickyHeader?: boolean;
   TableWrapper?: React.FC<DataTableWrapperProps>;
+  TableBody?: React.FC<DataTableBodyProps<TData>>;
   meta?: Omit<
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
@@ -155,6 +160,7 @@ const DataTable = <TData, TValue>({
   noData,
   autoWidth = false,
   TableWrapper = DataTableWrapper,
+  TableBody = DataTableBody,
   stickyHeader = false,
   meta,
 }: DataTableProps<TData, TValue>) => {
@@ -320,6 +326,22 @@ const DataTable = <TData, TValue>({
     );
   };
 
+  const renderNoData = () => {
+    return (
+      <TableRow data-testid="no-data-row">
+        <TableCell colSpan={columns.length}>
+          {noData ? (
+            noData
+          ) : (
+            <div className="flex h-28 items-center justify-center text-muted-slate">
+              No results
+            </div>
+          )}
+        </TableCell>
+      </TableRow>
+    );
+  };
+
   return (
     <TableWrapper>
       <Table
@@ -379,23 +401,11 @@ const DataTable = <TData, TValue>({
             );
           })}
         </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map(renderRow)
-          ) : (
-            <TableRow data-testid="no-data-row">
-              <TableCell colSpan={columns.length}>
-                {noData ? (
-                  noData
-                ) : (
-                  <div className="flex h-28 items-center justify-center text-muted-slate">
-                    No results
-                  </div>
-                )}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
+        <TableBody
+          table={table}
+          renderRow={renderRow}
+          renderNoData={renderNoData}
+        />
       </Table>
     </TableWrapper>
   );

@@ -1,5 +1,5 @@
 import opik
-from ...testlib import TraceModel, SpanModel, ANY_BUT_NONE, ANY_DICT, assert_equal
+from ...testlib import TraceModel, SpanModel, ANY_BUT_NONE, assert_equal
 
 
 def test_span__provider_supported__usage_format_is_correct__usage_converted_to_opik_format(
@@ -23,20 +23,12 @@ def test_span__provider_supported__usage_format_is_correct__usage_converted_to_o
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
         name="some-name",
-        metadata=ANY_DICT,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 type="llm",
                 name="some-name",
-                metadata={
-                    "usage": {
-                        "completion_tokens": 10,
-                        "prompt_tokens": 20,
-                        "total_tokens": 30,
-                    }
-                },
                 usage={
                     "completion_tokens": 10,
                     "prompt_tokens": 20,
@@ -76,19 +68,12 @@ def test_span__provider_not_passed__usage_format_is_correct_for_some_provider__u
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
         name="some-name",
-        metadata=ANY_DICT,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 type="llm",
                 name="some-name",
-                metadata={
-                    "usage": {
-                        "input_tokens": 10,
-                        "output_tokens": 20,
-                    }
-                },
                 usage={
                     "completion_tokens": 20,
                     "prompt_tokens": 10,
@@ -127,19 +112,12 @@ def test_span__unknown_provider_passed__usage_format_is_correct_for_some_provide
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
         name="some-name",
-        metadata=ANY_DICT,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 type="llm",
                 name="some-name",
-                metadata={
-                    "usage": {
-                        "input_tokens": 10,
-                        "output_tokens": 20,
-                    }
-                },
                 usage={
                     "completion_tokens": 20,
                     "prompt_tokens": 10,
@@ -183,23 +161,12 @@ def test_span__unknown_provider_passed__usage_format_is_also_unknown__usage_flat
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
         name="some-name",
-        metadata=ANY_DICT,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 type="llm",
                 name="some-name",
-                metadata={
-                    "usage": {
-                        "abc_input_tokens": 10,
-                        "abc_output_tokens": 20,
-                        "abc_nested_dict": {
-                            "nested_int": 10,
-                            "nested_str": "abc",
-                        },
-                    }
-                },
                 usage={
                     "original_usage.abc_input_tokens": 10,
                     "original_usage.abc_output_tokens": 20,
@@ -240,22 +207,12 @@ def test_span__user_added_openai_keys_to_unknown_usage_themselves__they_are_incl
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
         name="some-name",
-        metadata=ANY_DICT,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 type="llm",
                 name="some-name",
-                metadata={
-                    "usage": {
-                        "prompt_tokens": 10,
-                        "completion_tokens": 20,
-                        "total_tokens": 30,
-                        "abc_input_tokens": 10,
-                        "abc_output_tokens": 20,
-                    }
-                },
                 usage={
                     "prompt_tokens": 10,
                     "completion_tokens": 20,

@@ -14,7 +14,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.*;
 
 public interface AuthService {
 
-    void authenticate(HttpHeaders headers, Cookie sessionToken, String path);
+    void authenticate(HttpHeaders headers, Cookie sessionToken, ContextInfoHolder contextInfo);
     void authenticateSession(Cookie sessionToken);
 }
 
@@ -24,7 +24,7 @@ class AuthServiceImpl implements AuthService {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
-    public void authenticate(HttpHeaders headers, Cookie sessionToken, String path) {
+    public void authenticate(HttpHeaders headers, Cookie sessionToken, ContextInfoHolder contextInfo) {
 
         var currentWorkspaceName = WorkspaceUtils.getWorkspaceName(headers.getHeaderString(WORKSPACE_HEADER));
 

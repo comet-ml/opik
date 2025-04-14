@@ -1,4 +1,7 @@
-from typing import Set
+from typing import Set, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opik.guardrails import schemas
 
 
 class OpikException(Exception):
@@ -21,8 +24,14 @@ class ScoreMethodMissingArguments(OpikException):
     pass
 
 
-class MetricComputationError(Exception):
+class MetricComputationError(OpikException):
     """Exception raised when a metric cannot be computed."""
+
+    pass
+
+
+class JSONParsingError(OpikException):
+    """Exception raised when we fail to parse an LLM response to a dictionary"""
 
     pass
 
@@ -50,3 +59,21 @@ class ExperimentNotFound(OpikException):
 
 class DatasetNotFound(OpikException):
     pass
+
+
+class GuardrailValidationFailed(OpikException):
+    """Exception raised when a guardrail validation fails."""
+
+    def __init__(
+        self,
+        message: str,
+        validation_results: List["schemas.ValidationResult"],
+        failed_validations: List["schemas.ValidationResult"],
+    ):
+        self.message = message
+        self.validation_results = validation_results
+        self.failed_validations = failed_validations
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        return f"{self.message}. Failed validations: {self.failed_validations}\n"

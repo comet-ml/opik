@@ -1,9 +1,14 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.Project;
+import com.comet.opik.api.attachment.Attachment;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
+import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import com.comet.opik.api.resources.utils.AWSUtils;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -14,9 +19,12 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.AttachmentUtilsTest;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -34,20 +42,18 @@ import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.api.attachment.EntityType.TRACE;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Attachment Resource Test")
@@ -57,11 +63,12 @@ class AttachmentResourceTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
+    public static final String LARGE_FILE_NAME = "large.txt";
     public static final String FILE_NAME = "test.jpg";
-    public static final String MIME_TYPE = "image/jpeg";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
 
@@ -88,16 +95,21 @@ class AttachmentResourceTest {
                         .redisUrl(REDIS.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
                         .authCacheTtlInSeconds(null)
-                        .minioUrl(minioUrl)
+                        .isMinIO(false)
+                        .modules(List.of(AWSUtils.testClients(minioUrl)))
                         .build());
     }
 
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private AttachmentResourceClient attachmentResourceClient;
-    private HttpClient httpClient;
+    private TransactionTemplate mySqlTemplate;
+    private ProjectService projectService;
+    private String baseURI;
+    public static final int MULTI_UPLOAD_CHUNK_SIZE = 6 * 1048576; //6M
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi,
-            TransactionTemplate mySqlTemplate) throws SQLException {
+    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate, ProjectService projectService)
+            throws SQLException {
 
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
 
@@ -107,7 +119,9 @@ class AttachmentResourceTest {
         }
 
         this.attachmentResourceClient = new AttachmentResourceClient(client);
-        this.httpClient = HttpClient.newHttpClient();
+        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.mySqlTemplate = mySqlTemplate;
+        this.projectService = projectService;
 
         ClientSupportUtils.config(client);
     }
@@ -119,79 +133,136 @@ class AttachmentResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
-        httpClient.close();
+        attachmentResourceClient.close();
     }
 
     @Test
     @DisplayName("Upload attachment with MultiPart Presign URL")
-    void uploadAttachmentWithMultiPartPresignUrl() throws IOException, InterruptedException {
+    void uploadAttachmentWithMultiPartPresignUrl() throws IOException {
 
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
 
-        UUID traceId = UUID.randomUUID();
-        UUID projectId = UUID.randomUUID();
-
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        log.info("Start attachment upload for workspaceId {}, projectId {}, traceId {}", workspaceId, projectId,
-                traceId);
-
         // Initiate upload
-        StartMultipartUploadRequest startUploadRequest = StartMultipartUploadRequest.builder()
-                .fileName(FILE_NAME)
-                .mimeType(MIME_TYPE)
-                .numOfFileParts(1)
-                .entityType(TRACE)
-                .entityId(traceId)
-                .containerId(projectId)
-                .build();
+        StartMultipartUploadRequest startUploadRequest = factory.manufacturePojo(StartMultipartUploadRequest.class);
+
+        log.info("Start attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId,
+                startUploadRequest.projectName(),
+                startUploadRequest.entityId());
 
         StartMultipartUploadResponse startUploadResponse = attachmentResourceClient
                 .startMultiPartUpload(startUploadRequest, apiKey, workspaceName, 200);
 
         // Upload file using presigned url, will be done on client side (SDK)
-        InputStream is = getClass().getClassLoader().getResourceAsStream(FILE_NAME);
+        InputStream is = getClass().getClassLoader().getResourceAsStream(LARGE_FILE_NAME);
         byte[] fileData = IOUtils.toByteArray(is);
         List<String> eTags = uploadParts(startUploadResponse, fileData);
 
-        // Complete upload
-        CompleteMultipartUploadRequest completeUploadRequest = CompleteMultipartUploadRequest.builder()
-                .fileName(FILE_NAME)
-                .mimeType(MIME_TYPE)
-                .entityType(TRACE)
-                .entityId(traceId)
-                .containerId(projectId)
-                .fileSize((long) fileData.length)
-                .uploadId(startUploadResponse.uploadId())
-                .uploadedFileParts(List.of(MultipartUploadPart.builder()
-                        .eTag(eTags.getFirst())
-                        .partNumber(1)
-                        .build()))
-                .build();
+        CompleteMultipartUploadRequest completeUploadRequest = prepareCompleteUploadRequest(startUploadRequest,
+                fileData.length, startUploadResponse.uploadId(), eTags);
 
         attachmentResourceClient.completeMultiPartUpload(completeUploadRequest, apiKey, workspaceName, 204);
 
-        log.info("Completed attachment upload for workspaceId {}, projectId {}, traceId {}", workspaceId, projectId,
-                traceId);
+        log.info("Complete attachment upload for workspaceId {}, projectName {}, entityId {}", workspaceId,
+                startUploadRequest.projectName(),
+                startUploadRequest.entityId());
 
-        // TODO: proper verification that the file was uploaded will be done once we prepare corresponding endpoint in OPIK-728
+        // To verify that the file was uploaded we get the list of attachments
+        Project project = projectService.findByNames(workspaceId, List.of(startUploadRequest.projectName())).getFirst();
+        var page = attachmentResourceClient.attachmentList(project.id(), startUploadRequest.entityType(),
+                startUploadRequest.entityId(), UUID.randomUUID().toString(), apiKey, workspaceName, 200);
+
+        var expectedPage = AttachmentUtilsTest.prepareExpectedPage(startUploadRequest, fileData.length);
+        AttachmentUtilsTest.verifyPage(page, expectedPage);
+
+        // To verify the link, we download attachment using that link
+        String downloadLink = page.content().get(0).link();
+        var downloadedFileData = attachmentResourceClient.downloadFileExternal(downloadLink, 200);
+        assertThat(downloadedFileData).isEqualTo(fileData);
+
+        // Delete attachment and verify it's not available
+        DeleteAttachmentsRequest deleteAttachmentsRequest = AttachmentUtilsTest.prepareDeleteRequest(startUploadRequest,
+                project.id());
+        attachmentResourceClient.deleteAttachments(deleteAttachmentsRequest, apiKey, workspaceName, 204);
+
+        page = attachmentResourceClient.attachmentList(project.id(), startUploadRequest.entityType(),
+                startUploadRequest.entityId(), UUID.randomUUID().toString(), apiKey, workspaceName, 200);
+        AttachmentUtilsTest.verifyPage(page, Attachment.AttachmentPage.empty(1));
+
+        // Try to download deleted file, should fail
+        attachmentResourceClient.downloadFileExternal(downloadLink, 404);
     }
 
-    private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data)
-            throws IOException, InterruptedException {
-        String url = startUploadResponse.preSignUrls().getFirst();
+    @Test
+    @DisplayName("Direct upload for AWS S3 should fail")
+    void directS3UploadShouldFailTest() throws IOException {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
 
-        var request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .PUT(HttpRequest.BodyPublishers.ofByteArray(data))
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Initiate upload
+        AttachmentInfo attachmentInfo = factory.manufacturePojo(AttachmentInfo.class);
+        InputStream is = getClass().getClassLoader().getResourceAsStream(FILE_NAME);
+        byte[] fileData = IOUtils.toByteArray(is);
+        attachmentResourceClient.uploadAttachment(attachmentInfo, fileData, apiKey, workspaceName, 403);
+    }
+
+    @Test
+    @DisplayName("Direct download for AWS S3 should fail")
+    void directS3DownloadShouldFailTest() throws IOException {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Initiate upload
+        AttachmentInfo attachmentInfo = factory.manufacturePojo(AttachmentInfo.class);
+        attachmentResourceClient.downloadAttachment(attachmentInfo.fileName(), attachmentInfo.containerId(),
+                attachmentInfo.mimeType(), attachmentInfo.entityType(), attachmentInfo.entityId(), apiKey,
+                workspaceName, 403);
+    }
+
+    private List<String> uploadParts(StartMultipartUploadResponse startUploadResponse, byte[] data) {
+        List<String> eTags = new ArrayList<>();
+        for (int i = 0; i < startUploadResponse.preSignUrls().size(); i++) {
+            int chunkToUpload = i == startUploadResponse.preSignUrls().size() - 1
+                    ? data.length - i * MULTI_UPLOAD_CHUNK_SIZE
+                    : MULTI_UPLOAD_CHUNK_SIZE;
+            byte[] partData = new byte[chunkToUpload];
+            System.arraycopy(data, i * MULTI_UPLOAD_CHUNK_SIZE, partData, 0, chunkToUpload);
+            String eTag = attachmentResourceClient.uploadFileExternal(startUploadResponse.preSignUrls().get(i),
+                    partData);
+
+            eTags.add(eTag);
+        }
+
+        return eTags;
+    }
+
+    private CompleteMultipartUploadRequest prepareCompleteUploadRequest(StartMultipartUploadRequest startUploadRequest,
+            long fileSize, String uploadId, List<String> eTags) {
+        List<MultipartUploadPart> uploadedFileParts = new ArrayList<>();
+        for (int i = 1; i <= eTags.size(); i++) {
+            uploadedFileParts.add(MultipartUploadPart.builder()
+                    .eTag(eTags.get(i - 1))
+                    .partNumber(i)
+                    .build());
+        }
+
+        return CompleteMultipartUploadRequest.builder()
+                .fileName(startUploadRequest.fileName())
+                .entityType(startUploadRequest.entityType())
+                .entityId(startUploadRequest.entityId())
+                .projectName(startUploadRequest.projectName())
+                .fileSize(fileSize)
+                .uploadId(uploadId)
+                .uploadedFileParts(uploadedFileParts)
                 .build();
-
-        var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        String eTag = response.headers().firstValue("ETag").orElseThrow();
-
-        return List.of(eTag);
     }
 }

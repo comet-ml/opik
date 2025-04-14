@@ -2,6 +2,9 @@
 subtitle: Describes how to run Opik on a Kubernetes cluster
 ---
 
+> **Important:** If you're using or looking to use Opik or Comet enterprise version please reach out to Sales@comet.com to gain access to the correct deployment documentation.
+
+
 For production deployments, we recommend using our Kubernetes Helm chart. This chart is designed to be highly configurable and has been battle-tested in Comet's managed cloud offering.
 
 ## Prerequisites
@@ -49,20 +52,46 @@ Supported from Opik chart version 1.4.2
 
 Configuration snippet for using external Clickhouse:
 ```bash
-opik:
-  component:
+component:
     backend:
       ...
       env:
         ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://<YOUR CLICKHOUSE HOST>:8123"
         ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
-      initContainers:
-      - name: wait-for-clickhouse-service
-        image: stefanevinance/wait-for-200
-        env:
-          - name: URL
-            value: http://<YOUR CLICKHOUSE HOST>:8123
-...
-  clickhouse:
+        ANALYTICS_DB_DATABASE_NAME: "opik"
+        ANALYTICS_DB_MIGRATIONS_USER: "opik"
+        ANALYTICS_DB_USERNAME: "opik"
+        ANALYTICS_DB_MIGRATIONS_PASS: "xxx"
+        ANALYTICS_DB_PASS: "xxx"
+    ...
+clickhouse:
     enabled: false
 ```
+The passwords can be handled in the secret, and then you should configure it as following
+```bash
+component:
+    backend:
+      ...
+      envFrom:
+        - configMapRef:
+            name: opik-backend
+        - secretRef:
+            name: <your secret name>
+      env:
+        ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://<YOUR CLICKHOUSE HOST>:8123"
+        ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
+        ANALYTICS_DB_DATABASE_NAME: "opik"
+        ANALYTICS_DB_MIGRATIONS_USER: "opik"
+        ANALYTICS_DB_USERNAME: "opik"
+...
+clickhouse:
+    enabled: false
+```
+
+## Troubleshooting
+
+If you get this error when running helm
+```bash
+ERROR: Exception Primary Reason:  Code: 225. DB::Exception: Can't create replicated table without ZooKeeper. (NO_ZOOKEEPER) (version 24.3.5.47.altinitystable (altinity build))
+```
+Please make sure you use the latest Opik helm chart version that runs zookeeper by default

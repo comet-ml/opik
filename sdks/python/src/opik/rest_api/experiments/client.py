@@ -5,6 +5,7 @@ from ..core.client_wrapper import SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..core.pydantic_utilities import parse_obj_as
+from ..errors.bad_request_error import BadRequestError
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from ..types.json_node_write import JsonNodeWrite
@@ -34,6 +35,7 @@ class ExperimentsClient:
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -52,6 +54,8 @@ class ExperimentsClient:
         dataset_deleted : typing.Optional[bool]
 
         prompt_id : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -81,6 +85,7 @@ class ExperimentsClient:
                 "name": name,
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -92,6 +97,16 @@ class ExperimentsClient:
                         type_=ExperimentPagePublic,  # type: ignore
                         object_=_response.json(),
                     ),
+                )
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
                 )
             _response_json = _response.json()
         except JSONDecodeError:
@@ -458,72 +473,6 @@ class ExperimentsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    def get_experiment_by_name(
-        self, *, name: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> ExperimentPublic:
-        """
-        Get experiment by name
-
-        Parameters
-        ----------
-        name : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        ExperimentPublic
-            Experiments resource
-
-        Examples
-        --------
-        from Opik import OpikApi
-
-        client = OpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-        client.experiments.get_experiment_by_name(
-            name="name",
-        )
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            "v1/private/experiments/retrieve",
-            method="POST",
-            json={
-                "name": name,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return typing.cast(
-                    ExperimentPublic,
-                    parse_obj_as(
-                        type_=ExperimentPublic,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    )
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
     def get_experiment_item_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> ExperimentItemPublic:
@@ -645,6 +594,63 @@ class ExperimentsClient:
                 raise ApiError(status_code=_response.status_code, body=_response.text)
             raise ApiError(status_code=_response.status_code, body=_response_json)
 
+    def stream_experiments(
+        self,
+        *,
+        name: str,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[bytes]:
+        """
+        Stream experiments
+
+        Parameters
+        ----------
+        name : str
+
+        limit : typing.Optional[int]
+
+        last_retrieved_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.Iterator[bytes]
+            Experiments stream or error during process
+        """
+        with self._client_wrapper.httpx_client.stream(
+            "v1/private/experiments/stream",
+            method="POST",
+            json={
+                "name": name,
+                "limit": limit,
+                "last_retrieved_id": last_retrieved_id,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    for _chunk in _response.iter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                _response.read()
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
+
 
 class AsyncExperimentsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -659,6 +665,7 @@ class AsyncExperimentsClient:
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -677,6 +684,8 @@ class AsyncExperimentsClient:
         dataset_deleted : typing.Optional[bool]
 
         prompt_id : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -714,6 +723,7 @@ class AsyncExperimentsClient:
                 "name": name,
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -725,6 +735,16 @@ class AsyncExperimentsClient:
                         type_=ExperimentPagePublic,  # type: ignore
                         object_=_response.json(),
                     ),
+                )
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    )
                 )
             _response_json = _response.json()
         except JSONDecodeError:
@@ -1139,80 +1159,6 @@ class AsyncExperimentsClient:
             raise ApiError(status_code=_response.status_code, body=_response.text)
         raise ApiError(status_code=_response.status_code, body=_response_json)
 
-    async def get_experiment_by_name(
-        self, *, name: str, request_options: typing.Optional[RequestOptions] = None
-    ) -> ExperimentPublic:
-        """
-        Get experiment by name
-
-        Parameters
-        ----------
-        name : str
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        ExperimentPublic
-            Experiments resource
-
-        Examples
-        --------
-        import asyncio
-
-        from Opik import AsyncOpikApi
-
-        client = AsyncOpikApi(
-            api_key="YOUR_API_KEY",
-            workspace_name="YOUR_WORKSPACE_NAME",
-        )
-
-
-        async def main() -> None:
-            await client.experiments.get_experiment_by_name(
-                name="name",
-            )
-
-
-        asyncio.run(main())
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/experiments/retrieve",
-            method="POST",
-            json={
-                "name": name,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return typing.cast(
-                    ExperimentPublic,
-                    parse_obj_as(
-                        type_=ExperimentPublic,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-            if _response.status_code == 404:
-                raise NotFoundError(
-                    typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    )
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, body=_response.text)
-        raise ApiError(status_code=_response.status_code, body=_response_json)
-
     async def get_experiment_item_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> ExperimentItemPublic:
@@ -1319,6 +1265,63 @@ class AsyncExperimentsClient:
                 "limit": limit,
                 "last_retrieved_id": last_retrieved_id,
                 "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+            try:
+                if 200 <= _response.status_code < 300:
+                    _chunk_size = (
+                        request_options.get("chunk_size", None)
+                        if request_options is not None
+                        else None
+                    )
+                    async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size):
+                        yield _chunk
+                    return
+                await _response.aread()
+                _response_json = _response.json()
+            except JSONDecodeError:
+                raise ApiError(status_code=_response.status_code, body=_response.text)
+            raise ApiError(status_code=_response.status_code, body=_response_json)
+
+    async def stream_experiments(
+        self,
+        *,
+        name: str,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Stream experiments
+
+        Parameters
+        ----------
+        name : str
+
+        limit : typing.Optional[int]
+
+        last_retrieved_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Yields
+        ------
+        typing.AsyncIterator[bytes]
+            Experiments stream or error during process
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            "v1/private/experiments/stream",
+            method="POST",
+            json={
+                "name": name,
+                "limit": limit,
+                "last_retrieved_id": last_retrieved_id,
             },
             headers={
                 "content-type": "application/json",

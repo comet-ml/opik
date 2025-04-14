@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AutomationRuleEvaluator;
 import com.comet.opik.api.AutomationRuleEvaluatorCriteria;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
-import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
@@ -11,12 +10,14 @@ import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -53,8 +54,7 @@ public interface AutomationRuleEvaluatorService {
     AutomationRuleEvaluatorPage find(UUID projectId, @NonNull String workspaceId,
             String name, int page, int size);
 
-    <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(@NonNull UUID projectId, @NonNull String workspaceId,
-            AutomationRuleEvaluatorType automationRuleEvaluatorType);
+    <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(@NonNull UUID projectId, @NonNull String workspaceId);
 
     Mono<LogPage> getLogs(LogCriteria criteria);
 }
@@ -69,9 +69,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull AutomationRuleEvaluatorLogsDAO logsDAO;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-'+ $inputRuleEvaluator.type")
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public <E, T extends AutomationRuleEvaluator<E>> T save(@NonNull T inputRuleEvaluator,
             @NonNull UUID projectId,
             @NonNull String workspaceId,
@@ -95,6 +96,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
                 case AutomationRuleEvaluatorUserDefinedMetricPython userDefinedMetricPython -> {
+                    if (!opikConfiguration.getServiceToggles().isPythonEvaluatorEnabled()) {
+                        throw new ServerErrorException("Python evaluator is disabled", 501);
+                    }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
                             .projectId(projectId)
@@ -128,7 +132,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-*'", keyUsesPatternMatching = true)
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
             @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate<?> evaluatorUpdate) {
 
@@ -147,12 +151,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                 .code(AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdateLlmAsJudge.getCode()))
                                 .lastUpdatedBy(userName)
                                 .build();
-                    case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython ->
-                        UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
+                    case AutomationRuleEvaluatorUpdateUserDefinedMetricPython evaluatorUpdateUserDefinedMetricPython -> {
+                        if (!opikConfiguration.getServiceToggles().isPythonEvaluatorEnabled()) {
+                            throw new ServerErrorException("Python evaluator is disabled", 501);
+                        }
+                        yield UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
                                 .code(AutomationModelEvaluatorMapper.INSTANCE
                                         .map(evaluatorUpdateUserDefinedMetricPython.getCode()))
                                 .lastUpdatedBy(userName)
                                 .build();
+                    }
                 };
 
                 int resultEval = dao.updateEvaluator(id, modelUpdate);
@@ -198,7 +206,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-*'", keyUsesPatternMatching = true)
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");
@@ -258,16 +266,13 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @Cacheable(name = "automation_rule_evaluators_find_by_type", key = "$projectId +'-'+ $workspaceId  +'-'+  $type", returnType = AutomationRuleEvaluator.class, wrapperType = List.class)
+    @Cacheable(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId", returnType = AutomationRuleEvaluator.class, wrapperType = List.class)
     public <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(
-            @NonNull UUID projectId, @NonNull String workspaceId, @NonNull AutomationRuleEvaluatorType type) {
-        log.debug("Finding AutomationRuleEvaluators with type '{}' in projectId '{}' and workspaceId '{}'", type,
-                projectId, workspaceId);
-
+            @NonNull UUID projectId, @NonNull String workspaceId) {
+        log.info("Finding AutomationRuleEvaluators, projectId '{}', workspaceId '{}'", projectId, workspaceId);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var criteria = AutomationRuleEvaluatorCriteria.builder().type(type).build();
-
+            var criteria = AutomationRuleEvaluatorCriteria.builder().build();
             return dao.find(workspaceId, projectId, criteria)
                     .stream()
                     .map(evaluator -> switch (evaluator) {
@@ -277,7 +282,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                             (T) AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                     })
                     .toList();
-
         });
     }
 

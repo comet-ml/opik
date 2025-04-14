@@ -11,6 +11,7 @@ import useTracesList from "@/api/traces/useTracesList";
 import useSpansList from "@/api/traces/useSpansList";
 import { Span, SPAN_TYPE, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
+import { Sorting } from "@/types/sorting";
 
 export enum TRACE_DATA_TYPE {
   traces = "traces",
@@ -21,6 +22,7 @@ type UseTracesOrSpansListParams = {
   projectId: string;
   type: TRACE_DATA_TYPE;
   filters?: Filters;
+  sorting?: Sorting;
   search?: string;
   page: number;
   size: number;
@@ -30,6 +32,7 @@ type UseTracesOrSpansListParams = {
 type UseTracesOrSpansListResponse = {
   data: {
     content: Array<Trace | Span>;
+    sortable_by: string[];
     total: number;
   };
   isPending: boolean;

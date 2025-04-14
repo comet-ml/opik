@@ -5,7 +5,7 @@ simple filters without "and" or "or" operators.
 
 import json
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 COLUMNS = {
     "name": "string",
@@ -45,10 +45,10 @@ class OpikQueryLanguage:
 
     When converting a query string into another format, a common approach is:
     1. First convert the string into a series of tokens using a tokenizer
-    2. Convert the list of tokens into a Abstract Syntax Tree (AST) using a parser
+    2. Convert the list of tokens into an Abstract Syntax Tree (AST) using a parser
     3. Traverse the AST and convert it into the desired format using a formatter
 
-    Due to the simple nature of the queries we currently support (no support for and/or operators, etc), we have have
+    Due to the simple nature of the queries we currently support (no support for and/or operators, etc.), we have
     combined the tokenizer and formatter steps into a single parse method.
 
     The parse method works by iterating over the string character by character and extracting / validating the tokens.
@@ -58,7 +58,13 @@ class OpikQueryLanguage:
         self.query_string = query_string or ""
 
         self._cursor = 0
-        self.parsed_filters = self._parse()
+        self._filter_expressions = self._parse_expressions()
+        self.parsed_filters = None
+        if self._filter_expressions is not None:
+            self.parsed_filters = json.dumps(self._filter_expressions)
+
+    def get_filter_expressions(self) -> Optional[List[Dict[str, Any]]]:
+        return self._filter_expressions
 
     def _is_valid_field_char(self, char: str) -> bool:
         return char.isalnum() or char == "_"
@@ -256,10 +262,10 @@ class OpikQueryLanguage:
             return {"value": value}
         else:
             raise ValueError(
-                f'Invalid value {self.query_string[start:self._cursor]}, expected an string in double quotes("value") or a number'
+                f'Invalid value {self.query_string[start : self._cursor]}, expected an string in double quotes("value") or a number'
             )
 
-    def _parse(self) -> Optional[str]:
+    def _parse_expressions(self) -> Optional[List[Dict[str, Any]]]:
         if len(self.query_string) == 0:
             return None
 
@@ -296,4 +302,4 @@ class OpikQueryLanguage:
             else:
                 break
 
-        return json.dumps(expressions)
+        return expressions

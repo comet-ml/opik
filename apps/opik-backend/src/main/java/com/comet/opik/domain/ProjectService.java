@@ -7,6 +7,7 @@ import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.Direction;
@@ -17,6 +18,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -29,6 +31,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -40,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -83,10 +88,20 @@ public interface ProjectService {
 
     Project retrieveByName(String projectName);
 
+    Mono<List<Project>> retrieveByNamesOrCreate(Set<String> projectNames);
+
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
+
+    static Map<String, Project> groupByName(List<Project> projects) {
+        return projects.stream().collect(Collectors.toMap(
+                Project::name,
+                Function.identity(),
+                BinaryOperatorUtils.last(),
+                () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)));
+    }
 }
 
 @Slf4j
@@ -173,6 +188,7 @@ class ProjectServiceImpl implements ProjectService {
                         workspaceId,
                         projectUpdate.name(),
                         projectUpdate.description(),
+                        projectUpdate.visibility(),
                         userName);
 
                 return null;
@@ -191,8 +207,13 @@ class ProjectServiceImpl implements ProjectService {
     @Override
     public Project get(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
+                .map(v -> v == ProjectVisibility.PUBLIC)
+                .orElse(false);
 
-        return get(id, workspaceId);
+        return Optional.of(get(id, workspaceId))
+                .filter(project -> !publicOnly || project.visibility() == ProjectVisibility.PUBLIC)
+                .orElseThrow(this::createNotFoundError);
     }
 
     @Override
@@ -287,6 +308,7 @@ class ProjectServiceImpl implements ProjectService {
             @NonNull List<SortingField> sortingFields) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        ProjectVisibility visibility = requestContext.get().getVisibility();
 
         if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
             return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
@@ -299,9 +321,9 @@ class ProjectServiceImpl implements ProjectService {
             int offset = (page - 1) * size;
 
             return new ProjectRecordSet(
-                    repository.find(size, offset, workspaceId, criteria.projectName(),
+                    repository.find(size, offset, workspaceId, criteria.projectName(), visibility,
                             sortingQueryBuilder.toOrderBySql(sortingFields)),
-                    repository.findCount(workspaceId, criteria.projectName()));
+                    repository.findCount(workspaceId, criteria.projectName(), visibility));
         });
 
         if (projectRecordSet.content().isEmpty()) {
@@ -354,12 +376,13 @@ class ProjectServiceImpl implements ProjectService {
     private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull SortingField sortingField) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        ProjectVisibility visibility = requestContext.get().getVisibility();
 
         // get all project ids and last updated
         List<ProjectIdLastUpdated> allProjectIdsLastUpdated = template.inTransaction(READ_ONLY, handle -> {
             ProjectDAO repository = handle.attach(ProjectDAO.class);
 
-            return repository.getAllProjectIdsLastUpdated(workspaceId, criteria.projectName());
+            return repository.getAllProjectIdsLastUpdated(workspaceId, criteria.projectName(), visibility);
         });
 
         if (allProjectIdsLastUpdated.isEmpty()) {
@@ -450,6 +473,7 @@ class ProjectServiceImpl implements ProjectService {
                     log.info("Creating project with name '{}' on workspaceId '{}'", projectName, workspaceId);
                     var project = Project.builder()
                             .name(projectName)
+                            .visibility(ProjectVisibility.PRIVATE)
                             .build();
 
                     UUID projectId = idGenerator.generateId();
@@ -499,9 +523,76 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public Mono<List<Project>> retrieveByNamesOrCreate(Set<String> projectNames) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return checkIfNeededToCreateProjectsWithContext(workspaceId, userName, projectNames) // create projects if needed
+                    .then(Mono.fromCallable(() -> getAllProjectsByName(workspaceId, projectNames))
+                            .subscribeOn(Schedulers.boundedElastic())); // get all project itemIds
+        });
+    }
+
+    @Override
     public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
         template.inTransaction(WRITE,
                 handle -> handle.attach(ProjectDAO.class).recordLastUpdatedTrace(workspaceId, lastUpdatedTraces));
     }
 
+    private Mono<Void> checkIfNeededToCreateProjectsWithContext(String workspaceId,
+            String userName, Set<String> projectNames) {
+
+        return Mono.fromRunnable(() -> checkIfNeededToCreateProjects(projectNames, userName, workspaceId))
+                .publishOn(Schedulers.boundedElastic())
+                .then();
+    }
+
+    private List<Project> getAllProjectsByName(String workspaceId,
+            Set<String> projectNames) {
+        return template.inTransaction(READ_ONLY, handle -> {
+
+            var projectDAO = handle.attach(ProjectDAO.class);
+
+            return projectDAO.findByNames(workspaceId, projectNames);
+        });
+    }
+
+    private void checkIfNeededToCreateProjects(Set<String> projectNames,
+            String userName, String workspaceId) {
+
+        Map<String, Project> projectsPerLowerCaseName = ProjectService.groupByName(
+                getAllProjectsByName(workspaceId, projectNames));
+
+        template.inTransaction(WRITE, handle -> {
+
+            var projectDAO = handle.attach(ProjectDAO.class);
+
+            projectNames
+                    .stream()
+                    .filter(projectName -> !projectsPerLowerCaseName.containsKey(projectName))
+                    .forEach(projectName -> {
+                        UUID projectId = idGenerator.generateId();
+                        var newProject = Project.builder()
+                                .name(projectName)
+                                .visibility(ProjectVisibility.PRIVATE)
+                                .id(projectId)
+                                .createdBy(userName)
+                                .lastUpdatedBy(userName)
+                                .build();
+
+                        try {
+                            projectDAO.save(workspaceId, newProject);
+                        } catch (UnableToExecuteStatementException e) {
+                            if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                                log.warn("Project {} already exists", projectName);
+                            } else {
+                                throw e;
+                            }
+                        }
+                    });
+
+            return null;
+        });
+    }
 }

@@ -22,6 +22,8 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.pythonevaluator.PythonEvaluatorRequest;
+import com.comet.opik.domain.pythonevaluator.PythonEvaluatorResponse;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.llm.LlmModule;
@@ -41,7 +43,6 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -58,6 +59,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.apache.commons.lang3.RandomStringUtils;
@@ -66,6 +68,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -79,12 +82,15 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -103,11 +109,11 @@ class AutomationRuleEvaluatorsResourceTest {
 
     private static final String URL_TEMPLATE = "%s/v1/private/automations/evaluators/";
 
-    private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {"createdAt", "lastUpdatedAt",
-            "projectName"};
+    private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {
+            "createdAt", "lastUpdatedAt", "projectName"};
 
-    private static final String messageToTest = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
-    private static final String testEvaluator = """
+    private static final String MESSAGE_TO_TEST = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
+    private static final String LLM_AS_A_JUDGE_EVALUATOR = """
             {
               "model": { "name": "gpt-4o", "temperature": 0.3 },
               "messages": [
@@ -127,12 +133,35 @@ class AutomationRuleEvaluatorsResourceTest {
               ]
             }
             """
-            .formatted(messageToTest)
+            .formatted(MESSAGE_TO_TEST)
             .trim();
 
-    private static final String summaryStr = "What was the approach to experimenting with different data mixtures?";
-    private static final String outputStr = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
-    private static final String input = """
+    private static final String USER_DEFINED_METRIC = """
+            from typing import Any
+
+            from opik.evaluation.metrics import base_metric, score_result
+
+
+            class UserDefinedEquals(base_metric.BaseMetric):
+                def __init__(
+                    self,
+                    name: str = "user_defined_equals_metric",
+                ):
+                    super().__init__(
+                        name=name,
+                        track=False,
+                    )
+
+                def score(
+                    self, output: str, reference: str, **ignored_kwargs: Any
+                ) -> score_result.ScoreResult:
+                    value = 1.0 if output == reference else 0.0
+                    return score_result.ScoreResult(value=value, name=self.name)
+            """;
+
+    private static final String SUMMARY_STR = "What was the approach to experimenting with different data mixtures?";
+    private static final String OUTPUT_STR = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
+    private static final String INPUT = """
             {
                 "questions": {
                     "question1": "%s",
@@ -141,17 +170,17 @@ class AutomationRuleEvaluatorsResourceTest {
                 "pdf_url": "https://arxiv.org/pdf/2406.04744",
                 "title": "CRAG -- Comprehensive RAG Benchmark"
             }
-            """.formatted(summaryStr)
+            """.formatted(SUMMARY_STR)
             .trim();
 
-    private static final String output = """
+    private static final String OUTPUT = """
             {
                 "output": "%s"
             }
-            """.formatted(outputStr)
+            """.formatted(OUTPUT_STR)
             .trim();
 
-    private static final String validAiMsgTxt = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"},"
+    private static final String VALID_AI_MSG_TXT = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"},"
             +
             "\"Conciseness\":{\"score\":4,\"reason\":\"The summary is mostly concise but could be slightly more streamlined by removing redundant phrases.\"},"
             +
@@ -164,26 +193,25 @@ class AutomationRuleEvaluatorsResourceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer<?> mysql = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer clickhouse = ClickHouseContainerUtils.newClickHouseContainer(zookeeper);
+
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
-    private final TestDropwizardAppExtension APP;
+    private final TestDropwizardAppExtension app;
 
     {
-        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
-
+        Startables.deepStart(redis, mysql, clickhouse, zookeeper).join();
         wireMock = WireMockUtils.startWireMock();
-
-        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
-
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, DATABASE_NAME);
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
-                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .jdbcUrl(mysql.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
-                        .redisUrl(REDIS.getRedisURI())
+                        .redisUrl(redis.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
                         .disableModules(List.of(LlmModule.class))
                         .modules(List.of(new AbstractModule() {
@@ -193,6 +221,10 @@ class AutomationRuleEvaluatorsResourceTest {
                                         .toInstance(Mockito.mock(LlmProviderFactory.class, Mockito.RETURNS_DEEP_STUBS));
                             }
                         }))
+                        .customConfigs(List.of(
+                                new CustomConfig("pythonEvaluator.url",
+                                        wireMock.runtimeInfo().getHttpBaseUrl() + "/pythonBackendMock"),
+                                new CustomConfig("serviceToggles.pythonEvaluatorEnabled", "true")))
                         .build());
     }
 
@@ -206,17 +238,16 @@ class AutomationRuleEvaluatorsResourceTest {
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) {
-
+    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
         MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
+        try (var connection = clickhouse.createConnection("")) {
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+                    ClickHouseContainerUtils.migrationParameters());
+        }
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
-
         ClientSupportUtils.config(client);
-
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
-
         this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(this.client, baseURI);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
@@ -232,7 +263,7 @@ class AutomationRuleEvaluatorsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ApiKey {
 
-        private static final String FAKE_API_KEY = UUID.randomUUID().toString();
+        private static final String FAKE_API_KEY = "apiKey-" + UUID.randomUUID();
 
         Stream<Arguments> credentials() {
             return Stream.of(
@@ -246,7 +277,8 @@ class AutomationRuleEvaluatorsResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(FAKE_API_KEY))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                            .willReturn(WireMock.unauthorized()
+                                    .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     HttpStatus.SC_UNAUTHORIZED)))));
@@ -310,8 +342,8 @@ class AutomationRuleEvaluatorsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SessionTokenCookie {
 
-        private static final String SESSION_TOKEN = UUID.randomUUID().toString();
-        private static final String FAKE_SESSION_TOKEN = UUID.randomUUID().toString();
+        private static final String SESSION_TOKEN = "sessionToken-" + UUID.randomUUID();
+        private static final String FAKE_SESSION_TOKEN = "sessionToken-" + UUID.randomUUID();
 
         Stream<Arguments> credentials() {
             return Stream.of(
@@ -331,7 +363,8 @@ class AutomationRuleEvaluatorsResourceTest {
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(FAKE_SESSION_TOKEN))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                            .willReturn(WireMock.unauthorized()
+                                    .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     HttpStatus.SC_UNAUTHORIZED)))));
@@ -342,13 +375,10 @@ class AutomationRuleEvaluatorsResourceTest {
         @DisplayName("create evaluator definition: when api key is present, then return proper response")
         void createAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(
                 String sessionToken, boolean isAuthorized, String workspaceName) {
-
             var projectId = UUID.randomUUID();
             var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .id(null)
                     .projectId(projectId)
                     .build();
-
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
@@ -370,17 +400,12 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("get evaluators by project id: when api key is present, then return proper response")
         void getProjectAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(
-                String sessionToken,
-                boolean isAuthorized,
-                String workspaceName) {
-
+                String sessionToken, boolean isAuthorized, String workspaceName) {
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
                     WORKSPACE_NAME);
-
             int samplesToCreate = 15;
             var newWorkspaceName = "workspace-" + UUID.randomUUID();
             var newWorkspaceId = UUID.randomUUID().toString();
-
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/opik/auth-session"))
                             .withCookie(SESSION_COOKIE, equalTo(sessionToken))
@@ -388,8 +413,9 @@ class AutomationRuleEvaluatorsResourceTest {
                             .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, newWorkspaceId))));
 
             IntStream.range(0, samplesToCreate).forEach(i -> {
-                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
-                        .toBuilder().id(null).projectId(projectId).build();
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
                 evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
             });
 
@@ -401,16 +427,13 @@ class AutomationRuleEvaluatorsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
-
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
-
                     var actualEntity = actualResponse
                             .readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
                     assertThat(actualEntity.content()).hasSize(samplesToCreate);
                     assertThat(actualEntity.total()).isEqualTo(samplesToCreate);
-
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
@@ -422,14 +445,8 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("get evaluator by id: when api key is present, then return proper response")
         void getAutomationRuleEvaluatorById__whenSessionTokenIsPresent__thenReturnProperResponse(
-                String sessionToken,
-                boolean isAuthorized,
-                String workspaceName) {
-
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .id(null)
-                    .build();
-
+                String sessionToken, boolean isAuthorized, String workspaceName) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -440,11 +457,9 @@ class AutomationRuleEvaluatorsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
-
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
-
                     var ruleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
                     assertThat(ruleEvaluator.getId()).isEqualTo(id);
                 } else {
@@ -459,15 +474,12 @@ class AutomationRuleEvaluatorsResourceTest {
         @DisplayName("update evaluator: when api key is present, then return proper response")
         void updateAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(
                 String sessionToken, boolean isAuthorized, String workspaceName) {
-
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null)
-                    .build();
-
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
-                    .projectId(evaluator.getProjectId()).build();
-
+                    .projectId(evaluator.getProjectId())
+                    .build();
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path(id.toString())
                     .request()
@@ -489,16 +501,12 @@ class AutomationRuleEvaluatorsResourceTest {
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("delete evaluator by id: when api key is present, then return proper response")
-        void deleteAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean isAuthorized,
-                String workspaceName) {
-
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder().id(null)
-                    .build();
-
+        void deleteAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(
+                String sessionToken, boolean isAuthorized, String workspaceName) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
-            var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
 
+            var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("delete")
                     .queryParam("project_id", evaluator.getProjectId())
@@ -522,28 +530,24 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("batch delete evaluators by id: when api key is present, then return proper response")
         void deleteProjectAutomationRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(
-                String sessionToken,
-                boolean isAuthorized,
-                String workspaceName) {
-
+                String sessionToken, boolean isAuthorized, String workspaceName) {
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
                     WORKSPACE_NAME);
-
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId).build();
+                    .projectId(projectId)
+                    .build();
             var evalId1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-
             var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId).build();
+                    .projectId(projectId)
+                    .build();
             var evalId2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-
             var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId).build();
+                    .projectId(projectId)
+                    .build();
             evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
 
             var evalIds1and2 = Set.of(evalId1, evalId2);
             var deleteMethod = BatchDelete.builder().ids(evalIds1and2).build();
-
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("delete")
                     .queryParam("project_id", projectId)
@@ -561,7 +565,6 @@ class AutomationRuleEvaluatorsResourceTest {
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(UNAUTHORIZED_RESPONSE);
                 }
             }
-
             // we shall see a single evaluators for the project now
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("project_id", projectId)
@@ -570,11 +573,9 @@ class AutomationRuleEvaluatorsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
-
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
-
                     var actualEntity = actualResponse
                             .readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
                     assertThat(actualEntity.content()).hasSize(1);
@@ -591,44 +592,30 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("credentials")
         @DisplayName("get logs per rule evaluators: when api key is present, then return proper response")
         void getLogsPerRuleEvaluators__whenSessionTokenIsPresent__thenReturnProperResponse(
-                String sessionToken,
-                boolean isAuthorized,
-                String workspaceName,
-                LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
-
-            ChatResponse chatResponse = ChatResponse.builder()
-                    .aiMessage(AiMessage.from(validAiMsgTxt))
-                    .build();
-
+                String sessionToken, boolean isAuthorized, String workspaceName, LlmProviderFactory llmProviderFactory)
+                throws JsonProcessingException {
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
             when(llmProviderFactory.getLanguageModel(anyString(), any())
                     .chat(any()))
                     .thenAnswer(invocationOnMock -> chatResponse);
-
-            String projectName = UUID.randomUUID().toString();
-
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .id(null)
-                    .code(OBJECT_MAPPER.readValue(testEvaluator,
+                    .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
                     .samplingRate(1f)
                     .projectId(projectId)
                     .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .input(OBJECT_MAPPER.readTree(input))
-                    .output(OBJECT_MAPPER.readTree(output))
+                    .input(OBJECT_MAPPER.readTree(INPUT))
+                    .output(OBJECT_MAPPER.readTree(OUTPUT))
                     .build();
-
-            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
-
-            Instant startTime = Instant.now();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             Awaitility.await().untilAsserted(() -> {
-
                 try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                         .path(id.toString())
                         .path("logs")
@@ -637,9 +624,11 @@ class AutomationRuleEvaluatorsResourceTest {
                         .accept(MediaType.APPLICATION_JSON_TYPE)
                         .header(WORKSPACE_HEADER, workspaceName)
                         .get()) {
-
                     if (isAuthorized) {
-                        assertLogResponse(actualResponse, startTime, id, trace);
+                        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                        assertThat(actualResponse.hasEntity()).isTrue();
+                        var actualEntity = actualResponse.readEntity(LogPage.class);
+                        assertLogResponse(actualEntity, id, trace);
                     } else {
                         assertThat(actualResponse.getStatusInfo().getStatusCode())
                                 .isEqualTo(HttpStatus.SC_UNAUTHORIZED);
@@ -899,50 +888,111 @@ class AutomationRuleEvaluatorsResourceTest {
     class GetLogs {
 
         @Test
-        void getLogs(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
-            var chatResponse = ChatResponse.builder()
-                    .aiMessage(AiMessage.from(validAiMsgTxt))
-                    .build();
-
+        void getLogsLlmAsJudgeScorer(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
             when(llmProviderFactory.getLanguageModel(anyString(), any())
                     .chat(any()))
                     .thenAnswer(invocationOnMock -> chatResponse);
-
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .id(null)
-                    .code(OBJECT_MAPPER.readValue(testEvaluator,
+                    .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
                     .samplingRate(1f)
                     .projectId(projectId)
                     .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .input(OBJECT_MAPPER.readTree(input))
-                    .output(OBJECT_MAPPER.readTree(output))
+                    .input(OBJECT_MAPPER.readTree(INPUT))
+                    .output(OBJECT_MAPPER.readTree(OUTPUT))
                     .build();
-
-            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
-
-            var startTime = Instant.now();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             Awaitility.await().untilAsserted(() -> {
+                var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(logPage, id, trace);
+            });
+        }
 
-                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .path(id.toString())
-                        .path("logs")
-                        .request()
-                        .accept(MediaType.APPLICATION_JSON_TYPE)
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                        .get()) {
+        @Test
+        void getLogsUserDefinedMetricPythonScorer() throws JsonProcessingException {
+            var pythonEvaluatorRequest = PythonEvaluatorRequest.builder()
+                    .code(USER_DEFINED_METRIC)
+                    .data(Map.of(
+                            "output", "abc",
+                            "reference", "abc"))
+                    .build();
+            var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
+            wireMock.server().stubFor(
+                    post(urlPathEqualTo("/pythonBackendMock/v1/private/evaluators/python"))
+                            .withRequestBody(equalToJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorRequest)))
+                            .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorResponse))));
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
+                            .metric(USER_DEFINED_METRIC)
+                            .arguments(Map.of(
+                                    "output", "output.response",
+                                    "reference", "abc"))
+                            .build())
+                    .samplingRate(1f)
+                    .projectId(projectId)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
-                    assertLogResponse(actualResponse, startTime, id, trace);
-                }
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .output(OBJECT_MAPPER.readTree("""
+                            {
+                                "response": "abc"
+                            }
+                            """))
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+                var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(logPage, id, trace);
+            });
+        }
+
+        @Test
+        void getLogsTraceSkipped() {
+            // Adding 2 rules to a project, as there was a bug in the sampler causing the logs to fail when having
+            // multiple rules. This test should have at least 2 rules to ensure that the bug is fixed.
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Added a Python rule with sampling rate 0
+            var evaluatorPython = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class)
+                    .toBuilder()
+                    .samplingRate(0f)
+                    .projectId(projectId)
+                    .build();
+            var idPython = evaluatorsResourceClient.createEvaluator(evaluatorPython, WORKSPACE_NAME, API_KEY);
+
+            // Added a LLM rule with sampling rate 0
+            var evaluatorLlm = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .samplingRate(0f)
+                    .projectId(projectId)
+                    .build();
+            var idLlm = evaluatorsResourceClient.createEvaluator(evaluatorLlm, WORKSPACE_NAME, API_KEY);
+
+            // Sending a trace, that shouldn't be sampled as the rate is 0 for both rules
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+                var logPagePython = evaluatorsResourceClient.getLogs(idPython, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(logPagePython, idPython, evaluatorPython, trace);
+                var logPageLlm = evaluatorsResourceClient.getLogs(idLlm, WORKSPACE_NAME, API_KEY);
+                assertLogResponse(logPageLlm, idLlm, evaluatorLlm, trace);
             });
         }
     }
@@ -979,8 +1029,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var actualAutomationRuleEvaluators = actualEntity.content();
             assertThat(actualAutomationRuleEvaluators).hasSize(expectedAutomationRuleEvaluators.size());
             assertThat(actualAutomationRuleEvaluators)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
-                            AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedAutomationRuleEvaluators);
 
             for (int i = 0; i < actualAutomationRuleEvaluators.size(); i++) {
@@ -992,8 +1041,7 @@ class AutomationRuleEvaluatorsResourceTest {
             }
 
             assertThat(actualAutomationRuleEvaluators)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
-                            AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
                     .doesNotContainAnyElementsOf(unexpectedAutomationRuleEvaluators);
         }
     }
@@ -1004,37 +1052,51 @@ class AutomationRuleEvaluatorsResourceTest {
         assertThat(actualRuleEvaluator.getLastUpdatedAt()).isAfter(expectedRuleEvaluator.getLastUpdatedAt());
     }
 
-    private void assertLogResponse(Response actualResponse, Instant startTime, UUID id, Trace trace) {
-        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-        assertThat(actualResponse.hasEntity()).isTrue();
+    private void assertLogResponse(LogPage logPage, UUID id, Trace trace) {
+        assertLogPage(logPage, 4);
 
-        var actualEntity = actualResponse.readEntity(LogPage.class);
-
-        assertThat(actualEntity.content()).hasSize(4);
-        assertThat(actualEntity.total()).isEqualTo(4);
-        assertThat(actualEntity.size()).isEqualTo(4);
-        assertThat(actualEntity.page()).isEqualTo(1);
-
-        assertThat(actualEntity.content())
+        assertThat(logPage.content())
                 .allSatisfy(log -> {
-                    assertThat(log.timestamp()).isBetween(startTime, Instant.now());
+                    assertThat(log.timestamp()).isBetween(trace.createdAt(), Instant.now());
                     assertThat(log.ruleId()).isEqualTo(id);
-                    assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
                     assertThat(log.level()).isEqualTo(LogLevel.INFO);
+                    assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
                 });
 
-        assertThat(actualEntity.content())
-                .anyMatch(log -> log.message()
-                        .matches("Scores for traceId '.*' stored successfully:\\n\\n.*"));
-
-        assertThat(actualEntity.content())
-                .anyMatch(log -> log.message().matches("Received response for traceId '.*':\\n\\n.*"));
-
-        assertThat(actualEntity.content())
+        assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
-                        "(?s)Sending traceId '([^']*)' to LLM using the following input:\\n\\n.*"));
+                        "Scores for traceId '.*' stored successfully:\\n\\n.*"));
+        assertThat(logPage.content())
+                .anyMatch(log -> log.message().matches(
+                        "Received response for traceId '.*':\\n\\n.*"));
+        assertThat(logPage.content())
+                .anyMatch(log -> log.message().matches(
+                        "(?s)Sending traceId '.*' to .* using the following input:\\n\\n.*"));
+        assertThat(logPage.content())
+                .anyMatch(log -> log.message().matches(
+                        "Evaluating traceId '.*' sampled by rule '.*'"));
+    }
 
-        assertThat(actualEntity.content())
-                .anyMatch(log -> log.message().matches("Evaluating traceId '.*' sampled by rule '.*'"));
+    private static void assertLogPage(LogPage logPage, int expectedSize) {
+        assertThat(logPage.content()).hasSize(expectedSize);
+        assertThat(logPage.total()).isEqualTo(expectedSize);
+        assertThat(logPage.size()).isEqualTo(expectedSize);
+        assertThat(logPage.page()).isEqualTo(1);
+    }
+
+    private void assertLogResponse(LogPage logPage, UUID ruleId, AutomationRuleEvaluator<?> rule, Trace trace) {
+        assertLogPage(logPage, 1);
+
+        assertThat(logPage.content())
+                .allSatisfy(log -> {
+                    assertThat(log.timestamp()).isBetween(trace.createdAt(), Instant.now());
+                    assertThat(log.ruleId()).isEqualTo(ruleId);
+                    assertThat(log.level()).isEqualTo(LogLevel.INFO);
+                    assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                });
+
+        assertThat(logPage.content().getFirst().message())
+                .isEqualTo("The traceId '%s' was skipped for rule: '%s' and per the sampling rate '0.0'".formatted(
+                        trace.id(), rule.getName()));
     }
 }

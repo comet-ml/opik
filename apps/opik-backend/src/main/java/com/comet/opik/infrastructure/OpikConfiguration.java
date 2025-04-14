@@ -33,6 +33,9 @@ public class OpikConfiguration extends JobConfiguration {
     private RateLimitConfig rateLimit = new RateLimitConfig();
 
     @Valid @NotNull @JsonProperty
+    private UsageLimitConfig usageLimit = new UsageLimitConfig();
+
+    @Valid @NotNull @JsonProperty
     private MetadataConfig metadata = new MetadataConfig();
 
     @Valid @NotNull @JsonProperty
@@ -68,4 +71,10 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private S3Config s3Config = new S3Config();
+
+    @Valid @NotNull @JsonProperty
+    private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();
 }

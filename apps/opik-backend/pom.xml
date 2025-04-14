@@ -21,7 +21,7 @@
         <lombok.version>1.18.36</lombok.version>
         <mysql.version>9.2.0</mysql.version>
         <dropwizard-guicey.version>7.1.4</dropwizard-guicey.version>
-        <stringtemplate.version>3.48.0</stringtemplate.version>
+        <stringtemplate.version>3.49.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.8.2</clickhouse-java.version>
@@ -31,7 +31,7 @@
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.12.0</wiremock.version>
         <redisson.version>3.45.0</redisson.version>
-        <opentelmetry.version>2.14.0</opentelmetry.version>
+        <opentelmetry.version>2.15.0</opentelmetry.version>
         <aws.java.sdk.version>2.31.1</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
@@ -70,7 +70,7 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
-                <version>4.1.118.Final</version>
+                <version>4.2.0.Final</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -272,6 +272,11 @@
             <artifactId>opentelemetry-proto</artifactId>
             <version>1.5.0-alpha</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>3.1.0</version>
+        </dependency>
 
 
         <!-- Test -->
@@ -453,6 +458,9 @@
                         <transformer
                                 implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                             <mainClass>${mainClass}</mainClass>
+                            <manifestEntries>
+                                <Multi-Release>true</Multi-Release>
+                            </manifestEntries>
                         </transformer>
                     </transformers>
                     <!-- exclude signed Manifests -->

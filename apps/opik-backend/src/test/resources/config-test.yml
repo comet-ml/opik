@@ -127,12 +127,8 @@ authentication:
   # Description: API key resolution cache TTL (seconds). Setting this value to 0 means no caching.
   apiKeyResolutionCacheTTLInSec: 0
   # Default:
-  # Description: Configures how to authenticate requests which originates from the sdk
-  sdk:
-    url: ''
-  # Default:
-  # Description: Configures how to authenticate requests which originates from the ui
-  ui:
+  # Description: Configures base url for React service, used for user management and authentication
+  reactService:
     url: ''
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
@@ -162,6 +158,13 @@ rateLimit:
   # Default: false
   # Description: Whether or not rate limit is enabled
   enabled: false
+
+# Configuration for usage limit. This is not enabled by default for open source installations.
+# In order to support that, the remote authentication server must contain a `quotas` object in its authentication
+# response.
+usageLimit:
+  # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
+  errorMessage: "You have exceeded the usage limit for this operation."
 
 # Configuration for anonymous usage reporting
 usageReport:
@@ -201,6 +204,9 @@ onlineScoring:
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
+      codec: java
+    - scorer: user_defined_metric_python
+      streamName: stream_scoring_user_defined_metric_python
       codec: java
 
 # LLM providers client configuration
@@ -264,3 +270,14 @@ s3Config:
   s3Url: http://localhost:9000
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: true
+
+# Python evaluator configuration
+pythonEvaluator:
+  # Default: http://localhost:8000
+  # Description: URL of the Python evaluator service, generally the opik-python-backend service
+  url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
+
+serviceToggles:
+  # Default: false for testing. It should be enabled for test scenarios when it's relevant.
+  # Description: Whether or not Python evaluator is enabled
+  pythonEvaluatorEnabled: "false"

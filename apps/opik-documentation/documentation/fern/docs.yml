@@ -1,7 +1,16 @@
 instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
     custom-domain: https://www.comet.com/docs/opik/
+metadata:
+  # Core platform identity
+  og:site_name: "Opik Documentation"
+  og:title: "Opik LLM development Platform | Observability, Evaluation & Security"
+  og:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
+  og:url: "https://www.comet.com/docs/opik"
+
+title: Opik Documentation
 favicon: img/logo.svg
+
 js:
   - path: ./add_cookbook_banner.js
     strategy: afterInteractive
@@ -159,6 +168,9 @@ navigation:
               - page: Instructor
                 path: docs/tracing/integrations/instructor.mdx
                 slug: instructor
+              - page: LangChainJS
+                path: docs/tracing/integrations/langchainjs.mdx
+                slug: langchainjs
               - page: LangGraph
                 path: docs/tracing/integrations/langgraph.mdx
                 slug: langgraph
@@ -171,6 +183,9 @@ navigation:
               - page: Predibase
                 path: docs/tracing/integrations/predibase.mdx
                 slug: predibase
+              - page: Pydantic AI
+                path: docs/tracing/integrations/pydantic-ai.mdx
+                slug: pydantic-ai
               - page: Ragas
                 path: docs/tracing/integrations/ragas.mdx
                 slug: ragas
@@ -180,6 +195,9 @@ navigation:
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
                 slug: watsonx
+              - page: Agent Development Kit
+                path: docs/tracing/integrations/adk.mdx
+                slug: adk
           - section: OpenTelemetry
             slug: /opentelemetry
             contents:
@@ -246,12 +264,18 @@ navigation:
       - section: Prompt engineering
         slug: /prompt_engineering
         contents:
+          - page: Prompt optimization
+            path: docs/prompt_engineering/prompt_optimization.mdx
+            slug: prompt_optimization
+          - page: Agent optimization
+            path: docs/prompt_engineering/agent_optimization.mdx
+            slug: agent_optimization
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
             slug: prompt_management
-          - page: Managing prompts in code
-            path: docs/prompt_engineering/managing_prompts_in_code.mdx
-            slug: managing_prompts_in_code
+          - page: Opik's MCP server
+            path: docs/prompt_engineering/mcp_server.mdx
+            slug: mcp_server
           - page: Playground
             path: docs/prompt_engineering/playground.mdx
             slug: playground
@@ -267,7 +291,7 @@ navigation:
           - page: Production monitoring
             path: docs/production/production_monitoring.mdx
             slug: /production_monitoring
-          - page: Rules
+          - page: Online Evaluation rules
             path: docs/production/rules.mdx
             slug: rules
           - page: Gateway
@@ -357,6 +381,9 @@ navigation:
           - page: Predibase
             path: docs/cookbook/predibase.mdx
             slug: predibase
+          - page: Pydantic AI
+            path: docs/cookbook/pydantic-ai.mdx
+            slug: pydantic-ai
           - page: Ragas
             path: docs/cookbook/ragas.mdx
             slug: ragas
@@ -412,4 +439,7 @@ redirects:
     permanent: true
   - source: "/docs/opik/reference/rest_api/opik-rest-api/:slug/:slug"
     destination: "/docs/opik/reference/rest-api/overview"
+    permanent: true
+  - source: "docs/prompt_engineering/managing_prompts_in_code"
+    destination: "/docs/opik/prompt_engineering/prompt_management"
     permanent: true

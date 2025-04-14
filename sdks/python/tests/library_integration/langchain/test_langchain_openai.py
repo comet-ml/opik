@@ -52,13 +52,13 @@ EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT = {
         ),
         (
             langchain_openai.ChatOpenAI,
-            "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
             EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
             False,
         ),
         (
             langchain_openai.ChatOpenAI,
-            "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
             EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
             True,
         ),
@@ -92,6 +92,25 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
     callback.flush()
+
+    if llm_model == langchain_openai.OpenAI:
+        expected_llm_span_input = {"prompts": [expected_input_prompt]}
+    else:
+        expected_llm_span_input = {
+            "messages": [
+                [
+                    {
+                        "content": expected_input_prompt,
+                        "additional_kwargs": {},
+                        "response_metadata": {},
+                        "type": "human",
+                        "name": None,
+                        "id": None,
+                        "example": False,
+                    }
+                ]
+            ]
+        }
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -128,7 +147,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                         id=ANY_BUT_NONE,
                         type="llm",
                         name="custom-openai-llm-name",
-                        input={"prompts": [expected_input_prompt]},
+                        input=expected_llm_span_input,
                         output=ANY_BUT_NONE,
                         metadata=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
@@ -152,7 +171,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
     fake_backend,
     ensure_openai_configured,
 ):
-    expected_input_prompt = "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
+    input_prompt = "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
 
     callback = OpikTracer(
         tags=["tag3", "tag4"],
@@ -169,9 +188,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
     )
 
     chunks = []
-    for chunk in model.stream(
-        "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
-    ):
+    for chunk in model.stream(input_prompt):
         chunks.append(chunk)
 
     callback.flush()
@@ -179,7 +196,21 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="custom-openai-llm-name",
-        input={"prompts": [expected_input_prompt]},
+        input={
+            "messages": [
+                [
+                    {
+                        "content": input_prompt,
+                        "additional_kwargs": {},
+                        "response_metadata": {},
+                        "type": "human",
+                        "name": None,
+                        "id": None,
+                        "example": False,
+                    }
+                ]
+            ]
+        },
         output={
             "generations": ANY_BUT_NONE,
             "llm_output": None,
@@ -195,7 +226,6 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
             "ls_provider": "openai",
             "ls_temperature": ANY,
             "created_from": "langchain",
-            "usage": ANY_DICT,
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -203,7 +233,21 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="custom-openai-llm-name",
-                input={"prompts": [expected_input_prompt]},
+                input={
+                    "messages": [
+                        [
+                            {
+                                "content": input_prompt,
+                                "additional_kwargs": {},
+                                "response_metadata": {},
+                                "type": "human",
+                                "name": None,
+                                "id": None,
+                                "example": False,
+                            }
+                        ]
+                    ]
+                },
                 output=ANY_BUT_NONE,
                 tags=["tag3", "tag4"],
                 metadata={
@@ -325,8 +369,18 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                         id=ANY_BUT_NONE,
                         name="custom-openai-llm-name",
                         input={
-                            "prompts": [
-                                "Human: Given the title of play, write a synopsys for that. Title: The Hobbit."
+                            "messages": [
+                                [
+                                    {
+                                        "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
+                                        "additional_kwargs": {},
+                                        "response_metadata": {},
+                                        "type": "human",
+                                        "name": None,
+                                        "id": None,
+                                        "example": False,
+                                    }
+                                ]
                             ]
                         },
                         output=ANY_BUT_NONE,
@@ -439,8 +493,18 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
                         id=ANY_BUT_NONE,
                         name="custom-openai-llm-name",
                         input={
-                            "prompts": [
-                                "Human: Given the title of play, write a synopsys for that. Title: The Hobbit."
+                            "messages": [
+                                [
+                                    {
+                                        "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
+                                        "additional_kwargs": {},
+                                        "response_metadata": {},
+                                        "type": "human",
+                                        "name": None,
+                                        "id": None,
+                                        "example": False,
+                                    }
+                                ]
                             ]
                         },
                         output=ANY_BUT_NONE,

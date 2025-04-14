@@ -16,7 +16,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { Button } from "@/components/ui/button";
 
-const CompareExperimentsOutputCell: React.FunctionComponent<
+const CompareExperimentsOutputCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
 > = (context) => {
   const { custom } = context.column.columnDef.meta ?? {};
@@ -52,7 +52,9 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
         <span className="truncate">{data}</span>
       </CellTooltipWrapper>
     ) : (
-      <div className="size-full overflow-y-auto">{data}</div>
+      <div className="size-full overflow-y-auto whitespace-pre-wrap break-words">
+        {data}
+      </div>
     );
   };
 
@@ -67,10 +69,11 @@ const CompareExperimentsOutputCell: React.FunctionComponent<
           <Button
             size="icon-xs"
             variant="outline"
-            onClick={() => {
+            onClick={(event) => {
               if (isFunction(openTrace) && item?.trace_id) {
                 openTrace(item.trace_id);
               }
+              event.stopPropagation();
             }}
             className="absolute right-1 top-1 hidden group-hover:flex"
           >

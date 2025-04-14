@@ -7,11 +7,11 @@ import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.Provider;
 import lombok.RequiredArgsConstructor;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -32,11 +32,14 @@ public class AuthFilter implements ContainerRequestFilter {
 
         var sessionToken = headers.getCookies().get(RequestContext.SESSION_COOKIE);
 
-        URI requestUri = context.getUriInfo().getRequestUri();
+        UriInfo uriInfo = context.getUriInfo();
 
-        if (Pattern.matches("/v1/private/.*", requestUri.getPath())) {
-            authService.authenticate(headers, sessionToken, requestUri.getPath());
-        } else if (Pattern.matches("/v1/session/.*", requestUri.getPath())) {
+        if (Pattern.matches("/v1/private/.*", uriInfo.getRequestUri().getPath())) {
+            authService.authenticate(headers, sessionToken, ContextInfoHolder.builder()
+                    .uriInfo(uriInfo)
+                    .method(context.getMethod())
+                    .build());
+        } else if (Pattern.matches("/v1/session/.*", uriInfo.getRequestUri().getPath())) {
             authService.authenticateSession(sessionToken);
         }
 

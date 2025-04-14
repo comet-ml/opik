@@ -1,3 +1,5 @@
+import random
+import string
 import time
 import datetime as dt
 from opik.rest_api.client import OpikApi
@@ -13,6 +15,12 @@ def get_opik_api_client():
         workspace_name=os.getenv("OPIK_WORKSPACE", None),
         api_key=os.getenv("OPIK_API_KEY", None),
     )
+
+
+def get_random_string(length):
+    letters = string.ascii_lowercase
+    result_str = "".join(random.choice(letters) for _ in range(length))
+    return result_str
 
 
 def create_project_via_api(name: str):

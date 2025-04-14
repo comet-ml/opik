@@ -40,6 +40,12 @@ export enum DYNAMIC_COLUMN_TYPE {
   null = "null",
 }
 
+export enum CUSTOM_HEADER_ICON {
+  GUARDRAILS = "guardrails",
+}
+
+export type HeaderIconType = COLUMN_TYPE | CUSTOM_HEADER_ICON;
+
 export type ColumnData<T> = {
   id: string;
   label: string;
@@ -48,8 +54,9 @@ export type ColumnData<T> = {
   size?: number;
   type?: COLUMN_TYPE;
   customMeta?: object;
-  iconType?: COLUMN_TYPE;
+  iconType?: HeaderIconType;
   header?: Header<T, unknown>;
+  headerCheckbox?: boolean;
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;

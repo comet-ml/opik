@@ -4,8 +4,6 @@ import { BASE_API_URL } from "@/api/api";
 export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
 export const OPIK_HIGHLIGHT_LINE_TEMPLATE = " # HIGHLIGHTED_LINE";
 
-export const IMPORT_OS_TEMPLATE = "import os";
-
 export const buildApiKeyConfig = (
   apiKey: string,
   masked = false,
@@ -14,6 +12,9 @@ export const buildApiKeyConfig = (
   `os.environ["OPIK_API_KEY"] = "${masked ? maskAPIKey(apiKey) : apiKey}"${
     withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""
   }`;
+
+export const buildProjectNameConfig = (projectName: string) =>
+  `os.environ["OPIK_PROJECT_NAME"] = "${projectName}"`;
 
 export const buildWorkspaceNameConfig = (
   workspaceName: string,
@@ -24,7 +25,7 @@ export const buildWorkspaceNameConfig = (
   }`;
 
 export const buildOpikUrlOverrideConfig = (withHighlight = false) =>
-  `${IMPORT_OS_TEMPLATE} \n os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
+  `os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
     BASE_API_URL,
     window.location.origin,
   ).toString()}${withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""}"`;
@@ -35,6 +36,7 @@ type PutConfigInCodeArgs = {
   apiKey?: string;
   shouldMaskApiKey?: boolean;
   withHighlight?: boolean;
+  projectName?: string;
 };
 
 export const getConfigCode = (
@@ -42,6 +44,7 @@ export const getConfigCode = (
   apiKey?: string,
   shouldMaskApiKey = false,
   withHighlight = false,
+  projectName?: string,
 ) => {
   if (!apiKey) return buildOpikUrlOverrideConfig(withHighlight);
 
@@ -54,8 +57,11 @@ export const getConfigCode = (
     workspaceName,
     withHighlight,
   );
+  const projectNameConfig = projectName
+    ? `\n${buildProjectNameConfig(projectName)}`
+    : "";
 
-  return `${IMPORT_OS_TEMPLATE} \n${apiKeyConfig} \n${workspaceConfig}`;
+  return `${apiKeyConfig} \n${workspaceConfig}${projectNameConfig}`;
 };
 
 export const putConfigInCode = ({
@@ -64,6 +70,7 @@ export const putConfigInCode = ({
   apiKey,
   shouldMaskApiKey,
   withHighlight = false,
+  projectName,
 }: PutConfigInCodeArgs): { code: string; lines: number[] } => {
   let patchedCode = "";
 
@@ -73,6 +80,7 @@ export const putConfigInCode = ({
       apiKey,
       shouldMaskApiKey,
       withHighlight,
+      projectName,
     );
 
     patchedCode = code.replace(OPIK_API_KEY_TEMPLATE, configCode);

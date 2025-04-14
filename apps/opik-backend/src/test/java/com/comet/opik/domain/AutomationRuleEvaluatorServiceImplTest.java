@@ -29,6 +29,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.apache.commons.lang3.RandomStringUtils;
@@ -63,14 +64,15 @@ class AutomationRuleEvaluatorServiceImplTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
     private final WireMockUtils.WireMockRuntime WIRE_MOCK;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER).join();
 
         WIRE_MOCK = WireMockUtils.startWireMock();
 
@@ -87,7 +89,9 @@ class AutomationRuleEvaluatorServiceImplTest {
                                         new TestDropwizardAppExtensionUtils.CustomConfig("cacheManager.enabled",
                                                 "true"),
                                         new TestDropwizardAppExtensionUtils.CustomConfig("cacheManager.defaultDuration",
-                                                "PT1S")))
+                                                "PT1S"),
+                                        new TestDropwizardAppExtensionUtils.CustomConfig(
+                                                "serviceToggles.pythonEvaluatorEnabled", "true")))
                         .build());
     }
 
@@ -131,7 +135,7 @@ class AutomationRuleEvaluatorServiceImplTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
-        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        var judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
@@ -139,7 +143,7 @@ class AutomationRuleEvaluatorServiceImplTest {
         // Going around the service to delete the evaluator
         deleteEvaluator(transactionTemplate, evaluator);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
@@ -198,14 +202,14 @@ class AutomationRuleEvaluatorServiceImplTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
-        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        var judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
 
         var evaluator2 = createEvaluator(evaluatorClass, projectId, projectName);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, evaluator2.getType());
+        judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(2);
         assertEvaluator(Set.of(evaluator, evaluator2), judges);
@@ -232,7 +236,7 @@ class AutomationRuleEvaluatorServiceImplTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
-        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        var judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
@@ -240,7 +244,7 @@ class AutomationRuleEvaluatorServiceImplTest {
         var evaluatorUpdate = factory.manufacturePojo(evaluatorUpdateClass);
         service.update(evaluator.getId(), projectId, WORKSPACE_ID, USER, evaluatorUpdate);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, evaluatorUpdate.getType());
+        judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertThat(judges.getFirst().getName()).isEqualTo(evaluatorUpdate.getName());
@@ -256,14 +260,14 @@ class AutomationRuleEvaluatorServiceImplTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var evaluator = createEvaluator(evaluatorClass, projectId, projectName);
 
-        var judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        var judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).hasSize(1);
         assertEvaluator(evaluator, judges.getFirst());
 
         service.delete(Set.of(evaluator.getId()), projectId, WORKSPACE_ID);
 
-        judges = service.findAll(projectId, WORKSPACE_ID, evaluator.getType());
+        judges = service.findAll(projectId, WORKSPACE_ID);
 
         assertThat(judges).isEmpty();
     }

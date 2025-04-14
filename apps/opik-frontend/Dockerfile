@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.15.0-alpine3.20 AS builder
+FROM node:20.19.0-alpine3.20 AS builder
 
 WORKDIR /opt/frontend
 
@@ -24,7 +24,15 @@ ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
 # Production stage
-FROM nginx:1.27.4-alpine3.21
+FROM amazonlinux:2023
+
+# Install packages
+RUN yum update -y && yum install -y nginx \
+    && yum clean all
+
+# Add label for later inspection
+ARG BUILD_MODE=production
+LABEL build.mode="${BUILD_MODE}"
 
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html

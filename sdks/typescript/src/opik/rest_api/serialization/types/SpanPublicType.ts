@@ -7,8 +7,8 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 
 export const SpanPublicType: core.serialization.Schema<serializers.SpanPublicType.Raw, OpikApi.SpanPublicType> =
-    core.serialization.enum_(["general", "tool", "llm"]);
+    core.serialization.enum_(["general", "tool", "llm", "guardrail"]);
 
 export declare namespace SpanPublicType {
-    export type Raw = "general" | "tool" | "llm";
+    export type Raw = "general" | "tool" | "llm" | "guardrail";
 }

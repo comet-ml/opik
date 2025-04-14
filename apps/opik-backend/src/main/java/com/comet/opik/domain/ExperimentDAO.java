@@ -5,7 +5,10 @@ import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Function;
@@ -111,148 +114,6 @@ class ExperimentDAO {
             ;
             """;
 
-    private static final String SELECT_BY = """
-            SELECT
-                e.workspace_id as workspace_id,
-                e.dataset_id as dataset_id,
-                e.id as id,
-                e.name as name,
-                e.metadata as metadata,
-                e.created_at as created_at,
-                e.last_updated_at as last_updated_at,
-                e.created_by as created_by,
-                e.last_updated_by as last_updated_by,
-                e.prompt_version_id as prompt_version_id,
-                e.prompt_id as prompt_id,
-                e.prompt_versions as prompt_versions,
-                if(
-                     notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
-                     arrayMap(
-                        vName -> (
-                            vName,
-                            if(
-                                arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                            )
-                                    )
-                                ) = 0,
-                                0,
-                                arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
-                                            )
-                                    )
-                                ) / arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                            )
-                                    )
-                                )
-                            )
-                        ),
-                        arrayDistinct(arrayMap(vName -> vName.1, arrayFilter(curName -> length(curName.1) > 0, groupArray(tuple(tfs.name)))))
-                    ),
-                    []
-                 ) as feedback_scores,
-                count (DISTINCT ei.trace_id) as trace_count,
-                groupUniqArrayArray(tc.comments_array) as comments_array_agg
-            FROM (
-                SELECT
-                    *
-                FROM experiments
-                WHERE workspace_id = :workspace_id
-                <if(id)> AND id = :id <endif>
-                <if(name)> AND name = :name <endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS e
-            LEFT JOIN (
-                SELECT DISTINCT
-                    experiment_id,
-                    trace_id
-                FROM experiment_items
-                WHERE workspace_id = :workspace_id
-            ) AS ei ON e.id = ei.experiment_id
-            LEFT JOIN (
-                SELECT
-                    entity_id as id,
-                    name as name,
-                    SUM(value) as total_value,
-                    COUNT(value) as count_value
-                FROM (
-                    SELECT
-                        entity_id,
-                        name,
-                        value
-                    FROM feedback_scores
-                    WHERE entity_type = :entity_type
-                    AND workspace_id = :workspace_id
-                    AND entity_id IN (
-                        SELECT
-                            id
-                        FROM traces
-                        WHERE workspace_id = :workspace_id
-                    )
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                )
-                GROUP BY
-                    entity_id,
-                    name
-            ) AS tfs ON ei.trace_id = tfs.id
-            LEFT JOIN (
-                SELECT
-                    entity_id,
-                    groupArray(tuple(*)) AS comments_array
-                FROM (
-                    SELECT
-                        id,
-                        text,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by,
-                        entity_id
-                    FROM comments
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                GROUP BY entity_id
-            ) AS tc ON ei.trace_id = tc.entity_id
-            GROUP BY
-                e.workspace_id,
-                e.dataset_id,
-                e.id,
-                e.name,
-                e.metadata as metadata,
-                e.created_at,
-                e.last_updated_at,
-                e.created_by,
-                e.last_updated_by,
-                e.prompt_version_id,
-                e.prompt_id,
-                e.prompt_versions
-            ORDER BY e.id DESC
-            ;
-            """;
-
     private static final String FIND = """
             SELECT
                 e.workspace_id as workspace_id,
@@ -268,49 +129,46 @@ class ExperimentDAO {
                 e.prompt_id as prompt_id,
                 e.prompt_versions as prompt_versions,
                 if(
-                     notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
-                     arrayMap(
-                        vName -> (
-                            vName,
-                            if(
+                    notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
+                    mapFromArrays(
+                        arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
+                        arrayMap(
+                            vName -> if(
                                 arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
+                                        )
                                     )
                                 ) = 0,
                                 0,
                                 arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
+                                        )
                                     )
                                 ) / arrayReduce(
                                     'SUM',
                                     arrayMap(
-                                        vNameAndValue ->
-                                            vNameAndValue.2,
-                                            arrayFilter(
-                                                (pair -> pair.1 = vName),
-                                                groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                            )
+                                        vNameAndValue -> vNameAndValue.2,
+                                        arrayFilter(
+                                            pair -> pair.1 = vName,
+                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
+                                        )
                                     )
                                 )
-                            )
-                        ),
-                        arrayDistinct(arrayMap(vName -> vName.1, arrayFilter(curName -> length(curName.1) > 0, groupArray(tuple(tfs.name)))))
+                            ),
+                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name)))
+                        )
                     ),
-                    []
+                    map()
                 ) as feedback_scores,
                 count (DISTINCT ei.trace_id) as trace_count,
                 groupUniqArrayArray(tc.comments_array) as comments_array_agg
@@ -322,6 +180,8 @@ class ExperimentDAO {
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
+                <if(id)> AND id = :id <endif>
+                <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -393,8 +253,8 @@ class ExperimentDAO {
                 e.prompt_version_id,
                 e.prompt_id,
                 e.prompt_versions
-            ORDER BY e.id DESC
-            LIMIT :limit OFFSET :offset
+            ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
+            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ;
             """;
 
@@ -474,17 +334,25 @@ class ExperimentDAO {
             """;
 
     private static final String EXPERIMENT_DAILY_BI_INFORMATION = """
-                SELECT
-                     workspace_id,
-                     created_by AS user,
-                     COUNT(DISTINCT id) AS experiment_count
+            SELECT
+                 workspace_id,
+                 created_by AS user,
+                 COUNT(DISTINCT id) AS experiment_count
+            FROM experiments
+            WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+            AND id NOT IN (
+                SELECT id
                 FROM experiments
-                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-                GROUP BY workspace_id,created_by
+                WHERE workspace_id = :demo_workspace_id
+                AND name IN :excluded_names
+            )
+            GROUP BY workspace_id, created_by
             ;
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull ExperimentSortingFactory sortingFactory;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -543,29 +411,43 @@ class ExperimentDAO {
     @WithSpan
     Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
-        var template = new ST(SELECT_BY);
+        var limit = 1;
+        var template = new ST(FIND);
         template.add("id", id.toString());
+        template.add("limit", limit);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> get(template.render(), connection, statement -> statement.bind("id", id)))
+                .flatMapMany(connection -> get(
+                        template.render(), connection,
+                        statement -> statement.bind("id", id).bind("limit", limit)))
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
     }
 
     @WithSpan
-    Mono<Experiment> getByName(@NonNull String name) {
-        log.info("Getting experiment by name '{}'", name);
-        var template = new ST(SELECT_BY);
-        template.add("name", name);
+    Flux<Experiment> get(@NonNull ExperimentStreamRequest request) {
+        log.info("Getting experiment by '{}'", request);
+        var template = new ST(FIND);
+        template.add("name", request.name());
+        if (request.lastRetrievedId() != null) {
+            template.add("lastRetrievedId", request.lastRetrievedId());
+        }
+        template.add("limit", request.limit());
         return Mono.from(connectionFactory.create())
-                .flatMapMany(
-                        connection -> get(template.render(), connection, statement -> statement.bind("name", name)))
-                .flatMap(this::mapToDto)
-                .singleOrEmpty();
+                .flatMapMany(connection -> get(
+                        template.render(), connection,
+                        statement -> {
+                            statement.bind("name", request.name());
+                            if (request.lastRetrievedId() != null) {
+                                statement = statement.bind("lastRetrievedId", request.lastRetrievedId());
+                            }
+                            return statement.bind("limit", request.limit());
+                        }))
+                .flatMap(this::mapToDto);
     }
 
     private Publisher<? extends Result> get(String query, Connection connection, Function<Statement, Statement> bind) {
         var statement = connection.createStatement(query)
-                .bind("entity_type", FeedbackScoreDAO.EntityType.TRACE.getType());
+                .bind("entity_type", EntityType.TRACE.getType());
         return makeFluxContextAware(bindWorkspaceIdToFlux(bind.apply(statement)));
     }
 
@@ -621,14 +503,17 @@ class ExperimentDAO {
     }
 
     private static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
-        List<FeedbackScoreAverage> feedbackScoresAvg = Arrays
-                .stream(Optional.ofNullable(row.get("feedback_scores", List[].class))
-                        .orElse(new List[0]))
-                .filter(scores -> CollectionUtils.isNotEmpty(scores) && scores.size() == 2
-                        && !scores.get(1).toString().isBlank())
-                .map(scores -> new FeedbackScoreAverage(scores.getFirst().toString(),
-                        new BigDecimal(scores.get(1).toString())))
+        List<FeedbackScoreAverage> feedbackScoresAvg = Optional
+                .ofNullable(row.get("feedback_scores", Map.class))
+                .map(map -> (Map<String, BigDecimal>) map)
+                .orElse(Map.of())
+                .entrySet()
+                .stream()
+                .map(scores -> {
+                    return new FeedbackScoreAverage(scores.getKey(), scores.getValue());
+                })
                 .toList();
+
         return feedbackScoresAvg.isEmpty() ? null : feedbackScoresAvg;
     }
 
@@ -644,16 +529,34 @@ class ExperimentDAO {
                 .flatMapMany(connection -> find(page, size, experimentSearchCriteria, connection))
                 .flatMap(this::mapToDto)
                 .collectList()
-                .map(experiments -> new ExperimentPage(page, experiments.size(), total, experiments));
+                .map(experiments -> new ExperimentPage(page, experiments.size(), total, experiments,
+                        sortingFactory.getSortableFields()));
     }
 
     private Publisher<? extends Result> find(
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
+
+        var sorting = sortingQueryBuilder.toOrderBySql(experimentSearchCriteria.sortingFields());
+
+        var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(experimentSearchCriteria.sortingFields());
+
+        int offset = (page - 1) * size;
+
         var template = newFindTemplate(FIND, experimentSearchCriteria);
+
+        template.add("sort_fields", sorting);
+        template.add("limit", size);
+        template.add("offset", offset);
+
         var statement = connection.createStatement(template.render())
                 .bind("limit", size)
-                .bind("offset", (page - 1) * size);
+                .bind("offset", offset);
+
+        if (hasDynamicKeys) {
+            statement = sortingQueryBuilder.bindDynamicKeys(statement, experimentSearchCriteria.sortingFields());
+        }
+
         bindSearchCriteria(statement, experimentSearchCriteria, false);
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
@@ -760,8 +663,10 @@ class ExperimentDAO {
     }
 
     private Publisher<? extends Result> getBiDailyData(Connection connection) {
-        var statement = connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION);
-        return statement.execute();
+        return connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
+                .bind("demo_workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
+                .bind("excluded_names", DemoData.EXPERIMENTS)
+                .execute();
     }
 
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
@@ -839,7 +744,10 @@ class ExperimentDAO {
 
     public Mono<Long> getDailyCreatedCount() {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION).execute())
+                .flatMapMany(connection -> connection.createStatement(EXPERIMENT_DAILY_BI_INFORMATION)
+                        .bind("demo_workspace_id", ProjectService.DEFAULT_WORKSPACE_ID)
+                        .bind("excluded_names", DemoData.EXPERIMENTS)
+                        .execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_count", Long.class)))
                 .reduce(0L, Long::sum);
     }
