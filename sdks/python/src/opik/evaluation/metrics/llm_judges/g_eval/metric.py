@@ -164,7 +164,7 @@ class GEval(base_metric.BaseMetric):
         """
         try:
             if not self._log_probs_supported:
-                dict_content = parsing_helpers.convert_to_json(
+                dict_content = parsing_helpers.extract_json_content_or_raise(
                     content.choices[0].message.content
                 )
 

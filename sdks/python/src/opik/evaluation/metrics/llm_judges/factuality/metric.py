@@ -127,7 +127,7 @@ class Factuality(base_metric.BaseMetric):
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
-            list_content = parsing_helpers.convert_to_json(content)
+            list_content = parsing_helpers.extract_json_content_or_raise(content)
 
             reason = ""
             score = 0.0

@@ -140,7 +140,7 @@ class ContextRecall(base_metric.BaseMetric):
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
-            dict_content = parsing_helpers.convert_to_json(content)
+            dict_content = parsing_helpers.extract_json_content_or_raise(content)
             score: float = float(dict_content["context_recall_score"])
 
             if not (0.0 <= score <= 1.0):

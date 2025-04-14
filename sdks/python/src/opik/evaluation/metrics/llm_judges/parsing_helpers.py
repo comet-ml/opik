@@ -1,23 +1,26 @@
-from typing import Dict
+from typing import Any
 import json
-from ....exceptions import JSONParsingError
+from opik import exceptions
 
 
-def convert_to_json(content: str) -> Dict:
+def extract_json_content_or_raise(content: str) -> Any:
     try:
         return json.loads(content)
     except json.decoder.JSONDecodeError:
-        try:
-            import instructor
-        except ImportError:
-            raise JSONParsingError(
-                "Failed to parse response to JSON, install the `instructor` library using `pip install instructor` for Opik to use more robust parsing strategies."
-            )
-
-        try:
-            json_string = instructor.utils.extract_json_from_codeblock(content)
-            return json.loads(json_string)
-        except Exception as e:
-            raise JSONParsingError(f"Failed to parse response to JSON: {str(e)}")
+        return _extract_presumably_json_dict_or_raise(content)
     except Exception as e:
-        raise JSONParsingError(f"Failed to parse response to JSON: {str(e)}")
+        raise exceptions.JSONParsingError(
+            f"Failed to parse response to JSON dictionary: {str(e)}"
+        )
+
+
+def _extract_presumably_json_dict_or_raise(content: str) -> str:
+    try:
+        first_paren = content.find("{")
+        last_paren = content.rfind("}")
+        json_string = content[first_paren : last_paren + 1]
+        return json.loads(json_string)
+    except Exception as e:
+        raise exceptions.JSONParsingError(
+            f"Failed to extract presumably JSON dictionary: {str(e)}"
+        )
