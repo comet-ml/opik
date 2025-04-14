@@ -68,18 +68,6 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     setValue(isNumber(feedbackScore?.value) ? feedbackScore?.value : "");
   }, [feedbackScore?.value, spanId, traceId]);
 
-  const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
-
-  const deleteFeedbackScore = useCallback(() => {
-    feedbackScoreDelete({
-      traceId,
-      spanId,
-      name: feedbackScore?.name ?? "",
-    });
-    setEditReason(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedbackScore?.name, traceId, spanId]);
-
   const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
 
   const handleChangeValue = useCallback(
@@ -117,12 +105,26 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     value: reasonValue,
     onChange: onReasonChange,
     onReset: onReasonReset,
+    resetValue,
   } = useDebouncedValue({
     initialValue: feedbackScore?.reason,
     onDebouncedChange: handleChangeReason,
     delay: SET_VALUE_DEBOUNCE_DELAY,
     onChange: onChangeTextAreaTriggered,
   });
+
+  const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
+
+  const deleteFeedbackScore = useCallback(() => {
+    feedbackScoreDelete({
+      traceId,
+      spanId,
+      name: feedbackScore?.name ?? "",
+    });
+    setEditReason(false);
+    resetValue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedbackScore?.name, traceId, spanId, resetValue]);
 
   const handleCopyReasonClick = async (reasonValue: string) => {
     await copy(reasonValue);
