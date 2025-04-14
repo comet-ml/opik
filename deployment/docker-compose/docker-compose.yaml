@@ -191,6 +191,22 @@ services:
       retries: 30
       start_period: 2s
 
+  guardrails-backend:
+    image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
+    build:
+      context: ../../apps/opik-guardrails-backend
+      dockerfile: Dockerfile
+    hostname: guardrails
+    environment:
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck"]
+      interval: 2s
+      timeout: 60s
+      retries: 30
+      start_period: 10s
+
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always
@@ -224,6 +240,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      guardrails-backend:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]
       interval: 1s
