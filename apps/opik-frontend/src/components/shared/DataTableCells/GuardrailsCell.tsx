@@ -81,16 +81,8 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const hasSingleGuardrailSpan = guardrailValidations.length === 1;
-  const guardrailComputedResult =
+  const { statusList, generalStatus } =
     getGuardrailComputedResult(guardrailValidations);
-
-  let traceGuardrailsStatus = GuardrailResult.PASSED;
-  const hasFailedGuardrails = guardrailComputedResult.some(
-    (res) => res.status === GuardrailResult.FAILED,
-  );
-  if (hasFailedGuardrails) {
-    traceGuardrailsStatus = GuardrailResult.FAILED;
-  }
 
   if (!guardrailValidations.length) {
     <CellWrapper
@@ -110,9 +102,9 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
       <HoverCard open={isOpen} onOpenChange={setIsOpen}>
         <HoverCardTrigger asChild>
           <div className="flex items-center gap-1 px-2">
-            <GuardrailStatus status={traceGuardrailsStatus} />
+            <GuardrailStatus status={generalStatus} />
             <span className="comet-body-s truncate text-foreground first-letter:uppercase">
-              {traceGuardrailsStatus}
+              {generalStatus}
             </span>
           </div>
         </HoverCardTrigger>
@@ -126,7 +118,7 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
             {hasSingleGuardrailSpan ? (
               <SingleGuardrailData data={guardrailValidations[0]} />
             ) : (
-              <GeneralGuardrailData data={guardrailComputedResult} />
+              <GeneralGuardrailData data={statusList} />
             )}
           </div>
         </HoverCardContent>
