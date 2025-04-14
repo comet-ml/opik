@@ -16,6 +16,54 @@ const BASE64_PREFIXES_MAP = {
   UklGR: "webp",
 } as const;
 
+function base64ToBytes(base64: string): Uint8Array {
+  const binaryStr = atob(base64);
+  const len = binaryStr.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function isValidBase64Image(base64Str: string): boolean {
+  try {
+    const bytes = base64ToBytes(base64Str);
+    if (bytes.length < 4) return false;
+
+    const hex = Array.from(bytes.slice(0, 12))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    const startsWith = (sig: string) => hex.startsWith(sig.toLowerCase());
+
+    const signatures = {
+      jpeg: ["ffd8ff"],
+      png: ["89504e470d0a1a0a"],
+      gif: ["474946383961", "474946383761"],
+      bmp: ["424d"],
+      tiff: ["49492a00", "4d4d002a"],
+      webp: ["52494646"], // needs extra check
+    };
+
+    for (const sigs of Object.values(signatures)) {
+      for (const sig of sigs) {
+        if (startsWith(sig)) return true;
+      }
+    }
+
+    // WebP check
+    if (startsWith("52494646") && bytes.length >= 12) {
+      const format = String.fromCharCode(...bytes.slice(8, 12));
+      if (format === "WEBP") return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 const IMAGE_URL_EXTENSIONS = [
   "apng",
   "avif",
@@ -50,7 +98,7 @@ const IMAGE_URL_EXTENSIONS = [
   "webp",
 ] as const;
 
-const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]{100,}={0,2}";
+const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
 const DATA_IMAGE_REGEX = new RegExp(
   `data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}`,
   "g",
@@ -155,6 +203,9 @@ const extractPrefixedBase64Images = (
   for (const [prefix, extension] of Object.entries(BASE64_PREFIXES_MAP)) {
     const prefixRegex = new RegExp(`${prefix}${IMAGE_CHARS_REGEX}`, "g");
     updatedInput = updatedInput.replace(prefixRegex, (match) => {
+      if (!isValidBase64Image(match)) {
+        return match;
+      }
       const name = `[image_${index}]`;
       images.push({
         url: `data:image/${extension};base64,${match}`,
