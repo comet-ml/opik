@@ -50,6 +50,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private final AutomationRuleEvaluatorType type;
     private final StreamReadGroupArgs redisReadConfig;
     private final String consumerId;
+    private final int batchSize;
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription; // Store the subscription reference
@@ -66,7 +67,8 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
         this.redisson = redisson;
         this.feedbackScoreService = feedbackScoreService;
         this.type = type;
-        this.redisReadConfig = StreamReadGroupArgs.neverDelivered().count(config.getConsumerBatchSize());
+        this.batchSize = config.getConsumerBatchSize();
+        this.redisReadConfig = StreamReadGroupArgs.neverDelivered().count(batchSize);
         this.consumerId = "consumer-" + config.getConsumerGroupName() + "-" + UUID.randomUUID();
         initializeCounters(getMetricsBaseName());
     }
@@ -158,7 +160,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
                 .flatMapIterable(Map::entrySet)
                 .flatMap(entry -> Mono.fromRunnable(() -> processReceivedMessages(stream, entry))
                         .subscribeOn(Schedulers.boundedElastic()),
-                        10) // Concurrency hint
+                        batchSize) // Concurrency hint
                 .onErrorContinue(
                         (throwable, object) -> log.error("Error processing message from Redis stream", throwable))
                 .subscribe();
