@@ -55,10 +55,12 @@ class FileUploadManager:
         self._upload_results: List[UploadResult] = []
         self.closed = False
 
-    def submit_file_upload(self, options: upload_options.FileUploadOptions) -> None:
+    def upload_attachment_file(
+        self, attachment: upload_options.FileUploadOptions
+    ) -> None:
         self._submit_upload(
             uploader=file_uploader.upload_attachment,
-            options=options,
+            options=attachment,
         )
 
     def _submit_upload(
@@ -104,8 +106,20 @@ class FileUploadManager:
         )
 
     def remaining_uploads(self) -> int:
+        """Returns the number of remaining uploads. Can be called at any time."""
         status_list = [result.ready() for result in self._upload_results]
         return status_list.count(False)
+
+    def failed_uploads(self) -> int:
+        """Should be invoked after join() to get a number of failed uploads."""
+        assert self.closed, "The file upload manager has not been closed."
+
+        failed = 0
+        for result in self._upload_results:
+            if not result.ready() or not result.successful():
+                failed += 1
+
+        return failed
 
     def close(self) -> None:
         self._executor.shutdown(wait=False)
@@ -113,15 +127,7 @@ class FileUploadManager:
 
     def join(self) -> None:
         self._executor.shutdown(wait=True)
-
-    def has_failed(self) -> bool:
-        for result in self._upload_results:
-            if not result.ready():
-                return True
-            elif not result.successful():
-                return True
-
-        return False
+        self.closed = True
 
 
 class FileUploadManagerMonitor(object):
@@ -136,9 +142,16 @@ class FileUploadManagerMonitor(object):
         current_time = time.monotonic()
 
         if remaining.bytes == 0:
-            LOGGER.info(
-                "All assets have been sent, waiting for delivery confirmation",
-            )
+            failed_uploads = self.file_upload_manager.failed_uploads()
+            if failed_uploads > 0:
+                LOGGER.info(
+                    "The assets upload has finished, though %d asset(s) was(were) not uploaded successfully. See logs for more details.",
+                    failed_uploads,
+                )
+            else:
+                LOGGER.info(
+                    "All assets have been sent, waiting for delivery confirmation",
+                )
         elif self.last_remaining_uploads_display is None:
             LOGGER.info(
                 "Still uploading %d file(s), remaining %s/%s",

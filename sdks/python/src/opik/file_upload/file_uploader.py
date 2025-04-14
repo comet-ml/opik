@@ -20,6 +20,30 @@ def upload_attachment(
     httpx_client: httpx.Client,
     monitor: Optional[upload_monitor.FileUploadMonitor] = None,
 ) -> None:
+    try:
+        _do_upload_attachment(
+            upload_options=upload_options,
+            rest_client=rest_client,
+            httpx_client=httpx_client,
+            monitor=monitor,
+        )
+    except Exception as e:
+        LOGGER.error(
+            "Failed to upload attachment: '%s' from file: '%s', reason: %s",
+            upload_options.file_name,
+            upload_options.file_path,
+            e,
+            exc_info=True,
+        )
+        raise
+
+
+def _do_upload_attachment(
+    upload_options: file_upload_options.FileUploadOptions,
+    rest_client: rest_api_client.OpikApi,
+    httpx_client: httpx.Client,
+    monitor: Optional[upload_monitor.FileUploadMonitor] = None,
+) -> None:
     file_parts = file_parts_strategy.FilePartsStrategy(
         file_path=upload_options.file_path,
         file_size=upload_options.file_size,
