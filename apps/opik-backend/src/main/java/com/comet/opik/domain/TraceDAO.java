@@ -608,7 +608,7 @@ class TraceDAOImpl implements TraceDAO {
                   s.usage as usage,
                   s.total_estimated_cost as total_estimated_cost,
                   c.comments_array as comments,
-                  t.guardrails_list as guardrails_list,
+                  gagg.guardrails_list as guardrails_list,
                   s.span_count AS span_count
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
