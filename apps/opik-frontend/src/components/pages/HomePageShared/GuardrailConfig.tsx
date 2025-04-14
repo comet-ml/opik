@@ -8,7 +8,8 @@ import { cn, updateTextAreaHeight } from "@/lib/utils";
 import { CheckedState } from "@radix-ui/react-checkbox";
 import { Info } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
-import { PiiSupportedEntities, PiiSupportedEntity } from "./guardrailsConfig";
+import { PiiSupportedEntities } from "@/types/guardrails";
+import { PIIEntitiesLabelMap } from "@/constants/guardrails";
 
 type ThresholdProps = {
   id: string;
@@ -37,19 +38,20 @@ const Threshold: React.FC<ThresholdProps> = ({
   );
 };
 
-const restrictedLabelMap = {
-  [PiiSupportedEntities.CREDIT_CARD]: "Credit card number",
-  [PiiSupportedEntities.PHONE_NUMBER]: "Phone number",
-  [PiiSupportedEntities.EMAIL_ADDRESS]: "Email",
-  [PiiSupportedEntities.IBAN_CODE]: "Bank account number",
-  [PiiSupportedEntities.IP_ADDRESS]: "IP address",
-  [PiiSupportedEntities.NRP]: "National Registration Plate",
-  [PiiSupportedEntities.LOCATION]: "Address",
-  [PiiSupportedEntities.PERSON]: "Name",
-  [PiiSupportedEntities.CRYPTO]: "Cryptocurrency",
-  [PiiSupportedEntities.MEDICAL_LICENSE]: "Medical license",
-  [PiiSupportedEntities.URL]: "URL",
-};
+const RESTRICTED_LABEL_LIST: PiiSupportedEntities[] = [
+  PiiSupportedEntities.CREDIT_CARD,
+  PiiSupportedEntities.PHONE_NUMBER,
+  PiiSupportedEntities.EMAIL_ADDRESS,
+  PiiSupportedEntities.IBAN_CODE,
+  PiiSupportedEntities.IP_ADDRESS,
+  PiiSupportedEntities.NRP,
+  PiiSupportedEntities.LOCATION,
+  PiiSupportedEntities.PERSON,
+  PiiSupportedEntities.CRYPTO,
+  PiiSupportedEntities.MEDICAL_LICENSE,
+  PiiSupportedEntities.URL,
+];
+
 type RestrictedListProps = {
   value: string[];
   label?: string;
@@ -68,12 +70,10 @@ const RestrictedList: React.FC<RestrictedListProps> = ({
     onChange(newList);
   };
 
-  const restrictedLabelList = Object.keys(restrictedLabelMap);
-
   return (
     <div className="grid w-full">
       <p className="comet-body-s-accented flex h-10 items-center">{label}</p>
-      {restrictedLabelList.map((label) => (
+      {RESTRICTED_LABEL_LIST.map((label) => (
         <Label
           key={label}
           className="flex h-10 cursor-pointer items-center gap-2"
@@ -84,9 +84,7 @@ const RestrictedList: React.FC<RestrictedListProps> = ({
             onCheckedChange={(v) => onCheckedChange(v, label)}
           />
 
-          <div className="comet-body-s">
-            {restrictedLabelMap[label as PiiSupportedEntity]}
-          </div>
+          <div className="comet-body-s">{PIIEntitiesLabelMap[label]}</div>
         </Label>
       ))}
     </div>

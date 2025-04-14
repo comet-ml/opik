@@ -6,12 +6,9 @@ import GuardrailConfig from "./GuardrailConfig";
 import { Separator } from "@/components/ui/separator";
 import DocsLinkCard from "@/components/pages-shared/onboarding/DocsLinkCard/DocsLinkCard";
 import GuardrailConfigCode from "./GuardrailConfigCode";
-import {
-  GuardrailType,
-  GuardrailTypes,
-  guardrailsMap,
-} from "./guardrailsConfig";
+import { guardrailsMap } from "./guardrailsConfig";
 import { useGuardrailConfigState } from "./useGuardrailConfigState";
+import { GuardrailTypes } from "@/types/guardrails";
 
 const GUARDRAIL_DOCS_LINK =
   "https://www.comet.com/docs/opik/production/guardrails";
@@ -35,7 +32,7 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
     getEnabledGuardrailTypes,
   } = useGuardrailConfigState();
 
-  const enabledGuardrailsKeys = getEnabledGuardrailTypes() as GuardrailType[];
+  const enabledGuardrailsKeys = getEnabledGuardrailTypes() as GuardrailTypes[];
   const importCodeNames = enabledGuardrailsKeys.map(
     (key) => guardrailsMap[key].codeImportName,
   );
