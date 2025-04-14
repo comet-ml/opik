@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Union, Optional, List, Any
 import pydantic
@@ -8,6 +7,7 @@ from opik import logging_messages
 
 from . import template
 from opik.exceptions import MetricComputationError
+from .. import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ class Factuality(base_metric.BaseMetric):
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
-            list_content = json.loads(content)
+            list_content = parsing_helpers.extract_json_content_or_raise(content)
 
             reason = ""
             score = 0.0
