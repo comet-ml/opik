@@ -19,15 +19,15 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         model: str,
         project_name: Optional[str] = None,
-        max_examples: int = 5,
+        min_examples: int = 2,
+        max_examples: int = 8,
         seed: int = 42,
-        num_threads: int = 8,
         **model_kwargs,
     ):
         super().__init__(model, project_name, **model_kwargs)
+        self.min_examples = min_examples
         self.max_examples = max_examples
         self.seed = seed
-        self.num_threads = num_threads
 
         self._openai_client = track_openai(
             openai.OpenAI(), project_name=self.project_name
@@ -39,10 +39,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         dataset: Union[str, Dataset],
         metric: BaseMetric,
         prompt: str,  # TODO: should we enforce prompt parameter for demos?
-        demo_examples_keys_mapping: Dict[str, str],
+        few_shot_examples_inputs_from_dataset_columns_mapping: Union[List[str], Dict[str, str]],
+        metric_inputs_from_dataset_columns_mapping: Dict[str, Any],
+        metric_inputs_from_predictor_output_mapping: Dict[str, Any], 
         n_trials: int = 10,
         num_threads: int = 4,
-        scoring_key_mapping: Dict[str, str] = None,
         train_ratio: float = 0.2,
         **kwargs,
     ) -> optimization_result.OptimizationResult:
@@ -64,20 +65,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             model=self.model, client=self._openai_client, **self.model_kwargs
         )
 
-        all_train_examples = [
-            {
-                demo_examples_keys_mapping[key]: example[value]
-                for key, value in demo_examples_keys_mapping.items()
-            }
-            for example in train_set
-        ]
-
         def optimization_objective(trial: optuna.Trial) -> float:
-            n_examples = trial.suggest_int("n_examples", 1, self.max_examples)
+            n_examples = trial.suggest_int("n_examples", self.min_examples, self.max_examples)
 
             example_indices = [
                 trial.suggest_categorical(
-                    f"example_{i}", list(range(len(all_train_examples)))
+                    f"example_{i}", list(range(len(train_set)))
                 )
                 for i in range(n_examples)
             ]
@@ -85,7 +78,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             param = prompt_parameter.PromptParameter(
                 name="few_shot_examples",
                 instruction=prompt,
-                demos=[all_train_examples[idx] for idx in example_indices],
+                few_shot_examples_inputs_from_dataset_columns_mapping=few_shot_examples_inputs_from_dataset_columns_mapping,
+                demos=[
+                    train_set[idx]
+                    for idx in example_indices
+                ],
             )
 
             score = evaluator.evaluate_predictor(
@@ -96,7 +93,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 metric=metric,
                 project_name=self.project_name,
                 num_threads=num_threads,
-                scoring_key_mapping=scoring_key_mapping,
+                metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
+                metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
             )
             trial.set_user_attr("score", score)
 
@@ -120,7 +118,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         best_param = prompt_parameter.PromptParameter(
             name="few_shot_examples",
             instruction=prompt,
-            demos=[all_train_examples[idx] for idx in best_indices],
+            few_shot_examples_inputs_from_dataset_columns_mapping=few_shot_examples_inputs_from_dataset_columns_mapping,
+            demos=[train_set[idx] for idx in best_indices],
         )
 
         return optimization_result.OptimizationResult(
@@ -130,10 +129,48 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             details={
                 "prompt_parameter": best_param,
                 "n_examples": best_n_examples,
-                "indices": best_indices,
                 "trial_number": best_trial.number,
             },
         )
+
+    def evaluate_prompt(
+        self,
+        dataset: Union[str, Dataset],
+        metric: BaseMetric,
+        prompt: str,
+        metric_inputs_from_dataset_columns_mapping: Dict[str, Any],
+        metric_inputs_from_predictor_output_mapping: Dict[str, Any],
+        num_test: int = None,
+        num_threads: int = 12,
+    ) -> float:
+        if isinstance(dataset, str):
+            dataset = self._opik_client.get_dataset(dataset)
+
+        predictor_ = predictor.OpenAIPredictor(
+            model=self.model,
+            client=self._openai_client,
+            **self.model_kwargs
+        )
+
+        param = prompt_parameter.PromptParameter(
+            name="few_shot_examples_prompt",
+            instruction=prompt,
+        )
+
+        score = evaluator.evaluate_predictor(
+            dataset=dataset,
+            metric=metric,
+            validation_items_ids=None,
+            predictor_=predictor_,
+            predictor_parameter=param,
+            metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
+            metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
+            num_threads=num_threads,
+            project_name=self.project_name,
+            num_test=num_test,
+        )
+
+        return score
 
 
 def _split_dataset(

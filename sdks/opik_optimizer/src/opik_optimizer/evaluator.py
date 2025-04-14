@@ -7,13 +7,15 @@ from opik.evaluation.metrics import score_result
 
 def evaluate_predictor(
     dataset: opik.Dataset,
-    validation_items_ids: List[str],
+    validation_items_ids: Optional[List[str]],
     predictor_: predictor.OpenAIPredictor,
     predictor_parameter: prompt_parameter.PromptParameter,
     metric: metrics.BaseMetric,
     num_threads: int,
-    scoring_key_mapping: Optional[Dict[str, str]],
+    metric_inputs_from_dataset_columns_mapping: Dict[str, str],
+    metric_inputs_from_predictor_output_mapping: Dict[str, str],
     project_name: Optional[str],
+    num_test: Optional[int] = None,
 ) -> float:
     score_results: List[score_result.ScoreResult] = []
 
@@ -22,7 +24,12 @@ def evaluate_predictor(
             prompt_variables=item,
             prompt_parameter=predictor_parameter,
         )
-        return {"output": output}
+        return {"evaluated_output": output}
+
+    scoring_key_mapping = {
+        **metric_inputs_from_dataset_columns_mapping,
+        **metric_inputs_from_predictor_output_mapping,
+    }
 
     evaluation_result = opik.evaluate(
         dataset=dataset,
@@ -32,6 +39,7 @@ def evaluate_predictor(
         dataset_item_ids=validation_items_ids,
         scoring_metrics=[metric],
         task_threads=num_threads,
+        nb_samples=num_test,
     )
 
     # We may allow score aggregation customization.
