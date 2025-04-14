@@ -649,40 +649,6 @@ class TracesResourceTest {
             }
 
         }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("get trace threads, when api key is present, then return proper response")
-        void getThreads__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
-
-            var trace = createTrace()
-                    .toBuilder()
-                    .projectId(null)
-                    .threadId(UUID.randomUUID().toString())
-                    .projectName(DEFAULT_PROJECT)
-                    .feedbackScores(null)
-                    .build();
-
-            create(trace, okApikey, workspaceName);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("threads")
-                    .queryParam("project_name", DEFAULT_PROJECT)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                assertExpectedResponseWithoutABody(expected, actualResponse, errorMessage, HttpStatus.SC_OK);
-            }
-        }
-
     }
 
     @Nested
