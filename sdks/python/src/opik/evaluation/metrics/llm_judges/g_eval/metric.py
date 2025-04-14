@@ -68,10 +68,10 @@ class GEval(base_metric.BaseMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            supported_arguments_kwargs = {"must_support_arguments": ["logprobs", "top_logprobs"]} if self.use_logprobs else {}
+            model_kwargs = {"must_support_arguments": ["logprobs", "top_logprobs"]} if self.use_logprobs else {}
             self._model = models_factory.get(
                 model_name=model,
-                **supported_arguments_kwargs
+                **model_kwargs
             )
 
     def score(
@@ -104,11 +104,11 @@ class GEval(base_metric.BaseMetric):
             },
         ]
 
-        supported_model_kwargs = { "logprobs" : True , "top_logprobs": 20, } if self.use_logprobs else {}
+        model_kwargs = { "logprobs" : True , "top_logprobs": 20, } if self.use_logprobs else {}
         model_output = self._model.generate_provider_response(
             messages=request,
             response_format=GEvalScoreFormat,
-            **supported_model_kwargs
+            **model_kwargs
         )
 
         return self._parse_model_output(model_output)
