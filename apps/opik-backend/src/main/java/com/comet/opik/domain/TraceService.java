@@ -435,14 +435,9 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Mono<TraceThreadPage> getTraceThreads(int page, int size, @NonNull TraceSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return dao.findThreads(size, page, criteria);
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> dao.findThreads(size, page, criteria.toBuilder().projectId(project.id()).build()))
-                .switchIfEmpty(Mono.just(TraceThreadPage.empty(page)));
+        return dao.findThreads(size, page, criteria);
     }
 
     @Override

@@ -536,6 +536,9 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        // Verify project visibility
+        projectService.get(identifier.projectId());
+
         log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.projectId(),
                 identifier.threadId(), workspaceId);
 

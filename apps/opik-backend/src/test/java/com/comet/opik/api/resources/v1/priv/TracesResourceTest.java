@@ -17,6 +17,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
@@ -416,44 +417,49 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource("publicCredentials")
+        void getById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                ProjectVisibility visibility, int expectedCode) {
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/" + id, "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
         void get__whenApiKeyIsPresent__thenReturnTraceStats(String apiKey,
                 ProjectVisibility visibility, int expectedCode) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
 
-            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
-            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/stats", "project_name");
 
-            Project project = factory.manufacturePojo(Project.class).toBuilder().name(DEFAULT_PROJECT)
-                    .visibility(visibility).build();
-            projectResourceClient.createProject(project, okApikey, workspaceName);
-
-            var trace = createTrace()
-                    .toBuilder()
-                    .projectId(null)
-                    .projectName(DEFAULT_PROJECT)
-                    .build();
-            create(trace, okApikey, workspaceName);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/stats")
-                    .queryParam("project_name", DEFAULT_PROJECT)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
-                if (expectedCode == 404) {
-                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
-                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(DEFAULT_PROJECT));
-                }
-            }
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/stats", "project_id");
         }
 
         @ParameterizedTest
         @MethodSource("publicCredentials")
         void get__whenApiKeyIsPresent__thenReturnTraceFeedbackScoresNames(String apiKey,
                 ProjectVisibility visibility, int expectedCode) {
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/feedback-scores/names", "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnTraceThreads(String apiKey,
+                ProjectVisibility visibility, int expectedCode) {
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/threads", "project_name");
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/threads", "project_id");
+        }
+
+        private void publicCredentialsTest(String apiKey,
+                ProjectVisibility visibility, int expectedCode,
+                Function<UUID, String> urlSuffix, String queryParam) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
 
@@ -469,14 +475,58 @@ class TracesResourceTest {
                     .projectId(null)
                     .projectName(DEFAULT_PROJECT)
                     .build();
-            create(trace, okApikey, workspaceName);
+            var traceId = create(trace, okApikey, workspaceName);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/feedback-scores/names")
-                    .queryParam("project_id", projectId)
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + urlSuffix.apply(traceId))
+                    .queryParam(queryParam, "project_id".equals(queryParam) ? projectId : DEFAULT_PROJECT)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    if ("project_id".equals(queryParam)) {
+                        assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                                .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
+                    } else {
+                        assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                                .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(DEFAULT_PROJECT));
+                    }
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnTraceThread(String apiKey,
+                ProjectVisibility visibility, int expectedCode) {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().name(DEFAULT_PROJECT)
+                    .visibility(visibility).build();
+            var projectId = projectResourceClient.createProject(project, okApikey, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            create(trace, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/threads/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity
+                            .json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 if (expectedCode == 404) {
@@ -815,35 +865,25 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource("publicCredentials")
+        void getById__whenApiKeyIsPresent__thenReturnProperResponse(String sessionToken,
+                ProjectVisibility visibility,
+                String workspaceName, int expectedCode) {
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/" + id, "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
         void get__whenSessionTokenIsPresent__thenReturnTraceStats(String sessionToken,
                 ProjectVisibility visibility,
                 String workspaceName, int expectedCode) {
-            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
-            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
-            Project project = factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
-            projectResourceClient.createProject(project, API_KEY, workspaceName);
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/stats", "project_id");
 
-            var trace = createTrace()
-                    .toBuilder()
-                    .projectId(null)
-                    .projectName(project.name())
-                    .build();
-            create(trace, API_KEY, workspaceName);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/stats")
-                    .queryParam("project_name", project.name())
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
-                if (expectedCode == 404) {
-                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
-                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(project.name()));
-                }
-            }
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/stats", "project_name");
         }
 
         @ParameterizedTest
@@ -851,6 +891,28 @@ class TracesResourceTest {
         void get__whenSessionTokenIsPresent__thenReturnTraceFeedbackScoresNames(String sessionToken,
                 ProjectVisibility visibility,
                 String workspaceName, int expectedCode) {
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/feedback-scores/names", "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenSessionTokenIsPresent__thenReturnTraceThreads(String sessionToken,
+                ProjectVisibility visibility,
+                String workspaceName, int expectedCode) {
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/threads", "project_id");
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/threads", "project_name");
+        }
+
+        private void publicCredentialsTest(String sessionToken,
+                ProjectVisibility visibility,
+                String workspaceName, int expectedCode,
+                Function<UUID, String> urlSuffix, String queryParam) {
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
             mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
@@ -862,14 +924,55 @@ class TracesResourceTest {
                     .projectId(null)
                     .projectName(project.name())
                     .build();
-            create(trace, API_KEY, workspaceName);
+            var traceId = create(trace, API_KEY, workspaceName);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/feedback-scores/names")
-                    .queryParam("project_id", projectId)
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + urlSuffix.apply(traceId))
+                    .queryParam(queryParam, "project_id".equals(queryParam) ? projectId : project.name())
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    if ("project_id".equals(queryParam)) {
+                        assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                                .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
+                    } else {
+                        assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                                .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(project.name()));
+                    }
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnTraceThread(String sessionToken,
+                ProjectVisibility visibility,
+                String workspaceName, int expectedCode) {
+
+            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            var projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(project.name())
+                    .build();
+            create(trace, API_KEY, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/threads/retrieve")
+                    .request()
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity
+                            .json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 if (expectedCode == 404) {
@@ -990,36 +1093,6 @@ class TracesResourceTest {
                         HttpStatus.SC_NO_CONTENT);
             }
 
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("get trace threads, when session token is present, then return proper response")
-        void getThreads__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
-
-            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
-
-            var trace = createTrace()
-                    .toBuilder()
-                    .projectId(null)
-                    .threadId(UUID.randomUUID().toString())
-                    .projectName(DEFAULT_PROJECT)
-                    .feedbackScores(null)
-                    .build();
-
-            create(trace, API_KEY, workspaceName);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("threads")
-                    .queryParam("project_name", DEFAULT_PROJECT)
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                assertExpectedResponseWithoutABody(expected, actualResponse, UNAUTHORIZED_RESPONSE, HttpStatus.SC_OK);
-            }
         }
     }
 
