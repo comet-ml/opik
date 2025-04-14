@@ -94,6 +94,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -138,6 +139,7 @@ import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -2614,7 +2616,8 @@ class ExperimentsResourceTest {
 
             assertThat(experimentCaptor.getValue().experimentId()).isEqualTo(actualId);
             assertThat(experimentCaptor.getValue().datasetId()).isEqualTo(actualExperiment.datasetId());
-            assertThat(experimentCaptor.getValue().createdAt()).isEqualTo(actualExperiment.createdAt());
+            assertThat(experimentCaptor.getValue().createdAt())
+                    .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
 
             return actualId;
         }

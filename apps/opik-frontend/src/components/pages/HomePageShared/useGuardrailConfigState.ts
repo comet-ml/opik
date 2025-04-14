@@ -1,9 +1,6 @@
 import { useReducer } from "react";
-import {
-  GuardrailType,
-  GuardrailsState,
-  guardrailsDefaultState,
-} from "./guardrailsConfig";
+import { GuardrailsState, guardrailsDefaultState } from "./guardrailsConfig";
+import { GuardrailTypes } from "@/types/guardrails";
 
 enum ActionType {
   UPDATE_THRESHOLD = "UPDATE_THRESHOLD",
@@ -14,15 +11,15 @@ enum ActionType {
 type GuardrailAction =
   | {
       type: ActionType.UPDATE_THRESHOLD;
-      payload: { guardrailType: GuardrailType; threshold: number };
+      payload: { guardrailType: GuardrailTypes; threshold: number };
     }
   | {
       type: ActionType.UPDATE_ENTITIES;
-      payload: { guardrailType: GuardrailType; entities: string[] };
+      payload: { guardrailType: GuardrailTypes; entities: string[] };
     }
   | {
       type: ActionType.TOGGLE_ENABLED;
-      payload: { guardrailType: GuardrailType };
+      payload: { guardrailType: GuardrailTypes };
     };
 
 const guardrailReducer = (
@@ -66,31 +63,37 @@ export const useGuardrailConfigState = (
 ) => {
   const [state, dispatch] = useReducer(guardrailReducer, initialState);
 
-  const updateThreshold = (guardrailType: GuardrailType, threshold: number) => {
+  const updateThreshold = (
+    guardrailType: GuardrailTypes,
+    threshold: number,
+  ) => {
     dispatch({
       type: ActionType.UPDATE_THRESHOLD,
       payload: { guardrailType, threshold },
     });
   };
 
-  const updateEntities = (guardrailType: GuardrailType, entities: string[]) => {
+  const updateEntities = (
+    guardrailType: GuardrailTypes,
+    entities: string[],
+  ) => {
     dispatch({
       type: ActionType.UPDATE_ENTITIES,
       payload: { guardrailType, entities },
     });
   };
 
-  const toggleEnabled = (guardrailType: GuardrailType) => {
+  const toggleEnabled = (guardrailType: GuardrailTypes) => {
     dispatch({
       type: ActionType.TOGGLE_ENABLED,
       payload: { guardrailType },
     });
   };
 
-  const getEnabledGuardrailTypes = (): GuardrailType[] => {
+  const getEnabledGuardrailTypes = (): GuardrailTypes[] => {
     return Object.keys(state).filter(
-      (key) => state[key as GuardrailType].enabled,
-    ) as GuardrailType[];
+      (key) => state[key as GuardrailTypes].enabled,
+    ) as GuardrailTypes[];
   };
 
   return {

@@ -107,17 +107,19 @@ export const extractFilename = (url: string): string => {
 const extractOpenAIURLImages = (input: object, images: ParsedImageData[]) => {
   if (isObject(input) && "messages" in input && isArray(input.messages)) {
     input.messages.forEach((message) => {
-      (message?.content || []).forEach((content: Partial<ImageContent>) => {
-        if (!isImageContent(content)) return;
+      if (isArray(message?.content)) {
+        message.content.forEach((content: Partial<ImageContent>) => {
+          if (!isImageContent(content)) return;
 
-        const url = content.image_url!.url;
-        if (!isImageBase64String(url)) {
-          images.push({
-            url,
-            name: extractFilename(url),
-          });
-        }
-      });
+          const url = content.image_url!.url;
+          if (!isImageBase64String(url)) {
+            images.push({
+              url,
+              name: extractFilename(url),
+            });
+          }
+        });
+      }
     });
   }
 };
