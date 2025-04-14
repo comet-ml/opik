@@ -33,7 +33,8 @@ class RedissonLockService implements LockService {
         public void release(Lock lock) {
             semaphore.release(locked)
                     .subscribe(
-                            __ -> {},
+                            __ -> {
+                            },
                             __ -> log.warn("Lock already released or doesn't exist"),
                             () -> log.debug("Lock '{}' with id '{}' released successfully", lock, locked));
         }

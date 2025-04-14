@@ -378,7 +378,7 @@ class DailyUsageReportJobTest {
                     CLICKHOUSE, DATABASE_NAME);
 
             mockBiEventResponse(DailyUsageReportJob.STATISTICS_BE, wireMock.server());
-
+            mockBiEventResponse(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT, wireMock.server());
             mockBiEventResponse(InstallationReportService.NOTIFICATION_EVENT_TYPE, wireMock.server());
 
             runMigrations(MYSQL, CLICKHOUSE);
