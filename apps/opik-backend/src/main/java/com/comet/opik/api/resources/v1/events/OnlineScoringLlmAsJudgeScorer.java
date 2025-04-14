@@ -37,14 +37,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService) {
-        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.LLM_AS_JUDGE, "llm_as_judge");
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
-    }
-
-    @Override
-    String getMetricsBaseName() {
-        return "llm_as_judge";
     }
 
     /**

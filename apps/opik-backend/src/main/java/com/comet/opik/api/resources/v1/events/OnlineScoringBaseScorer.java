@@ -62,7 +62,8 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     protected OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
-            @NonNull AutomationRuleEvaluatorType type) {
+            @NonNull AutomationRuleEvaluatorType type,
+            @NonNull String metricsBaseName) {
         this.config = config;
         this.redisson = redisson;
         this.feedbackScoreService = feedbackScoreService;
@@ -72,14 +73,14 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
         this.consumerId = "consumer-" + config.getConsumerGroupName() + "-" + UUID.randomUUID();
 
         this.messageProcessingTime = METER
-                .histogramBuilder("online_scoring_" + getMetricsBaseName() + "_processing_time")
+                .histogramBuilder("online_scoring_" + metricsBaseName + "_processing_time")
                 .setDescription("Time taken to process a message")
                 .setUnit("ms")
                 .ofLongs()
                 .build();
 
         this.messageQueueDelay = METER
-                .histogramBuilder("online_scoring_" + getMetricsBaseName() + "_queue_delay")
+                .histogramBuilder("online_scoring_" + metricsBaseName + "_queue_delay")
                 .setDescription("Delay between message insertion in Redis and processing start")
                 .setUnit("ms")
                 .ofLongs()
@@ -226,8 +227,6 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
                 .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name,
                         Collectors.mapping(FeedbackScoreBatchItem::value, Collectors.toList())));
     }
-
-    abstract String getMetricsBaseName();
 
     /**
      * Redis Streams messageId are in the format <millisecondsTime>-<sequenceNumber>
