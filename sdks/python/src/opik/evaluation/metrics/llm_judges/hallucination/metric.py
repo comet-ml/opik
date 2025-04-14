@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Union, Optional, List, Any
 import pydantic
@@ -9,6 +8,7 @@ from opik import logging_messages
 
 from . import template
 from opik import exceptions
+from .. import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -131,7 +131,8 @@ class Hallucination(base_metric.BaseMetric):
 
     def _parse_model_output(self, content: str) -> score_result.ScoreResult:
         try:
-            dict_content = json.loads(content)
+            dict_content = parsing_helpers.extract_json_content_or_raise(content)
+
             score = float(dict_content["score"])
             return score_result.ScoreResult(
                 name=self.name,

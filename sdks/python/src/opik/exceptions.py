@@ -24,8 +24,14 @@ class ScoreMethodMissingArguments(OpikException):
     pass
 
 
-class MetricComputationError(Exception):
+class MetricComputationError(OpikException):
     """Exception raised when a metric cannot be computed."""
+
+    pass
+
+
+class JSONParsingError(OpikException):
+    """Exception raised when we fail to parse an LLM response to a dictionary"""
 
     pass
 
