@@ -50,7 +50,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     <div
       data-testid="feedback-score-tag"
       className={cn(
-        "group flex h-6 items-center gap-1.5 rounded-md border border-border pl-2 pr-2",
+        "group flex h-6 items-center gap-1.5 rounded-md border border-border pl-2 pr-2 max-w-full",
         className,
       )}
     >
