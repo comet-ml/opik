@@ -135,8 +135,9 @@ public class GuardrailsResourceTest {
         assertThat(actual.guardrailsValidations())
                 .withFailMessage("guardrails are expected to be grouped")
                 .hasSize(1);
-        assertThat(actual.guardrailsValidations()).containsExactlyInAnyOrder(
-                GuardrailsMapper.INSTANCE.mapToValidations(guardrails).toArray(GuardrailsValidation[]::new));
+        assertGuardrailValidations(
+                GuardrailsMapper.INSTANCE.mapToValidations(guardrails),
+                actual.guardrailsValidations());
     }
 
     @Test
@@ -167,11 +168,9 @@ public class GuardrailsResourceTest {
 
         assertThat(actual).isNotNull();
         assertThat(actual.content()).hasSize(traces.size());
-        actual.content().forEach(actualTrace -> {
-            assertGuardrailValidations(
-                    GuardrailsMapper.INSTANCE.mapToValidations(guardrailsByTraceId.get(actualTrace.id())),
-                    actualTrace.guardrailsValidations());
-        });
+        actual.content().forEach(actualTrace -> assertGuardrailValidations(
+                GuardrailsMapper.INSTANCE.mapToValidations(guardrailsByTraceId.get(actualTrace.id())),
+                actualTrace.guardrailsValidations()));
     }
 
     private List<GuardrailBatchItem> createGuardrails(UUID traceId, String projectName) {
@@ -194,7 +193,7 @@ public class GuardrailsResourceTest {
     private void assertGuardrailValidations(List<GuardrailsValidation> expected, List<GuardrailsValidation> actual) {
         assertThat(actual).hasSize(expected.size());
         expected.forEach(expectedValidation -> {
-            var actualValidation = actual.stream()
+            actual.stream()
                     .filter(validation -> validation.spanId().equals(expectedValidation.spanId()))
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("expected validation not found: " +
