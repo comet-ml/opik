@@ -56,8 +56,8 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private volatile Disposable streamSubscription; // Store the subscription reference
 
     protected static final Meter METER = GlobalOpenTelemetry.getMeter("online-scoring");
-    protected LongHistogram messageProcessingTime;
-    protected LongHistogram messageQueueDelay;
+    protected final LongHistogram messageProcessingTime;
+    protected final LongHistogram messageQueueDelay;
 
     protected OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
@@ -70,7 +70,21 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
         this.batchSize = config.getConsumerBatchSize();
         this.redisReadConfig = StreamReadGroupArgs.neverDelivered().count(batchSize);
         this.consumerId = "consumer-" + config.getConsumerGroupName() + "-" + UUID.randomUUID();
-        initializeCounters(getMetricsBaseName());
+
+        this.messageProcessingTime = METER
+                .histogramBuilder("online_scoring_" + getMetricsBaseName() + "_processing_time")
+                .setDescription("Time taken to process a message")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+
+        this.messageQueueDelay = METER
+                .histogramBuilder("online_scoring_" + getMetricsBaseName() + "_queue_delay")
+                .setDescription("Delay between message insertion in Redis and processing start")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+
     }
 
     @Override
@@ -169,27 +183,28 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private void processReceivedMessages(
             RStreamReactive<String, M> stream, Map.Entry<StreamMessageId, Map<String, M>> entry) {
         var messageId = entry.getKey();
+        long startProcessingTime = System.currentTimeMillis();
         try {
-            // Record queue delay
-            var messageTimestamp = extractTimeFromMessageId(messageId);
-            messageTimestamp.ifPresent(msgTime -> {
-                var queueDelay = System.currentTimeMillis() - msgTime;
-                messageQueueDelay.record(queueDelay);
-            });
-
             var message = entry.getValue().get(OnlineScoringConfig.PAYLOAD_FIELD);
             log.info("Message received with id '{}'", messageId);
 
-            long startProcessingTime = System.currentTimeMillis();
             score(message);
-            long processingTime = System.currentTimeMillis() - startProcessingTime;
-            messageProcessingTime.record(processingTime);
 
             // Remove messages from Redis pending list
             stream.ack(config.getConsumerGroupName(), messageId).subscribe();
             stream.remove(messageId).subscribe();
         } catch (Exception exception) {
             log.error("Error processing message id '{}'", messageId, exception);
+        } finally {
+            long processingTime = System.currentTimeMillis() - startProcessingTime;
+            messageProcessingTime.record(processingTime);
+
+            // Record queue delay
+            var messageTimestamp = extractTimeFromMessageId(messageId);
+            messageTimestamp.ifPresent(msgTime -> {
+                var queueDelay = startProcessingTime - msgTime;
+                messageQueueDelay.record(queueDelay);
+            });
         }
     }
 
@@ -210,22 +225,6 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
         return scores.stream()
                 .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name,
                         Collectors.mapping(FeedbackScoreBatchItem::value, Collectors.toList())));
-    }
-
-    private void initializeCounters(String baseName) {
-        messageProcessingTime = METER
-                .histogramBuilder("online_scoring_" + baseName + "_processing_time")
-                .setDescription("Time taken to process a message")
-                .setUnit("ms")
-                .ofLongs()
-                .build();
-
-        messageQueueDelay = METER
-                .histogramBuilder("online_scoring_" + baseName + "_queue_delay")
-                .setDescription("Delay between message insertion in Redis and processing start")
-                .setUnit("ms")
-                .ofLongs()
-                .build();
     }
 
     abstract String getMetricsBaseName();
