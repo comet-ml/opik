@@ -7,7 +7,7 @@ fullnameOverride: ""
 
 standalone: true
 basicAuth: false
-  
+
 registry: &registry ghcr.io/comet-ml/opik
 
 localFEAddress: "host.minikube.internal:5174"
@@ -18,8 +18,7 @@ demoDataJob: true
 component:
   backend:
     enabled: true
-    run_migration: true
-    serviceAccount: 
+    serviceAccount:
       create: true
     metrics:
       enabled: false
@@ -32,11 +31,16 @@ component:
       enabled: false
     backendConfigMap:
       enabled: true
-    initContainers:          
-    - name: wait-for-clickhouse-service
-      image: curlimages/curl:8.12.1
-      command: ["/bin/sh", "-c"]
-      args: ['while [ $(curl -ksw "%{http_code}" "http://clickhouse-opik-clickhouse:8123" -o /dev/null) -ne 200 ]; do sleep 5; echo "Clickhouse is not available. Waiting for the Clickhouse..."; done']
+    run_migration: true
+    waitForClickhouse:
+      clickhouse:
+        host: clickhouse-opik-clickhouse
+        port: 8123
+        protocol: http
+      image:
+        registry: docker.io
+        repository: curlimages/curl
+        tag: 8.12.1
     livenessProbe:
       path: /health-check?name=all&type=alive
       port:  8080
@@ -56,7 +60,7 @@ component:
       ANALYTICS_DB_HOST: "clickhouse-opik-clickhouse"
       ANALYTICS_DB_PORT: "8123"
       ANALYTICS_DB_USERNAME: "opik"
-      ANALYTICS_DB_DATABASE_NAME: "opik"  
+      ANALYTICS_DB_DATABASE_NAME: "opik"
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"
       REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
       ANALYTICS_DB_MIGRATIONS_PASS: opik
@@ -95,7 +99,7 @@ component:
 
   python-backend:
     enabled: true
-    serviceAccount: 
+    serviceAccount:
       create: true
     metrics:
       enabled: false
@@ -110,16 +114,22 @@ component:
       enabled: true
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
-      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
+      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
       PYTHON_CODE_EXECUTOR_STRATEGY: "process"
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
+      OTEL_SERVICE_NAME: "opik-python-backend"
+      OTEL_METRIC_EXPORT_INTERVAL: "60000"      
+      OTEL_PROPAGATORS: "tracecontext,baggage"
+      OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
+      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
     envFrom:
       - configMapRef:
           name: opik-python-backend
-          
+
     securityContext:
       privileged: true
     networkPolicy:
@@ -147,7 +157,7 @@ component:
 
   frontend:
     enabled: true
-    serviceAccount: 
+    serviceAccount:
       create: true
     metrics:
       enabled: false
@@ -207,7 +217,7 @@ component:
       # proxy_request_buffering: 'on'
 
 mysql:
-  enabled: true 
+  enabled: true
   fullnameOverride: opik-mysql
   auth:
     rootPassword: "opik"
@@ -230,7 +240,7 @@ minio:
     rootPassword: "LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
   provisioning:
     enabled: true
-    extraCommands: 
+    extraCommands:
       - mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4
       - mc mb --ignore-existing s3/public
       - mc anonymous set download s3/public/
@@ -310,6 +320,8 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  zookeeper:
+      host: opik-zookeeper
   backup: 
     enabled: false
     successfulJobsHistoryLimit: 1
@@ -327,9 +339,9 @@ clickhouse:
     #     memory: 1Gi
     #   limits:
     #     memory: 1Gi
-    
+
 zookeeper:
-    enabled: false
+    enabled: true
     fullnameOverride: opik-zookeeper
     replicaCount: 1
     # podAntiAffinityPreset: hard
@@ -351,6 +363,6 @@ zookeeper:
     # resources:
     #   requests:
     #     cpu: 300m
-    #     memory: 1Gi
+    #     memory: 1500Mi
     #   limits:
-    #     memory: 1Gi
+    #     memory: 2Gi

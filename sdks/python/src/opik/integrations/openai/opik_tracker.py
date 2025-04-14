@@ -2,7 +2,10 @@ from typing import Optional, TypeVar
 
 import openai
 
-from . import chat_completion_chunks_aggregator, openai_decorator
+from . import (
+    chat_completion_chunks_aggregator,
+    openai_chat_completions_decorator,
+)
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
@@ -17,6 +20,7 @@ def track_openai(
     * `openai_client.chat.completions.create()`, including support for stream=True mode.
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`
+    * `openai_client.responses.create()`
 
     Can be used within other Opik-tracked functions.
 
@@ -32,18 +36,19 @@ def track_openai(
 
     openai_client.opik_tracked = True
 
-    decorator_factory = openai_decorator.OpenaiTrackDecorator()
-
+    chat_completions_decorator_factory = (
+        openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
+    )
     if openai_client.base_url.host != "api.openai.com":
-        decorator_factory.provider = openai_client.base_url.host
+        chat_completions_decorator_factory.provider = openai_client.base_url.host
 
-    completions_create_decorator = decorator_factory.track(
+    completions_create_decorator = chat_completions_decorator_factory.track(
         type="llm",
         name="chat_completion_create",
         generations_aggregator=chat_completion_chunks_aggregator.aggregate,
         project_name=project_name,
     )
-    completions_parse_decorator = decorator_factory.track(
+    completions_parse_decorator = chat_completions_decorator_factory.track(
         type="llm",
         name="chat_completion_parse",
         generations_aggregator=chat_completion_chunks_aggregator.aggregate,
@@ -61,4 +66,38 @@ def track_openai(
         openai_client.beta.chat.completions.parse
     )
 
+    openai_responses_api_available = hasattr(openai_client, "responses") and hasattr(
+        openai_client.responses, "create"
+    )
+    if not openai_responses_api_available:
+        return openai_client
+
+    _patch_openai_responses(openai_client, project_name)
+
     return openai_client
+
+
+def _patch_openai_responses(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    from . import (
+        response_events_aggregator,
+        openai_responses_decorator,
+    )
+
+    responses_decorator_factory = (
+        openai_responses_decorator.OpenaiResponsesTrackDecorator()
+    )
+    if openai_client.base_url.host != "api.openai.com":
+        responses_decorator_factory.provider = openai_client.base_url.host
+
+    responses_create_decorator = responses_decorator_factory.track(
+        type="llm",
+        name="responses_create",
+        generations_aggregator=response_events_aggregator.aggregate,
+        project_name=project_name,
+    )
+    openai_client.responses.create = responses_create_decorator(
+        openai_client.responses.create
+    )

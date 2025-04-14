@@ -15,6 +15,7 @@ import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -66,7 +67,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.domain.FeedbackScoreDAO.EntityType;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/experiments")
@@ -164,13 +164,12 @@ public class ExperimentsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);
-        var newExperiment = experimentService.create(experiment)
+        var id = experimentService.create(experiment)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(newExperiment.id())).build();
-        log.info("Created experiment with id '{}', name '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
-                newExperiment.id(), newExperiment.name(), newExperiment.datasetId(), newExperiment.datasetName(),
-                workspaceId);
+        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
+        log.info("Created experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                id, experiment.name(), experiment.datasetName(), workspaceId);
         return Response.created(uri).build();
     }
 

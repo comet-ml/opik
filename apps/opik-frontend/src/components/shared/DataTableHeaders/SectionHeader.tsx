@@ -1,7 +1,7 @@
 import React from "react";
 import { HeaderContext } from "@tanstack/react-table";
 
-const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
+const SectionHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
   const { column } = context;
   const { header } = column.columnDef.meta ?? {};
 
@@ -12,4 +12,4 @@ const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
   );
 };
 
-export default TypeHeader;
+export default SectionHeader;

@@ -106,6 +106,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
+| clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
@@ -142,11 +143,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.image.repository | string | `"opik-backend"` |  |
 | component.backend.image.tag | string | `"latest"` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
-| component.backend.initContainers[0].args[0] | string | `"while [ $(curl -ksw \"%{http_code}\" \"http://clickhouse-opik-clickhouse:8123\" -o /dev/null) -ne 200 ]; do sleep 5; echo \"Clickhouse is not available. Waiting for the Clickhouse...\"; done"` |  |
-| component.backend.initContainers[0].command[0] | string | `"/bin/sh"` |  |
-| component.backend.initContainers[0].command[1] | string | `"-c"` |  |
-| component.backend.initContainers[0].image | string | `"curlimages/curl:8.12.1"` |  |
-| component.backend.initContainers[0].name | string | `"wait-for-clickhouse-service"` |  |
 | component.backend.livenessProbe.path | string | `"/health-check?name=all&type=alive"` |  |
 | component.backend.livenessProbe.port | int | `8080` |  |
 | component.backend.metrics.enabled | bool | `false` |  |
@@ -165,6 +161,12 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.ports[1].targetPort | int | `3003` |  |
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
+| component.backend.waitForClickhouse.clickhouse.host | string | `"clickhouse-opik-clickhouse"` |  |
+| component.backend.waitForClickhouse.clickhouse.port | int | `8123` |  |
+| component.backend.waitForClickhouse.clickhouse.protocol | string | `"http"` |  |
+| component.backend.waitForClickhouse.image.registry | string | `"docker.io"` |  |
+| component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
+| component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
@@ -196,6 +198,12 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |
 | component.python-backend.env.OPIK_REVERSE_PROXY_URL | string | `"http://opik-frontend:5173/api"` |  |
+| component.python-backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
+| component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION | string | `"BASE2_EXPONENTIAL_BUCKET_HISTOGRAM"` |  |
+| component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE | string | `"cumulative"` |  |
+| component.python-backend.env.OTEL_METRIC_EXPORT_INTERVAL | string | `"60000"` |  |
+| component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage"` |  |
+| component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
@@ -270,7 +278,7 @@ Call opik api on http://localhost:5173/api
 | redis.ssl | bool | `false` |  |
 | registry | string | `"ghcr.io/comet-ml/opik"` |  |
 | standalone | bool | `true` |  |
-| zookeeper.enabled | bool | `false` |  |
+| zookeeper.enabled | bool | `true` |  |
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
 | zookeeper.headless.publishNotReadyAddresses | bool | `true` |  |

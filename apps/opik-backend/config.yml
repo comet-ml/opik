@@ -131,14 +131,10 @@ authentication:
   # Default: 5
   # Description: API key resolution cache TTL (seconds). Setting this value to 0 means no caching.
   apiKeyResolutionCacheTTLInSec: ${AUTH_API_KEY_RESOLUTION_CACHE_TTL_IN_SEC:-5}
-  # Default:
-  # Description: Configures how to authenticate requests which originates from the sdk
-  sdk:
-    url: ${AUTH_SDK_URL:-''}
-  # Default:
-  # Description: Configures how to authenticate requests which originates from the ui
-  ui:
-    url: ${AUTH_UI_URL:-''}
+  # Default: http://react-svc:8080
+  # Description: Configures base url for React service, used for user management and authentication
+  reactService:
+    url: ${REACT_SERVICE_URL:-http://react-svc:8080}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -366,4 +362,4 @@ pythonEvaluator:
 serviceToggles:
   # Default: true
   # Description: Whether or not Python evaluator is enabled
-  pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-"true"}
+  pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-"false"}

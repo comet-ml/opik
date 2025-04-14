@@ -168,6 +168,9 @@ navigation:
               - page: Instructor
                 path: docs/tracing/integrations/instructor.mdx
                 slug: instructor
+              - page: LangChainJS
+                path: docs/tracing/integrations/langchainjs.mdx
+                slug: langchainjs
               - page: LangGraph
                 path: docs/tracing/integrations/langgraph.mdx
                 slug: langgraph
@@ -192,6 +195,9 @@ navigation:
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
                 slug: watsonx
+              - page: Agent Development Kit
+                path: docs/tracing/integrations/adk.mdx
+                slug: adk
           - section: OpenTelemetry
             slug: /opentelemetry
             contents:

@@ -50,7 +50,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription; // Store the subscription reference
 
-    public OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
+    protected OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull AutomationRuleEvaluatorType type) {
@@ -144,10 +144,17 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private void setupStreamListener(RStreamReactive<String, M> stream) {
         // Listen for messages
         this.streamSubscription = Flux.interval(config.getPoolingInterval().toJavaDuration())
+                // The next interval is dropped if slow consumers
+                .onBackpressureDrop()
                 .flatMap(i -> stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig))
-                .flatMap(messages -> Flux.fromIterable(messages.entrySet()))
+                // Skipping the interval and reporting an error if reading from Redis fails
+                .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
+                .flatMapIterable(Map::entrySet)
                 .publishOn(Schedulers.boundedElastic())
                 .doOnNext(entry -> processReceivedMessages(stream, entry))
+                // The processReceivedMessages method is wrapped in a try-catch, but handling the error just in case
+                // The error is logged and the interval is skipped
+                .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
                 .subscribe();
     }
 

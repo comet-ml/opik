@@ -89,6 +89,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
@@ -178,14 +179,16 @@ class SpansResourceTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
+        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -4215,15 +4218,21 @@ class SpansResourceTest {
             List<FeedbackScoreBatchItem> scoreForSpan = PodamFactoryUtils.manufacturePojoList(podamFactory,
                     FeedbackScoreBatchItem.class);
 
-            List<FeedbackScoreBatchItem> allScores = spans
-                    .stream()
-                    .flatMap(span -> scoreForSpan.stream()
-                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                                    .id(span.id())
-                                    .projectName(span.projectName())
-                                    .value(podamFactory.manufacturePojo(BigDecimal.class))
-                                    .build()))
-                    .toList();
+            List<FeedbackScoreBatchItem> allScores = new ArrayList<>();
+            for (Span span : spans) {
+                for (FeedbackScoreBatchItem item : scoreForSpan) {
+
+                    if (spans.getLast().equals(span) && scoreForSpan.getFirst().equals(item)) {
+                        continue;
+                    }
+
+                    allScores.add(item.toBuilder()
+                            .id(span.id())
+                            .projectName(span.projectName())
+                            .value(podamFactory.manufacturePojo(BigDecimal.class).abs())
+                            .build());
+                }
+            }
 
             spanResourceClient.feedbackScores(allScores, apiKey, workspaceName);
 
@@ -4231,30 +4240,34 @@ class SpansResourceTest {
                     "feedback_scores.%s".formatted(scoreForSpan.getFirst().name()),
                     direction);
 
-            Comparator<Span> comparing = Comparator.comparing(trace -> trace.feedbackScores()
+            Comparator<Span> comparing = Comparator.comparing((Span span) -> Optional.ofNullable(span.feedbackScores())
+                    .orElse(List.of())
                     .stream()
                     .filter(score -> score.name().equals(scoreForSpan.getFirst().name()))
                     .findFirst()
-                    .orElseThrow()
-                    .value());
+                    .map(FeedbackScore::value)
+                    .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Span::id).reversed());
 
             var expectedSpans = spans.stream()
                     .map(span -> span.toBuilder()
-                            .feedbackScores(allScores
-                                    .stream()
-                                    .filter(score -> score.id().equals(span.id()))
-                                    .map(scores -> FeedbackScore.builder()
-                                            .name(scores.name())
-                                            .value(scores.value())
-                                            .categoryName(scores.categoryName())
-                                            .source(scores.source())
-                                            .reason(scores.reason())
-                                            .build())
-                                    .toList())
+                            .feedbackScores(
+                                    allScores
+                                            .stream()
+                                            .filter(score -> score.id().equals(span.id()))
+                                            .map(scores -> FeedbackScore.builder()
+                                                    .name(scores.name())
+                                                    .value(scores.value())
+                                                    .categoryName(scores.categoryName())
+                                                    .source(scores.source())
+                                                    .reason(scores.reason())
+                                                    .build())
+                                            .toList())
                             .build())
-                    .sorted(direction == Direction.ASC
-                            ? comparing
-                            : comparing.reversed())
+                    .sorted(comparing)
                     .toList();
 
             List<SortingField> sortingFields = List.of(sortingField);

@@ -87,6 +87,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
@@ -160,14 +161,17 @@ class TracesResourceTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -4567,15 +4571,21 @@ class TracesResourceTest {
             List<FeedbackScoreBatchItem> scoreForTrace = PodamFactoryUtils.manufacturePojoList(factory,
                     FeedbackScoreBatchItem.class);
 
-            List<FeedbackScoreBatchItem> allScores = traces
-                    .stream()
-                    .flatMap(trace -> scoreForTrace.stream()
-                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                                    .id(trace.id())
-                                    .projectName(trace.projectName())
-                                    .value(factory.manufacturePojo(BigDecimal.class))
-                                    .build()))
-                    .toList();
+            List<FeedbackScoreBatchItem> allScores = new ArrayList<>();
+            for (Trace trace : traces) {
+                for (FeedbackScoreBatchItem item : scoreForTrace) {
+
+                    if (traces.getLast().equals(trace) && scoreForTrace.getFirst().equals(item)) {
+                        continue;
+                    }
+
+                    allScores.add(item.toBuilder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .value(factory.manufacturePojo(BigDecimal.class).abs())
+                            .build());
+                }
+            }
 
             traceResourceClient.feedbackScores(allScores, apiKey, workspaceName);
 
@@ -4583,12 +4593,17 @@ class TracesResourceTest {
                     "feedback_scores.%s".formatted(scoreForTrace.getFirst().name()),
                     direction);
 
-            Comparator<Trace> comparing = Comparator.comparing(trace -> trace.feedbackScores()
-                    .stream()
-                    .filter(score -> score.name().equals(scoreForTrace.getFirst().name()))
-                    .findFirst()
-                    .orElseThrow()
-                    .value());
+            Comparator<Trace> comparing = Comparator.comparing(
+                    (Trace trace) -> trace.feedbackScores()
+                            .stream()
+                            .filter(score -> score.name().equals(scoreForTrace.getFirst().name()))
+                            .findFirst()
+                            .map(FeedbackScore::value)
+                            .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Trace::id).reversed());
 
             var expectedTraces = traces.stream()
                     .map(trace -> trace.toBuilder()
@@ -4604,9 +4619,7 @@ class TracesResourceTest {
                                             .build())
                                     .toList())
                             .build())
-                    .sorted(direction == Direction.ASC
-                            ? comparing
-                            : comparing.reversed())
+                    .sorted(comparing)
                     .toList();
 
             List<SortingField> sortingFields = List.of(sortingField);
