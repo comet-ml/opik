@@ -25,6 +25,7 @@ public class ProjectEventListener {
     public ProjectEventListener(EventBus eventBus, ProjectService projectService, TraceService traceService) {
         this.projectService = projectService;
         this.traceService = traceService;
+
         eventBus.register(this);
     }
 

@@ -44,6 +44,8 @@ interface UsageReportService {
 
     Mono<UserCount> getUserCount();
 
+    boolean isFirstTraceReport();
+
 }
 
 @Slf4j
@@ -68,6 +70,12 @@ class UsageReportServiceImpl implements UsageReportService {
             handle.attach(MetadataDAO.class).saveMetadataKey(Metadata.ANONYMOUS_ID.getValue(), id);
             return null;
         });
+    }
+
+    @Override
+    public boolean isFirstTraceReport() {
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(UsageReportDAO.class).isEventReported(Metadata.FIRST_TRACE_CREATED.getValue()));
     }
 
     public boolean isEventReported(@NonNull String eventType) {

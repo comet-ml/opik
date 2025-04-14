@@ -65,7 +65,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DailyUsageReportJobTest {
 
-    private static final String SUCCESS_RESPONSE = "{\"message\":\"Event added successfully\",\"success\":\"true\"}";
+    public static final String SUCCESS_RESPONSE = "{\"message\":\"Event added successfully\",\"success\":\"true\"}";
 
     private static final String USER = UUID.randomUUID().toString();
 
@@ -286,6 +286,7 @@ class DailyUsageReportJobTest {
             wireMock.server().stop();
             MYSQL.stop();
             CLICKHOUSE.stop();
+            ZOOKEEPER_CONTAINER.stop();
             NETWORK.close();
         }
 
@@ -426,6 +427,7 @@ class DailyUsageReportJobTest {
             wireMock.server().stop();
             MYSQL.stop();
             CLICKHOUSE.stop();
+            ZOOKEEPER_CONTAINER.stop();
             NETWORK.close();
         }
 
