@@ -9,10 +9,10 @@ import uuid6
 from opik import httpx_client
 from opik.file_upload import (
     file_uploader,
-    file_upload_options,
     upload_client,
     upload_monitor,
 )
+from opik.file_upload import upload_options as file_upload_options
 from opik.message_processing import messages
 from opik.rest_api import types as rest_api_types
 from . import conftest

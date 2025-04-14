@@ -8,7 +8,7 @@ from ..rest_api import types as rest_api_types
 from ..rest_api.core import api_error as rest_api_error
 from ..rest_client_configurator import retry_decorator
 from . import upload_monitor
-from . import file_upload_options
+from . import upload_options as file_upload_options
 
 LOCAL_UPLOAD_MAGIC_ID = "BEMinIO"
 
