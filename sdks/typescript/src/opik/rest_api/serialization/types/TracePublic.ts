@@ -9,6 +9,7 @@ import { JsonNodePublic } from "./JsonNodePublic";
 import { ErrorInfoPublic } from "./ErrorInfoPublic";
 import { FeedbackScorePublic } from "./FeedbackScorePublic";
 import { CommentPublic } from "./CommentPublic";
+import { GuardrailsValidationPublic } from "./GuardrailsValidationPublic";
 
 export const TracePublic: core.serialization.ObjectSchema<serializers.TracePublic.Raw, OpikApi.TracePublic> =
     core.serialization.object({
@@ -32,6 +33,10 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
             core.serialization.list(FeedbackScorePublic).optional(),
         ),
         comments: core.serialization.list(CommentPublic).optional(),
+        guardrailsValidations: core.serialization.property(
+            "guardrails_validations",
+            core.serialization.list(GuardrailsValidationPublic).optional(),
+        ),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
         duration: core.serialization.number().optional(),
@@ -57,6 +62,7 @@ export declare namespace TracePublic {
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScorePublic.Raw[] | null;
         comments?: CommentPublic.Raw[] | null;
+        guardrails_validations?: GuardrailsValidationPublic.Raw[] | null;
         total_estimated_cost?: number | null;
         span_count?: number | null;
         duration?: number | null;
