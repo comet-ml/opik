@@ -286,8 +286,8 @@ class DailyUsageReportJobTest {
             wireMock.server().stop();
             MYSQL.stop();
             CLICKHOUSE.stop();
-            NETWORK.close();
             ZOOKEEPER_CONTAINER.stop();
+            NETWORK.close();
         }
 
         private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -427,8 +427,8 @@ class DailyUsageReportJobTest {
             wireMock.server().stop();
             MYSQL.stop();
             CLICKHOUSE.stop();
-            NETWORK.close();
             ZOOKEEPER_CONTAINER.stop();
+            NETWORK.close();
         }
 
         @Test
