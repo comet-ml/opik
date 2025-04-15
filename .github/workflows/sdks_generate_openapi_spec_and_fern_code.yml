@@ -37,12 +37,15 @@ jobs:
           FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
         run: |
           set -e
+          cd apps/opik-backend
+          mvn clean
+          cd -
           ./scripts/generate_openapi.sh
 
       - name: Push files
         run: |
           set -ex
-          git add --local user.email "github-actions@comet.com"
+          git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
           git add sdks/python/src/opik/rest_api/
           git add sdks/typescript/src/opik/rest_api/
