@@ -14,6 +14,7 @@ import { ChatCompletions } from "./api/resources/chatCompletions/client/Client";
 import { Datasets } from "./api/resources/datasets/client/Client";
 import { Experiments } from "./api/resources/experiments/client/Client";
 import { FeedbackDefinitions } from "./api/resources/feedbackDefinitions/client/Client";
+import { Guardrails } from "./api/resources/guardrails/client/Client";
 import { LlmProviderKey } from "./api/resources/llmProviderKey/client/Client";
 import { OpenTelemetryIngestion } from "./api/resources/openTelemetryIngestion/client/Client";
 import { Projects } from "./api/resources/projects/client/Client";
@@ -59,6 +60,7 @@ export class OpikApiClient {
     protected _datasets: Datasets | undefined;
     protected _experiments: Experiments | undefined;
     protected _feedbackDefinitions: FeedbackDefinitions | undefined;
+    protected _guardrails: Guardrails | undefined;
     protected _llmProviderKey: LlmProviderKey | undefined;
     protected _openTelemetryIngestion: OpenTelemetryIngestion | undefined;
     protected _projects: Projects | undefined;
@@ -100,6 +102,10 @@ export class OpikApiClient {
 
     public get feedbackDefinitions(): FeedbackDefinitions {
         return (this._feedbackDefinitions ??= new FeedbackDefinitions(this._options));
+    }
+
+    public get guardrails(): Guardrails {
+        return (this._guardrails ??= new Guardrails(this._options));
     }
 
     public get llmProviderKey(): LlmProviderKey {

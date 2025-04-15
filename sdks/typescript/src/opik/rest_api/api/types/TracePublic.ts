@@ -22,6 +22,7 @@ export interface TracePublic {
     lastUpdatedBy?: string;
     feedbackScores?: OpikApi.FeedbackScorePublic[];
     comments?: OpikApi.CommentPublic[];
+    guardrailsValidations?: OpikApi.GuardrailsValidationPublic[];
     totalEstimatedCost?: number;
     spanCount?: number;
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */

@@ -12,6 +12,7 @@ from .chat_completions.client import ChatCompletionsClient
 from .datasets.client import DatasetsClient
 from .experiments.client import ExperimentsClient
 from .feedback_definitions.client import FeedbackDefinitionsClient
+from .guardrails.client import GuardrailsClient
 from .llm_provider_key.client import LlmProviderKeyClient
 from .open_telemetry_ingestion.client import OpenTelemetryIngestionClient
 from .projects.client import ProjectsClient
@@ -33,6 +34,7 @@ from .chat_completions.client import AsyncChatCompletionsClient
 from .datasets.client import AsyncDatasetsClient
 from .experiments.client import AsyncExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient
+from .guardrails.client import AsyncGuardrailsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient
 from .projects.client import AsyncProjectsClient
@@ -127,6 +129,7 @@ class OpikApi:
         self.feedback_definitions = FeedbackDefinitionsClient(
             client_wrapper=self._client_wrapper
         )
+        self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = LlmProviderKeyClient(
             client_wrapper=self._client_wrapper
         )
@@ -311,6 +314,7 @@ class AsyncOpikApi:
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(
             client_wrapper=self._client_wrapper
         )
+        self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = AsyncLlmProviderKeyClient(
             client_wrapper=self._client_wrapper
         )

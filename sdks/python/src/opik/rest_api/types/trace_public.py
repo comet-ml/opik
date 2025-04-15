@@ -7,6 +7,7 @@ from .json_node_public import JsonNodePublic
 from .error_info_public import ErrorInfoPublic
 from .feedback_score_public import FeedbackScorePublic
 from .comment_public import CommentPublic
+from .guardrails_validation_public import GuardrailsValidationPublic
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
@@ -29,6 +30,9 @@ class TracePublic(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScorePublic]] = None
     comments: typing.Optional[typing.List[CommentPublic]] = None
+    guardrails_validations: typing.Optional[typing.List[GuardrailsValidationPublic]] = (
+        None
+    )
     total_estimated_cost: typing.Optional[float] = None
     span_count: typing.Optional[int] = None
     duration: typing.Optional[float] = pydantic.Field(default=None)
