@@ -75,8 +75,18 @@ export const getGuardrailComputedResult = (
     }
   });
 
-  return Object.entries(result).map(([name, status]) => ({
+  const statusList = Object.entries(result).map(([name, status]) => ({
     name,
     status,
   })) as GuardrailComputedResult[];
+
+  let generalStatus = GuardrailResult.PASSED;
+  const hasFailedGuardrails = statusList.some(
+    (res) => res.status === GuardrailResult.FAILED,
+  );
+  if (hasFailedGuardrails) {
+    generalStatus = GuardrailResult.FAILED;
+  }
+
+  return { statusList, generalStatus };
 };

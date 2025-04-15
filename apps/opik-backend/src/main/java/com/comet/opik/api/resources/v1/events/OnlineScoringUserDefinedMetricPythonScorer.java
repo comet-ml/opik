@@ -40,7 +40,8 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull PythonEvaluatorService pythonEvaluatorService) {
-        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON,
+                "python_user_defined_metric");
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
