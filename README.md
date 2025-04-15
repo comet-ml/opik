@@ -38,6 +38,9 @@ From RAG chatbots to code assistants to complex agentic pipelines and beyond, bu
 
 ![Opik thumbnail](readme-thumbnail.png)
 
+## Important change on version 1.7.0
+**Please check the change log [here](CHANGELOG.md).**
+
 ## 🚀 What is Opik?
 
 Opik is an open-source platform for evaluating, testing and monitoring LLM applications. Built by [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik).
