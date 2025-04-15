@@ -111,20 +111,25 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 SELECT t.start_time,
                         fs.name,
                         fs.value
-                FROM feedback_scores fs
-                    JOIN traces t ON t.id = fs.entity_id
-                WHERE project_id = :project_id
+                FROM feedback_scores fs <final>
+                JOIN (
+                    SELECT
+                        id,
+                        start_time
+                    FROM traces <final>
+                    WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    AND entity_type = 'trace'
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, name
+                    AND start_time >= parseDateTime64BestEffort(:start_time, 9)
+                    AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                ) t ON t.id = fs.entity_id
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                AND entity_type = 'trace'
             )
             SELECT <bucket> AS bucket,
                     name,
                     nullIf(avg(value), 0) AS value
             FROM feedback_scores_deduplication
-            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY name, bucket
             ORDER BY name, bucket
             WITH FILL
