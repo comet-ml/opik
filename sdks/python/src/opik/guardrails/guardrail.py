@@ -97,6 +97,11 @@ class Guardrail:
 
         result = self._api_client.validate(generation, validations)
 
+        if not result.validation_passed:
+            result.guardrail_result = "failed"
+        else:
+            result.guardrail_result = "passed"
+
         return result
 
     def _parse_result(

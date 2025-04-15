@@ -35,7 +35,7 @@ class GuardrailsTrackDecorator(base_track_decorator.BaseTrackDecorator):
         result = arguments_helpers.StartSpanParameters(
             name="Guardrail",
             input={"generation": kwargs["generation"]},
-            type="tool",  # TODO: Replace with type="guardrail"
+            type="guardrail",
         )
 
         return result
