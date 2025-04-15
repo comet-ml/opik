@@ -23,7 +23,6 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 
-@pytest.mark.skipif(not os.environ.get("ADMIN_API_KEY"), reason="ADMIN_API_KEY not set")
 @allure.title("New account demo data")
 def test_new_user_demo_data(page: Page, temp_user_with_api_key, env_config):
     """
