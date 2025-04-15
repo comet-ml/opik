@@ -10,13 +10,31 @@ type CustomMeta = {
   fieldType: "input" | "output";
 };
 
+const MAX_LENGTH = 2000;
+
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const { custom } = context.column.columnDef.meta ?? {};
   const { fieldType = "input" } = (custom ?? {}) as CustomMeta;
   const value = context.getValue() as string | object;
 
+  const rawValue = useMemo(() => {
+    let text = "";
+    if (isObject(value)) {
+      text = JSON.stringify(value, null, 2);
+    } else {
+      text = value;
+    }
+
+    return text;
+  }, [value]);
+
+  const hasExceededLimit = useMemo(
+    () => rawValue.length > MAX_LENGTH,
+    [rawValue],
+  );
+
   const response = useMemo(() => {
-    if (!value) {
+    if (!value || hasExceededLimit) {
       return {
         message: "",
         prettified: false,
@@ -26,7 +44,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     return prettifyMessage(value, {
       type: fieldType,
     });
-  }, [value, fieldType]);
+  }, [value, fieldType, hasExceededLimit]);
 
   const message = useMemo(() => {
     if (isObject(response.message)) {
@@ -45,17 +63,27 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const content = useMemo(() => {
     if (isSmall) {
       return (
-        <CellTooltipWrapper content={message}>
-          <span className="comet-code truncate">{message}</span>
+        <CellTooltipWrapper
+          content={
+            hasExceededLimit
+              ? "It has exceeded the preview limit, open trace details to see details"
+              : message
+          }
+        >
+          <span className="comet-code truncate">
+            {hasExceededLimit ? rawValue.slice(0, MAX_LENGTH) + "..." : message}
+          </span>
         </CellTooltipWrapper>
       );
     }
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {message}
+        {hasExceededLimit
+          ? "It has exceeded the preview limit, open trace details to see details"
+          : message}
       </div>
     );
-  }, [isSmall, message]);
+  }, [isSmall, message, hasExceededLimit, rawValue]);
 
   return (
     <CellWrapper
