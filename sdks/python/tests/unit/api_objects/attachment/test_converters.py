@@ -8,16 +8,12 @@ from opik.message_processing import messages
 @pytest.mark.parametrize(
     "attachment_data,expected",
     [
-        (attachment.Attachment("test.png", file_name=None), "image/png"),
-        (attachment.Attachment("test.png", file_name="test.jpg"), "image/jpeg"),
+        (attachment.Attachment(data="test.png", file_name=None), "image/png"),
+        (attachment.Attachment(data="test.png", file_name="test.jpg"), "image/jpeg"),
         (
             attachment.Attachment(
-                "test.pdf", file_name=None, content_type="image/jpeg"
+                data="test.pdf", file_name=None, content_type="image/jpeg"
             ),
-            "image/jpeg",
-        ),
-        (
-            attachment.Attachment({}, file_name=None, content_type="image/jpeg"),
             "image/jpeg",
         ),
     ],
@@ -31,7 +27,7 @@ def test_attachment_to_message():
     base_url = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
-    attachment_data = attachment.Attachment("test.png")
+    attachment_data = attachment.Attachment(data="test.png")
 
     message = converters.attachment_to_message(
         attachment_data=attachment_data,
@@ -56,7 +52,7 @@ def test_attachment_to_message__file_name():
     base_url = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
-    attachment_data = attachment.Attachment("test.pdf", file_name="test.jpg")
+    attachment_data = attachment.Attachment(data="test.pdf", file_name="test.jpg")
 
     message = converters.attachment_to_message(
         attachment_data=attachment_data,
@@ -81,7 +77,7 @@ def test_attachment_to_message__content_type():
     base_url = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
-    attachment_data = attachment.Attachment("test.pdf", content_type="image/jpeg")
+    attachment_data = attachment.Attachment(data="test.pdf", content_type="image/jpeg")
 
     message = converters.attachment_to_message(
         attachment_data=attachment_data,
