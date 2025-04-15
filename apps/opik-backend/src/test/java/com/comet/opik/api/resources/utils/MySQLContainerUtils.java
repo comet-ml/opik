@@ -12,7 +12,7 @@ public class MySQLContainerUtils {
     }
 
     public static MySQLContainer<?> newMySQLContainer(boolean reusable) {
-        return new MySQLContainer<>(DockerImageName.parse("mysql"))
+        return new MySQLContainer<>(DockerImageName.parse("mysql:8.4.2"))
                 .withUrlParam("createDatabaseIfNotExist", "true")
                 .withUrlParam("rewriteBatchedStatements", "true")
                 .withUrlParam("serverTimezone", "UTC")
