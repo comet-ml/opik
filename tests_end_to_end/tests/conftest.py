@@ -122,7 +122,7 @@ def video_dir():
 
 
 @pytest.fixture(scope="session")
-def browser_context(browser: Browser, get_url_from_config: str, video_dir):
+def browser_context(browser: Browser, video_dir):
     """Create a browser context with required permissions and authentication"""
     # Enable video recording
     context = browser.new_context(
@@ -135,8 +135,11 @@ def browser_context(browser: Browser, get_url_from_config: str, video_dir):
 
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
+    # Get data from config
+    env_config = get_environment_config()
+
     # Handle cloud environment authentication
-    if not get_url_from_config.startswith("http://localhost"):
+    if not env_config.base_url.startswith("http://localhost"):
         page = context.new_page()
         # Extract base URL for authentication (remove /opik from the end)
         base_url = re.sub(r"/opik$", "", env_config.base_url)
@@ -174,12 +177,6 @@ def browser_context(browser: Browser, get_url_from_config: str, video_dir):
 
     yield context
     context.close()
-
-
-@pytest.fixture(scope="session")
-def get_url_from_config():
-    env_config = get_environment_config()
-    return env_config.base_url
 
 
 @pytest.fixture(scope="function")
