@@ -286,6 +286,7 @@ class DailyUsageReportJobTest {
             wireMock.server().stop();
             MYSQL.stop();
             CLICKHOUSE.stop();
+            ZOOKEEPER_CONTAINER.stop();
             NETWORK.close();
         }
 
@@ -426,6 +427,7 @@ class DailyUsageReportJobTest {
             wireMock.server().stop();
             MYSQL.stop();
             CLICKHOUSE.stop();
+            ZOOKEEPER_CONTAINER.stop();
             NETWORK.close();
         }
 
