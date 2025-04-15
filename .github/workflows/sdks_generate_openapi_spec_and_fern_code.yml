@@ -25,7 +25,7 @@ jobs:
 
       - name: Set branch name
         run: |
-          echo "BRANCH_NAME=update-openapi-spec-and-fern-code-$(date +%Y-%m-%d)" >> $GITHUB_ENV
+          echo "BRANCH_NAME=github-actions/update-openapi-spec-and-fern-code-$(date +%Y-%m-%d)" >> $GITHUB_ENV
 
       - name: Create branch
         uses: JosiahSiegel/remote-branch-action@v1.2.0
