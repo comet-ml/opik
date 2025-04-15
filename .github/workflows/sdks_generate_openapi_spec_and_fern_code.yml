@@ -42,7 +42,7 @@ jobs:
           cd -
           ./scripts/generate_openapi.sh
 
-      - name: Push files
+      - name: Commit files
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
