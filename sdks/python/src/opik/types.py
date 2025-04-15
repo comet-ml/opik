@@ -28,6 +28,9 @@ class LLMProvider(str, enum.Enum):
     ANTHROPIC = "anthropic"
     """Used for models hosted by Anthropic. https://www.anthropic.com"""
 
+    ANTHROPIC_VERTEXAI = "anthropic_vertexai"
+    """Used for Anthropic models hosted by VertexAI. https://cloud.google.com/vertex-ai"""
+
     @classmethod
     def has_value(cls, value: str) -> bool:
         return value in [enum_item.value for enum_item in cls]
