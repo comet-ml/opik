@@ -8,6 +8,7 @@ from .json_node import JsonNode
 from .error_info import ErrorInfo
 from .feedback_score import FeedbackScore
 from .comment import Comment
+from .guardrails_validation import GuardrailsValidation
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
 
@@ -34,6 +35,7 @@ class Trace(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
     comments: typing.Optional[typing.List[Comment]] = None
+    guardrails_validations: typing.Optional[typing.List[GuardrailsValidation]] = None
     total_estimated_cost: typing.Optional[float] = None
     span_count: typing.Optional[int] = None
     duration: typing.Optional[float] = pydantic.Field(default=None)
