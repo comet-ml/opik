@@ -17,14 +17,14 @@ UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 def upload_attachment(
     upload_options: file_upload_options.FileUploadOptions,
     rest_client: rest_api_client.OpikApi,
-    httpx_client: httpx.Client,
+    upload_httpx_client: httpx.Client,
     monitor: Optional[upload_monitor.FileUploadMonitor] = None,
 ) -> None:
     try:
         _do_upload_attachment(
             upload_options=upload_options,
             rest_client=rest_client,
-            httpx_client=httpx_client,
+            httpx_client=upload_httpx_client,
             monitor=monitor,
         )
     except Exception as e:
@@ -42,7 +42,7 @@ def _do_upload_attachment(
     upload_options: file_upload_options.FileUploadOptions,
     rest_client: rest_api_client.OpikApi,
     httpx_client: httpx.Client,
-    monitor: Optional[upload_monitor.FileUploadMonitor] = None,
+    monitor: Optional[upload_monitor.FileUploadMonitor],
 ) -> None:
     file_parts = file_parts_strategy.FilePartsStrategy(
         file_path=upload_options.file_path,

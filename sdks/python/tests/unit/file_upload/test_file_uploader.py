@@ -19,7 +19,7 @@ def test_upload_attachment__s3(attachment, rest_client_s3, respx_mock):
     file_uploader.upload_attachment(
         upload_options=attachment,
         rest_client=rest_client_s3,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,
     )
 
@@ -38,7 +38,7 @@ def test_upload_attachment__s3__no_monitor(attachment, rest_client_s3, respx_moc
     file_uploader.upload_attachment(
         upload_options=attachment,
         rest_client=rest_client_s3,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
     )
 
     route = respx.put(rx_url)
@@ -55,7 +55,7 @@ def test_upload_attachment__local(attachment, rest_client_local, respx_mock):
     file_uploader.upload_attachment(
         upload_options=attachment,
         rest_client=rest_client_local,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,
     )
 
@@ -74,7 +74,7 @@ def test_upload_attachment__local__no_monitor(
     file_uploader.upload_attachment(
         upload_options=attachment,
         rest_client=rest_client_local,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
     )
 
     route = respx.put(rx_url)
@@ -96,7 +96,7 @@ def test_upload_attachment__local__retry_500(attachment, rest_client_local, resp
     file_uploader.upload_attachment(
         upload_options=attachment,
         rest_client=rest_client_local,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,
     )
 

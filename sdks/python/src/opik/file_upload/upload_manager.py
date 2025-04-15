@@ -74,7 +74,7 @@ class FileUploadManager:
             "monitor": monitor,
             "upload_options": options,
             "rest_client": self._rest_client,
-            "httpx_client": self._httpx_client,
+            "upload_httpx_client": self._httpx_client,
         }
         future = self._executor.submit(uploader, **kwargs)
         self._upload_results.append(UploadResult(future, monitor))
