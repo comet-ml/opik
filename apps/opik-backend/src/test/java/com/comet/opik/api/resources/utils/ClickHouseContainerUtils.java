@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.google.common.collect.Sets;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -16,16 +17,16 @@ public class ClickHouseContainerUtils {
     public static final String DATABASE_NAME = "opik";
     public static final String DATABASE_NAME_VARIABLE = "ANALYTICS_DB_DATABASE_NAME";
     private static final Network NETWORK = Network.newNetwork();
-    private static final Set<GenericContainer<?>> CONTAINERS = new HashSet<>();
+    private static final Set<GenericContainer<?>> CONTAINERS = Sets.newConcurrentHashSet();
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            NETWORK.close();
             CONTAINERS.forEach(container -> {
                 if (container.isRunning()) {
                     container.stop();
                 }
             });
+            NETWORK.close();
         }));
     }
 
