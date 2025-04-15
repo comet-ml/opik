@@ -71,13 +71,15 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) AS duration
-                FROM traces
+                FROM traces <final>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                 AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                <if(!final)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+                </endif>
             )
             SELECT <bucket> AS bucket,
                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
@@ -95,9 +97,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                    nullIf(count(DISTINCT id), 0) as count
             FROM traces
             WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+            AND workspace_id = :workspace_id
+            AND start_time >= parseDateTime64BestEffort(:start_time, 9)
+            AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
@@ -121,10 +123,18 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND workspace_id = :workspace_id
                     AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                     AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                    <if(!final)>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    </endif>
                 ) t ON t.id = fs.entity_id
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 AND entity_type = 'trace'
+                <if(!final)>
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                LIMIT 1 BY entity_id, name
+                </endif>
             )
             SELECT <bucket> AS bucket,
                     name,
@@ -143,20 +153,38 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 SELECT t.start_time as start_time,
                        name,
                        value
-                FROM spans
-                    JOIN traces t ON spans.trace_id = t.id
-                    ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
-                WHERE project_id = :project_id
+                FROM (
+                    SELECT
+                        start_time,
+                        id
+                    FROM traces <final>
+                    WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id, name
+                    AND start_time >= parseDateTime64BestEffort(:start_time, 9)
+                    AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                    <if(!final)>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    </endif>
+                ) t
+                JOIN (
+                    SELECT
+                        trace_id,
+                        usage
+                    FROM spans <final>
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    <if(!final)>
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    </endif>
+                ) s ON s.trace_id = t.id
+                ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
             )
             SELECT <bucket> AS bucket,
                     name,
                     nullIf(sum(value), 0) AS value
             FROM spans_dedup
-            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY name, bucket
             ORDER BY name, bucket
             WITH FILL
@@ -169,18 +197,38 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WITH spans_dedup AS (
                 SELECT t.start_time AS start_time,
                        s.total_estimated_cost AS value
-                FROM spans s
-                    JOIN traces t ON spans.trace_id = t.id
-                WHERE project_id = :project_id
+                FROM (
+                    SELECT
+                        start_time,
+                        id
+                    FROM traces <final>
+                    WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY s.id
+                    AND start_time >= parseDateTime64BestEffort(:start_time, 9)
+                    AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+                    <if(!final)>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    </endif>
+                ) t
+                JOIN (
+                    SELECT
+                        trace_id,
+                        total_estimated_cost
+                    FROM spans <final>
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    <if(!final)>
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                    </endif>
+                ) s ON s.trace_id = t.id
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
             )
             SELECT <bucket> AS bucket,
                     nullIf(sum(value), 0) AS value
             FROM spans_dedup
-            WHERE start_time >= parseDateTime64BestEffort(:start_time, 9)
-                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
             GROUP BY bucket
             ORDER BY bucket
             WITH FILL
