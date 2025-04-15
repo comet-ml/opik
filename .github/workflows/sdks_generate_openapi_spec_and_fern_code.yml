@@ -32,17 +32,20 @@ jobs:
           set -e
           ./scripts/generate_openapi.sh
 
-      - name: Create git tag
-        run: |
-          set -ex
-          git add --local user.email "github-actions@comet.com"
-          git config --local user.name "github-actions"
-          git add sdks/python/src/opik/rest_api/
-          git add sdks/typescript/src/opik/rest_api/
-          git add sdks/code_generation/fern/openapi/openapi.yaml
-          git add apps/opik-documentation/documentation/fern/openapi/opik.yaml
-          git commit -m "Update OpenAPI spec and Fern code"
-          git push origin ${{env.BRANCH_NAME}}                    
+      - name: Push files
+        uses: comet-ml/push-files@main
+        with:
+          branch: ${{ env.BRANCH_NAME }}
+          files: |
+            sdks/python/src/opik/rest_api/:sdks/python/src/opik/rest_api/
+            sdks/typescript/src/opik/rest_api/:sdks/typescript/src/opik/rest_api/
+            sdks/code_generation/fern/openapi/openapi.yaml:sdks/code_generation/fern/openapi/openapi.yaml
+            apps/opik-documentation/documentation/fern/openapi/opik.yaml:apps/opik-documentation/documentation/fern/openapi/opik.yaml
+          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          repository: 'comet-ml/opik'
+          commit_user_email: github-actions@comet.com
+          commit_user_name: 'Github Actions (${{ github.actor }})'
+          commit_message: "Update OpenAPI spec and Fern code"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
