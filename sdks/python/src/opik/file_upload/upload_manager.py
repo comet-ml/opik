@@ -31,10 +31,10 @@ class UploadResult:
         """Allows to check if wrapped Future successfully finished"""
         return self.future.done()
 
-    def successful(self) -> bool:
+    def successful(self, timeout: Optional[float] = None) -> bool:
         """Allows to check if wrapped Future completed without raising an exception"""
         try:
-            return self.future.exception() is None
+            return self.future.exception(timeout) is None
         except (CancelledError, TimeoutError):
             return False
 
@@ -46,13 +46,15 @@ class FileUploadManager:
         self,
         rest_client: rest_api_client.OpikApi,
         httpx_client: httpx.Client,
-        worker_cpu_ratio: int,
+        worker_count: Optional[int],
+        file_upload_timeout: Optional[int] = None,
     ) -> None:
         self._httpx_client = httpx_client
         self._rest_client = rest_client
 
-        self._executor = thread_pool.get_thread_pool(worker_cpu_ratio=worker_cpu_ratio)
+        self._executor = thread_pool.get_thread_pool(worker_count=worker_count)
         self._upload_results: List[UploadResult] = []
+        self._file_upload_timeout = file_upload_timeout
         self.closed = False
 
     def upload_attachment_file(
@@ -66,6 +68,13 @@ class FileUploadManager:
     def _submit_upload(
         self, options: upload_options.FileUploadOptions, uploader: Callable
     ) -> None:
+        if self.closed:
+            LOGGER.warning(
+                "The file upload manager has been already closed. No more files can be submitted for upload. (%s)",
+                options.file_name,
+            )
+            return
+
         monitor = upload_monitor.FileUploadMonitor()
         if options.file_size > 0:
             monitor.total_size = options.file_size
@@ -111,21 +120,15 @@ class FileUploadManager:
         return status_list.count(False)
 
     def failed_uploads(self) -> int:
-        """Should be invoked after join() to get a number of failed uploads."""
-        assert self.closed, "The file upload manager has not been closed."
-
+        """Important - this is blocking method waiting for all remaining uploads to complete."""
         failed = 0
         for result in self._upload_results:
-            if not result.ready() or not result.successful():
+            if not result.ready() or not result.successful(self._file_upload_timeout):
                 failed += 1
 
         return failed
 
     def close(self) -> None:
-        self._executor.shutdown(wait=False)
-        self.closed = True
-
-    def join(self) -> None:
         self._executor.shutdown(wait=True)
         self.closed = True
 
@@ -142,16 +145,9 @@ class FileUploadManagerMonitor(object):
         current_time = time.monotonic()
 
         if remaining.bytes == 0:
-            failed_uploads = self.file_upload_manager.failed_uploads()
-            if failed_uploads > 0:
-                LOGGER.info(
-                    "The assets upload has finished, though %d asset(s) was(were) not uploaded successfully. See logs for more details.",
-                    failed_uploads,
-                )
-            else:
-                LOGGER.info(
-                    "All assets have been sent, waiting for delivery confirmation",
-                )
+            LOGGER.info(
+                "All assets have been sent, waiting for delivery confirmation",
+            )
         elif self.last_remaining_uploads_display is None:
             LOGGER.info(
                 "Still uploading %d file(s), remaining %s/%s",
