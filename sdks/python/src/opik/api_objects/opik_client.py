@@ -92,6 +92,8 @@ class Opik:
         self._initialize_streamer(
             base_url=config_.url_override,
             workers=config_.background_workers,
+            file_upload_workers=config_.file_upload_background_workers,
+            file_upload_timeout=config_.default_file_upload_timeout,
             api_key=config_.api_key,
             check_tls_certificate=config_.check_tls_certificate,
             use_batching=_use_batching,
@@ -110,6 +112,8 @@ class Opik:
         self,
         base_url: str,
         workers: int,
+        file_upload_workers: Optional[int],
+        file_upload_timeout: Optional[int],
         api_key: Optional[str],
         check_tls_certificate: bool,
         use_batching: bool,
