@@ -17,6 +17,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -473,26 +474,38 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_id
             ), spans_agg AS (
-                SELECT
-                    trace_id,
-                    sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost,
-                    COUNT(DISTINCT id) as span_count
-                FROM (
+                <if(final)>
                     SELECT
-                        workspace_id,
-                        project_id,
                         trace_id,
-                        id,
-                        usage,
-                        total_estimated_cost
-                    FROM spans
+                        sumMap(usage) as usage,
+                        sum(total_estimated_cost) as total_estimated_cost,
+                        COUNT(DISTINCT id) as span_count
+                    FROM spans final
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                GROUP BY workspace_id, project_id, trace_id
+                    GROUP BY workspace_id, project_id, trace_id
+                <else>
+                    SELECT
+                        trace_id,
+                        sumMap(usage) as usage,
+                        sum(total_estimated_cost) as total_estimated_cost,
+                        COUNT(DISTINCT id) as span_count
+                    FROM (
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            trace_id,
+                            id,
+                            usage,
+                            total_estimated_cost
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY workspace_id, project_id, trace_id
+                <endif>
             ), comments_agg AS (
                 SELECT
                     entity_id,
@@ -945,6 +958,7 @@ class TraceDAOImpl implements TraceDAO {
                         LIMIT 1 BY entity_id, name
                     )
                     GROUP BY workspace_id, project_id, entity_id
+                <endif>
             )
             <if(feedback_scores_empty_filters)>
             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1224,6 +1238,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     @WithSpan
@@ -1578,6 +1593,10 @@ class TraceDAOImpl implements TraceDAO {
 
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
 
+        if (configuration.isEnableFinal()) {
+            template.add("final", "final");
+        }
+
         template.add("offset", offset);
 
         var finalTemplate = template;
@@ -1773,6 +1792,10 @@ class TraceDAOImpl implements TraceDAO {
 
             ST statsSQL = newFindTemplate(SELECT_TRACES_STATS, criteria);
 
+            if (configuration.isEnableFinal()) {
+                statsSQL.add("final", "final");
+            }
+
             var statement = connection.createStatement(statsSQL.render())
                     .bind("project_ids", List.of(criteria.projectId()));
 
@@ -1821,7 +1844,13 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate
                 .nonTransaction(connection -> {
-                    Statement statement = connection.createStatement(new ST(SELECT_TRACES_STATS).render())
+                    ST template = new ST(SELECT_TRACES_STATS);
+
+                    if (configuration.isEnableFinal()) {
+                        template.add("final", "final");
+                    }
+
+                    Statement statement = connection.createStatement(template.render())
                             .bind("project_ids", projectIds)
                             .bind("workspace_id", workspaceId);
 
@@ -2007,6 +2036,10 @@ class TraceDAOImpl implements TraceDAO {
         log.info("Searching traces by '{}'", criteria);
 
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+
+        if (configuration.isEnableFinal()) {
+            template.add("final", "final");
+        }
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 

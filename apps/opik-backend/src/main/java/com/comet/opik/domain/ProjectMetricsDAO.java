@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.google.inject.ImplementedBy;
@@ -55,7 +56,9 @@ public interface ProjectMetricsDAO {
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
+
     private final @NonNull TransactionTemplateAsync template;
+    private final @NonNull OpikConfiguration configuration;
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
@@ -79,7 +82,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 <if(!final)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
-                </endif>
+                <endif>
             )
             SELECT <bucket> AS bucket,
                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
@@ -126,7 +129,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <if(!final)>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                    </endif>
+                    <endif>
                 ) t ON t.id = fs.entity_id
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -134,7 +137,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 <if(!final)>
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
-                </endif>
+                <endif>
             )
             SELECT <bucket> AS bucket,
                     name,
@@ -165,7 +168,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <if(!final)>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                    </endif>
+                    <endif>
                 ) t
                 JOIN (
                     SELECT
@@ -177,7 +180,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <if(!final)>
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                    </endif>
+                    <endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
             )
@@ -209,7 +212,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <if(!final)>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                    </endif>
+                    <endif>
                 ) t
                 JOIN (
                     SELECT
@@ -221,10 +224,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <if(!final)>
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                    </endif>
+                    <endif>
                 ) s ON s.trace_id = t.id
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
             )
             SELECT <bucket> AS bucket,
                     nullIf(sum(value), 0) AS value
@@ -323,6 +324,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .add("fill_from", wrapWeekly(request.interval(),
                         "toStartOfInterval(parseDateTimeBestEffort(:start_time), %s)"
                                 .formatted(intervalToSql(request.interval()))));
+
+        if (configuration.isEnableFinal()) {
+            template.add("final", "final");
+        }
+
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
                 .bind("start_time", request.intervalStart().toString())
