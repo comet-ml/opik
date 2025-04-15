@@ -44,8 +44,8 @@ jobs:
         with:
           branch: ${{ env.BRANCH_NAME }}
           files: |
-            sdks/python/src/opik/rest_api/:sdks/python/src/opik/rest_api/
-            sdks/typescript/src/opik/rest_api/:sdks/typescript/src/opik/rest_api/
+            sdks/python/src/opik/rest_api/*:sdks/python/src/opik/rest_api/*
+            sdks/typescript/src/opik/rest_api/*:sdks/typescript/src/opik/rest_api/*
             sdks/code_generation/fern/openapi/openapi.yaml:sdks/code_generation/fern/openapi/openapi.yaml
             apps/opik-documentation/documentation/fern/openapi/opik.yaml:apps/opik-documentation/documentation/fern/openapi/opik.yaml
           github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
