@@ -8,7 +8,7 @@ import org.testcontainers.utility.DockerImageName;
 public class RedisContainerUtils {
 
     public static RedisContainer newRedisContainer() {
-        return new RedisContainer(DockerImageName.parse("redis"))
+        return new RedisContainer(DockerImageName.parse("redis:7.2.4-alpine3.19"))
                 .withReuse(true);
     }
 
