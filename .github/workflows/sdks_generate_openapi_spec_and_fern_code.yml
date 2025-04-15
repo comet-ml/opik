@@ -1,0 +1,12 @@
+name: SDKs Generate OpenAPI spec and Fern code
+
+on:
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  update-open-api-spec-and-fern-code:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
