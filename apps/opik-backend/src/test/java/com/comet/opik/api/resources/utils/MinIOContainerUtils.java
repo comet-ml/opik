@@ -20,7 +20,7 @@ public class MinIOContainerUtils {
     public static final String MINIO_BUCKET = "test-bucket";
 
     public static GenericContainer<?> newMinIOContainer() {
-        return new GenericContainer<>(DockerImageName.parse("minio/minio:latest"))
+        return new GenericContainer<>(DockerImageName.parse("minio/minio:RELEASE.2025-03-12T18-04-18Z"))
                 .withExposedPorts(9000)
                 .withEnv("MINIO_ROOT_USER", MINIO_USER)
                 .withEnv("MINIO_ROOT_PASSWORD", MINIO_PASSWORD)
