@@ -38,7 +38,7 @@ From RAG chatbots to code assistants to complex agentic pipelines and beyond, bu
 
 ![Opik thumbnail](readme-thumbnail.png)
 
-## Important change in version 1.7.0
+## Important change on version 1.7.0
 **Please check the change log [here](CHANGELOG.md).**
 
 ## 🚀 What is Opik?
