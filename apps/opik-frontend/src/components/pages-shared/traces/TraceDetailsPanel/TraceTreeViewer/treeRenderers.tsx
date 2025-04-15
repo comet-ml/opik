@@ -19,6 +19,8 @@ import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
 import BaseTraceDataTypeIcon from "../BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import styles from "./TraceTreeViewer.module.scss";
+import { getGuardrailComputedResult } from "@/constants/guardrails";
+import { GuardrailResult } from "@/types/guardrails";
 
 const generateStubCells = (depth: number) => {
   const items = [];
@@ -70,6 +72,10 @@ export const treeRenderers: TreeRenderProps = {
     const feedbackScores = props.item.data.feedback_scores;
     const comments = props.item.data.comments;
     const estimatedCost = props.item.data.total_estimated_cost;
+    const guardrailValidations = props.item.data.guardrail_validations ?? [];
+
+    const { generalStatus: guardrailStatus } =
+      getGuardrailComputedResult(guardrailValidations);
 
     const type = props.item.data.type as BASE_TRACE_DATA_TYPE;
 
@@ -126,6 +132,26 @@ export const treeRenderers: TreeRenderProps = {
                   <TooltipWrapper content="Has error">
                     <div className={styles.chainSpanDetailsItem}>
                       <CircleAlert className="text-destructive" />
+                    </div>
+                  </TooltipWrapper>
+                )}
+                {Boolean(guardrailValidations.length) && (
+                  <TooltipWrapper
+                    content={
+                      guardrailStatus === GuardrailResult.PASSED
+                        ? "Guardrails passed"
+                        : "Guardrails failed"
+                    }
+                  >
+                    <div className={styles.chainSpanDetailsItem}>
+                      <div
+                        className={cn("size-2 rounded-full shrink-0 mt-0.5", {
+                          "bg-emerald-500":
+                            guardrailStatus === GuardrailResult.PASSED,
+                          "bg-rose-500":
+                            guardrailStatus === GuardrailResult.FAILED,
+                        })}
+                      ></div>
                     </div>
                   </TooltipWrapper>
                 )}

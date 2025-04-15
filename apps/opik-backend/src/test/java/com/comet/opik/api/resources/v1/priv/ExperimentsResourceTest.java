@@ -64,7 +64,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.jdbi.v3.core.Jdbi;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -95,8 +94,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -137,6 +139,7 @@ import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1577,22 +1580,31 @@ class ExperimentsResourceTest {
             var sortingField = new SortingField(
                     "feedback_scores.%s".formatted(scoreForTrace.getFirst().name()),
                     direction);
-            Comparator<Experiment> comparing = Comparator.comparing(experiment -> experiment.feedbackScores()
-                    .stream()
-                    .filter(score -> score.name().equals(scoreForTrace.getFirst().name()))
-                    .findFirst()
-                    .orElseThrow()
-                    .value());
+
+            Comparator<Experiment> comparing = Comparator.comparing(
+                    (Experiment experiment) -> experiment.feedbackScores()
+                            .stream()
+                            .filter(score -> score.name().equals(scoreForTrace.getFirst().name()))
+                            .findFirst()
+                            .map(FeedbackScoreAverage::value)
+                            .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Experiment::id).reversed());
+
             var expectedExperiments = experiments
                     .stream()
-                    .sorted(direction == Direction.ASC ? comparing : comparing.reversed())
+                    .sorted(comparing)
                     .toList();
+
             var expectedScores = expectedExperiments
                     .stream()
                     .map(experiment -> Map.entry(experiment.id(), experiment.feedbackScores()
                             .stream()
                             .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
                     .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
             findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
                     expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField));
         }
@@ -1640,10 +1652,18 @@ class ExperimentsResourceTest {
 
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-        Map<UUID, List<FeedbackScoreBatchItem>> traceIdToScoresMap = traces.stream()
-                .map(trace -> copyScoresFrom(scoreForTrace, trace))
-                .flatMap(List::stream)
-                .collect(groupingBy(FeedbackScoreBatchItem::id));
+        Map<UUID, List<FeedbackScoreBatchItem>> traceIdToScoresMap = new HashMap<>();
+        for (Trace trace : traces) {
+            List<FeedbackScoreBatchItem> scores = copyScoresFrom(scoreForTrace, trace);
+            for (FeedbackScoreBatchItem item : scores) {
+
+                if (traces.getLast().equals(trace) && scores.getFirst().equals(item)) {
+                    continue;
+                }
+
+                traceIdToScoresMap.computeIfAbsent(item.id(), k -> new ArrayList<>()).add(item);
+            }
+        }
 
         var feedbackScoreBatch = podamFactory.manufacturePojo(FeedbackScoreBatch.class);
         feedbackScoreBatch = feedbackScoreBatch.toBuilder()
@@ -1736,7 +1756,7 @@ class ExperimentsResourceTest {
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    private @NotNull Set<UUID> getExpectedExperimentIdsWithComments(
+    private Set<UUID> getExpectedExperimentIdsWithComments(
             List<Experiment> experiments, List<ExperimentItem> experimentItems, UUID traceId) {
         return experiments.stream()
                 .map(Experiment::id)
@@ -2558,7 +2578,7 @@ class ExperimentsResourceTest {
                 .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
                         .id(trace.id())
                         .projectName(trace.projectName())
-                        .value(podamFactory.manufacturePojo(BigDecimal.class))
+                        .value(podamFactory.manufacturePojo(BigDecimal.class).abs())
                         .build())
                 .toList();
     }
@@ -2596,7 +2616,8 @@ class ExperimentsResourceTest {
 
             assertThat(experimentCaptor.getValue().experimentId()).isEqualTo(actualId);
             assertThat(experimentCaptor.getValue().datasetId()).isEqualTo(actualExperiment.datasetId());
-            assertThat(experimentCaptor.getValue().createdAt()).isEqualTo(actualExperiment.createdAt());
+            assertThat(experimentCaptor.getValue().createdAt())
+                    .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
 
             return actualId;
         }

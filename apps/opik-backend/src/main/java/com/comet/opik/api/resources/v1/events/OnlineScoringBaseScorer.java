@@ -7,6 +7,9 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.dropwizard.lifecycle.Managed;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import lombok.NonNull;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
@@ -24,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -46,20 +50,42 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     private final AutomationRuleEvaluatorType type;
     private final StreamReadGroupArgs redisReadConfig;
     private final String consumerId;
+    private final int batchSize;
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription; // Store the subscription reference
 
-    public OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
+    protected static final Meter METER = GlobalOpenTelemetry.getMeter("online-scoring");
+    protected final LongHistogram messageProcessingTime;
+    protected final LongHistogram messageQueueDelay;
+
+    protected OnlineScoringBaseScorer(@NonNull OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
-            @NonNull AutomationRuleEvaluatorType type) {
+            @NonNull AutomationRuleEvaluatorType type,
+            @NonNull String metricsBaseName) {
         this.config = config;
         this.redisson = redisson;
         this.feedbackScoreService = feedbackScoreService;
         this.type = type;
-        this.redisReadConfig = StreamReadGroupArgs.neverDelivered().count(config.getConsumerBatchSize());
+        this.batchSize = config.getConsumerBatchSize();
+        this.redisReadConfig = StreamReadGroupArgs.neverDelivered().count(batchSize);
         this.consumerId = "consumer-" + config.getConsumerGroupName() + "-" + UUID.randomUUID();
+
+        this.messageProcessingTime = METER
+                .histogramBuilder("online_scoring_" + metricsBaseName + "_processing_time")
+                .setDescription("Time taken to process a message")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+
+        this.messageQueueDelay = METER
+                .histogramBuilder("online_scoring_" + metricsBaseName + "_queue_delay")
+                .setDescription("Delay between message insertion in Redis and processing start")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+
     }
 
     @Override
@@ -142,34 +168,44 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     }
 
     private void setupStreamListener(RStreamReactive<String, M> stream) {
-        // Listen for messages
         this.streamSubscription = Flux.interval(config.getPoolingInterval().toJavaDuration())
-                // The next interval is dropped if slow consumers
                 .onBackpressureDrop()
                 .flatMap(i -> stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig))
-                // Skipping the interval and reporting an error if reading from Redis fails
                 .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
                 .flatMapIterable(Map::entrySet)
-                .publishOn(Schedulers.boundedElastic())
-                .doOnNext(entry -> processReceivedMessages(stream, entry))
-                // The processReceivedMessages method is wrapped in a try-catch, but handling the error just in case
-                // The error is logged and the interval is skipped
-                .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
+                .flatMap(entry -> Mono.fromRunnable(() -> processReceivedMessages(stream, entry))
+                        .subscribeOn(Schedulers.boundedElastic()),
+                        batchSize) // Concurrency hint
+                .onErrorContinue(
+                        (throwable, object) -> log.error("Error processing message from Redis stream", throwable))
                 .subscribe();
     }
 
     private void processReceivedMessages(
             RStreamReactive<String, M> stream, Map.Entry<StreamMessageId, Map<String, M>> entry) {
         var messageId = entry.getKey();
+        long startProcessingTime = System.currentTimeMillis();
         try {
             var message = entry.getValue().get(OnlineScoringConfig.PAYLOAD_FIELD);
             log.info("Message received with id '{}'", messageId);
+
             score(message);
+
             // Remove messages from Redis pending list
             stream.ack(config.getConsumerGroupName(), messageId).subscribe();
             stream.remove(messageId).subscribe();
         } catch (Exception exception) {
             log.error("Error processing message id '{}'", messageId, exception);
+        } finally {
+            long processingTime = System.currentTimeMillis() - startProcessingTime;
+            messageProcessingTime.record(processingTime);
+
+            // Record queue delay
+            var messageTimestamp = extractTimeFromMessageId(messageId);
+            messageTimestamp.ifPresent(msgTime -> {
+                var queueDelay = startProcessingTime - msgTime;
+                messageQueueDelay.record(queueDelay);
+            });
         }
     }
 
@@ -190,5 +226,23 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
         return scores.stream()
                 .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name,
                         Collectors.mapping(FeedbackScoreBatchItem::value, Collectors.toList())));
+    }
+
+    /**
+     * Redis Streams messageId are in the format <millisecondsTime>-<sequenceNumber>
+     * @param messageId a Redis Stream messageId
+     * @return a timestamp extracted from the messageId
+     */
+    private Optional<Long> extractTimeFromMessageId(StreamMessageId messageId) {
+        String idString = messageId.toString();
+        String[] parts = idString.split("-");
+        if (parts.length > 0) {
+            try {
+                return Optional.of(Long.parseLong(parts[0]));
+            } catch (NumberFormatException e) {
+                log.warn("Failed to parse timestamp from message ID: {}", idString, e);
+            }
+        }
+        return Optional.empty();
     }
 }

@@ -31,6 +31,11 @@ public class ProjectResourceClient {
                 .name(projectName)
                 .build();
 
+        return createProject(project, apiKey, workspaceName);
+    }
+
+    public UUID createProject(Project project, String apiKey, String workspaceName) {
+
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)

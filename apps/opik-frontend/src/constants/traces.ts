@@ -9,4 +9,5 @@ export const SPANS_COLORS_MAP: Record<BASE_TRACE_DATA_TYPE, string> = {
   [SPAN_TYPE.llm]: "#5899DA",
   [SPAN_TYPE.general]: "#19A979",
   [SPAN_TYPE.tool]: "#BF399E",
+  [SPAN_TYPE.guardrail]: "#FB9341",
 };

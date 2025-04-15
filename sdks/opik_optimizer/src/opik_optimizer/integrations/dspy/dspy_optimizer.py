@@ -28,7 +28,8 @@ class DspyOptimizer(BaseOptimizer):
         self.num_threads = 6
         self.model_kwargs["model"] = self.model
         lm = dspy.LM(**self.model_kwargs)
-        dspy.configure(lm=lm)  # , callbacks=[opik_callback])
+        opik_callback = OpikCallback(project_name=self.project_name)
+        dspy.configure(lm=lm, callbacks=[opik_callback])
 
     def optimize_prompt(
         self,
@@ -50,7 +51,7 @@ class DspyOptimizer(BaseOptimizer):
             opik_client = opik.Opik(project_name=self.project_name)
             self.dataset = opik_client.get_dataset(dataset).get_items()
         else:
-            self.dataset = dataset
+            self.dataset = dataset.get_items()
 
         # Validate dataset:
         for row in self.dataset:
@@ -72,6 +73,7 @@ class DspyOptimizer(BaseOptimizer):
             self.module = getattr(dspy, self.strategy)(self.data_signature)
 
         self.metric_function = opik_metric_to_dspy(metric, self.output_key)
+        self.opik_metric = metric
 
         # Initialize the optimizer:
         self.optimizer = MIPROv2(
@@ -82,3 +84,46 @@ class DspyOptimizer(BaseOptimizer):
             num_candidates=self.num_candidates,
             seed=self.seed,
         )
+
+    def evaluate_prompt(
+        self,
+        dataset: Union[str, Dataset],
+        metric: BaseMetric,
+        prompt: str,
+        input_key: str,
+        output_key: str,
+        num_test: int = 10,
+    ) -> float:
+        """
+        Compute the score of a prompt on dataset (or part thereof)
+
+        Args:
+            dataset: Opik dataset name or dataset
+            metric: Instance of an Opik metric
+            prompt: The prompt to evaluate
+            input_key: input field of dataset
+            output_key: output field of dataset
+            num_test: number of items to test in the dataset
+
+        Returns:
+            Evaluation score
+        """
+        if isinstance(dataset, str):
+            opik_client = opik.Opik(project_name=self.project_name)
+            dataset = opik_client.get_dataset(dataset).get_items()
+        else:
+            dataset = dataset.get_items()
+        metric_function = opik_metric_to_dspy(metric, output_key)
+        total_score = 0
+        signature = create_dspy_signature(input_key, output_key, prompt)
+        program = dspy.Predict(signature)
+        lm = dspy.settings.lm
+        total_score = 0
+        for row in tqdm(dataset[:num_test]):
+            result = program(**{input_key: row[input_key]})
+            score = metric_function(
+                State({output_key: getattr(result, output_key)}),
+                State({output_key: row[output_key]}),
+            )
+            total_score += score
+        return total_score / num_test
