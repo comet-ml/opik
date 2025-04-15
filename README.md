@@ -39,7 +39,7 @@ From RAG chatbots to code assistants to complex agentic pipelines and beyond, bu
 ![Opik thumbnail](readme-thumbnail.png)
 
 ## Important change in version 1.7.0
-**Please check the change log [here](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md).**
+**Please check the change log [here](CHANGELOG.md).**
 
 ## 🚀 What is Opik?
 
