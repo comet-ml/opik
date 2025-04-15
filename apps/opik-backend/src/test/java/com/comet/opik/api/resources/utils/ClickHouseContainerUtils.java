@@ -8,7 +8,6 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.MountableFile;
 
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
