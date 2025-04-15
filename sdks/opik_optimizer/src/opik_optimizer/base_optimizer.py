@@ -1,9 +1,21 @@
-from opik.api_objects.dataset import Dataset
-from opik.evaluation.metrics import BaseMetric
+from typing import Optional, Union, List, Dict, Any
+import opik
+from opik.evaluation import metrics
+from pydantic import BaseModel
+
+
+class OptimizationRound(BaseModel):
+    round_number: int
+    current_prompt: str
+    current_score: float
+    generated_prompts: List[Dict[str, Any]]
+    best_prompt: str
+    best_score: float
+    improvement: float
 
 
 class BaseOptimizer:
-    def __init__(self, model: str, project_name: str = None, **model_kwargs):
+    def __init__(self, model: str, project_name: Optional[str] = None, **model_kwargs):
         """
         Base class for optimizers.
 
@@ -15,12 +27,17 @@ class BaseOptimizer:
         self.model = model
         self.model_kwargs = model_kwargs
         self.project_name = project_name
+        self._history = []
 
     def optimize_prompt(
-        self, dataset: str | Dataset, metric: BaseMetric, prompt: str, **kwargs
+        self,
+        dataset: Union[str, opik.Dataset],
+        metric: metrics.BaseMetric,
+        prompt: str,
+        **kwargs
     ):
         """
-        Optimizer a prompt.
+        Optimize a prompt.
 
         Args:
            dataset: Opik dataset name, or Opik dataset
@@ -30,3 +47,21 @@ class BaseOptimizer:
         self.dataset = dataset
         self.metric = metric
         self.prompt = prompt
+
+    def get_history(self) -> List[Dict[str, Any]]:
+        """
+        Get the optimization history.
+
+        Returns:
+            List[Dict[str, Any]]: List of optimization rounds with their details
+        """
+        return self._history
+
+    def _add_to_history(self, round_data: Dict[str, Any]):
+        """
+        Add a round to the optimization history.
+
+        Args:
+            round_data: Dictionary containing round details
+        """
+        self._history.append(round_data)

@@ -1,7 +1,13 @@
 import React from "react";
 import { BASE_TRACE_DATA_TYPE, SPAN_TYPE } from "@/types/traces";
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
-import { Hammer, InspectionPanel, Link, MessageCircle } from "lucide-react";
+import {
+  Construction,
+  Hammer,
+  InspectionPanel,
+  Link,
+  MessageCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
@@ -29,6 +35,12 @@ const ICONS_MAP = {
     bg: "#FDE2F6",
     color: "#72275F",
     tooltip: "Tool",
+  },
+  [SPAN_TYPE.guardrail]: {
+    icon: Construction,
+    bg: "#FEE8D7",
+    color: "#734A2B",
+    tooltip: "Guardrail",
   },
 };
 

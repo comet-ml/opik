@@ -1,0 +1,51 @@
+name: "Python Backend Tests"
+run-name: "Python Backend Tests on ${{ github.ref_name }} by @${{ github.actor }}"
+
+on:
+  pull_request:
+    paths: 
+      - "apps/opik-python-backend/**"
+  push:
+    branches: 
+      - 'main'
+    paths: 
+      - "apps/opik-python-backend/**"
+  workflow_dispatch:
+
+jobs:
+  run-python-backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/opik-python-backend/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
+        with:
+          fetch-depth: 1
+      
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r tests/test_requirements.txt
+          pip install .
+      
+      - name: Run Tests
+        env:
+          PYTHON_CODE_EXECUTOR_STRATEGY: process
+          PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 10
+        run: |
+          cd tests && pytest -v --junitxml=../test-results.xml
+      
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          action_fail: true
+          files: apps/opik-python-backend/test-results.xml

@@ -1,21 +1,27 @@
 import React, { ForwardRefExoticComponent, RefAttributes } from "react";
 import { HeaderContext } from "@tanstack/react-table";
-import { COLUMN_TYPE } from "@/types/shared";
+import {
+  COLUMN_TYPE,
+  CUSTOM_HEADER_ICON,
+  HeaderIconType,
+} from "@/types/shared";
 import {
   Text,
   Hash,
-  LucideProps,
   List,
   Clock,
   Braces,
   PenLine,
   Coins,
+  Construction,
+  LucideProps,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 import useSortableHeader from "@/components/shared/DataTableHeaders/useSortableHeader";
 
 const COLUMN_TYPE_MAP: Record<
-  COLUMN_TYPE,
+  HeaderIconType,
   ForwardRefExoticComponent<
     Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>
   >
@@ -28,11 +34,18 @@ const COLUMN_TYPE_MAP: Record<
   [COLUMN_TYPE.dictionary]: Braces,
   [COLUMN_TYPE.numberDictionary]: PenLine,
   [COLUMN_TYPE.cost]: Coins,
+  [CUSTOM_HEADER_ICON.GUARDRAILS]: Construction,
 };
 
 const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
   const { column } = context;
-  const { header, type: columnType, iconType } = column.columnDef.meta ?? {};
+  const {
+    header,
+    headerCheckbox,
+    type: columnType,
+    iconType,
+  } = column.columnDef.meta ?? {};
+
   const type = iconType ?? columnType;
   const Icon = type ? COLUMN_TYPE_MAP[type] : "span";
 
@@ -47,6 +60,20 @@ const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
       className={className}
       onClick={onClickHandler}
     >
+      {headerCheckbox && (
+        <Checkbox
+          className="mr-3.5"
+          onClick={(event) => event.stopPropagation()}
+          checked={
+            context.table.getIsAllPageRowsSelected() ||
+            (context.table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) =>
+            context.table.toggleAllPageRowsSelected(!!value)
+          }
+          aria-label="Select all"
+        />
+      )}
       {Boolean(Icon) && <Icon className="size-3.5 shrink-0 text-slate-300" />}
       <span className="truncate">{header}</span>
       {renderSort()}

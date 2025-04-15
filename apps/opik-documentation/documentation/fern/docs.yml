@@ -195,6 +195,9 @@ navigation:
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
                 slug: watsonx
+              - page: Agent Development Kit
+                path: docs/tracing/integrations/adk.mdx
+                slug: adk
           - section: OpenTelemetry
             slug: /opentelemetry
             contents:

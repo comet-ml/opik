@@ -1,23 +1,95 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.google.common.collect.Sets;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.utility.MountableFile;
 
 import java.util.Map;
+import java.util.Set;
 
 public class ClickHouseContainerUtils {
 
     public static final String DATABASE_NAME = "opik";
     public static final String DATABASE_NAME_VARIABLE = "ANALYTICS_DB_DATABASE_NAME";
+    private static final Network NETWORK = Network.newNetwork();
+    private static final Set<GenericContainer<?>> CONTAINERS = Sets.newConcurrentHashSet();
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            CONTAINERS.forEach(container -> {
+                if (container.isRunning()) {
+                    container.stop();
+                }
+            });
+            NETWORK.close();
+        }));
+    }
 
     public static ClickHouseContainer newClickHouseContainer() {
         return newClickHouseContainer(true);
     }
 
     public static ClickHouseContainer newClickHouseContainer(boolean reusable) {
-        return new ClickHouseContainer(DockerImageName.parse("clickhouse/clickhouse-server:24.3.6.48-alpine"))
+        ClickHouseContainer container = new ClickHouseContainer(
+                DockerImageName.parse("clickhouse/clickhouse-server:24.3.6.48-alpine"))
                 .withReuse(reusable);
+
+        CONTAINERS.add(container);
+
+        return container;
+    }
+
+    public static GenericContainer<?> newZookeeperContainer() {
+        return newZookeeperContainer(true, NETWORK);
+    }
+
+    public static GenericContainer<?> newZookeeperContainer(boolean reusable, Network network) {
+        var container = new GenericContainer<>("zookeeper:3.9.3")
+                .withExposedPorts(2181)
+                .withNetworkAliases("zookeeper")
+                .withNetwork(network)
+                .withEnv("ALLOW_ANONYMOUS_LOGIN", "yes")
+                .withEnv("ZOO_MY_ID", "1")
+                .withReuse(reusable);
+
+        CONTAINERS.add(container);
+
+        return container;
+    }
+
+    public static ClickHouseContainer newClickHouseContainer(GenericContainer<?> zooKeeperContainer) {
+        return newClickHouseContainer(true, NETWORK, zooKeeperContainer);
+    }
+
+    public static ClickHouseContainer newClickHouseContainer(boolean reusable, Network network,
+            GenericContainer<?> zooKeeperContainer) {
+
+        try {
+
+            ClickHouseContainer container = newClickHouseContainer(reusable);
+
+            if (zooKeeperContainer != null) {
+                container.dependsOn(zooKeeperContainer);
+            }
+
+            CONTAINERS.add(container);
+
+            return container
+                    .withReuse(reusable)
+                    .withEnv("CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT", "1")
+                    .withNetwork(network)
+                    .withCopyFileToContainer(MountableFile.forClasspathResource("macros.xml"),
+                            "/etc/clickhouse-server/config.d/macros.xml")
+                    .withCopyFileToContainer(MountableFile.forClasspathResource("zookeeper.xml"),
+                            "/etc/clickhouse-server/config.d/zookeeper.xml");
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static DatabaseAnalyticsFactory newDatabaseAnalyticsFactory(ClickHouseContainer clickHouseContainer,

@@ -34,7 +34,9 @@ import org.quartz.JobKey;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Mono;
@@ -214,7 +216,11 @@ class DailyUsageReportJobTest {
 
         private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
         private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer(false);
-        private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(false);
+        private final Network NETWORK = Network.newNetwork();
+        private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
+                NETWORK);
+        private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(false, NETWORK,
+                ZOOKEEPER_CONTAINER);
 
         private final WireMockUtils.WireMockRuntime wireMock;
 
@@ -280,6 +286,8 @@ class DailyUsageReportJobTest {
             wireMock.server().stop();
             MYSQL.stop();
             CLICKHOUSE.stop();
+            ZOOKEEPER_CONTAINER.stop();
+            NETWORK.close();
         }
 
         private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -350,7 +358,11 @@ class DailyUsageReportJobTest {
 
         private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
         private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer(false);
-        private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(false);
+        private final Network NETWORK = Network.newNetwork();
+        private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
+                NETWORK);
+        private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(false, NETWORK,
+                ZOOKEEPER_CONTAINER);
 
         private final WireMockUtils.WireMockRuntime wireMock;
 
@@ -415,6 +427,8 @@ class DailyUsageReportJobTest {
             wireMock.server().stop();
             MYSQL.stop();
             CLICKHOUSE.stop();
+            ZOOKEEPER_CONTAINER.stop();
+            NETWORK.close();
         }
 
         @Test

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
@@ -23,7 +24,9 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_WORKSPACE;
@@ -36,9 +39,15 @@ class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
     private static final String NOT_LOGGED_USER = "Please login first";
 
+    private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = Map.of(
+            "^/v1/private/projects/?$", Set.of("GET"),
+            "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
+            Set.of("GET"),
+            "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/metrics/?$",
+            Set.of("POST"));
+
     private final @NonNull Client client;
-    private final @NonNull AuthenticationConfig.UrlConfig apiKeyAuthUrl;
-    private final @NonNull AuthenticationConfig.UrlConfig uiAuthUrl;
+    private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
 
@@ -57,7 +66,8 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public void authenticate(HttpHeaders headers, Cookie sessionToken, UriInfo uriInfo) {
+    public void authenticate(HttpHeaders headers, Cookie sessionToken, ContextInfoHolder contextInfo) {
+        UriInfo uriInfo = contextInfo.uriInfo();
         String path = uriInfo.getRequestUri().getPath();
         var currentWorkspaceName = Optional.ofNullable(headers.getHeaderString(RequestContext.WORKSPACE_HEADER))
                 .orElseGet(() -> uriInfo.getQueryParameters().getFirst(WORKSPACE_QUERY_PARAM));
@@ -65,11 +75,26 @@ class RemoteAuthService implements AuthService {
             log.warn("Workspace name is missing");
             throw new ClientErrorException(MISSING_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        if (sessionToken != null) {
-            authenticateUsingSessionToken(sessionToken, currentWorkspaceName, path);
-            return;
+
+        try {
+            if (sessionToken != null) {
+                authenticateUsingSessionToken(sessionToken, currentWorkspaceName, path);
+            } else {
+                authenticateUsingApiKey(headers, currentWorkspaceName, path);
+            }
+        } catch (ClientErrorException authException) {
+            if (!isDefaultWorkspace(currentWorkspaceName) && isNotAuthenticated(authException)
+                    && isEndpointPublic(contextInfo)) {
+                log.info("Using visibility PUBLIC for endpoint: {}", path);
+                String workspaceId = getWorkspaceId(currentWorkspaceName);
+                requestContext.get().setWorkspaceId(workspaceId);
+                requestContext.get().setWorkspaceName(currentWorkspaceName);
+                requestContext.get().setVisibility(ProjectVisibility.PUBLIC);
+                requestContext.get().setUserName("Public");
+                return;
+            }
+            throw authException;
         }
-        authenticateUsingApiKey(headers, currentWorkspaceName, path);
     }
 
     @Override
@@ -81,12 +106,14 @@ class RemoteAuthService implements AuthService {
     }
 
     private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path) {
-        if (ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName)) {
+        if (isDefaultWorkspace(workspaceName)) {
             log.warn("Default workspace name is not allowed for UI authentication");
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
-        try (var response = client.target(URI.create(uiAuthUrl.url()))
+        try (var response = client.target(URI.create(reactServiceUrl.url()))
+                .path("opik")
+                .path("auth-session")
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 .cookie(sessionToken)
@@ -119,7 +146,9 @@ class RemoteAuthService implements AuthService {
         var credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
-            try (var response = client.target(URI.create(apiKeyAuthUrl.url()))
+            try (var response = client.target(URI.create(reactServiceUrl.url()))
+                    .path("opik")
+                    .path("auth")
                     .request()
                     .accept(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION,
@@ -176,5 +205,52 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setWorkspaceId(workspaceId);
         requestContext.get().setWorkspaceName(workspaceName);
         requestContext.get().setQuotas(quotas);
+    }
+
+    private boolean isEndpointPublic(ContextInfoHolder contextInfo) {
+        for (String pattern : PUBLIC_ENDPOINTS.keySet()) {
+            if (contextInfo.uriInfo().getRequestUri().getPath().matches(pattern)) {
+                Set<String> allowedMethods = PUBLIC_ENDPOINTS.get(pattern);
+                if (allowedMethods.contains(contextInfo.method())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isNotAuthenticated(ClientErrorException authException) {
+        int status = authException.getResponse().getStatus();
+        return status == Response.Status.UNAUTHORIZED.getStatusCode()
+                || status == Response.Status.FORBIDDEN.getStatusCode();
+    }
+
+    private boolean isDefaultWorkspace(String workspaceName) {
+        return ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName);
+    }
+
+    private String getWorkspaceId(String workspaceName) {
+        try (var response = client.target(URI.create(reactServiceUrl.url()))
+                .path("workspaces")
+                .path("workspace-id")
+                .queryParam("name", workspaceName)
+                .request()
+                .get()) {
+
+            return getWorkspaceIdFromResponse(response);
+        }
+    }
+
+    private String getWorkspaceIdFromResponse(Response response) {
+        if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
+            return response.readEntity(String.class);
+        } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            log.error("Not found workspace by name : {}", errorResponse.msg());
+            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
+        }
+
+        log.error("Unexpected error while getting workspace name: {}", response.getStatus());
+        throw new InternalServerErrorException();
     }
 }

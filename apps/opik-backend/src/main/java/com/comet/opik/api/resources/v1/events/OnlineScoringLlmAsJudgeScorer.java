@@ -14,9 +14,12 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
-import org.slf4j.MDC;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+
+import java.util.Map;
+
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
  * This service listens a Redis stream for Traces to be scored in a LLM provider. It will prepare the LLM request
@@ -34,7 +37,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService) {
-        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.LLM_AS_JUDGE, "llm_as_judge");
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
     }
@@ -52,10 +55,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 trace.id(), message.userName(), message.llmAsJudgeCode().model().name());
 
         // This is crucial for logging purposes to identify the rule and trace
-        try (var logScope = MDC.putCloseable(UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name());
-                var workspaceScope = MDC.putCloseable("workspace_id", message.workspaceId());
-                var traceScope = MDC.putCloseable("trace_id", trace.id().toString());
-                var ruleScope = MDC.putCloseable("rule_id", message.ruleId().toString())) {
+        try (var logContext = wrapWithMdc(Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                "workspace_id", message.workspaceId(),
+                "trace_id", trace.id().toString(),
+                "rule_id", message.ruleId().toString()))) {
 
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
