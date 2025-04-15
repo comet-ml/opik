@@ -14,6 +14,7 @@ from . import (
     google_run_helpers,
     openai_run_helpers,
     anthropic_run_helpers,
+    anthropic_vertexai_run_helpers,
     opik_encoder_extension,
 )
 from ...api_objects import helpers, opik_client
@@ -284,6 +285,8 @@ class OpikTracer(BaseTracer):
 
         if openai_run_helpers.is_openai_run(run):
             usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
+        elif anthropic_vertexai_run_helpers.is_anthropic_vertexai_run(run):
+            usage_info = anthropic_vertexai_run_helpers.get_llm_usage_info(run_dict)
         elif google_run_helpers.is_google_run(run):
             usage_info = google_run_helpers.get_llm_usage_info(run_dict)
         elif anthropic_run_helpers.is_anthropic_run(run):

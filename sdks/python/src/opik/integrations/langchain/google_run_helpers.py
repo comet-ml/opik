@@ -24,6 +24,7 @@ def get_llm_usage_info(
 
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
+        # TODO: This is empty in Streaming mode with gemini models
         usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
             "usage_metadata"
         ]
