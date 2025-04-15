@@ -83,8 +83,8 @@ class RestFileUploadClient:
         self,
         upload_url: str,
         file_path: str,
+        monitor: Optional[upload_monitor.FileUploadMonitor],
         chunk_size: int = -1,
-        monitor: Optional[upload_monitor.FileUploadMonitor] = None,
     ) -> None:
         """Invoked to upload file to the local backend using httpx client configured with necessary authorization
         headers. Raises the `HTTPStatusError` if one occurred."""
@@ -104,8 +104,8 @@ class RestFileUploadClient:
 
 def _data_generator(
     file_path: str,
+    monitor: Optional[upload_monitor.FileUploadMonitor],
     chunk_size: int = -1,
-    monitor: Optional[upload_monitor.FileUploadMonitor] = None,
 ) -> Iterable[bytes]:
     with open(file_path, "rb") as file:
         while data := file.read(chunk_size):
