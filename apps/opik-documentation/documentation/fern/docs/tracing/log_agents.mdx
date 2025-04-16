@@ -1,7 +1,7 @@
 When working with agents, it can become challenging to track the flow of the agent and its interactions with the environment.
-Opik provides a way to track both the agent definition and it's flow.
+Opik provides a way to track both the agent definition and its flow.
 
-Opik includes an integration with many popular Agent frameworks ([LangGrah](/tracing/integrations/langgraph), [LLamaIndex](/tracing/integrations/llama_index))
+Opik has integrations with many popular Agent frameworks ([LangGraph](/tracing/integrations/langgraph), [LLamaIndex](/tracing/integrations/llama_index))
 and can also be used to log agents manually using the `@track` decorator.
 
 <Tip>
@@ -118,7 +118,7 @@ each step that has been executed in chronological order:
 
 ## Track the agent definition
 
-If you are using out [LangGraph](/tracing/integrations/langgraph) integration, you can also track the agent definition by passing in the `graph` argument to the `OpikTracer` callback:
+If you are using our [LangGraph](/tracing/integrations/langgraph) integration, you can also track the agent definition by passing in the `graph` argument to the `OpikTracer` callback:
 
 ```python
 from opik.integrations.langchain import OpikTracer
