@@ -191,11 +191,13 @@ def env_config() -> EnvConfig:
 
     return env_config
 
+
 @pytest.fixture(scope="function")
 def set_project_name(env_config: EnvConfig) -> str:
     os.environ["OPIK_PROJECT_NAME"] = env_config.project_name = (
-        "project_" + get_random_string(5))
-    
+        "project_" + get_random_string(5)
+    )
+
     return env_config.project_name
 
 
@@ -219,7 +221,7 @@ def client(set_project_name, env_config: EnvConfig) -> opik.Opik:
     kwargs = {
         "workspace": env_config.workspace,
         "host": env_config.api_url,  # SDK expects the full API URL
-        "project_name": set_project_name
+        "project_name": set_project_name,
     }
     if env_config.api_key:
         kwargs["api_key"] = env_config.api_key
