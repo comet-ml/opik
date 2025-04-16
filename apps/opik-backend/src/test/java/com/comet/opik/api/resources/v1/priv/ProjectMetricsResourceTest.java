@@ -747,7 +747,7 @@ class ProjectMetricsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
             return spans.stream()
-                    .map(span -> CostService.calculateCost(MODEL_NAME, provider, span.usage()))
+                    .map(span -> CostService.calculateCost(MODEL_NAME, provider, span.usage(), null))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
     }

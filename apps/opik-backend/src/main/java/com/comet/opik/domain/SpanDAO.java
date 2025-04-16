@@ -1213,7 +1213,7 @@ class SpanDAO {
         } else if (!isManualCostExist && isUpdateCostRecalculationAvailable(spanUpdate)) {
             // Calculate estimated cost only in case Span doesn't have manually set cost
             BigDecimal estimatedCost = CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(),
-                    spanUpdate.usage());
+                    spanUpdate.usage(), spanUpdate.metadata());
             statement.bind("total_estimated_cost", estimatedCost.toString());
             statement.bind("total_estimated_cost_version",
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
@@ -1431,7 +1431,7 @@ class SpanDAO {
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
 
-        return CostService.calculateCost(model, span.provider(), span.usage());
+        return CostService.calculateCost(model, span.provider(), span.usage(), span.metadata());
     }
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
@@ -1641,8 +1641,8 @@ class SpanDAO {
     }
 
     private boolean isUpdateCostRecalculationAvailable(SpanUpdate spanUpdate) {
-        return StringUtils.isNotBlank(spanUpdate.model()) && StringUtils.isNotBlank(spanUpdate.provider())
-                && spanUpdate.usage() != null;
+        return CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
+                spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
     }
 
     private void bindCost(Span span, Statement statement, String index) {

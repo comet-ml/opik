@@ -3871,7 +3871,7 @@ class TracesResourceTest {
 
     private BigDecimal calculateEstimatedCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage()))
+                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage(), null))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
