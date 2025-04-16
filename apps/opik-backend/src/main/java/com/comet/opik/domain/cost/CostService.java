@@ -24,7 +24,8 @@ public class CostService {
             "openai", "openai",
             "vertex_ai-language-models", "google_vertexai",
             "gemini", "google_ai",
-            "anthropic", "anthropic");
+            "anthropic", "anthropic",
+            "vertex_ai-anthropic_models", "anthropic_vertexai");
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic);

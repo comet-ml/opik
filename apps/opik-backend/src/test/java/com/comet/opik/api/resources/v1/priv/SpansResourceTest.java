@@ -4472,6 +4472,10 @@ class SpansResourceTest {
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-3-sonnet-20240229", "anthropic",
                             null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "claude-3-5-sonnet-v2@20241022", "anthropic_vertexai",
+                            null, null),
                     Arguments.of(
                             Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "original_usage.output_tokens",
@@ -4500,7 +4504,8 @@ class SpansResourceTest {
                             JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("0.000339", "Wrong currency")),
                             null),
                     Arguments.of(null, null, null,
-                            JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("\"Invalid cost\"", "USD")), null),
+                            JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("\"Invalid cost\"", "USD")),
+                            null),
                     Arguments.of(null, null, null, null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
@@ -5075,10 +5080,13 @@ class SpansResourceTest {
             } else if (initialManualCost != null) {
                 expectedCost = initialManualCost;
             } else {
-                if (expectedSpanUpdate.model() != null || expectedSpanUpdate.provider() != null || expectedSpanUpdate.usage() != null) {
+                if (expectedSpanUpdate.model() != null || expectedSpanUpdate.provider() != null
+                        || expectedSpanUpdate.usage() != null) {
                     expectedCost = CostService.calculateCost(
                             expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model(),
-                            expectedSpanUpdate.provider() != null ? expectedSpanUpdate.provider() : expectedSpan.provider(),
+                            expectedSpanUpdate.provider() != null
+                                    ? expectedSpanUpdate.provider()
+                                    : expectedSpan.provider(),
                             expectedSpanUpdate.usage() != null ? expectedSpanUpdate.usage() : expectedSpan.usage(),
                             expectedSpanUpdate.metadata());
                 } else {
