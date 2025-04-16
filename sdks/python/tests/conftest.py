@@ -8,9 +8,8 @@ import pytest
 from opik import context_storage
 from opik.api_objects import opik_client
 from opik.message_processing import streamer_constructors
-from testlib import noop_file_upload_manager
 from . import testlib
-from .testlib import backend_emulator_message_processor
+from .testlib import backend_emulator_message_processor, noop_file_upload_manager
 
 
 @pytest.fixture(autouse=True)
