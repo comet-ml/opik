@@ -8,6 +8,7 @@ import jakarta.ws.rs.core.Response;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
@@ -67,7 +68,7 @@ public class TraceAssertions {
         }
     }
 
-    public static void assertIgnoredFields(Trace actualTrace, Trace expectedTrace, String user) {
+    private static void assertIgnoredFields(Trace actualTrace, Trace expectedTrace, String user) {
         assertThat(actualTrace.projectId()).isNotNull();
         assertThat(actualTrace.projectName()).isNull();
 
@@ -76,7 +77,13 @@ public class TraceAssertions {
         }
 
         if (actualTrace.lastUpdatedAt() != null) {
-            assertThat(actualTrace.lastUpdatedAt()).isAfter(expectedTrace.lastUpdatedAt());
+            if (expectedTrace.lastUpdatedAt() != null) {
+                assertThat(actualTrace.lastUpdatedAt())
+                        // Some JVMs can resolve higher than microseconds, such as nanoseconds in the Ubuntu AMD64 JVM
+                        .isAfterOrEqualTo(expectedTrace.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS));
+            } else {
+                assertThat(actualTrace.lastUpdatedAt()).isCloseTo(Instant.now(), within(2, ChronoUnit.SECONDS));
+            }
         }
 
         if (actualTrace.createdBy() != null) {
