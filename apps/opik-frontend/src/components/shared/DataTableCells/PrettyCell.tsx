@@ -5,18 +5,42 @@ import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { prettifyMessage } from "@/lib/traces";
+import useLocalStorageState from "use-local-storage-state";
 
 type CustomMeta = {
   fieldType: "input" | "output";
 };
 
+const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
+const MAX_DATA_LENGTH = 10000;
+const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
+
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
+  const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
+    defaultValue: MAX_DATA_LENGTH,
+  });
   const { custom } = context.column.columnDef.meta ?? {};
   const { fieldType = "input" } = (custom ?? {}) as CustomMeta;
-  const value = context.getValue() as string | object;
+  const value = context.getValue() as string | object | undefined | null;
+
+  const rawValue = useMemo(() => {
+    let text = "";
+    if (isObject(value)) {
+      text = JSON.stringify(value, null, 2);
+    } else {
+      text = value ?? "-";
+    }
+
+    return text;
+  }, [value]);
+
+  const hasExceededLimit = useMemo(
+    () => rawValue.length > maxDataLength,
+    [rawValue, maxDataLength],
+  );
 
   const response = useMemo(() => {
-    if (!value) {
+    if (!value || hasExceededLimit) {
       return {
         message: "",
         prettified: false,
@@ -26,7 +50,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     return prettifyMessage(value, {
       type: fieldType,
     });
-  }, [value, fieldType]);
+  }, [value, fieldType, hasExceededLimit]);
 
   const message = useMemo(() => {
     if (isObject(response.message)) {
@@ -45,17 +69,23 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const content = useMemo(() => {
     if (isSmall) {
       return (
-        <CellTooltipWrapper content={message}>
-          <span className="comet-code truncate">{message}</span>
+        <CellTooltipWrapper
+          content={hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
+        >
+          <span className="comet-code truncate">
+            {hasExceededLimit
+              ? rawValue.slice(0, maxDataLength) + "..."
+              : message}
+          </span>
         </CellTooltipWrapper>
       );
     }
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {message}
+        {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
       </div>
     );
-  }, [isSmall, message]);
+  }, [isSmall, message, hasExceededLimit, rawValue, maxDataLength]);
 
   return (
     <CellWrapper
