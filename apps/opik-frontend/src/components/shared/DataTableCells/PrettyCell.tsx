@@ -21,14 +21,14 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   });
   const { custom } = context.column.columnDef.meta ?? {};
   const { fieldType = "input" } = (custom ?? {}) as CustomMeta;
-  const value = context.getValue() as string | object | undefined;
+  const value = context.getValue() as string | object | undefined | null;
 
   const rawValue = useMemo(() => {
     let text = "";
     if (isObject(value)) {
       text = JSON.stringify(value, null, 2);
     } else {
-      text = value || "-";
+      text = value ?? "-";
     }
 
     return text;
