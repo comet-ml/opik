@@ -1,23 +1,30 @@
 import re
 
 import httpx
+import pytest
 import respx
 
 from opik import httpx_client
 from opik.file_upload import (
     file_uploader,
     upload_monitor,
+    upload_options,
 )
 from . import conftest
 
 
-def test_upload_attachment__s3(attachment, rest_client_s3, respx_mock):
+@pytest.fixture
+def file_to_upload(attachment):
+    return upload_options.file_upload_options_from_attachment(attachment)
+
+
+def test_upload_attachment__s3(file_to_upload, rest_client_s3, respx_mock):
     rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
     respx_mock.put(rx_url).respond(200, headers={"ETag": "e-tag"})
 
     monitor = upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
-        upload_options=attachment,
+        upload_options=file_to_upload,
         rest_client=rest_client_s3,
         upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,
@@ -31,12 +38,12 @@ def test_upload_attachment__s3(attachment, rest_client_s3, respx_mock):
     rest_client_s3.attachments.complete_multi_part_upload.assert_called_once()
 
 
-def test_upload_attachment__s3__no_monitor(attachment, rest_client_s3, respx_mock):
+def test_upload_attachment__s3__no_monitor(file_to_upload, rest_client_s3, respx_mock):
     rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
     respx_mock.put(rx_url).respond(200, headers={"ETag": "e-tag"})
 
     file_uploader.upload_attachment(
-        upload_options=attachment,
+        upload_options=file_to_upload,
         rest_client=rest_client_s3,
         upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
     )
@@ -47,13 +54,13 @@ def test_upload_attachment__s3__no_monitor(attachment, rest_client_s3, respx_moc
     rest_client_s3.attachments.complete_multi_part_upload.assert_called_once()
 
 
-def test_upload_attachment__local(attachment, rest_client_local, respx_mock):
+def test_upload_attachment__local(file_to_upload, rest_client_local, respx_mock):
     rx_url = re.compile("https://localhost:8080/bucket/*")
     respx_mock.put(rx_url).respond(200)
 
     monitor = upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
-        upload_options=attachment,
+        upload_options=file_to_upload,
         rest_client=rest_client_local,
         upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,
@@ -66,13 +73,13 @@ def test_upload_attachment__local(attachment, rest_client_local, respx_mock):
 
 
 def test_upload_attachment__local__no_monitor(
-    attachment, rest_client_local, respx_mock
+    file_to_upload, rest_client_local, respx_mock
 ):
     rx_url = re.compile("https://localhost:8080/bucket/*")
     respx_mock.put(rx_url).respond(200)
 
     file_uploader.upload_attachment(
-        upload_options=attachment,
+        upload_options=file_to_upload,
         rest_client=rest_client_local,
         upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
     )
@@ -81,7 +88,9 @@ def test_upload_attachment__local__no_monitor(
     assert route.call_count == 1
 
 
-def test_upload_attachment__local__retry_500(attachment, rest_client_local, respx_mock):
+def test_upload_attachment__local__retry_500(
+    file_to_upload, rest_client_local, respx_mock
+):
     rx_url = re.compile("https://localhost:8080/bucket/*")
 
     def retry_side_effect(request, route):
@@ -94,7 +103,7 @@ def test_upload_attachment__local__retry_500(attachment, rest_client_local, resp
 
     monitor = upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
-        upload_options=attachment,
+        upload_options=file_to_upload,
         rest_client=rest_client_local,
         upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
         monitor=monitor,
