@@ -175,6 +175,7 @@ const SyntaxHighlighter: React.FunctionComponent<SyntaxHighlighterProps> = ({
               EditorView.contentAttributes.of({ tabindex: "0" }),
               searchPanelTheme,
             ]}
+            maxHeight="700px"
           />
         )}
       </div>

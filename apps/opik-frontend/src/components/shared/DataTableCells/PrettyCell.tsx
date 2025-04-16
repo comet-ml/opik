@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import isObject from "lodash/isObject";
 import { CellContext } from "@tanstack/react-table";
 import { ROW_HEIGHT } from "@/types/shared";
@@ -14,14 +14,26 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const { custom } = context.column.columnDef.meta ?? {};
   const { fieldType = "input" } = (custom ?? {}) as CustomMeta;
   const value = context.getValue() as string | object;
-  if (!value) return "";
 
-  const response = prettifyMessage(value, {
-    type: fieldType,
-  });
-  const message = isObject(response.message)
-    ? JSON.stringify(value, null, 2)
-    : response.message;
+  const response = useMemo(() => {
+    if (!value) {
+      return {
+        message: "",
+        prettified: false,
+      };
+    }
+
+    return prettifyMessage(value, {
+      type: fieldType,
+    });
+  }, [value, fieldType]);
+
+  const message = useMemo(() => {
+    if (isObject(response.message)) {
+      return JSON.stringify(value, null, 2);
+    }
+    return response.message || "";
+  }, [response.message, value]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??
@@ -30,21 +42,20 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
 
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
-  let content;
-
-  if (isSmall) {
-    content = (
-      <CellTooltipWrapper content={message}>
-        <span className="comet-code truncate">{message}</span>
-      </CellTooltipWrapper>
-    );
-  } else {
-    content = (
+  const content = useMemo(() => {
+    if (isSmall) {
+      return (
+        <CellTooltipWrapper content={message}>
+          <span className="comet-code truncate">{message}</span>
+        </CellTooltipWrapper>
+      );
+    }
+    return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
         {message}
       </div>
     );
-  }
+  }, [isSmall, message]);
 
   return (
     <CellWrapper
