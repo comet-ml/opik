@@ -122,7 +122,7 @@ def video_dir():
 
 
 @pytest.fixture(scope="session")
-def browser_context(browser: Browser, video_dir):
+def browser_context(browser: Browser, env_config, video_dir):
     """Create a browser context with required permissions and authentication"""
     # Enable video recording
     context = browser.new_context(
@@ -134,9 +134,6 @@ def browser_context(browser: Browser, video_dir):
     context._video_info = video_dir["info"]
 
     context.grant_permissions(["clipboard-read", "clipboard-write"])
-
-    # Get data from config
-    env_config = get_environment_config()
 
     # Handle cloud environment authentication
     if not env_config.base_url.startswith("http://localhost"):
@@ -179,7 +176,7 @@ def browser_context(browser: Browser, video_dir):
     context.close()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def env_config() -> EnvConfig:
     """
     Get the environment configuration from environment variables.
@@ -191,11 +188,15 @@ def env_config() -> EnvConfig:
 
     # Set workspace and project
     os.environ["OPIK_WORKSPACE"] = env_config.workspace
-    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name = (
-        "project_" + get_random_string(5)
-    )
 
     return env_config
+
+@pytest.fixture(scope="function")
+def set_project_name(env_config: EnvConfig) -> str:
+    os.environ["OPIK_PROJECT_NAME"] = env_config.project_name = (
+        "project_" + get_random_string(5))
+    
+    return env_config.project_name
 
 
 @pytest.fixture(autouse=True)
@@ -213,11 +214,12 @@ def configure_logging(request):
 
 
 @pytest.fixture(scope="function", autouse=True)
-def client(env_config: EnvConfig) -> opik.Opik:
+def client(set_project_name, env_config: EnvConfig) -> opik.Opik:
     """Create an Opik client configured for the current environment"""
     kwargs = {
         "workspace": env_config.workspace,
         "host": env_config.api_url,  # SDK expects the full API URL
+        "project_name": set_project_name
     }
     if env_config.api_key:
         kwargs["api_key"] = env_config.api_key
