@@ -35,7 +35,7 @@ def attachment(data_file):
         project_name="project_name",
         base_url_path="base_url_path",
     )
-    upload_options = file_upload_options.upload_options_from_attachment(attachment)
+    upload_options = file_upload_options.file_upload_options_from_attachment(attachment)
     yield upload_options
 
 

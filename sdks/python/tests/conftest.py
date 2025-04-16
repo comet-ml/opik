@@ -8,6 +8,7 @@ import pytest
 from opik import context_storage
 from opik.api_objects import opik_client
 from opik.message_processing import streamer_constructors
+from testlib import noop_file_upload_manager
 from . import testlib
 from .testlib import backend_emulator_message_processor
 
@@ -33,10 +34,12 @@ def patch_streamer():
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor()
         )
+        fake_upload_manager = noop_file_upload_manager.NoopFileUploadManager()
         streamer = streamer_constructors.construct_streamer(
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=True,
+            file_upload_manager=fake_upload_manager,
         )
 
         yield streamer, fake_message_processor_
@@ -52,10 +55,12 @@ def patch_streamer_without_batching():
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor()
         )
+        fake_upload_manager = noop_file_upload_manager.NoopFileUploadManager()
         streamer = streamer_constructors.construct_streamer(
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=False,
+            file_upload_manager=fake_upload_manager,
         )
 
         yield streamer, fake_message_processor_

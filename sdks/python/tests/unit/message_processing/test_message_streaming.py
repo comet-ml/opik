@@ -52,6 +52,7 @@ def batched_streamer_and_mock_message_processor():
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
+            file_upload_manager=mock.Mock(),
         )
 
         yield tested, mock_message_processor
@@ -87,6 +88,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=False,
+            file_upload_manager=mock.Mock(),
         )
 
         CREATE_MESSAGE = obj
@@ -114,6 +116,7 @@ def test_streamer__span__batching_enabled__messages_that_support_batching_are_pr
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
+            file_upload_manager=mock.Mock(),
         )
 
         CREATE_SPAN_MESSAGE = create_span_message()
@@ -137,6 +140,7 @@ def test_streamer__trace__batching_enabled__messages_that_support_batching_are_p
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
+            file_upload_manager=mock.Mock(),
         )
 
         CREATE_TRACE_MESSAGE = create_trace_message()
