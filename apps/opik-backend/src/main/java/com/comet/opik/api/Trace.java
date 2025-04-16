@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
@@ -30,7 +29,7 @@ public record Trace(
         @JsonView({
                 Trace.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
-        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) @NotBlank String name,
+        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String name,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) @NotNull Instant startTime,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) Instant endTime,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) JsonNode input,
@@ -40,7 +39,7 @@ public record Trace(
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) ErrorInfo errorInfo,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Map<String, Long> usage,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
+        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) Instant lastUpdatedAt,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({

@@ -5179,6 +5179,67 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BatchInsert {
 
+        @Test
+        void upsert() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .feedbackScores(null)
+                    .usage(null)
+                    .projectName(projectName)
+                    .name(null)
+                    .endTime(null)
+                    .input(null)
+                    .output(null)
+                    .metadata(null)
+                    .tags(null)
+                    .errorInfo(null)
+                    .threadId(null)
+                    .lastUpdatedAt(null)
+                    .build();
+            var expectedTraces = List.of(trace);
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces.reversed(),
+                    List.of(),
+                    API_KEY);
+
+            trace = trace.toBuilder()
+                    .name("name-01-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .build();
+            expectedTraces = List.of(trace);
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces.reversed(),
+                    List.of(),
+                    API_KEY);
+
+            trace = trace.toBuilder()
+                    .name("name-02-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .lastUpdatedAt(Instant.now().plus(1, ChronoUnit.DAYS))
+                    .build();
+            expectedTraces = List.of(trace);
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces.reversed(),
+                    List.of(),
+                    API_KEY);
+        }
+
         @ParameterizedTest
         @MethodSource
         void batch__whenCreateTraces__thenReturnNoContent(Function<String, String> projectNameModifier) {

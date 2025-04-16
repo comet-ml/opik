@@ -48,6 +48,7 @@ import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -134,6 +135,7 @@ class TraceDAOImpl implements TraceDAO {
                 output,
                 metadata,
                 tags,
+                last_updated_at,
                 error_info,
                 created_by,
                 last_updated_by,
@@ -151,6 +153,7 @@ class TraceDAOImpl implements TraceDAO {
                         :output<item.index>,
                         :metadata<item.index>,
                         :tags<item.index>,
+                        if(:last_updated_at<item.index> IS NULL, NULL, parseDateTime64BestEffort(:last_updated_at<item.index>, 9)),
                         :error_info<item.index>,
                         :user_name,
                         :user_name,
@@ -1452,7 +1455,9 @@ class TraceDAOImpl implements TraceDAO {
         return result.map((row, rowMetadata) -> Trace.builder()
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
-                .name(row.get("name", String.class))
+                .name(Optional.ofNullable(row.get("name", String.class))
+                        .filter(StringUtils::isNotEmpty)
+                        .orElse(null))
                 .startTime(row.get("start_time", Instant.class))
                 .endTime(row.get("end_time", Instant.class))
                 .input(Optional.ofNullable(row.get("input", String.class))
@@ -1728,7 +1733,7 @@ class TraceDAOImpl implements TraceDAO {
 
                 statement.bind("id" + i, trace.id())
                         .bind("project_id" + i, trace.projectId())
-                        .bind("name" + i, trace.name())
+                        .bind("name" + i, Objects.requireNonNullElse(trace.name(), ""))
                         .bind("start_time" + i, trace.startTime().toString())
                         .bind("input" + i, getOrDefault(trace.input()))
                         .bind("output" + i, getOrDefault(trace.output()))
@@ -1737,6 +1742,12 @@ class TraceDAOImpl implements TraceDAO {
                         .bind("error_info" + i,
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
                         .bind("thread_id" + i, trace.threadId() != null ? trace.threadId() : "");
+
+                if (trace.lastUpdatedAt() != null) {
+                    statement.bind("last_updated_at" + i, trace.lastUpdatedAt().toString());
+                } else {
+                    statement.bindNull("last_updated_at" + i, String.class);
+                }
 
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());

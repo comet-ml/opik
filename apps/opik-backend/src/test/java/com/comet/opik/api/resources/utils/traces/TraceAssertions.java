@@ -7,6 +7,8 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import jakarta.ws.rs.core.Response;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
@@ -61,7 +63,12 @@ public class TraceAssertions {
         assertThat(actualTrace.projectId()).isNotNull();
         assertThat(actualTrace.projectName()).isNull();
         assertThat(actualTrace.createdAt()).isAfter(expectedTrace.createdAt());
-        assertThat(actualTrace.lastUpdatedAt()).isAfter(expectedTrace.lastUpdatedAt());
+        if (expectedTrace.lastUpdatedAt() != null) {
+            assertThat(actualTrace.lastUpdatedAt()).isAfterOrEqualTo(expectedTrace.lastUpdatedAt());
+        }
+        else {
+            assertThat(actualTrace.lastUpdatedAt()).isCloseTo(Instant.now(), within(2, ChronoUnit.SECONDS));
+        }
         assertThat(actualTrace.createdBy()).isEqualTo(user);
         assertThat(actualTrace.lastUpdatedBy()).isEqualTo(user);
         assertThat(actualTrace.threadId()).isEqualTo(expectedTrace.threadId());
