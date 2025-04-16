@@ -6,6 +6,7 @@ from typing import Any, List, Optional
 from . import messages, queue_consumer
 from .. import synchronization
 from .batching import batch_manager
+from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -16,11 +17,13 @@ class Streamer:
         message_queue: "queue.Queue[Any]",
         queue_consumers: List[queue_consumer.QueueConsumer],
         batch_manager: Optional[batch_manager.BatchManager],
+        file_upload_manager: upload_manager.BaseFileUploadManager,
     ) -> None:
         self._lock = threading.RLock()
         self._message_queue = message_queue
         self._queue_consumers = queue_consumers
         self._batch_manager = batch_manager
+        self._file_upload_manager = file_upload_manager
 
         self._drain = False
 
@@ -39,6 +42,8 @@ class Streamer:
                 and self._batch_manager.message_supports_batching(message)
             ):
                 self._batch_manager.process_message(message)
+            elif upload_manager.message_supports_upload(message):
+                self._file_upload_manager.upload(message)
             else:
                 self._message_queue.put(message)
 

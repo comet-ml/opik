@@ -18,7 +18,7 @@ class FileUploadOptions:
     base_url_path: str  # the encoded base URL
 
 
-def upload_options_from_attachment(
+def file_upload_options_from_attachment(
     attachment: messages.CreateAttachmentMessage,
 ) -> FileUploadOptions:
     file_size = os.path.getsize(attachment.file_path)

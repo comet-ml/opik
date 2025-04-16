@@ -1,3 +1,4 @@
+import abc
 import dataclasses
 import logging
 import math
@@ -8,6 +9,7 @@ from typing import Callable, List, Optional
 import httpx
 
 from . import upload_options, upload_monitor, thread_pool, file_uploader
+from ..message_processing import messages
 from ..rest_api import client as rest_api_client
 from .. import format_helpers
 
@@ -39,7 +41,29 @@ class UploadResult:
             return False
 
 
-class FileUploadManager:
+def message_supports_upload(message: messages.BaseMessage) -> bool:
+    return isinstance(message, messages.CreateAttachmentMessage)
+
+
+class BaseFileUploadManager(abc.ABC):
+    @abc.abstractmethod
+    def upload(self, message: messages.BaseMessage) -> None:
+        pass
+
+    @abc.abstractmethod
+    def remaining_data(self) -> RemainingUploadData:
+        pass
+
+    @abc.abstractmethod
+    def all_done(self) -> bool:
+        pass
+
+    @abc.abstractmethod
+    def close(self) -> None:
+        pass
+
+
+class FileUploadManager(BaseFileUploadManager):
     """Manages concurrent file uploads."""
 
     def __init__(
@@ -57,12 +81,21 @@ class FileUploadManager:
         self._file_upload_timeout = file_upload_timeout
         self.closed = False
 
-    def upload_attachment_file(
-        self, attachment: upload_options.FileUploadOptions
-    ) -> None:
+    def upload(self, message: messages.BaseMessage) -> None:
+        if isinstance(message, messages.CreateAttachmentMessage):
+            self.upload_attachment(message)
+        else:
+            raise ValueError(f"Message {message} is not supported for file upload.")
+
+    def upload_attachment(self, attachment: messages.CreateAttachmentMessage) -> None:
+        assert isinstance(
+            attachment, messages.CreateAttachmentMessage
+        ), "Wrong attachment message type"
+
+        options = upload_options.file_upload_options_from_attachment(attachment)
         self._submit_upload(
             uploader=file_uploader.upload_attachment,
-            options=attachment,
+            options=options,
         )
 
     def _submit_upload(
