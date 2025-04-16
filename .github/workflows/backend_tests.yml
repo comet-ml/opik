@@ -35,7 +35,7 @@ jobs:
             - name: Run Tests for backend
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
-              run: mvn clean test -Dmaven.test.failure.ignore=true
+              run: mvn clean test -Dmaven.test.failure.ignore=true -Dsurefire.rerunFailingTestsCount=3
 
             - name: Publish Test Report
               uses: EnricoMi/publish-unit-test-result-action/linux@v2

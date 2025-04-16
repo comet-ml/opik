@@ -1,6 +1,6 @@
 # Opik Optimizer
 
-The Opik Opitmizer can refine your prompts to get better performance
+The Opik Optimizer can refine your prompts to get better performance
 from your LLMs. You can use a variety of algorithms, including:
 
 * FewShotOptimizer
@@ -107,7 +107,7 @@ pip install git+https://github.com/comet-ml/opik#subdirectory=sdks/opik_optimize
 To use the Opik Optimizer from source:
 
 ```bash
-git clone git clone git@github.com:comet-ml/opik
+git clone git@github.com:comet-ml/opik
 cd sdks/opik_optimizer
 pip install -e .
 ```
