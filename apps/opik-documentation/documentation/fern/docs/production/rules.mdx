@@ -3,23 +3,22 @@ subtitle: Describes how to define scoring rules for production traces
 ---
 
 <Tip>
-  Online evaluation metrics allow you to score all your production traces and easily identify any issues with your
+  Online evaluation metrics allow you to score all (or a sample) your production traces and easily identify any issues with your
   production LLM application.
 </Tip>
 
-When working with LLMs in production, the sheer number of traces means that it isn't possible to manually review each trace. Opik allows you to define LLM as a Judge metrics that will automatically score the LLM calls logged to the platform.
+When working with LLMs in production, the sheer number of traces means that it isn't possible to manually review each trace. 
+Opik allows you to define rules to automatically score the LLM calls logged to the platform in two powerful ways:
+1. **LLM as a Judge**: Use language models to evaluate outputs for qualities like relevance, hallucination, and moderation
+2. **Python Metrics**: Create custom scoring logic using Python for precise, deterministic evaluation
 
-![Opik LLM as a Judge](/img/production/online_evaluation.gif)
-
-By defining LLM as a Judge metrics that run on all your production traces, you will be able to
-automate the monitoring of your LLM calls for hallucinations, answer relevance or any other task
-specific metric.
-
-## Defining scoring rules
+![Opik Online Evaluation](/img/production/online_evaluation.gif)
 
 Scoring rules can be defined through both the UI and the [REST API](/reference/rest-api/overview).
 
 To create a new scoring metric in the UI, first navigate to the project you would like to monitor. Once you have navigated to the `rules` tab, you will be able to create a new rule.
+
+## Creating a LLM as a Judge Scoring Rule
 
 <Frame>
   <img src="/img/production/online_evaluation_rule_modal.png" />
@@ -62,10 +61,36 @@ rule is executed, Opik will replace the variables with the values from the trace
 
 You can control the format of the output using the `Scoring definition` parameter. This is were you can define the scores you want the LLM as a Judge metric to return. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the the LLM as a Judge metric always returns trace scores.
 
+## Creating a Python Code Scorer 
+
+<Frame>
+  <img src="/img/production/online_evaluation_python_code.png" />
+</Frame>
+
+### Running Python Metrics in Comet Cloud
+
+When using Comet Cloud, the code scorer will be executed in a sandbox environment with [selected set of Python libraries](https://github.com/comet-ml/opik/blob/main/apps/opik-sandbox-executor-python/requirements.txt) and a 3 second timeout. Network and file system access is disabled.
+
+### Running Python Metrics in Self-hosted
+
+You can decide using either a sandbox environment (via Docker containers) or spawning a new process to execute the code scorer. Both allows customised timeout, and the latter has not libraries or network access restrictions. The most important parameters are:
+```
+PYTHON_CODE_EXECUTOR_STRATEGY: docker | process
+PYTHON_CODE_EXECUTOR_PARALLEL_NUM: 5
+PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 3
+```
+
 ## Reviewing online evaluation scores
 
-The scores returned by the online evaluation rules will be stored as feedback scores for each trace. This will allow you to review these scores in the traces sidebar and track their changes over time in the Opik dashboard.
+The scores returned by the online evaluation rules will be stored as feedback scores for each trace. 
+
+<Frame>
+  <img src="/img/production/online_evaluation_python_score.png" />
+</Frame>
+
+This will allow you to review these scores in the traces sidebar and track their changes over time in the Opik dashboard.
 
 ![Opik dashboard](/img/production/opik_monitoring_dashboard.gif)
 
 You can also view the average feedback scores for all the traces in your project from the traces table.
+
