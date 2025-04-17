@@ -1,6 +1,7 @@
 import queue
 import threading
 import logging
+import time
 from typing import Any, List, Optional
 
 from . import messages, queue_consumer
@@ -62,18 +63,36 @@ class Streamer:
 
         return self._message_queue.empty()
 
-    def flush(self, timeout: Optional[int]) -> None:
+    def flush(self, timeout: Optional[float], upload_sleep_time: int = 5) -> bool:
         if self._batch_manager is not None:
             self._batch_manager.flush()
 
+        start_time = time.time()
+
         synchronization.wait_for_done(
-            check_function=lambda: (
-                self.workers_waiting()
-                and self._message_queue.empty()
-                and (self._batch_manager is None or self._batch_manager.is_empty())
-            ),
+            check_function=lambda: self._all_done(),
             timeout=timeout,
             sleep_time=0.1,
+        )
+
+        elapsed_time = time.time() - start_time
+        if timeout is not None:
+            timeout = timeout - elapsed_time
+            if timeout < 0.0:
+                timeout = 1.0
+
+        # flushing upload manager is blocking operation
+        upload_flushed = self._file_upload_manager.flush(
+            timeout=timeout, sleep_time=upload_sleep_time
+        )
+
+        return upload_flushed and self._all_done()
+
+    def _all_done(self) -> bool:
+        return (
+            self.workers_waiting()
+            and self._message_queue.empty()
+            and (self._batch_manager is None or self._batch_manager.is_empty())
         )
 
     def workers_waiting(self) -> bool:

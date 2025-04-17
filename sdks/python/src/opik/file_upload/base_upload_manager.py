@@ -31,7 +31,7 @@ class BaseFileUploadManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def flush(self, timeout: Optional[float]) -> None:
+    def flush(self, timeout: Optional[float], sleep_time: int = 5) -> bool:
         pass
 
     @abc.abstractmethod

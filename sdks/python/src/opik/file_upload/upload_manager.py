@@ -74,7 +74,7 @@ class FileUploadManagerMonitor:
                     upload_speed = 0
 
                 LOGGER.info(
-                    "Still uploading %d asset(s), remaining %s/%s, Throughput %s/s, ETA unknown",
+                    "Still uploading %d file(s), remaining %s/%s, Throughput %s/s, ETA unknown",
                     remaining.uploads,
                     format_helpers.format_bytes(remaining.bytes),
                     format_helpers.format_bytes(remaining.total_size),
@@ -85,7 +85,7 @@ class FileUploadManagerMonitor:
                 remaining_time = str(int(math.ceil(remaining.bytes / upload_speed)))
 
                 LOGGER.info(
-                    "Still uploading %d asset(s), remaining %s/%s, Throughput %s/s, ETA ~%ss",
+                    "Still uploading %d file(s), remaining %s/%s, Throughput %s/s, ETA ~%ss",
                     remaining.uploads,
                     format_helpers.format_bytes(remaining.bytes),
                     format_helpers.format_bytes(remaining.total_size),
@@ -183,12 +183,13 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
         )
 
     def remaining_uploads(self) -> int:
-        """Returns the number of remaining uploads. Can be called at any time."""
+        """Returns the number of remaining uploads. Non-blocking - can be called at any time."""
         status_list = [result.ready() for result in self._upload_results]
         return status_list.count(False)
 
     def failed_uploads(self, timeout: Optional[float]) -> int:
-        """Important - this is blocking method waiting for all remaining uploads to complete."""
+        """Important - this is blocking method waiting for all remaining uploads to complete or while
+        timeout is expired."""
         failed = 0
         for result in self._upload_results:
             if not result.ready() or not result.successful(timeout):
@@ -196,14 +197,23 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
 
         return failed
 
-    def flush(self, timeout: Optional[float]) -> None:
+    def flush(self, timeout: Optional[float], sleep_time: int = 5) -> bool:
+        """Flushes all pending uploads. This is a blocking method that waits for all remaining uploads to complete,
+        either until they finish or the specified timeout expires. If no timeout is set, it waits indefinitely.
+        Args:
+             timeout: Timeout in seconds to wait for all remaining uploads to complete.
+                If None is provided, it will wait for all remaining uploads to complete.
+            sleep_time: The sleep interval between checks and printing progress.
+        Returns:
+            The flag to indicate whether all remaining uploads are completed or not within the provided timeout.
+        """
         upload_monitor = FileUploadManagerMonitor(self)
 
         synchronization.wait_for_done(
             check_function=lambda: self.all_done(),
             progress_callback=upload_monitor.log_remaining_uploads,
             timeout=timeout,
-            sleep_time=5,
+            sleep_time=sleep_time,
         )
 
         # check failed uploads number only if all upload operations completed to avoid blocking
@@ -214,6 +224,9 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
                     "Failed to upload %d file(s). Check logs for details.",
                     failed_uploads,
                 )
+            return True
+
+        return False
 
     def close(self) -> None:
         self._executor.shutdown(wait=True)
