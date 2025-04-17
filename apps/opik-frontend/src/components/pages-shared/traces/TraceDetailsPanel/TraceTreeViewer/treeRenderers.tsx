@@ -19,7 +19,6 @@ import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
 import BaseTraceDataTypeIcon from "../BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import styles from "./TraceTreeViewer.module.scss";
-import { getGuardrailComputedResult } from "@/constants/guardrails";
 import { GuardrailResult } from "@/types/guardrails";
 
 const generateStubCells = (depth: number) => {
@@ -72,10 +71,7 @@ export const treeRenderers: TreeRenderProps = {
     const feedbackScores = props.item.data.feedback_scores;
     const comments = props.item.data.comments;
     const estimatedCost = props.item.data.total_estimated_cost;
-    const guardrailValidations = props.item.data.guardrail_validations ?? [];
-
-    const { generalStatus: guardrailStatus } =
-      getGuardrailComputedResult(guardrailValidations);
+    const guardrailStatus = props.item.data.output?.guardrail_result ?? null;
 
     const type = props.item.data.type as BASE_TRACE_DATA_TYPE;
 
@@ -135,7 +131,7 @@ export const treeRenderers: TreeRenderProps = {
                     </div>
                   </TooltipWrapper>
                 )}
-                {Boolean(guardrailValidations.length) && (
+                {Boolean(guardrailStatus !== null) && (
                   <TooltipWrapper
                     content={
                       guardrailStatus === GuardrailResult.PASSED

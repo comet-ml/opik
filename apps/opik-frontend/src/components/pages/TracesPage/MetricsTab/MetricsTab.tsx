@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { ChartLine as ChartLineIcon } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import MetricChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChart";
 import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
@@ -17,6 +16,9 @@ import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatCost } from "@/lib/money";
 import { formatDuration } from "@/lib/date";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import MetricContainerChart from "./MetricChart/MetricChartContainer";
 
 enum DAYS_OPTION_TYPE {
   ONE_DAY = "1",
@@ -75,6 +77,9 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     withDefault(StringParam, DEFAULT_DAYS_VALUE),
   );
   const [requestChartOpen, setRequestChartOpen] = useState(false);
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
 
   // to show if there is no data
   const { data: traces } = useTracesOrSpansList(
@@ -154,7 +159,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
         >
           <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
-              <MetricChart
+              <MetricContainerChart
                 chartId="feedback_scores_chart"
                 name="Feedback scores"
                 description="Daily averages"
@@ -164,10 +169,11 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                 intervalEnd={intervalEnd}
                 projectId={projectId}
                 disableLoadingData={!isValidDays}
+                chartType="line"
               />
             </div>
             <div className="flex-1">
-              <MetricChart
+              <MetricContainerChart
                 chartId="number_of_traces_chart"
                 name="Number of traces"
                 description="Daily totals"
@@ -177,13 +183,14 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                 intervalEnd={intervalEnd}
                 projectId={projectId}
                 disableLoadingData={!isValidDays}
+                chartType="line"
               />
             </div>
           </div>
 
           <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
-              <MetricChart
+              <MetricContainerChart
                 chartId="duration_chart"
                 name="Duration"
                 description="Daily quantiles in seconds"
@@ -196,11 +203,12 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                 renderValue={renderDurationTooltipValue}
                 labelsMap={DURATION_LABELS_MAP}
                 customYTickFormatter={durationYTickFormatter}
+                chartType="line"
               />
             </div>
 
             <div className="flex-1">
-              <MetricChart
+              <MetricContainerChart
                 chartId="token_usage_chart"
                 name="Token usage"
                 description="Daily totals"
@@ -210,12 +218,13 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                 intervalEnd={intervalEnd}
                 projectId={projectId}
                 disableLoadingData={!isValidDays}
+                chartType="line"
               />
             </div>
           </div>
           <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
-              <MetricChart
+              <MetricContainerChart
                 chartId="estimated_cost_chart"
                 name="Estimated cost"
                 description="Total daily cost in USD"
@@ -226,8 +235,26 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                 projectId={projectId}
                 disableLoadingData={!isValidDays}
                 renderValue={renderCostTooltipValue}
+                chartType="line"
               />
             </div>
+            {isGuardrailsEnabled && (
+              <div className="flex-1">
+                <MetricContainerChart
+                  chartId="failed_guardrails_chart"
+                  name="Failed guardrails"
+                  description="Daily totals"
+                  metricName={METRIC_NAME_TYPE.FAILED_GUARDRAILS}
+                  interval={interval}
+                  intervalStart={intervalStart}
+                  intervalEnd={intervalEnd}
+                  projectId={projectId}
+                  disableLoadingData={!isValidDays}
+                  renderValue={renderCostTooltipValue}
+                  chartType="bar"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

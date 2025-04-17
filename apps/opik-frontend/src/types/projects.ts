@@ -39,3 +39,6 @@ export interface ProjectMetricTrace {
   name: string;
   data: ProjectMetricDataPoint[];
 }
+
+export type TransformedDataValueType = null | number | string;
+export type TransformedData = { [key: string]: TransformedDataValueType };
