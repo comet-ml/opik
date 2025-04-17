@@ -12,7 +12,7 @@ class BaseMetric(abc.ABC):
     from this class and implement the abstract methods.
 
     Args:
-        name: The name of the metric.
+        name: The name of the metric. If not provided, uses the class name.
         track: Whether to track the metric. Defaults to True.
 
     Example:
@@ -33,8 +33,8 @@ class BaseMetric(abc.ABC):
         >>>         )
     """
 
-    def __init__(self, name: str, track: bool = True) -> None:
-        self.name = name
+    def __init__(self, name: str | None = None, track: bool = True) -> None:
+        self.name = name if name is not None else self.__class__.__name__
         self.track = track
 
         config = opik_config.OpikConfig()
