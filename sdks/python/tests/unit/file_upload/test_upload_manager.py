@@ -29,8 +29,8 @@ def test_upload_attachment__s3(rest_client_s3, attachment, respx_mock, capture_l
     monitor.log_remaining_uploads()
 
     assert file_upload_manager.all_done() is True
-    assert file_upload_manager.remaining_uploads() == 0
-    assert file_upload_manager.failed_uploads() == 0
+    assert file_upload_manager.remaining_data().uploads == 0
+    assert file_upload_manager.failed_uploads(1) == 0
     assert monitor.all_done() is True
 
     route = respx.put(rx_url)
@@ -77,9 +77,9 @@ def test_upload_attachment__s3__failed_upload(rest_client_s3, attachment, respx_
 
     assert monitor.all_done() is True
     assert file_upload_manager.all_done() is True
-    assert file_upload_manager.remaining_uploads() == 0
+    assert file_upload_manager.remaining_data().uploads == 0
 
-    assert file_upload_manager.failed_uploads() == failed_count
+    assert file_upload_manager.failed_uploads(1) == failed_count
 
     route = respx.put(rx_url)
     # the first upload will fail - so, only one call to bucket instead of three for it
@@ -109,8 +109,8 @@ def test_upload_attachment__local(
     monitor.log_remaining_uploads()
 
     assert file_upload_manager.all_done() is True
-    assert file_upload_manager.remaining_uploads() == 0
-    assert file_upload_manager.failed_uploads() == 0
+    assert file_upload_manager.remaining_data().uploads == 0
+    assert file_upload_manager.failed_uploads(1) == 0
     assert monitor.all_done() is True
 
     route = respx.put(rx_url)
@@ -153,10 +153,10 @@ def test_upload_attachment__local__failed_upload(
     monitor.log_remaining_uploads()
 
     assert file_upload_manager.all_done() is True
-    assert file_upload_manager.remaining_uploads() == 0
+    assert file_upload_manager.remaining_data().uploads == 0
     assert monitor.all_done() is True
 
-    assert file_upload_manager.failed_uploads() == failed_count
+    assert file_upload_manager.failed_uploads(1) == failed_count
 
     route = respx.put(rx_url)
     assert route.call_count == number_of_uploads

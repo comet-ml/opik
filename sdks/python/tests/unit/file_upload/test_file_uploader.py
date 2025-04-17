@@ -7,7 +7,7 @@ import respx
 from opik import httpx_client
 from opik.file_upload import (
     file_uploader,
-    upload_monitor,
+    file_upload_monitor,
     upload_options,
 )
 from . import conftest
@@ -22,7 +22,7 @@ def test_upload_attachment__s3(file_to_upload, rest_client_s3, respx_mock):
     rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
     respx_mock.put(rx_url).respond(200, headers={"ETag": "e-tag"})
 
-    monitor = upload_monitor.FileUploadMonitor()
+    monitor = file_upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
         upload_options=file_to_upload,
         rest_client=rest_client_s3,
@@ -58,7 +58,7 @@ def test_upload_attachment__local(file_to_upload, rest_client_local, respx_mock)
     rx_url = re.compile("https://localhost:8080/bucket/*")
     respx_mock.put(rx_url).respond(200)
 
-    monitor = upload_monitor.FileUploadMonitor()
+    monitor = file_upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
         upload_options=file_to_upload,
         rest_client=rest_client_local,
@@ -101,7 +101,7 @@ def test_upload_attachment__local__retry_500(
 
     respx_mock.put(rx_url).mock(side_effect=retry_side_effect)
 
-    monitor = upload_monitor.FileUploadMonitor()
+    monitor = file_upload_monitor.FileUploadMonitor()
     file_uploader.upload_attachment(
         upload_options=file_to_upload,
         rest_client=rest_client_local,

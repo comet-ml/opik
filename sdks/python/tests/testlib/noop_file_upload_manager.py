@@ -1,23 +1,23 @@
-from typing import List
+from typing import List, Optional
 
-from opik.file_upload import upload_manager
+from opik.file_upload import base_upload_manager
 from opik.message_processing import messages
 
 
-class NoopFileUploadManager(upload_manager.BaseFileUploadManager):
+class NoopFileUploadManager(base_upload_manager.BaseFileUploadManager):
     def __init__(self) -> None:
         self.uploads: List[messages.BaseMessage] = []
 
     def upload(self, message: messages.BaseMessage) -> None:
         self.uploads.append(message)
 
-    def remaining_data(self) -> upload_manager.RemainingUploadData:
-        if len(self.uploads) > 0:
-            self.uploads = self.uploads[:-1]
-
-        return upload_manager.RemainingUploadData(
+    def remaining_data(self) -> base_upload_manager.RemainingUploadData:
+        return base_upload_manager.RemainingUploadData(
             uploads=len(self.uploads), bytes=-1, total_size=-1
         )
+
+    def flush(self, timeout: Optional[float]) -> None:
+        self.uploads = []
 
     def all_done(self) -> bool:
         return len(self.uploads) == 0

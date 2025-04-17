@@ -4,7 +4,7 @@ import httpx
 import pytest
 import respx
 
-from opik.file_upload import upload_monitor
+from opik.file_upload import file_upload_monitor
 from opik.file_upload.s3_multipart_upload import file_parts_strategy, s3_upload_error
 from opik.file_upload.s3_multipart_upload import s3_file_uploader, s3_httpx_client
 from .. import conftest
@@ -26,7 +26,7 @@ def test_upload_file_parts_to_s3(data_file, respx_mock):
     respx_mock.put(rx_url).respond(200, headers={"ETag": "e-tag"})
 
     httpx_client = s3_httpx_client.get()
-    monitor = upload_monitor.FileUploadMonitor()
+    monitor = file_upload_monitor.FileUploadMonitor()
 
     uploader = s3_file_uploader.S3FileDataUploader(
         file_parts=file_parts,
@@ -77,7 +77,7 @@ def test_upload_file_parts_to_s3__retry_on_500(data_file, respx_mock):
     respx_mock.put(rx_url).mock(side_effect=retry_side_effect)
 
     httpx_client = s3_httpx_client.get()
-    monitor = upload_monitor.FileUploadMonitor()
+    monitor = file_upload_monitor.FileUploadMonitor()
 
     uploader = s3_file_uploader.S3FileDataUploader(
         file_parts=file_parts,
@@ -109,7 +109,7 @@ def test_upload_file_parts_to_s3__error_status(data_file, respx_mock):
     respx_mock.put(rx_url).respond(403, headers={"ETag": "e-tag"})
 
     httpx_client = s3_httpx_client.get()
-    monitor = upload_monitor.FileUploadMonitor()
+    monitor = file_upload_monitor.FileUploadMonitor()
 
     uploader = s3_file_uploader.S3FileDataUploader(
         file_parts=file_parts,

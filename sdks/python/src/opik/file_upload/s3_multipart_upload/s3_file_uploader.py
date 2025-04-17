@@ -6,7 +6,7 @@ from typing import List, Optional, IO
 import httpx
 
 from . import file_parts_strategy, s3_upload_error, s3_httpx_client
-from .. import upload_monitor
+from .. import file_upload_monitor
 
 
 LOGGER = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class S3FileDataUploader:
         file_parts: file_parts_strategy.FilePartsStrategy,
         pre_sign_urls: List[str],
         httpx_client: httpx.Client,
-        monitor: Optional[upload_monitor.FileUploadMonitor] = None,
+        monitor: Optional[file_upload_monitor.FileUploadMonitor] = None,
     ) -> None:
         self._file_parts = file_parts
         self._pre_sign_urls = pre_sign_urls

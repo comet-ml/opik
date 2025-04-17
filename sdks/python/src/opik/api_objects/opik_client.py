@@ -93,7 +93,6 @@ class Opik:
             base_url=config_.url_override,
             workers=config_.background_workers,
             file_upload_worker_count=config_.file_upload_background_workers,
-            file_upload_timeout=config_.default_file_upload_timeout,
             api_key=config_.api_key,
             check_tls_certificate=config_.check_tls_certificate,
             use_batching=_use_batching,
@@ -113,7 +112,6 @@ class Opik:
         base_url: str,
         workers: int,
         file_upload_worker_count: Optional[int],
-        file_upload_timeout: Optional[int],
         api_key: Optional[str],
         check_tls_certificate: bool,
         use_batching: bool,
@@ -137,7 +135,6 @@ class Opik:
             httpx_client=httpx_client_,
             use_batching=use_batching,
             file_upload_worker_count=file_upload_worker_count,
-            file_upload_timeout=file_upload_timeout,
         )
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
