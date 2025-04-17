@@ -10,7 +10,7 @@ def f3(x):
     return "f3 output"
 
 
-@track()
+@track
 def f2(x):
     # creates span2 attached to trace1 with parent span1
     f3("f3 input")
