@@ -1,5 +1,3 @@
-import pytest
-import os
 import time
 import allure
 import logging
