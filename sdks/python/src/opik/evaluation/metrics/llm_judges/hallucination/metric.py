@@ -139,7 +139,8 @@ class Hallucination(base_metric.BaseMetric):
                 value=score,
                 reason=str(dict_content["reason"]),
             )
-        except Exception:
+        except Exception as e:
+            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
             raise exceptions.MetricComputationError(
                 logging_messages.HALLUCINATION_DETECTION_FAILED
             )

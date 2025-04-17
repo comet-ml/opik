@@ -139,5 +139,6 @@ class Factuality(base_metric.BaseMetric):
             score /= len(list_content)
 
             return score_result.ScoreResult(name=self.name, value=score, reason=reason)
-        except Exception:
+        except Exception as e:
+            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
             raise MetricComputationError(logging_messages.FACTUALITY_SCORE_CALC_FAILED)
