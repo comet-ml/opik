@@ -38,7 +38,7 @@ class SpanCostCalculator {
     }
 
     public static BigDecimal textGenerationWithCacheCostOpenAI(ModelPrice modelPrice, Map<String, Integer> usage) {
-        return textGenerationWithCacheCost(modelPrice, usage, "original_usage.input_tokens",
+        return textGenerationWithCachedTokensNotIncludedInCost(modelPrice, usage, "original_usage.input_tokens",
                 "original_usage.output_tokens", "original_usage.cache_read_input_tokens",
                 "original_usage.cache_creation_input_tokens");
     }
@@ -56,10 +56,11 @@ class SpanCostCalculator {
      * @param cacheCreationInputTokensKey Key for cache creation tokens in usage map
      * @return The calculated cost as a BigDecimal
      */
-    private static BigDecimal textGenerationWithCachedTokensNotIncludedInCost(ModelPrice modelPrice, Map<String, Integer> usage,
+    private static BigDecimal textGenerationWithCachedTokensNotIncludedInCost(ModelPrice modelPrice,
+            Map<String, Integer> usage,
             String inputTokensKey, String outputTokensKey, String cacheReadInputTokensKey,
             String cacheCreationInputTokensKey) {
-        
+
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault(inputTokensKey, 0)))
                 .add(modelPrice.outputPrice()
                         .multiply(BigDecimal.valueOf(usage.getOrDefault(outputTokensKey, 0))))
