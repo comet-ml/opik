@@ -58,16 +58,16 @@ metric_inputs_from_predictor_output_mapping = {
     "output": "evaluated_output"  # evaluated_output is the reserved name for predictor output string
 }
 
-# initial_score = optimizer.evaluate_prompt(
-#     dataset=halu_eval_dataset,
-#     metric=halu_eval_accuracy,
-#     prompt=prompt,
-#     metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
-#     metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
-#     num_threads=16,
-# )
+initial_score = optimizer.evaluate_prompt(
+    dataset=halu_eval_dataset,
+    metric=halu_eval_accuracy,
+    prompt=prompt,
+    metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
+    metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
+    num_threads=16,
+)
 
-# print("Initial score:", initial_score)
+print("Initial score:", initial_score)
 
 result = optimizer.optimize_prompt(
     dataset=halu_eval_dataset,
@@ -80,19 +80,19 @@ result = optimizer.optimize_prompt(
     },
     metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
     metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
-    n_trials=2,
+    n_trials=10,
     train_ratio=0.4,
     num_threads=16,
 )
 
 print(result.prompt)
-# final_score = optimizer.evaluate_prompt(
-#     dataset=halu_eval_dataset,
-#     metric=halu_eval_accuracy,
-#     prompt=result.prompt,
-#     metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
-#     metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
-#     num_threads=16,
-# )
+final_score = optimizer.evaluate_prompt(
+    dataset=halu_eval_dataset,
+    metric=halu_eval_accuracy,
+    prompt=result.prompt,
+    metric_inputs_from_dataset_columns_mapping=metric_inputs_from_dataset_columns_mapping,
+    metric_inputs_from_predictor_output_mapping=metric_inputs_from_predictor_output_mapping,
+    num_threads=16,
+)
 
-# print("Final score:", final_score)
+print("Final score:", final_score)
