@@ -16,8 +16,9 @@ class NoopFileUploadManager(base_upload_manager.BaseFileUploadManager):
             uploads=len(self.uploads), bytes=-1, total_size=-1
         )
 
-    def flush(self, timeout: Optional[float]) -> None:
+    def flush(self, timeout: Optional[float], sleep_time: int = 5) -> bool:
         self.uploads = []
+        return True
 
     def all_done(self) -> bool:
         return len(self.uploads) == 0

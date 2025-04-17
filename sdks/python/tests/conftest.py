@@ -1,6 +1,9 @@
 import random
 import string
+import tempfile
 from typing import cast
+
+import numpy as np
 
 from unittest import mock
 import pytest
@@ -73,7 +76,7 @@ def fake_backend(patch_streamer):
     """
     Patches the function that creates an instance of Streamer under the hood of Opik.
     As a result, instead of sending data to the backend, it's being passed to
-    backend emulator, which uses this data to build span and trace trees.
+    the backend emulator, which uses this data to build span and trace trees.
 
     The resulting trees can be accessed via `fake_backend.trace_trees` or
     `fake_backend.span_trees` and then used for comparing with expected span/trace trees.
@@ -102,7 +105,7 @@ def fake_backend(patch_streamer):
 def fake_backend_without_batching(patch_streamer_without_batching):
     """
     Same as fake_backend but must be used when batching is not supported
-    (e.g. when there are Span/Trace update requests)
+    (e.g., when there are Span/Trace update requests)
     """
     streamer, fake_message_processor_ = patch_streamer_without_batching
 
@@ -147,3 +150,13 @@ def configure_opik_not_configured():
         ],
     ):
         yield
+
+
+@pytest.fixture()
+def temp_file_15mb():
+    file_size = 15 * 1024 * 1024
+    with tempfile.NamedTemporaryFile(delete=True) as f:
+        f.write(np.random.bytes(file_size))
+        f.flush()
+
+        yield f

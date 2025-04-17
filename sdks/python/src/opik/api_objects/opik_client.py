@@ -822,7 +822,7 @@ class Opik:
         timeout = timeout if timeout is not None else self._flush_timeout
         self._streamer.close(timeout)
 
-    def flush(self, timeout: Optional[int] = None) -> None:
+    def flush(self, timeout: Optional[int] = None) -> bool:
         """
         Flush the streamer to ensure all messages are sent.
 
@@ -830,10 +830,10 @@ class Opik:
             timeout (Optional[int]): The timeout for flushing the streamer. Once the timeout is reached, the flush method will return regardless of whether all messages have been sent.
 
         Returns:
-            None
+            True if all messages have been sent within specified timeout, False otherwise.
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        self._streamer.flush(timeout)
+        return self._streamer.flush(timeout)
 
     def search_traces(
         self,
