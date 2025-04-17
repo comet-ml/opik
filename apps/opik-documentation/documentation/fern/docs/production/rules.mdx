@@ -67,6 +67,15 @@ You can control the format of the output using the `Scoring definition` paramete
   <img src="/img/production/online_evaluation_python_code.png" />
 </Frame>
 
+When creating a new Python metrics rule, you will be presented with the following options:
+
+1. **Name:** The name of the rule
+2. **Sampling rate:** The percentage of traces to score. When set to `1`, all traces will be scored.
+3. **Code:** Your code needs to extend our [BaseMetric](https://github.com/comet-ml/opik/blob/main/sdks/python/src/opik/evaluation/metrics/base_metric.py) class.
+4. **Variable mapping:** This is the mapping of the variables in the prompt to the values from the trace.
+
+On the example above, we're creating a rule to run over 25% of the traces in our project, checking the similarity between the input query and the output.
+
 ### Running Python Metrics in Comet Cloud
 
 When using Comet Cloud, the code scorer will be executed in a sandbox environment with [selected set of Python libraries](https://github.com/comet-ml/opik/blob/main/apps/opik-sandbox-executor-python/requirements.txt) and a 3 second timeout. Network and file system access is disabled.
