@@ -14,6 +14,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
 ###############################
 FROM amazoncorretto:21.0.6-al2023
 
+
 RUN yum update -y && yum install -y shadow ca-certificates openssl perl \
     && yum clean all
 VOLUME /tmp
@@ -37,10 +38,22 @@ RUN chmod +x ./*.sh
 COPY --from=build /opt/opik-backend/target/openapi.yaml redoc/
 COPY --from=build /opt/opik-backend/target/*.jar ./
 
+# Remove previous permission changes
+# RUN chown -R appuser:appgroup /opt/opik && chmod -R 775 /opt/opik && \
+#     chown appuser:appgroup /tmp && chmod 775 /tmp
+
+# Ensure /tmp is writable by any user
+RUN chmod 777 /tmp
+
 EXPOSE 8080
 EXPOSE 3003
 
 ARG OPIK_VERSION
 ENV OPIK_VERSION=${OPIK_VERSION}
+
+RUN chown -R 1001:1001 /opt/opik
+
+# Switch to the non-root user
+USER 1001:1001
 
 CMD ["./entrypoint.sh"]
