@@ -6,6 +6,8 @@ import httpx
 
 from opik import exceptions
 from opik.api_objects import opik_client
+from opik.message_processing.messages import GuardrailBatchItemMessage
+from opik.opik_context import get_current_span_data, get_current_trace_data
 
 from . import guards, rest_api_client, schemas, tracing
 
@@ -101,6 +103,20 @@ class Guardrail:
             result.guardrail_result = "failed"
         else:
             result.guardrail_result = "passed"
+
+        for validation in result.validations:
+            guardrail_batch_item_message = GuardrailBatchItemMessage(
+                id=None,
+                project_name=None,
+                entity_id=get_current_trace_data().id,
+                secondary_id=get_current_span_data().id,
+                name=validation.type,
+                result="passed" if validation.validation_passed else "failed",
+                config=validation.validation_config,
+                details=validation.validation_details,
+            )
+
+            self._client._streamer.put(guardrail_batch_item_message)
 
         return result
 
