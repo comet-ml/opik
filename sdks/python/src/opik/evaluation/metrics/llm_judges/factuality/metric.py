@@ -133,7 +133,14 @@ class Factuality(base_metric.BaseMetric):
             score = 0.0
 
             for claim in list_content:
-                score += claim["score"]
+                claim_score = float(claim["score"])
+                
+                if not (0.0 <= claim_score <= 1.0):
+                    raise MetricComputationError(
+                        f"Factuality score must be between 0.0 and 1.0, got {claim_score}"
+                    )
+
+                score += claim_score
                 reason += claim["reason"] + "\n"
 
             score /= len(list_content)
