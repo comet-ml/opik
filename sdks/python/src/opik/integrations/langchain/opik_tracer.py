@@ -62,12 +62,13 @@ class OpikTracer(BaseTracer):
         graph: Optional["Graph"] = None,
         project_name: Optional[str] = None,
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
+        thread_id: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._trace_default_metadata = metadata if metadata is not None else {}
         self._trace_default_metadata["created_from"] = "langchain"
-
+        
         if graph:
             self._trace_default_metadata["_opik_graph_definition"] = {
                 "format": "mermaid",
@@ -91,6 +92,8 @@ class OpikTracer(BaseTracer):
         self._distributed_headers = distributed_headers
 
         self._opik_client = opik_client.get_client_cached()
+
+        self._thread_id = thread_id
 
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
@@ -153,7 +156,8 @@ class OpikTracer(BaseTracer):
     def _track_root_run(self, run_dict: Dict[str, Any]) -> None:
         run_metadata = run_dict["extra"].get("metadata", {})
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
-
+        self._update_thread_id_from_metadata(run_dict)
+        
         if self._distributed_headers:
             self._attach_span_to_distributed_headers(
                 run_dict=run_dict,
@@ -192,6 +196,7 @@ class OpikTracer(BaseTracer):
             metadata=root_metadata,
             tags=self._trace_default_tags,
             project_name=self._project_name,
+            thread_id=self._thread_id,
         )
 
         self._created_traces_data_map[run_dict["id"]] = trace_data
@@ -320,6 +325,14 @@ class OpikTracer(BaseTracer):
             error_info=error_info,
         )
         self._opik_client.span(**span_data.__dict__)
+    
+    def _update_thread_id_from_metadata(self, run_dict: Dict[str, Any]) -> None:
+        if not self._thread_id:
+            # We want to default to any manually set thread_id, so only update if self._thread_id is not already set
+            thread_id = run_dict["extra"].get("metadata", {}).get("thread_id")
+
+            if thread_id:
+                self._thread_id = thread_id
 
     def flush(self) -> None:
         """
