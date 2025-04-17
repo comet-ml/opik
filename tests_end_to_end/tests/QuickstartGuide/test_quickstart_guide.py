@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
     ],
 )
 @allure.title("Test Quickstart Snippet - {integration}")
-def test_quickstart_snippet(page, integration):
+def test_quickstart_snippet(page, env_config, integration):
     """
     Test that:
     1. Opens the Opik homepage
@@ -39,7 +39,7 @@ def test_quickstart_snippet(page, integration):
     7. Shows the output
     """
 
-    page.goto("http://localhost:5173/default/home")
+    page.goto(env_config.base_url)
     page.wait_for_load_state("networkidle")
 
     logger.info("Clicking quickstart")
