@@ -73,7 +73,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         except Exception:
             LOGGER.debug("on_span_end failed", exc_info=True)
 
-    def force_flush(self) -> None:
+    def force_flush(self) -> bool:
         return self._opik_client.flush()
 
     def shutdown(self) -> None:
