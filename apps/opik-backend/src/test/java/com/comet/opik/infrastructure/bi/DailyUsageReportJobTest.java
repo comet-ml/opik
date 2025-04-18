@@ -65,7 +65,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DailyUsageReportJobTest {
 
-    private static final String SUCCESS_RESPONSE = "{\"message\":\"Event added successfully\",\"success\":\"true\"}";
+    public static final String SUCCESS_RESPONSE = "{\"message\":\"Event added successfully\",\"success\":\"true\"}";
 
     private static final String USER = UUID.randomUUID().toString();
 
@@ -288,6 +288,7 @@ class DailyUsageReportJobTest {
             CLICKHOUSE.stop();
             ZOOKEEPER_CONTAINER.stop();
             NETWORK.close();
+            ZOOKEEPER_CONTAINER.stop();
         }
 
         private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -378,7 +379,7 @@ class DailyUsageReportJobTest {
                     CLICKHOUSE, DATABASE_NAME);
 
             mockBiEventResponse(DailyUsageReportJob.STATISTICS_BE, wireMock.server());
-
+            mockBiEventResponse(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT, wireMock.server());
             mockBiEventResponse(InstallationReportService.NOTIFICATION_EVENT_TYPE, wireMock.server());
 
             runMigrations(MYSQL, CLICKHOUSE);
